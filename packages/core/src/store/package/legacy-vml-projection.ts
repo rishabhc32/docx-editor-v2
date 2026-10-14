@@ -19,7 +19,7 @@ import {
   type LegacyGraphicFragment,
   type LegacyPictureBorder,
 } from './legacy-vml-shapes.ts';
-import type { VectorShapeProjection } from './drawing-shape-projection.ts';
+import type { VectorShapeComponent, VectorShapeProjection } from './drawing-shape-projection.ts';
 import { freezeVectorShapeComponent } from './drawing-vector-freeze.ts';
 import { legacyImageEffects } from './legacy-vml-image-effects.ts';
 import { legacyTextArt } from './legacy-vml-text-art.ts';
@@ -151,6 +151,19 @@ function supportedStyle(node: OoxmlElement, root: boolean): ReadonlyMap<string, 
   return styles;
 }
 
+interface GroupCoordinates {
+  readonly origin: readonly [number, number];
+  readonly size: readonly [number, number];
+}
+
+/** The coordinate space a group gives its members, or null when it is invalid. */
+function groupCoordinates(group: OoxmlElement): GroupCoordinates | null {
+  const origin = pair(a(group, 'coordorigin') ?? '0,0');
+  const size = pair(a(group, 'coordsize') ?? '21600,21600');
+  if (!origin || !size || size.some((v) => v <= 0)) return null;
+  return { origin, size };
+}
+
 function groupLayers(
   group: OoxmlElement,
   box: LegacyBox,
@@ -159,9 +172,9 @@ function groupLayers(
   canvas: LegacyBox = box
 ): boolean {
   if (depth > 8 || out.length >= 128 || !supportedStyle(group, depth === 0)) return false;
-  const origin = pair(a(group, 'coordorigin') ?? '0,0'),
-    size = pair(a(group, 'coordsize') ?? '21600,21600');
-  if (!origin || !size || size.some((v) => v <= 0)) return false;
+  const coordinates = groupCoordinates(group);
+  if (!coordinates) return false;
+  const { origin, size } = coordinates;
   for (const child of children(group)) {
     if (named(child, OFFICE, 'lock') || (depth === 0 && named(child, WORD_VML, 'wrap'))) continue;
     if (
@@ -308,6 +321,112 @@ function lineGeometry(root: OoxmlElement, floating: boolean): LineGeometry | nul
   });
 }
 
+const EMU_PER_POINT = 12_700;
+
+/** Most lines one group of lines may hold, as for the members of a graphic preview. */
+const MAX_GROUP_LINES = 128;
+
+/** A group child that holds no drawing: a lock, a wrap, or an inline group's empty anchor lock. */
+function isGroupMetadata(child: OoxmlElement): boolean {
+  return (
+    named(child, OFFICE, 'lock') ||
+    named(child, WORD_VML, 'wrap') ||
+    (named(child, WORD_VML, 'anchorlock') && child.attributes.length === 0)
+  );
+}
+
+/**
+ * The members of a group that holds only `v:line`s, as Word writes for the double rules around
+ * headings. Null when the group holds another member, so it stays a graphic preview.
+ */
+function groupLines(group: OoxmlElement): OoxmlElement[] | null {
+  const members = children(group).filter((child) => !isGroupMetadata(child));
+  if (members.length === 0 || !members.every((child) => named(child, VML, 'line'))) return null;
+  return members;
+}
+
+/**
+ * A group coordinate on one axis as an offset from the group's edge, in points. Scaling can put
+ * a point on the edge a few ULPs outside it, so up to one EMU outside counts as on the edge.
+ * Null when the point is outside the group.
+ */
+function groupOffset(value: number, origin: number, size: number, extent: number): number | null {
+  const offset = ((value - origin) * extent) / size;
+  const tolerance = 1 / EMU_PER_POINT;
+  if (offset < -tolerance || offset > extent + tolerance) return null;
+  return Math.min(Math.max(offset, 0), extent);
+}
+
+/**
+ * The ends of a group line in the group's box, in points. Null when an end is missing, outside
+ * the group, or the same as the other end.
+ */
+function groupLineEnds(
+  line: OoxmlElement,
+  coordinates: GroupCoordinates,
+  width: number,
+  height: number
+): LegacyLineEnds | null {
+  const end = (value: string | undefined) => {
+    const point = pair(value ?? '');
+    if (!point) return null;
+    const x = groupOffset(point[0], coordinates.origin[0], coordinates.size[0], width);
+    const y = groupOffset(point[1], coordinates.origin[1], coordinates.size[1], height);
+    return x === null || y === null ? null : Object.freeze([x, y] as const);
+  };
+  const from = end(a(line, 'from'));
+  const to = end(a(line, 'to'));
+  if (!from || !to || (from[0] === to[0] && from[1] === to[1])) return null;
+  return Object.freeze([from, to] as const);
+}
+
+/**
+ * A group of lines as one vector shape with a component for each line, as a modern group is.
+ * Each line is read as a standalone line is, so its outline can reach past the group's box.
+ * Null when a line is outside that subset.
+ */
+function groupLineShape(
+  group: OoxmlElement,
+  lines: readonly OoxmlElement[],
+  width: number,
+  height: number
+): VectorShapeProjection | null {
+  const coordinates = groupCoordinates(group);
+  if (!coordinates || lines.length > MAX_GROUP_LINES) return null;
+  const components: VectorShapeComponent[] = [];
+  for (const line of lines) {
+    // A group line is placed by its points alone.
+    const style = supportedStyle(line, false);
+    if (!style || ['left', 'top', 'width', 'height'].some((key) => style.has(key))) return null;
+    const ends = groupLineEnds(line, coordinates, width, height);
+    const reach = legacyLineReach(line);
+    if (!ends || reach === null) return null;
+    // As for a standalone line, the box sits in a canvas grown by the outline's reach. Sum in
+    // this order so the box's far edge stays inside the canvas after rounding.
+    const box = { x: reach, y: reach, width, height };
+    const canvas = { x: 0, y: 0, width: reach + width + reach, height: reach + height + reach };
+    if (legacyShapeFragment(line, box, canvas, false, ends) === null) return null;
+    const shape = legacyLineShape(line, width, height, ends);
+    if (!shape) return null;
+    components.push(shape.components[0]!);
+  }
+  // As a modern group: only a single component names one stroke.
+  const first = components.length === 1 ? components[0]! : null;
+  return Object.freeze({
+    extentEmu: Object.freeze({
+      cx: Math.round(width * EMU_PER_POINT),
+      cy: Math.round(height * EMU_PER_POINT),
+    }),
+    subpathsEmu: Object.freeze(components.flatMap((component) => component.subpathsEmu)),
+    fillHex: null,
+    fillAlpha: 1,
+    strokeHex: first?.strokeHex ?? null,
+    strokeAlpha: 1,
+    strokeWidthEmu: first?.strokeWidthEmu ?? 0,
+    components: Object.freeze(components),
+  });
+}
+
 /**
  * `preview` is the validated cached-preview shape of a `w:object`. A `w:pict` picture beside an
  * `o:OLEObject` is the same kind of preview. Either projection is a static read-only graphic: no
@@ -355,14 +474,17 @@ function readProjection(node: OoxmlElement, preview?: OoxmlElement): DrawingProj
     height = line?.height ?? points(style.get('height'));
   const extentOk = (n: number) => Number.isFinite(n) && (line ? n >= 0 : n > 0) && n <= 10_000;
   if (![width, height].every(extentOk)) return null;
+  const lines = root.localName === 'group' ? groupLines(root) : null;
+  const lineGroup = lines ? groupLineShape(root, lines, width, height) : null;
+  if (lines && !lineGroup) return null;
   // A picture outline widens the drawing by its full weight on every side; the picture keeps
   // its authored size inside it.
   const border = root.localName === 'shape' && !textbox ? legacyPictureBorder(root) : undefined;
   if (border === null || (readOnly && border)) return null;
-  // A line is a vector shape, which paints in every output and whose outline reaches past its
-  // box as a modern line's does. The other shapes are a graphic preview, which grows by the
-  // outline's reach on every side to keep the outline inside its image.
-  const vector = !!line;
+  // A line, or a group of lines, is a vector shape, which paints in every output and whose
+  // outline reaches past its box as a modern line's does. The other shapes are a graphic
+  // preview, which grows by the outline's reach on every side to keep the outline inside it.
+  const vector = !!line || !!lineGroup;
   const strokeReach =
     !textbox && !border && (line || ['rect', 'roundrect', 'oval'].includes(root.localName))
       ? legacyLineReach(root, !line)
@@ -378,7 +500,7 @@ function readProjection(node: OoxmlElement, preview?: OoxmlElement): DrawingProj
   const textboxStory = textbox ? legacyTextboxStory(root, textbox, style) : null;
   if (textbox && !textboxStory) return null;
   if (!textboxStory && root.localName === 'group') {
-    if (!groupLayers(root, box, fragments, 0) || !fragments.length) return null;
+    if (!lineGroup && (!groupLayers(root, box, fragments, 0) || !fragments.length)) return null;
   } else if (!textboxStory && !textArt) {
     const fragment = legacyShapeFragment(
       root,
@@ -392,7 +514,7 @@ function readProjection(node: OoxmlElement, preview?: OoxmlElement): DrawingProj
     // A vector shape is validated by the same reading and painted from its own projection.
     if (!vector) fragments.push(fragment);
   }
-  const vectorShape = line ? legacyLineShape(root, width, height, line.ends) : null;
+  const vectorShape = lineGroup ?? (line ? legacyLineShape(root, width, height, line.ends) : null);
   if (line && !vectorShape) return null;
   const wrapNodes = children(root).filter((n) => named(n, WORD_VML, 'wrap'));
   if (wrapNodes.length > 1) return null;
