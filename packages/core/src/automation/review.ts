@@ -102,8 +102,25 @@ export interface AutomationRevisionRead {
   readonly author: string;
   /** ISO-8601 as the file wrote it, or empty when it wrote none. */
   readonly date: string;
+  /**
+   * `@w:id` of the decision's first tracked mark (`item.address.id`): FILE data, unlike `id`.
+   * Never the derivation's placeholder for a mark with no `@w:id`, because such a decision is
+   * `readOnly` and this listing skips it.
+   */
+  readonly fileId: string;
+  /** The package part the decision is written in, as its review ranges name it. */
+  readonly partName: string;
   readonly item: ReviewRevisionItem;
 }
+
+/** Which field each per-revision text read answers. */
+export const REVISION_TEXT_READS = {
+  getRevisionType: 'type',
+  getRevisionAuthor: 'author',
+  getRevisionDate: 'date',
+  getRevisionFileId: 'fileId',
+  getRevisionPartName: 'partName',
+} as const satisfies Readonly<Record<string, keyof AutomationRevisionRead>>;
 
 /** Every tracked-change item that belongs to one story, including unsupported structural ones. */
 export function revisionItemsInStory(reads: AutomationStoryReads): readonly ReviewRevisionItem[] {
@@ -137,6 +154,8 @@ export function revisionReads(reads: AutomationStoryReads): readonly AutomationR
         type,
         author: item.author,
         date: item.date ?? '',
+        fileId: item.address.id,
+        partName: reads.part.name,
         item,
       })
     );

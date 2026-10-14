@@ -227,6 +227,8 @@ Established list definitions and page setup refuse tracked writes. Comments and 
 
 When a person adopts an agent's suggestions, attribute them to that person with `revisions.setAuthor(author, revisions)` or `revisions.setAuthor(author, { authors })`. This is a DocxEditor addition; Office.js has no author write. The changes stay pending. Never reject and reinsert suggestions to change their author.
 
+When a reviewer's accept or reject decision arrives from another process, find its revisions by file identity. Load `revision.id` and `revision.partName`, which are DocxEditor additions, and compare them with the review item's `addresses` and the part name of its `ranges`. Then pass the matches to `revisions.resolve(action, matches)`. Expect one match, or two for a paired replacement. Otherwise, read again and reconsider; never resolve a guess. For more information, see [Find the revision for a review item](https://docx-editor.dev/docs/2.x/editor-api/revisions#find-the-revision-for-a-review-item).
+
 Standard `insertText('', 'Replace')` means deletion, and an empty insertion is a no-op. Agent tools should require nonempty insertion/replacement text and expose deletion as an explicit model decision. The shipped worker does this. The [compatibility manifest](https://github.com/eigenpal/docx-editor/blob/main/packages/editor-api/compat/manifest.json) records measured members and behavioral differences.
 
 ## Set paragraph direction
