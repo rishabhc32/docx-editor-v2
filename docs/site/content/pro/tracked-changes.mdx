@@ -191,7 +191,7 @@ const modules = [reviewModule()];
 | --- | --- |
 | Text | Tracks insertions, deletions, and replacements. The review pane shows a replacement as separate deletion and addition cards. |
 | Paragraph structure | Tracks inserted and deleted paragraph marks. |
-| Paragraph properties | Tracks alignment, indents, spacing, and style in a separate card. |
+| Paragraph properties | Tracks alignment, indents, spacing, style, list membership, and list level in a separate card. |
 | Tables | Tracks row and cell insertion, deletion, and property changes. |
 | Run formatting | Tracks formatting changes in a separate card. |
 | Images | Tracks insertion and deletion. Property edits are unavailable. |
@@ -206,7 +206,9 @@ Formatting text inside your own pending insertion records nothing: the whole run
 
 If your change lands on the properties another author's record holds, their record stays. Resolving their proposal is a review decision, so take it in the review pane rather than through a formatting press.
 
-Lists, indent level, and tab stops are not recorded. Changing them in suggesting mode applies the change with no card. Table property changes made in the editor are not recorded either; a `w:tblPrChange` a file already carries still renders.
+**Bullet List**, **Numbered List**, and the indent controls on a list item record the paragraph's previous list settings in `w:pPrChange`. Reject restores them. A list definition that the change adds to `numbering.xml` is not recorded, and it stays after a reject.
+
+Tab stops are not recorded. Changing them in suggesting mode applies the change with no card. Table property changes made in the editor are not recorded either; a `w:tblPrChange` a file already carries still renders.
 
 A document that sets `w:doNotTrackFormatting` in `settings.xml` gets no formatting records. Its text edits stay tracked.
 
