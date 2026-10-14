@@ -251,6 +251,7 @@ const docxEditorFrameProps = {
     type: String as PropType<LockedControlNavigation>,
     default: undefined,
   },
+  headerFooterEditing: { type: Boolean, default: undefined },
   zoomMode: { type: [Object, String] as PropType<DocxEditorProps['zoomMode']>, default: undefined },
   locale: { type: String, default: undefined },
   author: { type: String, default: undefined },
@@ -493,6 +494,9 @@ const DocxEditorFrame = defineComponent({
             : {}),
           ...(props.lockedControlNavigation !== undefined
             ? { lockedControlNavigation: props.lockedControlNavigation }
+            : {}),
+          ...(props.headerFooterEditing !== undefined
+            ? { headerFooterEditing: props.headerFooterEditing }
             : {}),
           onRevisionMarkupChange: (settings: ResolvedRevisionMarkup) =>
             emit('revisionMarkupChange', settings),

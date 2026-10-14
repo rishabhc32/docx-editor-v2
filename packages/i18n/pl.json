@@ -852,7 +852,8 @@
     "nothingToPaint": "Zaznacz tekst, aby zastosować formatowanie",
     "noReviewAuthors": "Ten dokument nie ma autorów recenzji",
     "suggestingNeedsAuthor": "Sugerowanie wymaga autora. Ustaw autora w konfiguracji edytora.",
-    "pictureSelected": "Zaznaczono obraz. Umieść kursor w tekście, aby wstawić obraz."
+    "pictureSelected": "Zaznaczono obraz. Umieść kursor w tekście, aby wstawić obraz.",
+    "headerFooterReadOnly": "Nagłówki i stopki są w tym edytorze tylko do odczytu."
   },
   "equationPopup": {
     "apply": "Zastosuj",

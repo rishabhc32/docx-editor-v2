@@ -3246,17 +3246,21 @@ a.docx-hyperlink:focus-visible {
   opacity: 1;
 }
 
-/* No affordance while another furniture scope is open, in view mode, or in print.
- * Each selector MIRRORS the qualifiers of the rule it cancels: the existing-band tint
- * carries two `:not()`s and the footer hint carries an attribute selector, so a plainer
- * selector here LOST the specificity race and left the invitation on screen. */
+/* No affordance while another furniture scope is open, in view mode, when headers and footers
+ * are read-only, or in print. Each selector MIRRORS the qualifiers of the rule it cancels: the
+ * existing-band tint carries two `:not()`s and the footer hint carries an attribute selector,
+ * so a plainer selector here LOST the specificity race and left the invitation on screen. */
 .docx-pages--hf-editing .docx-hf--placeholder:hover,
 .docx-paginated-surface--viewing .docx-hf--placeholder:hover,
+.docx-paginated-surface--hf-read-only .docx-hf--placeholder:hover,
 .docx-pages--hf-editing .docx-hf:not([data-docx-hf-active]):not(.docx-hf--placeholder):hover,
 .docx-paginated-surface--viewing
   .docx-hf:not([data-docx-hf-active]):not(.docx-hf--placeholder):hover,
+.docx-paginated-surface--hf-read-only
+  .docx-hf:not([data-docx-hf-active]):not(.docx-hf--placeholder):hover,
 .docx-pages--hf-editing .docx-hf-hover:hover,
-.docx-paginated-surface--viewing .docx-hf-hover:hover {
+.docx-paginated-surface--viewing .docx-hf-hover:hover,
+.docx-paginated-surface--hf-read-only .docx-hf-hover:hover {
   background: none;
 }
 
@@ -3264,21 +3268,25 @@ a.docx-hyperlink:focus-visible {
  * own child and carries `docx-pages--hf-editing` itself, so the weight that beats the
  * footer variant comes from a fact the painter cannot drift away from. */
 .docx-pages.docx-pages--hf-editing .docx-hf--placeholder:hover::after,
-.docx-paginated-surface--viewing .docx-pages .docx-hf--placeholder:hover::after {
+.docx-paginated-surface--viewing .docx-pages .docx-hf--placeholder:hover::after,
+.docx-paginated-surface--hf-read-only .docx-pages .docx-hf--placeholder:hover::after {
   content: none;
 }
 
 .docx-pages--hf-editing .docx-hf-edit-hint,
-.docx-paginated-surface--viewing .docx-hf-edit-hint {
+.docx-paginated-surface--viewing .docx-hf-edit-hint,
+.docx-paginated-surface--hf-read-only .docx-hf-edit-hint {
   display: none;
 }
 
 /* The last half of the affordance: an I-beam over a band nobody can enter reads as "put a
- * caret here", which viewing refuses. Furniture text never maps to a model position anyway
- * — see `dom-selection` — so the arrow is the honest cursor here. */
+ * caret here", which viewing and read-only furniture refuse. Furniture text never maps to a
+ * model position anyway — see `dom-selection` — so the arrow is the honest cursor here. */
 .docx-paginated-surface--viewing .docx-hf:not([data-docx-hf-active]),
+.docx-paginated-surface--hf-read-only .docx-hf:not([data-docx-hf-active]),
 .docx-pages--hf-editing .docx-hf-hover,
-.docx-paginated-surface--viewing .docx-hf-hover {
+.docx-paginated-surface--viewing .docx-hf-hover,
+.docx-paginated-surface--hf-read-only .docx-hf-hover {
   cursor: default;
 }
 

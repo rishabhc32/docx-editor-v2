@@ -1,0 +1,13 @@
+{
+  "impact": "no-impact",
+  "fields": [],
+  "before": "Readers could open, create, and edit headers and footers from the editor UI.",
+  "after": "With headerFooterEditing set to false, the editor UI cannot open, create, remove, relink, or write a header or footer. Without the option, behavior is unchanged.",
+  "reason": "The option is read once per editor and gates only local scope entry and local commands, before any write. It adds no operation and writes no shared state. Header and footer edits from other participants apply and converge as before, and presence inside a header replicates unchanged.",
+  "tests": [
+    "packages/core/src/editor/__tests__/header-footer-editing-option.test.ts",
+    "packages/pro/src/collaboration/__tests__/document-header-footer-editing.test.ts"
+  ],
+  "changeset": "header-footer-editing",
+  "migration": null
+}

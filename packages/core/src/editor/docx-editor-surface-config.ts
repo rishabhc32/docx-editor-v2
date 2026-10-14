@@ -9,7 +9,7 @@ export function configSurfaceOptions(
   config: DocxEditorConfig
 ): Pick<
   PaginatedSurfaceOptions,
-  'tableInteractionLabel' | 'imageDecodePort' | 'lockedControlNavigation'
+  'tableInteractionLabel' | 'imageDecodePort' | 'lockedControlNavigation' | 'headerFooterEditing'
 > {
   return {
     ...(config.tableInteractionLabel
@@ -17,5 +17,6 @@ export function configSurfaceOptions(
       : {}),
     ...(config.imageDecodePort ? { imageDecodePort: config.imageDecodePort } : {}),
     ...(config.lockedControlNavigation === 'atomic' ? { lockedControlNavigation: 'atomic' } : {}),
+    ...(config.headerFooterEditing === false ? { headerFooterEditing: false } : {}),
   };
 }

@@ -113,6 +113,7 @@ import {
   type TreeDocOp,
 } from '@docx-editor.dev/core/store';
 import { resolveSelectedDrawingRecord } from './docx-editor-images.ts';
+import { registerHeaderFooterEditing } from './docx-editor-hf.ts';
 import { createHiddenMarkEditing, type RevisionView } from './hidden-mark-joins.ts';
 import { drawingSelectionPosition } from './surface-drawing-selection.ts';
 import { syncActiveFieldShading } from './surface-field-shading.ts';
@@ -405,6 +406,8 @@ export function mountPaginatedSurface(
   const document = container.ownerDocument;
   // `lockedControlNavigation: 'atomic'`: inline controls with locked content are one caret unit.
   const atomicNavigation = options.lockedControlNavigation === 'atomic';
+  // `headerFooterEditing: false`: no lane opens or creates a header or footer story.
+  const headerFootersReadOnly = options.headerFooterEditing === false;
 
   const pagesLayer = document.createElement('div');
   pagesLayer.className = 'docx-pages';
@@ -2645,7 +2648,7 @@ export function mountPaginatedSurface(
     setHeaderFooterEditingChrome(container, pagesLayer, activeHf != null);
     // Viewing mode hides write affordances the painter cannot know about — today the
     // blank header/footer "double-click to add" band.
-    setEditingModeChrome(container, editingMode);
+    setEditingModeChrome(container, editingMode, headerFootersReadOnly);
     // The pages are absolutely positioned, so the layer has no intrinsic size and the
     // surface would collapse to zero — pages then escape whatever centres or scrolls it.
     // Size it from the records, which is the only place the extent is known.
@@ -3403,7 +3406,7 @@ export function mountPaginatedSurface(
     mirrorToDom: () => selectionSync.mirrorToDom(),
     notify: () => options.onChange?.(currentState()),
     materializedPages: () => materializedSet,
-    entryRefused: () => editingMode === 'view',
+    entryRefused: () => editingMode === 'view' || headerFootersReadOnly,
     leaveOtherStories: () => {
       noteOps?.exitNote();
       textboxEditing?.exit();
@@ -5327,7 +5330,7 @@ export function mountPaginatedSurface(
       // A mode change moves no content, so nothing else here repaints. The chrome class
       // still has to follow immediately: without this the blank header/footer band kept
       // inviting a double-click to add a story that viewing mode then refused.
-      setEditingModeChrome(container, editingMode);
+      setEditingModeChrome(container, editingMode, headerFootersReadOnly);
       // Painted chrome reads the mode too — content-control widgets disable themselves on
       // it, and table furniture re-derives from it — so the pages have to be rebuilt even
       // though not one character moved.
@@ -5930,6 +5933,7 @@ export function mountPaginatedSurface(
   );
   registerFormFieldIdentity(surface, textFormInteraction.fieldId);
   registerContentLockPolicy(surface, options.contentLockPolicy);
+  registerHeaderFooterEditing(surface, options.headerFooterEditing);
   legacyCheckboxInteraction = createLegacyCheckboxInteraction({
     pagesLayer,
     part: (paragraphId?: string) =>
@@ -6163,8 +6167,8 @@ export function mountPaginatedSurface(
         return hfScope?.exitHeaderFooter();
       },
       enterEmptyHeaderFooter: (kind, pageIndex) => {
-        // Creating the part is a WRITE — viewing mode refuses it like every other lane.
-        if (editingMode === 'view') return;
+        // Creating the part is a WRITE — viewing and read-only furniture refuse it like any lane.
+        if (editingMode === 'view' || headerFootersReadOnly) return;
         flushPendingInputAndLayout();
         const scope = hfScope;
         if (!scope) return;

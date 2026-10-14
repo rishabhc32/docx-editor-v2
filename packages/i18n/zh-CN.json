@@ -852,7 +852,8 @@
     "nothingToPaint": "请选择要应用格式的文本",
     "noReviewAuthors": "此文档没有审阅作者",
     "suggestingNeedsAuthor": "建议模式需要作者。请在编辑器配置中设置作者。",
-    "pictureSelected": "已选中一张图片。请将光标放在文本中以插入图片。"
+    "pictureSelected": "已选中一张图片。请将光标放在文本中以插入图片。",
+    "headerFooterReadOnly": "此编辑器中的页眉和页脚为只读。"
   },
   "equationPopup": {
     "apply": "应用",

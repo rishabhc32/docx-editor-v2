@@ -1237,6 +1237,7 @@ export interface DocxEditorProps {
     fieldResults?: FieldResultsMode;
     fonts?: FontConfiguration | FontConfigurationFragment | FontResolver;
     fontShaping?: FontShapingOptions;
+    headerFooterEditing?: boolean;
     hyperlinkPopup?: boolean;
     i18n?: Translations;
     readonly loadingIndicator?: DocxEditorChildren;
@@ -1351,6 +1352,7 @@ export interface DocxEditorRootProps {
     fieldResults?: FieldResultsMode;
     fonts?: FontConfiguration | FontConfigurationFragment | FontResolver;
     fontShaping?: FontShapingOptions;
+    headerFooterEditing?: boolean;
     imageDecodePort?: ImageDecodePort;
     locale?: string;
     lockedControlNavigation?: LockedControlNavigation;

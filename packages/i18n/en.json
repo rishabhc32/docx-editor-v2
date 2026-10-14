@@ -30,6 +30,7 @@
     "bodyOnlyToc": "A table of contents goes in the document body.",
     "bodyOnlyNote": "Footnotes and endnotes are added from the document body.",
     "furnitureOnlyPageField": "Open a header or footer to insert a page number.",
+    "headerFooterReadOnly": "Headers and footers are read-only in this editor.",
     "suggestingSectionBreak": "Turn off suggesting to insert this section break. It changes where the next section starts, which can't be suggested.",
     "tableCellSectionBreak": "Section breaks go outside a table.",
     "lockedSectionBreak": "A locked or linked content control holds the next section, so this break can't change it.",

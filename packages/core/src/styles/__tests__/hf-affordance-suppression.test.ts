@@ -17,8 +17,12 @@ import postcss from 'postcss';
 const cssPath = resolve(import.meta.dir, '../editor.css');
 const css = readFileSync(cssPath, 'utf8');
 
-/** The two mode classes that must cancel a write affordance. */
-const SUPPRESSORS = ['.docx-pages--hf-editing', '.docx-paginated-surface--viewing'] as const;
+/** The mode classes that must each cancel a write affordance. */
+const SUPPRESSORS = [
+  '.docx-pages--hf-editing',
+  '.docx-paginated-surface--viewing',
+  '.docx-paginated-surface--hf-read-only',
+] as const;
 
 /**
  * `(a, b, c)` per the selectors spec, packed for comparison. Enough for this stylesheet:
@@ -74,17 +78,21 @@ function isSuppressor(selector: string): boolean {
   return SUPPRESSORS.some((mode) => selector.includes(mode));
 }
 
-function suppressed(invitation: Occurrence, property: string): boolean {
+function suppressed(
+  invitation: Occurrence,
+  property: string,
+  mode: (typeof SUPPRESSORS)[number]
+): boolean {
   return declarationsOf(property).some(
     (candidate) =>
-      isSuppressor(candidate.selector) &&
+      candidate.selector.includes(mode) &&
       candidate.specificity >= invitation.specificity &&
       (candidate.specificity > invitation.specificity || candidate.index > invitation.index)
   );
 }
 
 describe('header/footer affordance suppression', () => {
-  test('every hover invitation is outranked by a mode-gated rule', () => {
+  test('every hover invitation is outranked by a rule for each mode', () => {
     // The invitations: the blank band's hint text, and the tint on any hovered band.
     const isInvitation = (selector: string): boolean =>
       selector.includes('.docx-hf') && selector.includes(':hover') && !isSuppressor(selector);
@@ -93,10 +101,20 @@ describe('header/footer affordance suppression', () => {
     const tints = declarationsOf('background').filter((rule) => isInvitation(rule.selector));
     expect(tints.length).toBeGreaterThanOrEqual(2);
 
-    for (const hint of hints)
-      expect([hint.selector, suppressed(hint, 'content')]).toEqual([hint.selector, true]);
-    for (const tint of tints)
-      expect([tint.selector, suppressed(tint, 'background')]).toEqual([tint.selector, true]);
+    for (const mode of SUPPRESSORS) {
+      for (const hint of hints)
+        expect([mode, hint.selector, suppressed(hint, 'content', mode)]).toEqual([
+          mode,
+          hint.selector,
+          true,
+        ]);
+      for (const tint of tints)
+        expect([mode, tint.selector, suppressed(tint, 'background', mode)]).toEqual([
+          mode,
+          tint.selector,
+          true,
+        ]);
+    }
   });
 
   test('the specificity helper agrees with the spec on the shapes this sheet uses', () => {
