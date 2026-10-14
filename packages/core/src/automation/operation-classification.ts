@@ -59,6 +59,8 @@ export const AUTOMATION_QUERY_OPERATIONS = [
   'getRevisionType',
   'getRevisionAuthor',
   'getRevisionDate',
+  'getRevisionFileId',
+  'getRevisionPartName',
   'getRevisionRange',
   'getContentControls',
   'getContentControlById',

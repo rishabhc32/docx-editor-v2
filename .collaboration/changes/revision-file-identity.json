@@ -1,0 +1,13 @@
+{
+  "impact": "no-impact",
+  "fields": [],
+  "before": "Document API revisions expose author, date, type, and range, but not the w:id or the part that the file wrote for the change.",
+  "after": "Revision.id and Revision.partName read the change's w:id and package part through two new automation queries.",
+  "reason": "The change adds read-only queries. Nothing is written, so no shared field, collaboration operation, snapshot, or protocol message changes.",
+  "tests": [
+    "packages/editor-api/src/model/__tests__/model-revision-identity.test.ts",
+    "packages/core/src/editor/__tests__/automation-host-parity-office.test.ts"
+  ],
+  "changeset": "revision-file-identity",
+  "migration": null
+}

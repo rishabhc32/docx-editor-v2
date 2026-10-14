@@ -117,7 +117,12 @@ import { projectedSearchSpans } from './search.ts';
 import type { NoteKind } from '../store/package/note-nodes.ts';
 import { paragraphStyleName, styleIdFor } from './styles.ts';
 import type { StoryScope } from '../store/store/tree-package-store.ts';
-import { commentReads, revisionReads, type AutomationRevisionRead } from './review.ts';
+import {
+  commentReads,
+  REVISION_TEXT_READS,
+  revisionReads,
+  type AutomationRevisionRead,
+} from './review.ts';
 import { planProposal, trackedParagraphInsertError, trackedProposalOf } from './plan-proposal.ts';
 import { planRevisionDecision, revisionItemOps } from './revision-operations.ts';
 import type { ReviewCommentItem } from '../store/store/review-items.ts';
@@ -2392,22 +2397,14 @@ export function createBatchPlanner(host: BatchPlannerHost): BatchPlanner {
         });
       }
 
-      case 'getRevisionType': {
+      case 'getRevisionType':
+      case 'getRevisionAuthor':
+      case 'getRevisionDate':
+      case 'getRevisionFileId':
+      case 'getRevisionPartName': {
         const found = revisionAt(operation.revision);
         if (!found.ok) return found.planned;
-        return query({ kind: 'text', text: found.item.type });
-      }
-
-      case 'getRevisionAuthor': {
-        const found = revisionAt(operation.revision);
-        if (!found.ok) return found.planned;
-        return query({ kind: 'text', text: found.item.author });
-      }
-
-      case 'getRevisionDate': {
-        const found = revisionAt(operation.revision);
-        if (!found.ok) return found.planned;
-        return query({ kind: 'text', text: found.item.date });
+        return query({ kind: 'text', text: found.item[REVISION_TEXT_READS[operation.op]] });
       }
 
       case 'getRevisionRange': {
