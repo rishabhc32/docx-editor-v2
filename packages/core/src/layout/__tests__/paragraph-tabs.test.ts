@@ -137,6 +137,21 @@ describe('tabAdvanceWidth / nextTabDestination', () => {
     expect(tabAdvanceWidth('left', 20, 100, 40, 40)).toBe(80);
     expect(tabAdvanceWidth('decimal', 20, 100, 40, 25)).toBe(55);
   });
+
+  test('a pen one rounding step short of a stop has already reached it', () => {
+    // A right-aligned segment ends at `(stop - width) + width`, which floating point can
+    // leave one step short of the stop. The next tab moves on; it does not re-align there.
+    const tabs = {
+      stops: [
+        { positionPt: 102.05, alignment: 'right' as const },
+        { positionPt: 116.25, alignment: 'left' as const },
+      ],
+      defaultIntervalPt: 57,
+    };
+    expect(nextTabDestination(tabs, 102.04999999999998, 500).positionPt).toBe(116.25);
+    // A real gap before the stop still reaches it.
+    expect(nextTabDestination(tabs, 102.04, 500).positionPt).toBe(102.05);
+  });
 });
 
 describe('breakParagraph tab-stop geometry', () => {
@@ -361,6 +376,32 @@ describe('hanging-indent tabs', () => {
     const lines = linesOf(lay(load(row('<w:tab w:val="right" w:pos="720"/>'))));
     const title = lines[0]!.spans.find((span) => span.text === 'Alpha')!;
     expect(title.box.x + title.box.width).toBeCloseTo(36, 6);
+  });
+
+  test('after a right-aligned number, the text tabs on to the indent', () => {
+    // A definition subparagraph: the number right-aligns on 2041tw, and the text starts at
+    // the 2325tw indent, Word's implicit stop. In 12pt runs the pen after "(i)" stops one
+    // float step short of the right stop, and after "(ii)" one step past it.
+    const styleCascade = buildStyleCascadeTable(
+      loadStyles(
+        `<w:style w:type="paragraph" w:styleId="Defsubpara"><w:pPr>` +
+          `<w:tabs><w:tab w:val="right" w:pos="2041"/></w:tabs>` +
+          `<w:ind w:left="2325" w:hanging="2325"/></w:pPr>` +
+          `<w:rPr><w:sz w:val="24"/></w:rPr></w:style>`
+      )
+    );
+    const item = (number: string, text: string) =>
+      `<w:p><w:pPr><w:pStyle w:val="Defsubpara"/></w:pPr><w:r><w:tab/><w:t>${number}</w:t>` +
+      `</w:r><w:r><w:tab/><w:t>${text}</w:t></w:r></w:p>`;
+    const part = load(item('(i)', 'by way of lease') + item('(ii)', 'in any other way'));
+    const lines = linesOf(layoutSemanticDocument(part, 1, { measurer, styleCascade }));
+    expect(lines).toHaveLength(2);
+    for (const line of lines) {
+      const [, number, tab, text] = line.spans;
+      expect(number!.box.x + number!.box.width).toBeCloseTo(2041 / 20, 6);
+      expect(tab!.text).toBe('\t');
+      expect(text!.box.x).toBeCloseTo(2325 / 20, 6);
+    }
   });
 });
 
