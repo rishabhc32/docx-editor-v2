@@ -173,6 +173,14 @@ Use plain text and explicit revision information when preparing a model prompt. 
 
 `Document.revisions` addresses the main story. `Body.revisions` addresses that body's story, including a header, footer, or note. It never merges all stories into one collection.
 
+You can load a header or footer body's revisions in the same sync that requests the body:
+
+```ts
+const header = context.document.sections.getFirst().getHeader('Primary');
+header.revisions.load('items');
+await context.sync();
+```
+
 Load collection membership, then load `author`, `date`, and `type`:
 
 ```ts

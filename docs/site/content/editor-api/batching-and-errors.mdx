@@ -99,14 +99,12 @@ A story is the main body, a header, a footer, or another document text container
 
 Bookmark removal is an exception: `Document.deleteBookmark()` and `Bookmark.delete()` can share a sync with writes to another story. Inserting a bookmark can also move an existing name from another story in the same transaction.
 
-If the document has a primary header and footer, resolve both objects before formatting them. Then commit each story's writes separately:
+If the document has a primary header and footer, commit each story's writes in a separate sync. You don't need a sync to resolve the section or the stories first:
 
 ```ts
 await runtime.run(async (context) => {
   const section = context.document.sections.getFirst();
-  await context.sync();
   const stories = [section.getHeader('Primary'), section.getFooter('Primary')];
-  await context.sync();
 
   for (const story of stories) {
     story.font.name = 'Calibri';

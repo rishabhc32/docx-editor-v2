@@ -651,7 +651,8 @@ export interface RevisionAuthorOptions {
 
 /** What one revision collection addresses. */
 type RevisionScope =
-  | { readonly body: AutomationHandle }
+  // Read when a batch is planned, because a header, footer or note story may still be a promise.
+  | { readonly body: () => AutomationHandle }
   | { readonly span: () => AutomationSpanRef }
   | { readonly key: string };
 
@@ -675,7 +676,7 @@ export class RevisionCollection extends HandleCollection<Revision> {
     context: RequestContext,
     label: string,
     owner: ObjectPath,
-    body: AutomationHandle
+    body: () => AutomationHandle
   ): RevisionCollection {
     return new RevisionCollection(context, ObjectPath.derived(label, owner), { body });
   }
@@ -738,11 +739,14 @@ export class RevisionCollection extends HandleCollection<Revision> {
   #scopeRef(): { body: AutomationHandle } | { scope: AutomationSpanRef } | { key: string } {
     const scope = this.#scope;
     if ('span' in scope) return { scope: scope.span() };
-    return 'key' in scope ? { key: scope.key } : { body: scope.body };
+    return 'key' in scope ? { key: scope.key } : { body: scope.body() };
   }
 
-  /** The story handle, or `NotSupported` on a collection that a range or a key scopes. */
-  #storyBody(member: string): AutomationHandle {
+  /**
+   * The story handle to read at plan time, or `NotSupported` on a collection that a range or a
+   * key scopes.
+   */
+  #storyBody(member: string): () => AutomationHandle {
     const scope = this.#scope;
     if (!('body' in scope)) fail({ code: 'NotSupported', target: `${this.path.label}.${member}` });
     return scope.body;
@@ -783,7 +787,7 @@ export class RevisionCollection extends HandleCollection<Revision> {
       label,
       plan: () => ({
         op: 'resolveRevisionBatch',
-        body,
+        body: body(),
         action,
         ...(targets === undefined
           ? {}
@@ -852,7 +856,7 @@ export class RevisionCollection extends HandleCollection<Revision> {
       label,
       plan: () => ({
         op: 'setRevisionAuthorBatch',
-        body,
+        body: body(),
         author,
         ...(date === undefined ? {} : { date: date.toISOString() }),
         ...(authors === undefined ? {} : { authors: [...authors] }),

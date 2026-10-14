@@ -1,0 +1,10 @@
+{
+  "impact": "no-impact",
+  "fields": [],
+  "before": "Header, footer, and note body members such as revisions, lists, search, and insertParagraph refused with InvalidObjectPath until an earlier sync resolved the body.",
+  "after": "Those members read the body handle when the batch is planned, so the sync that resolves the body also runs them.",
+  "reason": "Only the client proxy changes when it reads a handle. The host receives the same operations in the same order as with the earlier sync, and document operations, shared state, and the collaboration format stay unchanged.",
+  "tests": ["packages/editor-api/src/runtime/__tests__/runtime-story-read-dependencies.test.ts"],
+  "changeset": "story-members-same-sync",
+  "migration": null
+}

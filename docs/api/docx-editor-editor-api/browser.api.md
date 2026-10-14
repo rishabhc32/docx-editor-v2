@@ -295,7 +295,7 @@ export class ContentControlCollection extends HandleCollection<ContentControl> {
     // @internal
     protected listing(): AutomationOperation;
     // @internal
-    static of(context: RequestContext, label: string, owner: ObjectPath, scope: ContentControlScope): ContentControlCollection;
+    static of(context: RequestContext, label: string, owner: ObjectPath, scope: () => ContentControlScope): ContentControlCollection;
     // @internal
     protected promised(label: string, nullable: boolean): ContentControl & PromisedItem;
 }
@@ -1004,7 +1004,7 @@ export class ListCollection extends HandleCollection<List> {
     // @internal
     protected listing(): AutomationOperation;
     // @internal
-    static of(context: RequestContext, label: string, owner: ObjectPath, body: AutomationHandle): ListCollection;
+    static of(context: RequestContext, label: string, owner: ObjectPath, body: () => AutomationHandle): ListCollection;
     // @internal
     protected promised(label: string, nullable: boolean): List & PromisedItem;
 }
@@ -1376,7 +1376,7 @@ export class RevisionCollection extends HandleCollection<Revision> {
     // @internal
     protected listing(): AutomationOperation;
     // @internal
-    static of(context: RequestContext, label: string, owner: ObjectPath, body: AutomationHandle): RevisionCollection;
+    static of(context: RequestContext, label: string, owner: ObjectPath, body: () => AutomationHandle): RevisionCollection;
     // @internal
     static ofReviewKey(context: RequestContext, label: string, owner: ObjectPath, key: string): RevisionCollection;
     // @internal

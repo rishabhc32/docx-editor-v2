@@ -299,19 +299,20 @@ export class List extends ModelObject implements PromisedItem {
  * @public
  */
 export class ListCollection extends HandleCollection<List> {
-  readonly #body: AutomationHandle;
+  /** Read when a batch is planned, because a header, footer or note story may still be a promise. */
+  readonly #body: () => AutomationHandle;
 
   /** @internal The lists of one story, in the order their numbers first appear. */
   static of(
     context: RequestContext,
     label: string,
     owner: ObjectPath,
-    body: AutomationHandle
+    body: () => AutomationHandle
   ): ListCollection {
     return new ListCollection(context, ObjectPath.derived(label, owner), body);
   }
 
-  private constructor(context: RequestContext, path: ObjectPath, body: AutomationHandle) {
+  private constructor(context: RequestContext, path: ObjectPath, body: () => AutomationHandle) {
     super(context, path);
     this.#body = body;
   }
@@ -338,7 +339,7 @@ export class ListCollection extends HandleCollection<List> {
     this.enqueue({
       sort: 'read',
       label: target,
-      plan: () => ({ op: 'getListById', body, id: wanted }),
+      plan: () => ({ op: 'getListById', body: body(), id: wanted }),
       settle: (value) => {
         found.hydrateAddress({ kind: 'handle', handle: hydratedHandle(value, target) });
       },
@@ -348,7 +349,7 @@ export class ListCollection extends HandleCollection<List> {
 
   /** @internal The read that answers this collection's members. */
   protected listing(): AutomationOperation {
-    return { op: 'getLists', body: this.#body };
+    return { op: 'getLists', body: this.#body() };
   }
 
   /** @internal Build one member from an address the listing answered. */

@@ -180,7 +180,7 @@ export class Document extends ModelObject {
       this.context,
       'document.contentControls',
       this.path,
-      { body: this.internals.roots().body }
+      () => ({ body: this.internals.roots().body })
     );
     return this.#contentControls;
   }
@@ -207,7 +207,7 @@ export class Document extends ModelObject {
       this.context,
       'document.revisions',
       this.path,
-      this.internals.roots().body
+      () => this.internals.roots().body
     );
     return this.#revisions;
   }

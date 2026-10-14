@@ -247,7 +247,7 @@ export class ContentControl extends ModelObject implements PromisedItem {
       this.context,
       `${this.path.label}.contentControls`,
       this.path,
-      { contentControl: this.#handle() }
+      () => ({ contentControl: this.#handle() })
     );
     return this.#contentControls;
   }
@@ -493,7 +493,8 @@ type ContentControlScope =
  * @public
  */
 export class ContentControlCollection extends HandleCollection<ContentControl> {
-  readonly #scope: ContentControlScope;
+  /** Read when a batch is planned, because its story or control may still be a promise. */
+  readonly #scope: () => ContentControlScope;
   readonly #plan: () => AutomationOperation;
 
   /** @internal The controls of a scope, in document order. */
@@ -501,18 +502,18 @@ export class ContentControlCollection extends HandleCollection<ContentControl> {
     context: RequestContext,
     label: string,
     owner: ObjectPath,
-    scope: ContentControlScope
+    scope: () => ContentControlScope
   ): ContentControlCollection {
     return new ContentControlCollection(context, ObjectPath.derived(label, owner), scope, () => ({
       op: 'getContentControls',
-      scope,
+      scope: scope(),
     }));
   }
 
   private constructor(
     context: RequestContext,
     path: ObjectPath,
-    scope: ContentControlScope,
+    scope: () => ContentControlScope,
     plan: () => AutomationOperation
   ) {
     super(context, path);
@@ -545,7 +546,7 @@ export class ContentControlCollection extends HandleCollection<ContentControl> {
     this.enqueue({
       sort: 'read',
       label: target,
-      plan: () => ({ op: 'getContentControlById', scope, id }),
+      plan: () => ({ op: 'getContentControlById', scope: scope(), id }),
       settle: (value) => {
         found.hydrateAddress({ kind: 'handle', handle: hydratedHandle(value, target) });
       },
@@ -562,7 +563,7 @@ export class ContentControlCollection extends HandleCollection<ContentControl> {
       this.context,
       ObjectPath.derived(target, this.path),
       scope,
-      () => ({ op: 'getContentControlsByTag', scope, tag: wanted })
+      () => ({ op: 'getContentControlsByTag', scope: scope(), tag: wanted })
     );
   }
 
@@ -575,7 +576,7 @@ export class ContentControlCollection extends HandleCollection<ContentControl> {
       this.context,
       ObjectPath.derived(target, this.path),
       scope,
-      () => ({ op: 'getContentControlsByTitle', scope, title: wanted })
+      () => ({ op: 'getContentControlsByTitle', scope: scope(), title: wanted })
     );
   }
 
