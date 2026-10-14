@@ -1,0 +1,15 @@
+{
+  "impact": "compatible",
+  "fields": [],
+  "before": "Accepting a tracked row insertion or rejecting a tracked row deletion removed the w:ins or w:del from w:trPr and left an empty w:trPr on the row. Every revision resolution path did this, including the review cards, bulk decisions, and the automation API.",
+  "after": "The same decision also removes a w:trPr whose every child it drops, so the row digests like one that never had row properties. A w:trPr that holds other row properties keeps them, and a w:trPr that arrives empty stays.",
+  "reason": "The removal is an ordinary tree edit inside the resolving transaction, so it replicates and undoes as one change through the existing journal. Peers receive the resulting tree, not the operation, and released participants read a row without w:trPr as an ordinary row. No stored field, operation shape, identity, or repair rule changes. A concurrent write into the same w:trPr, such as a row height, converges on the removal, as a concurrent property write into a w:pPr that another participant clears already does.",
+  "tests": [
+    "packages/core/src/store/__tests__/revision-row-properties.test.ts",
+    "packages/pro/src/collaboration/__tests__/document-row-marker-properties.test.ts",
+    "packages/pro/src/collaboration/__tests__/document-table-revisions.test.ts",
+    "packages/core/src/store/__tests__/revision-row-combinations.test.ts"
+  ],
+  "changeset": "row-marker-empty-properties",
+  "migration": null
+}

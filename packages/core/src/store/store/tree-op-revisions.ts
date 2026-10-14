@@ -2,6 +2,7 @@ import { revisionSiteRefusal, type RevisionSiteRefusal } from './revision-site-r
 import {
   hasRevisionMarkerContent,
   heldOnlyResolvedMarks,
+  heldOnlyResolvedRowProperties,
   isInertMarker,
 } from './revision-marker-content.ts';
 import { retainedNestedRowSites } from './revision-table-preserve-nested.ts';
@@ -617,6 +618,7 @@ function rebuildChildren(children: readonly OoxmlNode[], plan: RebuildPlan): Oox
     }
     if (child.kind !== 'textValue' && plan.removeStructures.has(child.id)) continue;
     if (child.kind !== 'textValue' && plan.dropMarks.has(child.id)) continue;
+    if (heldOnlyResolvedRowProperties(child, plan.dropMarks)) continue;
     if (child.kind !== 'textValue' && plan.restoreProperties.has(child.id)) continue;
     const action = child.kind === 'textValue' ? undefined : plan.actions.get(child.id);
     if (action === 'remove') continue;

@@ -48,3 +48,26 @@ export function heldOnlyResolvedMarks(node: OoxmlNode, dropped: ReadonlySet<stri
     markProperties ? dropped.has(child.id) : heldOnlyResolvedMarks(child, dropped)
   );
 }
+
+/**
+ * A `w:trPr` that held nothing but the properties this resolution drops: the row's own
+ * `w:ins` or `w:del`, an accepted `w:trPrChange`, or a height Word added without a record.
+ *
+ * The row marker is the row decision itself, so its container goes with it, and the row
+ * digests like one that never had row properties. The id-family rule above cannot apply here:
+ * a row read from a file, reopened from saved bytes, or held by another collaboration replica
+ * carries no record of who created its `w:trPr`. A `w:trPr` that arrives empty holds nothing
+ * this resolution drops, so it stays.
+ */
+export function heldOnlyResolvedRowProperties(
+  node: OoxmlNode,
+  dropped: ReadonlySet<string>
+): boolean {
+  return (
+    node.kind === 'generic' &&
+    node.namespaceUri === WML_NAMESPACE_URI &&
+    node.localName === 'trPr' &&
+    node.children.length > 0 &&
+    node.children.every((child) => dropped.has(child.id))
+  );
+}
