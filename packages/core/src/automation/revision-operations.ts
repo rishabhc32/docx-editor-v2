@@ -306,17 +306,38 @@ export function planRevisionDecision(
   };
 }
 
-/** Resolve only this decision's source sites, with shared dependency preflight. */
-export function revisionItemOps(
+/**
+ * Resolve only this decision's source sites, with shared dependency preflight.
+ *
+ * A decision the preflight skips is refused with its skip reason as the detail, the same
+ * reason `resolveRevisionBatch` reports in `skipped`, so the caller can say why.
+ */
+export function planRevisionItem(
   reads: AutomationStoryReads,
   item: ReviewRevisionItem,
   action: 'accept' | 'reject'
-): readonly TreeDocOp[] {
+): PlannedOperation {
   const decision = planRevisionBatch(
     reads.part,
     action,
     [reviewItemKey(item)],
     sharesItsPart(reads.story) ? reads.root : undefined
   );
-  return decision.result.skipped.length ? [] : decision.ops;
+  const [skipped] = decision.result.skipped;
+  if (skipped)
+    return {
+      ok: false,
+      error: {
+        code: 'unsupported-revision',
+        message: 'the review preflight left that change pending',
+        detail: skipped.reason,
+      },
+    };
+  return {
+    ok: true,
+    kind: 'command',
+    story: reads.story,
+    ops: decision.ops,
+    answer: () => ({ kind: 'applied' }),
+  };
 }

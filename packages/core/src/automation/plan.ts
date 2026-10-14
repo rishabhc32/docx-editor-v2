@@ -124,7 +124,7 @@ import {
   type AutomationRevisionRead,
 } from './review.ts';
 import { planProposal, trackedParagraphInsertError, trackedProposalOf } from './plan-proposal.ts';
-import { planRevisionDecision, revisionItemOps } from './revision-operations.ts';
+import { planRevisionDecision, planRevisionItem } from './revision-operations.ts';
 import type { ReviewCommentItem } from '../store/store/review-items.ts';
 import {
   planDeleteComment,
@@ -2424,14 +2424,11 @@ export function createBatchPlanner(host: BatchPlannerHost): BatchPlanner {
         const plan = planFor(found.reads);
         const conflict = pinWrite(plan);
         if (conflict) return conflict;
-        const ops = revisionItemOps(
+        return planRevisionItem(
           found.reads,
           found.item.item,
           operation.op === 'acceptRevision' ? 'accept' : 'reject'
         );
-        if (!ops.length)
-          return refuse('unsupported-revision', 'the table decision has unresolved dependencies');
-        return { ok: true, kind: 'command', story: found.reads.story, ops, answer: () => APPLIED };
       }
 
       case 'resolveRevisionBatch':
