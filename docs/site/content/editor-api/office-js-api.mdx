@@ -52,7 +52,7 @@ For operation-specific tracking limits, see [Tracked changes](/docs/2.x/editor-a
 | Comment and revision dates have the `Date` type. | Invalid or missing file dates return `null`. | Narrow the nullable `Date` before you use it. |
 | Font reads use concrete values. | Mixed, unspecified, or inherited style values return `null`. | Narrow the value before you reuse it in a write. |
 | `Range.select()` runs inside Word. | Selection needs an attached browser editor. | Check `runtime.capabilities.selection`. A server runtime returns `NotSupported`. |
-| Header and footer getters can address missing parts. | A getter returns a deferred body; its first write creates the missing story. | Sync after resolving the section and before using a newly created object. |
+| Header and footer getters can address missing parts. | A getter returns a deferred body; its first write creates the missing story. | Sync before you use an object that the first write returns. |
 | `ContentControl.id` is a number. | `ContentControl.id` is a string because DOCX IDs can be missing or repeated. | Do not use the file ID as a unique numeric key. |
 | `ContentControl.subtype` uses Word interface terms. | `ContentControl.subtype` uses DOCX control terms. | Handle values such as `plainText`, `dropDownList`, and `checkbox`. |
 

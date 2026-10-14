@@ -42,15 +42,11 @@ Assignments on one page-setup proxy coalesce per sync. The engine validates dime
 
 `Section.getHeader(type)` and `getFooter(type)` return `Body` proxies. `HeaderFooterType` accepts `Primary`, `FirstPage`, or `EvenPages`. Each variant is its own story scope. A missing header or footer returns a deferred empty body. Every read on it answers as an empty story, so its collections and searches are empty. Reading does not create the story. Its first supported content insertion creates the missing story.
 
-This example writes a primary footer after resolving its body:
+You can use the returned body in the same sync that requests it. The runtime resolves the section and the story first, and then runs the body's reads and writes. This example writes a primary footer in one sync:
 
 ```ts
 await runtime.run(async (context) => {
-  const section = context.document.sections.getFirst();
-  await context.sync();
-  const footer = section.getFooter('Primary');
-  footer.load('text');
-  await context.sync();
+  const footer = context.document.sections.getFirst().getFooter('Primary');
   footer.insertText('Internal document', 'End');
   await context.sync();
 });
