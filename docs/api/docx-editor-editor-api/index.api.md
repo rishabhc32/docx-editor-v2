@@ -1324,8 +1324,10 @@ export class Revision extends ModelObject implements PromisedItem {
     hydrateAddress(address: ObjectAddress): void;
     // @internal
     hydrateNull(): void;
+    get id(): string;
     // @internal
     protected onLoad(request: ResolvedLoadOptions): void;
+    get partName(): string;
     // @internal
     static promised(context: RequestContext, label: string, nullable: boolean): Revision;
     get range(): Range_2;

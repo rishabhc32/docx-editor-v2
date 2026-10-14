@@ -2377,6 +2377,18 @@ export function createBatchPlanner(host: BatchPlannerHost): BatchPlanner {
         return query({ kind: 'text', text: found.item.date });
       }
 
+      case 'getRevisionFileId':
+      case 'getRevisionPartName': {
+        const found = revisionAt(operation.revision);
+        if (!found.ok) return found.planned;
+        // FILE data, unlike the handle. The `@w:id` is the first mark's, the one the review
+        // item's `address` names, and never the placeholder for a mark with no `@w:id`: such a
+        // change is `readOnly`, so `revisionReads` does not list it.
+        const text =
+          operation.op === 'getRevisionFileId' ? found.item.item.address.id : found.reads.part.name;
+        return query({ kind: 'text', text });
+      }
+
       case 'getRevisionRange': {
         const found = revisionAt(operation.revision);
         if (!found.ok) return found.planned;

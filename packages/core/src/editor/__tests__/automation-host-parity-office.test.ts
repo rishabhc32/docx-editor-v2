@@ -454,6 +454,8 @@ describe('the two hosts agree about comments and tracked changes', () => {
           { op: 'getRevisionType', revision },
           { op: 'getRevisionAuthor', revision },
           { op: 'getRevisionDate', revision },
+          { op: 'getRevisionFileId', revision },
+          { op: 'getRevisionPartName', revision },
           { op: 'getRevisionRange', revision },
         ],
       });
@@ -469,5 +471,15 @@ describe('the two hosts agree about comments and tracked changes', () => {
       };
     });
     expect(outcome.server).toEqual(outcome.browser);
+    expect(outcome.server.read).toMatchObject({
+      values: [
+        { kind: 'text', text: 'Insert' },
+        { kind: 'text', text: 'Ada' },
+        { kind: 'text', text: '2026-02-01T09:00:00Z' },
+        { kind: 'text', text: '6' },
+        { kind: 'text', text: '/word/document.xml' },
+        { kind: 'span' },
+      ],
+    });
   });
 });

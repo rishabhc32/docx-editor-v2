@@ -293,7 +293,7 @@ Nested changes, move pairs, tracked rows, and paragraph marks with property chan
 
 Pass an empty array to select nothing. Duplicate objects resolve once; stale objects produce `unknown-revision`. Objects from another context or story fail validation.
 
-Use revision objects instead of raw OOXML `w:id` values, which Word can reuse. Treat result keys as opaque identifiers for the open document. Reload revisions after saving and reopening a file.
+Within one run, select revision objects instead of raw OOXML `w:id` values, which a file can reuse. To apply a decision from outside the runtime, see [Find the revision for a review item](#find-the-revision-for-a-review-item). Treat result keys as opaque identifiers for the open document. Reload revisions after saving and reopening a file.
 
 ## Resolve changes shown in the editor
 
@@ -384,6 +384,15 @@ await runtime.run(async (context) => {
 A comment key works with `getReviewItemRange`, and refuses with `NotSupported` in `getReviewItemRevisions`. A custom node key refuses in both. Read keys from the review queue just before you use them, because edits to the document can change them.
 
 These functions are DocxEditor additions. Office.js has no review queue and no key for a revision, so the functions are not members of the Office-shaped classes.
+
+## Find the revision for a review item
+
+A key names an item only in the document that listed it. If a review decision comes from outside the runtime, such as from a reviewer's browser editor, find its revisions by file identity instead. Load `Revision.id` and `Revision.partName`. These members are DocxEditor additions; Office.js has no revision ID.
+
+- `id` is the `w:id` that the file wrote for the change, as a string. If one revision covers several tracked marks, `id` is the `w:id` of the first mark.
+- `partName` is the package part that holds the change, such as `/word/document.xml` or `/word/header1.xml`.
+
+In the editor, a review item carries the same values in `item.addresses` and `item.ranges`. A file can repeat an ID, so compare `partName` and `author` together with `id`. Expect one match, or two for a paired replacement. Otherwise, read the review items again instead of guessing. An `id` can change after a write such as `setAuthor()`, and a change without a `w:id` doesn't appear in `items`.
 
 ## Change the author of tracked changes
 

@@ -409,6 +409,14 @@
       "reason": "Implemented by DocxEditor's object model as a read-only shortcut to the exact plain text returned by NoteItem#body.text. Upstream has no such member to select for exact conformance, so it is recorded as a DocxEditor extension rather than added to the reference shape. The body remains available for structured traversal and edits."
     },
     {
+      "uid": "Word.Revision#id",
+      "reason": "Implemented by DocxEditor's object model as a read-only DocxEditor addition: the change's file w:id, as a string. Upstream Word.Revision and Word.TrackedChange have no ID member to select for exact conformance. It lets a caller match a revision to a record kept outside the runtime, such as a review item, without a competing lookup method. It follows Word.ContentControl#id: a string, never a number, because the file writes it as text and can repeat it. Word numbers revisions per part, so it is matched with Word.Revision#partName. A revision that covers several tracked marks answers the w:id of its first mark, the one its review item's address names. A change with no w:id is read-only and is not listed. The proxy remains the identity; the file ID is metadata beside it."
+    },
+    {
+      "uid": "Word.Revision#partName",
+      "reason": "Implemented by DocxEditor's object model as a read-only DocxEditor addition: the package part that holds the change, such as /word/document.xml or /word/header1.xml. Upstream has no such member to select for exact conformance. It is the file's own part name, not engine identity, and the part name that the change's review item ranges carry. See Word.Revision#id."
+    },
+    {
       "uid": "Word.Body#revisions",
       "reason": "See Word.Document#revisions."
     },

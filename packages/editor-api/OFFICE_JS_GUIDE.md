@@ -376,6 +376,8 @@ await runtime.run(async (context) => {
 
 A browser review panel identifies cards by `key`. Pass the key to the DocxEditor function `getReviewItemRevisions(context, key)` to decide the card's own change, or the two halves of a paired replacement. `getReviewItemRange(context, key)` returns the range that a card covers; use `getReviewItemRangeOrNullObject(context, key)` when another reviewer can resolve the change first. Do not match cards to revisions by text.
 
+A key names a card only in the document that listed it. When a reviewer's accept or reject decision arrives from another process, find its revisions by file identity. Load `revision.id` and `revision.partName`, which are DocxEditor additions, and compare them with the review item's `addresses` and the part name of its `ranges`. Then pass the matches to `revisions.resolve(action, matches)`. Expect one match, or two for a paired replacement. Otherwise, read again and reconsider; never resolve a guess. For more information, see [Find the revision for a review item](https://docx-editor.dev/docs/2.x/editor-api/revisions#find-the-revision-for-a-review-item).
+
 ## Set paragraph direction
 
 Office.js has no paragraph direction member. Use the DocxEditor addition `Paragraph.readingOrder` to write right-to-left paragraphs, such as Arabic or Hebrew text. Queue the direction writes for several paragraphs in one sync, then read them back in the next sync:

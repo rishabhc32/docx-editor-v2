@@ -93,7 +93,7 @@ Font writes honor inherited complex-script properties. Font reads return authore
 | `Comment` | `authorName`, `creationDate`, `id`, `text`, `delete`, `resolved`, `replies`, `getRange`, `reply` | [Comments](/docs/2.x/editor-api/comments) |
 | `CommentReply` | `authorName`, `creationDate`, `id`, `text`, `delete` | [Comments](/docs/2.x/editor-api/comments) |
 | `CommentCollection`, `CommentReplyCollection` | `getFirst` | [Comments](/docs/2.x/editor-api/comments) |
-| `Revision` | `author`, `date`, `type`, `range`, `accept`, `reject` | [Tracked changes](/docs/2.x/editor-api/revisions) |
+| `Revision` | `author`, `date`, `type`, `range`, `accept`, `reject`; `id` and `partName` (DocxEditor additions) | [Tracked changes](/docs/2.x/editor-api/revisions), including [matching a review item](/docs/2.x/editor-api/revisions#find-the-revision-for-a-review-item) |
 | `RevisionCollection` | `resolve`, `setAuthor`, `acceptAll`, `rejectAll` | [Tracked changes](/docs/2.x/editor-api/revisions) |
 | `getReviewItemRevisions`, `getReviewItemRange`, `getReviewItemRangeOrNullObject` | DocxEditor functions that return the changes a review item `key` names, or the range it covers | [Work with review items](/docs/2.x/editor-api/revisions#work-with-review-items) |
 | `ChangeTrackingMode`, `RevisionTextView`, `RevisionType` | Runtime tracking modes, read views, and published revision types | [Tracked changes](/docs/2.x/editor-api/revisions) |

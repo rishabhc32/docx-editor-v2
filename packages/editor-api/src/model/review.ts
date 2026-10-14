@@ -483,6 +483,10 @@ export class CommentCollection extends HandleCollection<Comment> {
  * grid — are omitted from the collection rather than shipped as objects with an unpublishable
  * `type`. That listing is not the collection decision set: see {@link RevisionCollection}.
  *
+ * The object's identity is its proxy. {@link Revision.id} and {@link Revision.partName} are what
+ * the FILE wrote, for matching a change to a record held outside this runtime, such as a review
+ * item. They are not engine identity, and they are not unique.
+ *
  * @public
  */
 export class Revision extends ModelObject implements PromisedItem {
@@ -527,6 +531,34 @@ export class Revision extends ModelObject implements PromisedItem {
     return this.loadedProperty<RevisionType>('type');
   }
 
+  /**
+   * The `w:id` the file wrote for this change, as a string.
+   *
+   * A DocxEditor addition: Office.js has no revision ID. One revision can cover several tracked
+   * marks, such as adjacent deletion fragments. `id` is then its first mark's: the one its review
+   * item's `address` names. A replacement is two revisions, `Delete` and `Insert`; a paired review
+   * item names the deletion in `address` and both halves in `addresses`.
+   *
+   * Not unique: Word numbers revisions per part and a file can repeat a number, so match it with
+   * {@link Revision.partName}, and with `author` or `type` where it repeats. A change with no
+   * `w:id` is read-only and not listed. The value is untrusted file text, and a write such as
+   * `RevisionCollection.setAuthor()` can change it.
+   */
+  get id(): string {
+    return this.loadedProperty<string>('id');
+  }
+
+  /**
+   * The package part the change is written in, such as `/word/document.xml` or
+   * `/word/header1.xml`: the part its review item's ranges name.
+   *
+   * A DocxEditor addition: Office.js has no member for it. Every footnote shares
+   * `/word/footnotes.xml`, and a change in a text box reads its anchoring story's part.
+   */
+  get partName(): string {
+    return this.loadedProperty<string>('partName');
+  }
+
   /** The words the change covers. */
   get range(): Range {
     const label = `${this.path.label}.range`;
@@ -553,12 +585,21 @@ export class Revision extends ModelObject implements PromisedItem {
 
   /** @internal Plan the read this object's `load(...)` asked for. */
   protected override onLoad(request: ResolvedLoadOptions): void {
-    const selected = this.selection(request, ['author', 'date', 'type']);
+    const selected = this.selection(request, ['author', 'date', 'type', 'id', 'partName']);
     if (selected.includes('author')) {
       this.loadTextInto('author', () => ({ op: 'getRevisionAuthor', revision: this.#handle() }));
     }
     if (selected.includes('type')) {
       this.loadTextInto('type', () => ({ op: 'getRevisionType', revision: this.#handle() }));
+    }
+    if (selected.includes('id')) {
+      this.loadTextInto('id', () => ({ op: 'getRevisionFileId', revision: this.#handle() }));
+    }
+    if (selected.includes('partName')) {
+      this.loadTextInto('partName', () => ({
+        op: 'getRevisionPartName',
+        revision: this.#handle(),
+      }));
     }
     if (!selected.includes('date')) return;
     const label = `${this.path.label}.date`;

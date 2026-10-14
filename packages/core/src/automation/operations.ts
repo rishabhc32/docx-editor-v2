@@ -652,6 +652,13 @@ export type AutomationOperation =
   | { readonly op: 'getRevisionAuthor'; readonly revision: AutomationHandle }
   /** `@w:date` verbatim, or empty where the file wrote none. */
   | { readonly op: 'getRevisionDate'; readonly revision: AutomationHandle }
+  /**
+   * `@w:id` verbatim: the file's own number for the change's first tracked mark, the one its
+   * review item's `address` names. File data, not a handle — a document can repeat it.
+   */
+  | { readonly op: 'getRevisionFileId'; readonly revision: AutomationHandle }
+  /** The package part the change is written in, such as `/word/header1.xml`. */
+  | { readonly op: 'getRevisionPartName'; readonly revision: AutomationHandle }
   /** The words a change covers. Empty-range changes — a formatting one — answer their site. */
   | { readonly op: 'getRevisionRange'; readonly revision: AutomationHandle }
   /**
