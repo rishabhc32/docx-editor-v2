@@ -658,19 +658,20 @@ export interface RevisionAuthorOptions {
  * @public
  */
 export class RevisionCollection extends HandleCollection<Revision> {
-  readonly #body: AutomationHandle;
+  /** Read when a batch is planned, because a header, footer or note story may still be a promise. */
+  readonly #body: () => AutomationHandle;
 
   /** @internal The pending decisions of one story. */
   static of(
     context: RequestContext,
     label: string,
     owner: ObjectPath,
-    body: AutomationHandle
+    body: () => AutomationHandle
   ): RevisionCollection {
     return new RevisionCollection(context, ObjectPath.derived(label, owner), body);
   }
 
-  private constructor(context: RequestContext, path: ObjectPath, body: AutomationHandle) {
+  private constructor(context: RequestContext, path: ObjectPath, body: () => AutomationHandle) {
     super(context, path);
     this.#body = body;
   }
@@ -684,14 +685,12 @@ export class RevisionCollection extends HandleCollection<Revision> {
    * changes remain.
    */
   acceptAll(): void {
-    const body = this.#body;
-    this.commandOn('acceptAll', () => ({ op: 'acceptAllRevisions', body }));
+    this.commandOn('acceptAll', () => ({ op: 'acceptAllRevisions', body: this.#body() }));
   }
 
   /** Undo every change, likewise as one decision. */
   rejectAll(): void {
-    const body = this.#body;
-    this.commandOn('rejectAll', () => ({ op: 'rejectAllRevisions', body }));
+    this.commandOn('rejectAll', () => ({ op: 'rejectAllRevisions', body: this.#body() }));
   }
 
   /**
@@ -726,7 +725,7 @@ export class RevisionCollection extends HandleCollection<Revision> {
       label,
       plan: () => ({
         op: 'resolveRevisionBatch',
-        body: this.#body,
+        body: this.#body(),
         action,
         ...(targets === undefined
           ? {}
@@ -792,7 +791,7 @@ export class RevisionCollection extends HandleCollection<Revision> {
       label,
       plan: () => ({
         op: 'setRevisionAuthorBatch',
-        body: this.#body,
+        body: this.#body(),
         author,
         ...(date === undefined ? {} : { date: date.toISOString() }),
         ...(authors === undefined ? {} : { authors: [...authors] }),
@@ -814,7 +813,7 @@ export class RevisionCollection extends HandleCollection<Revision> {
 
   /** @internal The read that answers this collection's members. */
   protected listing(): AutomationOperation {
-    return { op: 'getRevisions', body: this.#body };
+    return { op: 'getRevisions', body: this.#body() };
   }
 
   /** @internal Build one member from an address the listing answered. */

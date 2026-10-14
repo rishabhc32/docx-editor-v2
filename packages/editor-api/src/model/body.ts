@@ -115,8 +115,8 @@ export class Body extends ModelObject {
    * @internal A story a read will name: a header or footer variant, or a note's body.
    *
    * The OWNER queues that read — a section, a note — because a pending object cannot address the
-   * document yet, and it is the owner that can. Like every object a batch produces in this runtime,
-   * the story is addressable from the next batch on.
+   * document yet, and it is the owner that can. The story's members read its handle when the batch
+   * is planned, so the sync that runs the owner's read can load or edit the story as well.
    */
   static promisedStory(context: RequestContext, label: string): Body {
     return new Body(context, ObjectPath.pending(label));
@@ -156,12 +156,12 @@ export class Body extends ModelObject {
    * does not aggregate bookmarks from other stories.
    */
   get bookmarks(): BookmarkCollection {
-    const handle = this.#handle();
+    this.requireUsablePath();
     this.#bookmarks ??= BookmarkCollection.of(
       this.context,
       `${this.path.label}.bookmarks`,
       this.path,
-      () => ({ op: 'getBookmarks', scope: { body: handle } })
+      () => ({ op: 'getBookmarks', scope: { body: this.#handle() } })
     );
     return this.#bookmarks;
   }
@@ -198,16 +198,14 @@ export class Body extends ModelObject {
   set style(value: string) {
     const target = `${this.path.label}.style`;
     const name = requireStyleName(value, target);
-    this.requireAddressable();
+    this.requireUsablePath();
     this.command('style', () => ({ op: 'setStyle', span: spanRefOf(this.path, 'body'), name }));
   }
 
   /** Every list this story holds, in the order their numbers first appear. */
   get lists(): ListCollection {
-    this.#lists ??= ListCollection.of(
-      this.context,
-      `${this.path.label}.lists`,
-      this.path,
+    this.requireUsablePath();
+    this.#lists ??= ListCollection.of(this.context, `${this.path.label}.lists`, this.path, () =>
       this.#handle()
     );
     return this.#lists;
@@ -220,11 +218,12 @@ export class Body extends ModelObject {
    * a story's controls makes a field and the group wrapping it look like siblings.
    */
   get contentControls(): ContentControlCollection {
+    this.requireUsablePath();
     this.#contentControls ??= ContentControlCollection.of(
       this.context,
       `${this.path.label}.contentControls`,
       this.path,
-      { body: this.#handle() }
+      () => ({ body: this.#handle() })
     );
     return this.#contentControls;
   }
@@ -232,10 +231,10 @@ export class Body extends ModelObject {
   /** The comments anchored in this story, in document order. Replies hang off the comment. */
   getComments(): CommentCollection {
     const target = `${this.path.label}.getComments`;
-    const handle = this.#handle();
+    this.requireUsablePath();
     return CommentCollection.of(this.context, target, this.path, () => ({
       op: 'getComments',
-      scope: { body: handle },
+      scope: { body: this.#handle() },
     }));
   }
 
@@ -248,11 +247,12 @@ export class Body extends ModelObject {
    * resolve every store-resolvable revision in this story.
    */
   get revisions(): RevisionCollection {
+    this.requireUsablePath();
     this.#revisions ??= RevisionCollection.of(
       this.context,
       `${this.path.label}.revisions`,
       this.path,
-      this.#handle()
+      () => this.#handle()
     );
     return this.#revisions;
   }
@@ -279,10 +279,10 @@ export class Body extends ModelObject {
     const target = `${this.path.label}.search`;
     if (typeof searchText !== 'string') fail({ code: 'InvalidArgument', target });
     const selected = searchOptions(options, target);
-    const handle = this.#handle();
+    this.requireUsablePath();
     return RangeCollection.of(this.context, target, this.path, () => ({
       op: 'search',
-      scope: { body: handle },
+      scope: { body: this.#handle() },
       text: searchText,
       options: {
         ...(selected ?? {}),
@@ -293,10 +293,10 @@ export class Body extends ModelObject {
 
   /** Empty the story, leaving one empty paragraph behind. */
   clear(): void {
-    const handle = this.#handle();
+    this.requireUsablePath();
     this.commandDiscarding('clear', () => ({
       op: 'replaceSpan',
-      span: { body: handle },
+      span: { body: this.#handle() },
       text: '',
     }));
   }
@@ -342,13 +342,13 @@ export class Body extends ModelObject {
     const target = `${this.path.label}.insertParagraph`;
     const written = insertableText(paragraphText, target);
     const where = bodyParagraphLocation(insertLocation, target);
-    const handle = this.#handle();
+    this.requireUsablePath();
     const created = Paragraph.promised(this.context, target, false);
     this.commandAnswering(
       target,
       () => ({
         op: 'insertParagraph',
-        anchor: { body: handle, at: where === 'Start' ? 'first' : 'last' },
+        anchor: { body: this.#handle(), at: where === 'Start' ? 'first' : 'last' },
         where: where === 'Start' ? 'before' : 'after',
         text: written,
       }),
