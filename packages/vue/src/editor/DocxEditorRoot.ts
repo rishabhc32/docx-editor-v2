@@ -144,6 +144,7 @@ export const DocxEditorRoot = defineComponent({
       type: String as PropType<LockedControlNavigation>,
       default: undefined,
     },
+    headerFooterEditing: { type: Boolean, default: undefined },
     zoom: { type: Number, default: undefined },
     zoomMode: { type: [Object, String] as PropType<ZoomMode | 'auto'>, default: undefined },
     tableInteractionLabel: {

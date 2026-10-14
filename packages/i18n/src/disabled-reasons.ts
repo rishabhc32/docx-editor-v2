@@ -55,6 +55,8 @@ export const DISABLED_REASON_KEYS: Readonly<Record<string, TranslationKey>> = Ob
   'insertNote requires body scope': 'disabledReason.bodyOnlyNote',
   'insertPageField requires an open header or footer scope':
     'disabledReason.furnitureOnlyPageField',
+  // Keyed on `HEADER_FOOTER_READ_ONLY_REASON` in the engine's header and footer lane.
+  'headers and footers are read-only in this editor': 'disabledReason.headerFooterReadOnly',
   // Not a scope refusal: the story is right and the MODE is not. A section break's type
   // lands on the section that follows it, and Word's record for that change is one this
   // engine refuses to accept or reject — so it cannot be proposed.

@@ -62,8 +62,11 @@ export interface DocumentSearchOptions {
   readonly wholeWord?: boolean;
   /** Override the default {@link SEARCH_MATCH_LIMIT}. Clamped to it; never raised past it. */
   readonly limit?: number;
-  /** Stories the facade can navigate in its current mode. */
-  readonly stories?: 'all' | 'body';
+  /**
+   * Stories the facade can navigate in its current mode. `bodyAndNotes` leaves out headers and
+   * footers, for an editor whose furniture cannot be opened.
+   */
+  readonly stories?: 'all' | 'bodyAndNotes' | 'body';
 }
 
 /**
@@ -204,11 +207,19 @@ function noteStories(
   return stories;
 }
 
-function searchStories(part: OoxmlPart, sources?: DocumentSearchSources): SearchStory[] {
+function searchStories(
+  part: OoxmlPart,
+  sources: DocumentSearchSources | undefined,
+  scope: DocumentSearchOptions['stories'] = 'all'
+): SearchStory[] {
   const stories = bodyStories(part);
-  if (sources) {
-    const seen = new Set<OoxmlPart>();
-    for (const story of furnitureStories(sources.headerFooterBySection, seen)) stories.push(story);
+  if (sources && scope !== 'body') {
+    if (scope === 'all') {
+      const seen = new Set<OoxmlPart>();
+      for (const story of furnitureStories(sources.headerFooterBySection, seen)) {
+        stories.push(story);
+      }
+    }
     for (const story of noteStories(
       sources.footnotes,
       'footnote',
@@ -299,8 +310,7 @@ export function collectTextMatchesForQueries(
   open = open.filter((index) => index >= 0);
   if (open.length === 0) return results;
 
-  const searchableSources = options.stories === 'body' ? undefined : sources;
-  for (const story of searchStories(part, searchableSources)) {
+  for (const story of searchStories(part, sources, options.stories)) {
     let paragraphIndex = 0;
     for (const paragraph of storyParagraphs(story.root)) {
       if (paragraph.kind !== 'paragraph') continue;

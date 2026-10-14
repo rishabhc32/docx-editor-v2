@@ -13,6 +13,7 @@ import { PopupConfigProvider, type DocxEditorPopups } from './popup-config';
 import { warnFieldResultsChanged } from './field-results-warning';
 import { warnContentLockPolicyChanged } from './content-lock-policy-warning';
 import { warnLockedControlNavigationChanged } from './locked-control-navigation-warning';
+import { warnHeaderFooterEditingChanged } from './header-footer-editing-warning';
 import type { DocxEditorChildren } from '../docx-editor-children';
 // Provider-first host for the docx editor facade.
 //
@@ -162,6 +163,13 @@ export interface DocxEditorRootProps {
    * ignored, with a development warning.
    */
   lockedControlNavigation?: LockedControlNavigation;
+  /**
+   * Whether the reader can edit headers and footers. `true` (the default) keeps Word's
+   * behaviour. `false` makes them read-only in the editor UI; collaboration edits, review
+   * actions, and automation still change them. Read once, when the editor is created: a later
+   * change is ignored, with a development warning.
+   */
+  headerFooterEditing?: boolean;
 
   /** Fired once per instance, after it is published to the tree (and after any
    *  `DocxEditor.Content` in the same commit has attached its mount point). A large
@@ -296,6 +304,8 @@ export function DocxEditorRoot(props: DocxEditorRootProps) {
   const createdContentLockPolicy = useRef(props.contentLockPolicy);
   /** The `lockedControlNavigation` the current instance was created with. */
   const createdLockedControlNavigation = useRef(props.lockedControlNavigation);
+  /** The `headerFooterEditing` the current instance was created with. */
+  const createdHeaderFooterEditing = useRef(props.headerFooterEditing);
 
   // The channel `<DocxEditor.ColorByChangeType>` / `<DocxEditor.AuthorStyle>` declare through.
   // A store: declarations register from anywhere in the subtree, and identity must hold
@@ -321,6 +331,7 @@ export function DocxEditorRoot(props: DocxEditorRootProps) {
     createdFieldResults.current = p.fieldResults;
     createdContentLockPolicy.current = p.contentLockPolicy;
     createdLockedControlNavigation.current = p.lockedControlNavigation;
+    createdHeaderFooterEditing.current = p.headerFooterEditing;
     const instance = createDocxEditor({
       ...(p.document !== undefined ? { document: p.document } : {}),
       ...(p.fonts ? { fonts: p.fonts } : {}),
@@ -334,6 +345,9 @@ export function DocxEditorRoot(props: DocxEditorRootProps) {
       ...(p.contentLockPolicy !== undefined ? { contentLockPolicy: p.contentLockPolicy } : {}),
       ...(p.lockedControlNavigation !== undefined
         ? { lockedControlNavigation: p.lockedControlNavigation }
+        : {}),
+      ...(p.headerFooterEditing !== undefined
+        ? { headerFooterEditing: p.headerFooterEditing }
         : {}),
       ...(p.mode !== undefined ? { mode: p.mode } : {}),
       ...(declaredStyles !== undefined ? { revisionStyles: declaredStyles } : {}),
@@ -489,6 +503,13 @@ export function DocxEditorRoot(props: DocxEditorRootProps) {
       );
     }
   }, [editor, props.lockedControlNavigation]);
+
+  // Read once at creation, like `fieldResults`.
+  useEffect(() => {
+    if (editor) {
+      warnHeaderFooterEditingChanged(createdHeaderFooterEditing.current, props.headerFooterEditing);
+    }
+  }, [editor, props.headerFooterEditing]);
 
   // Table furniture labels follow the live locale resolver without remounting the editor.
   useEffect(() => {

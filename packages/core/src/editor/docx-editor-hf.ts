@@ -4,10 +4,67 @@
 // and handles active-scope rebind after unlink / exit after delete-or-link of the open story.
 
 import type { EditorCommand, ExecResult } from '../contracts/editor.ts';
-import type { TreeDocOp } from '@docx-editor.dev/core/store';
+import { bookmarkNameKey, listBookmarks, type TreeDocOp } from '@docx-editor.dev/core/store';
 import type { PaginatedSurface } from './paginated-surface-contract.ts';
+import { storyScopeOfPartName } from './surface-scope.ts';
 
 export type FurnitureVariant = 'default' | 'first' | 'even';
+
+export const HEADER_FOOTER_READ_ONLY_REASON = 'headers and footers are read-only in this editor';
+
+/** The commands that open, create, remove, relink or write a header or footer story. */
+const HEADER_FOOTER_COMMANDS: ReadonlySet<EditorCommand['type']> = new Set([
+  'editHeaderFooter',
+  'removeHeaderFooter',
+  'setHeaderFooterOptions',
+  'linkHeaderFooterToPrevious',
+  'unlinkHeaderFooterFromPrevious',
+  'insertPageField',
+]);
+
+const readOnlyHeaderFooters = new WeakSet<PaginatedSurface>();
+
+/** Share `headerFooterEditing: false` with admission without adding it to the public surface API. */
+export function registerHeaderFooterEditing(
+  surface: PaginatedSurface,
+  enabled: boolean | undefined
+): void {
+  if (enabled === false) readOnlyHeaderFooters.add(surface);
+}
+
+/** Whether the surface was created with `headerFooterEditing: false`. */
+export function headerFootersReadOnly(surface: PaginatedSurface): boolean {
+  return readOnlyHeaderFooters.has(surface);
+}
+
+/** Whether a header or footer holds a bookmark with this name, compared without case. */
+function headerFooterHoldsBookmark(surface: PaginatedSurface, name: string): boolean {
+  const key = bookmarkNameKey(name);
+  return surface.session
+    .storyParts()
+    .some(
+      (part) =>
+        storyScopeOfPartName(surface.session, part.name, { kind: 'body' }).kind ===
+          'headerFooter' &&
+        listBookmarks(part).some((bookmark) => bookmarkNameKey(bookmark.name) === key)
+    );
+}
+
+/**
+ * Whether `command` opens, creates, removes, relinks, or writes a header or footer story. A
+ * bookmark write counts when a header or footer holds the name, because adding, deleting, or
+ * keeping the first of a name can move or remove the bookmark there.
+ */
+export function isHeaderFooterCommand(surface: PaginatedSurface, command: EditorCommand): boolean {
+  if (HEADER_FOOTER_COMMANDS.has(command.type)) return true;
+  if (
+    command.type !== 'insertBookmark' &&
+    command.type !== 'deleteBookmark' &&
+    command.type !== 'keepFirstBookmark'
+  )
+    return false;
+  return headerFooterHoldsBookmark(surface, command.name);
+}
 
 export function variantFromFlags(flags: {
   readonly firstPage?: boolean;

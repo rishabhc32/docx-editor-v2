@@ -11,6 +11,7 @@ import { formControlTranslateKey } from './form-control-translate';
 import { warnFieldResultsChanged } from './field-results-warning';
 import { warnContentLockPolicyChanged } from './content-lock-policy-warning';
 import { warnLockedControlNavigationChanged } from './locked-control-navigation-warning';
+import { warnHeaderFooterEditingChanged } from './header-footer-editing-warning';
 import {
   computed,
   inject,
@@ -116,6 +117,13 @@ export interface DocxEditorRootProps {
    * ignored, with a development warning.
    */
   lockedControlNavigation?: LockedControlNavigation;
+  /**
+   * Whether the reader can edit headers and footers. `true` (the default) keeps Word's
+   * behaviour. `false` makes them read-only in the editor UI; collaboration edits, review
+   * actions, and automation still change them. Read once, when the editor is created: a later
+   * change is ignored, with a development warning.
+   */
+  headerFooterEditing?: boolean;
 
   tableInteractionLabel?: (key: 'table.insertRowBelow' | 'table.insertColumnRight') => string;
   imageDecodePort?: ImageDecodePort;
@@ -168,6 +176,8 @@ export function useDocxEditorRootOwner(
   let createdContentLockPolicy: DocxEditorRootProps['contentLockPolicy'];
   /** The `lockedControlNavigation` the current instance was created with. */
   let createdLockedControlNavigation: DocxEditorRootProps['lockedControlNavigation'];
+  /** The `headerFooterEditing` the current instance was created with. */
+  let createdHeaderFooterEditing: DocxEditorRootProps['headerFooterEditing'];
   const markupRevision = shallowRef(0);
   let applyingMarkup = false;
   const tick = shallowRef(0);
@@ -288,6 +298,7 @@ export function useDocxEditorRootOwner(
     createdFieldResults = p.fieldResults;
     createdContentLockPolicy = p.contentLockPolicy;
     createdLockedControlNavigation = p.lockedControlNavigation;
+    createdHeaderFooterEditing = p.headerFooterEditing;
     const instance = createDocxEditor({
       ...(p.document !== undefined ? { document: p.document } : {}),
       ...(p.fonts ? { fonts: p.fonts } : {}),
@@ -301,6 +312,9 @@ export function useDocxEditorRootOwner(
       ...(p.contentLockPolicy !== undefined ? { contentLockPolicy: p.contentLockPolicy } : {}),
       ...(p.lockedControlNavigation !== undefined
         ? { lockedControlNavigation: p.lockedControlNavigation }
+        : {}),
+      ...(p.headerFooterEditing !== undefined
+        ? { headerFooterEditing: p.headerFooterEditing }
         : {}),
       ...(p.mode !== undefined ? { mode: p.mode } : {}),
       ...(revisionStyleRegistry.current() !== undefined
@@ -478,6 +492,15 @@ export function useDocxEditorRootOwner(
       if (editor) {
         warnLockedControlNavigationChanged(createdLockedControlNavigation, lockedControlNavigation);
       }
+    },
+    { flush: 'post' }
+  );
+
+  // Read once at creation, like `fieldResults`.
+  watch(
+    () => [editorRef.value, toValue(props).headerFooterEditing] as const,
+    ([editor, headerFooterEditing]) => {
+      if (editor) warnHeaderFooterEditingChanged(createdHeaderFooterEditing, headerFooterEditing);
     },
     { flush: 'post' }
   );

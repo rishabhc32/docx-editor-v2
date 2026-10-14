@@ -408,6 +408,21 @@ describe('document search facade', () => {
     editor.destroy();
   });
 
+  test('leaves read-only headers and footers out, and keeps the notes', () => {
+    const editor = createDocxEditor({
+      container: document.createElement('div'),
+      document: storyParityDocx(),
+      headerFooterEditing: false,
+    });
+
+    expect(editor.findMatches('Alpha').map((match) => match.scope?.kind ?? 'body')).toEqual([
+      'body',
+      'note',
+      'note',
+    ]);
+    editor.destroy();
+  });
+
   test('limits search to the body when a scoped entry method is unavailable', () => {
     const editor = createDocxEditor({
       container: document.createElement('div'),

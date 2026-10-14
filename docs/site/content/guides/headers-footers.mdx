@@ -20,6 +20,30 @@ While editing, a separator bar labels the region (**Header** or **Footer**) and 
 
 Press Escape or click the close action to save and leave header/footer editing.
 
+## Read-only headers and footers
+
+To show headers and footers without letting readers edit them, set `headerFooterEditing` to `false`:
+
+```ts
+const editor = createDocxEditor({
+  container,
+  document: bytes,
+  headerFooterEditing: false,
+});
+```
+
+In React and Vue, pass the same value as the `headerFooterEditing` prop. The editor reads it once, when it is created.
+
+With `headerFooterEditing: false`:
+
+- A double-click doesn't open a header or footer, and doesn't create a missing one.
+- Headers and footers show no hover highlight, edit hint, or text cursor.
+- `setActiveScope` and `focus` can't open a header or footer, and search skips their text.
+- `editHeaderFooter`, `removeHeaderFooter`, `setHeaderFooterOptions`, `linkHeaderFooterToPrevious`, `unlinkHeaderFooterFromPrevious`, and `insertPageField` return `{ ok: false, code: 'locked' }`. Toolbar controls that run them are disabled.
+- If a header or footer holds a bookmark, `insertBookmark`, `deleteBookmark`, and `keepFirstBookmark` with its name return `{ ok: false, code: 'locked' }`. `goToBookmark` scrolls to the bookmark without opening the header or footer.
+
+The setting applies to the editor UI only. Header and footer edits from collaborators still appear. Review actions, such as accepting or rejecting all changes, still resolve tracked changes in headers and footers. Automation through the [Editing API](/docs/2.x/editor-api) can still change them.
+
 ## Page-number fields
 
 `PAGE`, `NUMPAGES`, and `SECTIONPAGES` stay as Word fields. The page view updates their values when the document reflows.

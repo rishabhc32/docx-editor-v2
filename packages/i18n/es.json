@@ -38,7 +38,8 @@
     "lockedContentBreak": "Un control de contenido bloquea este texto, así que no puedes insertar aquí un salto de sección.",
     "nothingToCopyFormatting": "Selecciona texto para copiar su formato",
     "nothingToPaint": "Selecciona texto para aplicar el formato",
-    "pictureSelected": "Hay una imagen seleccionada. Coloque el cursor en el texto para insertar una imagen."
+    "pictureSelected": "Hay una imagen seleccionada. Coloque el cursor en el texto para insertar una imagen.",
+    "headerFooterReadOnly": "Los encabezados y pies de página son de solo lectura en este editor."
   },
   "toolbar": {
     "ariaLabel": "Barra de formato",

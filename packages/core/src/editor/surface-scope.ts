@@ -386,9 +386,17 @@ export function setHeaderFooterEditingChrome(
  * written on every mode change, not only on a repaint: `setEditingMode` moves the mode
  * without moving the document, so a reader who switched to Viewing kept the invitation
  * until some unrelated edit repainted the pages.
+ *
+ * `headerFootersReadOnly` (`headerFooterEditing: false`) hides the same header and footer
+ * invitations in every mode, because the surface refuses the double click they invite.
  */
-export function setEditingModeChrome(container: HTMLElement, mode: SurfaceEditingMode): void {
+export function setEditingModeChrome(
+  container: HTMLElement,
+  mode: SurfaceEditingMode,
+  headerFootersReadOnly: boolean
+): void {
   container.classList.toggle('docx-paginated-surface--viewing', mode === 'view');
+  container.classList.toggle('docx-paginated-surface--hf-read-only', headerFootersReadOnly);
 }
 
 /** Move the caret within body stops or an open furniture/note story's stops. */

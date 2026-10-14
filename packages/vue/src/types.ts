@@ -105,6 +105,13 @@ export interface DocxEditorProps {
    * ignored, with a development warning.
    */
   lockedControlNavigation?: LockedControlNavigation;
+  /**
+   * Whether the reader can edit headers and footers. `true` (the default) keeps Word's
+   * behaviour. `false` makes them read-only in the editor UI; collaboration edits, review
+   * actions, and automation still change them. Read once, when the editor is created: a later
+   * change is ignored, with a development warning.
+   */
+  headerFooterEditing?: boolean;
 
   /**
    * BCP-47 locale for regional date input and engine-generated labels. Defaults to en-US.

@@ -169,6 +169,20 @@ export interface DocxEditorConfig {
    * does. Fixed for the instance.
    */
   lockedControlNavigation?: LockedControlNavigation;
+  /**
+   * Whether the reader can edit headers and footers. `true` (the default) keeps Word's
+   * behaviour. `false` makes them read-only in the editor UI: a double click neither opens a
+   * header or footer nor creates a missing one, `setActiveScope` and `focus` cannot open one,
+   * find skips them, and `editHeaderFooter`, `removeHeaderFooter`, `setHeaderFooterOptions`,
+   * `linkHeaderFooterToPrevious`, `unlinkHeaderFooterFromPrevious` and `insertPageField` are
+   * refused with `locked`, as are the bookmark commands that would move or remove a bookmark
+   * in a header or footer. Go To still shows such a bookmark. Fixed for the instance.
+   *
+   * UI scope only: header and footer edits from collaboration peers still apply, review
+   * actions, such as accepting or rejecting all changes, still resolve revisions in them, and
+   * automation APIs can still write them.
+   */
+  headerFooterEditing?: boolean;
   /** Override raster decode for insert/replace image commands; defaults to browser/headless. */
   imageDecodePort?: import('../store/package/image-resources.ts').ImageDecodePort;
   /**
