@@ -1,0 +1,13 @@
+{
+  "impact": "no-impact",
+  "fields": [],
+  "before": "Revision.accept(), Revision.reject(), and review item key decisions refuse an incomplete group or a retained row with NotImplemented and no reason in debugInfo.innerError.",
+  "after": "The same refusal names the skip reason in debugInfo.innerError, such as review.incomplete-group.",
+  "reason": "The planner refuses the decision before any write and names the skip reason, as before. Only the thrown error changes, so no shared field, operation, snapshot, or protocol message changes.",
+  "tests": [
+    "packages/editor-api/src/runtime/__tests__/runtime-revision-decisions.test.ts",
+    "packages/editor-api/src/runtime/__tests__/runtime-browser-diagnostics.test.ts"
+  ],
+  "changeset": "revision-decision-refusal-reason",
+  "migration": null
+}
