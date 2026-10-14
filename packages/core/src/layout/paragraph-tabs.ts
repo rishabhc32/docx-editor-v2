@@ -278,8 +278,16 @@ export interface TabDestination {
 }
 
 /**
- * Next tab destination strictly past `currentX`, preferring custom stops then the default
- * interval. Destination is clamped to `rightEdge` so stops cannot escape the content box.
+ * How far short of a stop the pen can be and still be on it, in points. A right-aligned segment
+ * ends at `(stop - width) + width`, which floating point can leave one step short of the stop,
+ * so the next tab would find the same stop again. Far below a twip, so a real gap still counts.
+ */
+const TAB_STOP_REACHED_PT = 1e-9;
+
+/**
+ * Next tab destination strictly past `currentX` (within `TAB_STOP_REACHED_PT`), preferring
+ * custom stops then the default interval. Destination is clamped to `rightEdge` so stops
+ * cannot escape the content box.
  */
 export function nextTabDestination(
   tabs: ResolvedTabStops,
@@ -291,7 +299,7 @@ export function nextTabDestination(
   for (const stop of tabs.stops) {
     if (stop.numberingOnly && !forNumbering) continue;
     if (stop.implied && forNumbering) continue;
-    if (stop.positionPt > currentX) {
+    if (stop.positionPt > currentX + TAB_STOP_REACHED_PT) {
       return {
         positionPt: Math.min(stop.positionPt, edge),
         alignment: stop.alignment,
@@ -300,7 +308,7 @@ export function nextTabDestination(
     }
   }
   const interval = tabs.defaultIntervalPt > 0 ? tabs.defaultIntervalPt : DEFAULT_TAB_INTERVAL_PT;
-  let next = Math.ceil((currentX + 1e-9) / interval) * interval;
+  let next = Math.ceil((currentX + TAB_STOP_REACHED_PT) / interval) * interval;
   if (next <= currentX) next += interval;
   // A default-interval tab has no leader: only an authored `w:tab` can carry one.
   return {
