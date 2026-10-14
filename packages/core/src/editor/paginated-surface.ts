@@ -2923,7 +2923,7 @@ export function mountPaginatedSurface(
    * so the `w:hyperlink` only ever wraps this author's own `w:ins` — which is the
    * reviewable unit.
    *
-   * The three PROPERTY ops are members for the reason the tabs and breaks are: passed
+   * The PROPERTY ops, list ops included, are members for the reason tabs and breaks are: passed
    * through unattributed they rewrote a `w:rPr` outright, so a suggester's Bold press was a
    * permanent edit with no card, nothing to reject, and — once formatting learned to reach
    * tracked text — a silent rewrite of another author's pending insertion (#495).

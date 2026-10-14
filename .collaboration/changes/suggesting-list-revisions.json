@@ -1,0 +1,14 @@
+{
+  "impact": "compatible",
+  "fields": [],
+  "before": "In suggesting mode, bulleted list, numbered list, and list indent changes from the editor applied without a w:pPrChange. A bullet press recorded the paragraph only when it also applied the List Paragraph style.",
+  "after": "These changes write a w:pPrChange attributed to the suggesting author, with one review item per press. A document that sets w:doNotTrackFormatting applies them untracked, like other paragraph formatting. List definitions in numbering.xml stay untracked.",
+  "reason": "The editor now attaches a revision to setListNumbering and setListLevel ops. Automation in suggesting mode already emits these ops with a revision, so released participants already apply them. The replicated result is the existing w:pPrChange paragraph property record. No stored field, operation kind, or identity rule changes.",
+  "tests": [
+    "packages/core/src/editor/__tests__/suggesting-list-revisions.test.ts",
+    "packages/pro/src/collaboration/__tests__/document-suggested-lists.test.ts",
+    "packages/editor-api/src/runtime/__tests__/runtime-change-tracking.test.ts"
+  ],
+  "changeset": "suggesting-list-revisions",
+  "migration": null
+}

@@ -17,7 +17,9 @@ type RevisionCapableOp = Extract<
       | 'deleteTableRow'
       | 'setRunProperties'
       | 'setParagraphProperties'
-      | 'setParagraphMarkProperties';
+      | 'setParagraphMarkProperties'
+      | 'setListNumbering'
+      | 'setListLevel';
   }
 >;
 const REVISION_CAPABLE_OPS: ReadonlySet<TreeDocOp['op']> = new Set<RevisionCapableOp['op']>([
@@ -34,6 +36,10 @@ const REVISION_CAPABLE_OPS: ReadonlySet<TreeDocOp['op']> = new Set<RevisionCapab
   'setRunProperties',
   'setParagraphProperties',
   'setParagraphMarkProperties',
+  // List writes are paragraph property changes: the store records the old `w:numPr` in a
+  // `w:pPrChange`. Left out, the list buttons and a list item's indent applied untracked.
+  'setListNumbering',
+  'setListLevel',
 ]);
 
 export function isRevisionCapable(op: TreeDocOp): op is RevisionCapableOp {
@@ -50,8 +56,6 @@ export function isTrackedEdit(op: TreeDocOp): boolean {
     // tracked edit with no `insertText` beside it to report for it.
     case 'insertContentControl':
     case 'authorTable':
-    case 'setListNumbering':
-    case 'setListLevel':
     case 'splitParagraphMany':
       return op.revision !== undefined;
     default:
