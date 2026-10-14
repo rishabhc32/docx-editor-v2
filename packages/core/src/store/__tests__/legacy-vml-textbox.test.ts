@@ -388,6 +388,95 @@ describe('VML lines and rectangles', () => {
     expect(component.arrowheadsEmu).toBeUndefined();
   });
 
+  test('a group of lines is one vector shape with a component for each line', () => {
+    // Word's double rule: two lines placed by their points in the group's coordinates. Both
+    // touch the group's edges, and their strokes reach past it, as a standalone line's do.
+    const part = parse(
+      '<w:pict><v:group id="rule" style="position:absolute;margin-left:1in;margin-top:19pt;' +
+        'width:448.75pt;height:1.3pt;z-index:-251658240;mso-wrap-distance-left:0;' +
+        'mso-wrap-distance-right:0;mso-position-horizontal-relative:page" ' +
+        'coordorigin="1440,380" coordsize="8975,26">' +
+        '<v:line style="position:absolute" from="1440,386" to="10404,386" strokeweight=".6pt"/>' +
+        '<v:line style="position:absolute" from="1440,397" to="10415,397" strokeweight=".84pt"/>' +
+        '<w10:wrap type="topAndBottom" anchorx="page"/></v:group></w:pict>'
+    );
+    const before = serializeOoxmlPart(part);
+    const projection = only(part);
+    expect(projection.kind).toBe('anchored');
+    expect(projection.wrap).toBe('topAndBottom');
+    expect(projection.anchor?.behindDocument).toBe(true);
+    expect(projection.extentEmu).toEqual({ cx: 5_699_125, cy: 16_510 });
+    expect(projection.position?.horizontal).toEqual({
+      relativeFrom: 'page',
+      align: null,
+      offsetEmu: 72 * EMU,
+    });
+    expect(projection.position?.vertical.offsetEmu).toBe(19 * EMU);
+    expect(projection.legacyGraphic).toBeUndefined();
+    // One group unit is 0.05pt, which is 635 EMU, on both axes.
+    const unit = 635;
+    const [thin, thick, ...rest] = projection.vectorShape!.components;
+    expect(rest).toEqual([]);
+    expect(thin!.subpathsEmu).toEqual([
+      [
+        { x: 0, y: 6 * unit },
+        { x: 8964 * unit, y: 6 * unit },
+      ],
+    ]);
+    expect(thin!.strokeHex).toBe('000000');
+    expect(thin!.strokeWidthEmu).toBe(7_620);
+    expect(thick!.subpathsEmu).toEqual([
+      [
+        { x: 0, y: 17 * unit },
+        { x: 8975 * unit, y: 17 * unit },
+      ],
+    ]);
+    expect(thick!.strokeWidthEmu).toBe(10_668);
+    expect(serializeOoxmlPart(part)).toBe(before);
+  });
+
+  test('an inline group of lines with an anchor lock is one inline vector shape', () => {
+    const projection = only(
+      parse(
+        '<w:pict><v:group style="width:213.55pt;height:.8pt;mso-position-horizontal-relative:char;' +
+          'mso-position-vertical-relative:line" coordsize="4271,16">' +
+          '<v:line style="position:absolute" from="0,8" to="4270,8" strokeweight=".76pt"/>' +
+          '<w10:anchorlock/></v:group></w:pict>'
+      )
+    );
+    expect(projection.kind).toBe('inline');
+    expect(projection.extentEmu).toEqual({ cx: 2_712_085, cy: 10_160 });
+    expect(projection.legacyGraphic).toBeUndefined();
+    expect(projection.vectorShape!.components).toHaveLength(1);
+    expect(projection.vectorShape!.components[0]!.subpathsEmu).toEqual([
+      [
+        { x: 0, y: 5_080 },
+        { x: 2_711_450, y: 5_080 },
+      ],
+    ]);
+  });
+
+  test('a group line outside the subset keeps the whole group refused', () => {
+    const group = (line: string) =>
+      '<w:pict><v:group style="position:absolute;width:100pt;height:10pt" coordorigin="0,0" ' +
+      `coordsize="1000,100"><v:line style="position:absolute" from="0,50" to="1000,50"/>${line}` +
+      '</v:group></w:pict>';
+    for (const line of [
+      // Points with units, or outside the group's coordinates, which would be clipped.
+      '<v:line style="position:absolute" from="0pt,5pt" to="100pt,5pt"/>',
+      '<v:line style="position:absolute" from="0,50" to="1001,50"/>',
+      '<v:line style="position:absolute" from="-1,50" to="1000,50"/>',
+      // A box beside the points, a flip, one point, or coincident points.
+      '<v:line style="position:absolute;left:0;top:0;width:10;height:10" from="0,0" to="10,10"/>',
+      '<v:line style="position:absolute;flip:x" from="0,0" to="10,10"/>',
+      '<v:line style="position:absolute" from="0,50"/>',
+      '<v:line style="position:absolute" from="5,5" to="5,5"/>',
+      // A member the vector subset does not read.
+      '<v:line style="position:absolute" from="0,0" to="10,10"><v:textbox/></v:line>',
+    ])
+      expect(projectDrawingsInPart(parse(group(line)))).toEqual([]);
+  });
+
   test('a line without both points, inline, or flipped stays refused', () => {
     for (const content of [
       '<w:pict><v:line style="position:absolute" from="0,0"/></w:pict>',
