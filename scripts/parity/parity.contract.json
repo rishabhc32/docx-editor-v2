@@ -28,7 +28,8 @@
       "reviewDisplayMode",
       "fieldResults",
       "contentLockPolicy",
-      "lockedControlNavigation"
+      "lockedControlNavigation",
+      "headerFooterEditing"
     ],
     "deferredInVue": {},
     "reactCallbacksAsVueEmits": {

@@ -3,6 +3,11 @@ import { tocAtPosition } from './surface-toc-ranges.ts';
 import { formsProtectionRefusal } from '../store/store/tree-op-content-controls.ts';
 import { settingsPartOf } from '../store/package/note-properties.ts';
 import { commandProtectionRefusal, FORMS_WRITE_REASON } from './command-protection.ts';
+import {
+  HEADER_FOOTER_READ_ONLY_REASON,
+  headerFootersReadOnly,
+  isHeaderFooterCommand,
+} from './docx-editor-hf.ts';
 // Snapshot derivations for `createDocxEditor` (editor seam).
 //
 // The reads that turn a mounted surface into contract values: run formatting, page setup,
@@ -333,6 +338,14 @@ export function gateCommand(
   }
   const protection = support.mutating ? commandProtectionRefusal(command, surface) : null;
   if (protection) return { ok: false, refusal: protection };
+  // Refuse before any write: `editHeaderFooter` creates a missing part before it enters it, so
+  // a refusal at entry alone would leave the new part behind.
+  if (isHeaderFooterCommand(command) && headerFootersReadOnly(surface)) {
+    return {
+      ok: false,
+      refusal: { ok: false, code: 'locked', reason: HEADER_FOOTER_READ_ONLY_REASON },
+    };
+  }
   if (command.type === 'insertTextBox') {
     const refusal = textboxInsertionRefusal(surface);
     return refusal ? { ok: false, refusal } : { ok: true };

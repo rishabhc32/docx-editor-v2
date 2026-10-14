@@ -29,6 +29,7 @@ Staged React/Vue prop divergences are enforced by `bun run check:editor-contract
 | `zoom` | `number` | React, Vue | Fixed zoom scale; changes apply without remounting. |
 | `zoomMode` | `ZoomMode \| 'auto'` | React, Vue | Automatic or fixed zoom behavior. |
 | `lockedControlNavigation` | `'characters' \| 'atomic'` | React, Vue | Caret movement through an inline content control with locked content. `'atomic'` steps over the control as one unit. Read once, at creation. For details, see [Caret movement in content-locked controls](https://www.docx-editor.dev/docs/2.x/guides/content-controls#caret-movement-in-content-locked-controls). |
+| `headerFooterEditing` | `boolean` | React, Vue | `false` makes headers and footers read-only in the editor UI. Defaults to `true`. Read once, at creation. For details, see [Read-only headers and footers](https://www.docx-editor.dev/docs/2.x/guides/headers-footers#read-only-headers-and-footers). |
 | `locale` | `string` | React, Vue | Regional date input and generated labels; defaults to `en-US`. |
 | `i18n` | `Translations` | React, Vue | UI translations, including form controls; separate from `locale`. |
 | `t` | `(key, params?) => string` | React, Vue | Host translation function for editor chrome. |

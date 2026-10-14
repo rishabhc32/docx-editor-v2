@@ -1457,6 +1457,7 @@ export interface DocxEditorConfig {
     fieldResults?: FieldResultsMode;
     fonts?: FontConfiguration | FontConfigurationFragment | FontResolver;
     fontShaping?: FontShapingOptions;
+    headerFooterEditing?: boolean;
     imageDecodePort?: ImageDecodePort;
     locale?: string;
     lockedControlNavigation?: LockedControlNavigation;

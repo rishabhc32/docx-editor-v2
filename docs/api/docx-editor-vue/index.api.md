@@ -3899,6 +3899,7 @@ export interface DocxEditorProps {
     // (undocumented)
     fonts?: FontConfiguration | FontConfigurationFragment | FontResolver;
     fontShaping?: FontShapingOptions;
+    headerFooterEditing?: boolean;
     // (undocumented)
     hyperlinkPopup?: boolean;
     // (undocumented)
@@ -4090,6 +4091,10 @@ export const DocxEditorRoot: vue.DefineComponent<vue.ExtractPropTypes<{
         default: undefined;
         type: PropType<DocxEditorRootProps['fonts']>;
     };
+    headerFooterEditing: {
+        default: undefined;
+        type: BooleanConstructor;
+    };
     imageDecodePort: {
         default: undefined;
         type: PropType<ImageDecodePort>;
@@ -4161,6 +4166,10 @@ export const DocxEditorRoot: vue.DefineComponent<vue.ExtractPropTypes<{
         default: undefined;
         type: PropType<DocxEditorRootProps['fonts']>;
     };
+    headerFooterEditing: {
+        default: undefined;
+        type: BooleanConstructor;
+    };
     imageDecodePort: {
         default: undefined;
         type: PropType<ImageDecodePort>;
@@ -4212,6 +4221,7 @@ export const DocxEditorRoot: vue.DefineComponent<vue.ExtractPropTypes<{
     fieldResults: FieldResultsMode;
     fontShaping: _docx_editor_dev_core.FontShapingOptions | undefined;
     fonts: _docx_editor_dev_core.FontConfiguration | _docx_editor_dev_core.FontConfigurationFragment | _docx_editor_dev_core.FontResolver | undefined;
+    headerFooterEditing: boolean;
     imageDecodePort: ImageDecodePort;
     locale: string;
     lockedControlNavigation: LockedControlNavigation;
@@ -4247,6 +4257,7 @@ export interface DocxEditorRootProps {
     // (undocumented)
     fonts?: FontConfiguration | FontConfigurationFragment | FontResolver;
     fontShaping?: FontShapingOptions;
+    headerFooterEditing?: boolean;
     // (undocumented)
     imageDecodePort?: ImageDecodePort;
     locale?: string;

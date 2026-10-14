@@ -4,6 +4,7 @@ import type { DocumentEditingMode, ExecResult, TextMatch, ViewScope } from '../c
 import type { SemanticPosition } from '../layout/semantic-interaction.ts';
 import type { PaginatedSurface } from './paginated-surface-contract.ts';
 import { drawingSelectionPosition } from './surface-drawing-selection.ts';
+import { headerFootersReadOnly } from './docx-editor-hf.ts';
 
 type ScopedStory =
   | {
@@ -43,16 +44,19 @@ export function isScopedStory(scope: ViewScope | undefined): scope is ScopedStor
   return scope?.kind === 'headerFooter' || scope?.kind === 'note';
 }
 
-/** Whether navigation can open every non-body story returned by document search. */
+/** The stories document search covers: only those that navigation can open. */
 export function searchStoriesForSurface(
   surface: PaginatedSurface,
   editingMode: DocumentEditingMode
-): 'all' | 'body' {
-  return editingMode !== 'viewing' &&
-    typeof surface.enterHeaderFooter === 'function' &&
-    typeof surface.enterNote === 'function'
-    ? 'all'
-    : 'body';
+): 'all' | 'bodyAndNotes' | 'body' {
+  if (
+    editingMode === 'viewing' ||
+    typeof surface.enterHeaderFooter !== 'function' ||
+    typeof surface.enterNote !== 'function'
+  ) {
+    return 'body';
+  }
+  return headerFootersReadOnly(surface) ? 'bodyAndNotes' : 'all';
 }
 
 /** Leave a scoped story only when the destination is a body paragraph. */

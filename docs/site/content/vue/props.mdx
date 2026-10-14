@@ -22,6 +22,7 @@ Use `document` for the document source.
 | `zoomMode` | `ZoomMode \| 'auto'` | Zoom source. `'auto'` fits the page width. |
 | `contentLockPolicy` | `ContentLockPolicy` | Set `{ allowFormattingInLockedContent: true }` to let users format content-locked controls. Their text stays protected. The editor reads this prop once, at creation. For details, see [Formatting content-locked controls](/docs/2.x/guides/content-controls#formatting-content-locked-controls). |
 | `lockedControlNavigation` | `'characters' \| 'atomic'` | How the caret moves through an inline content control with locked content. `'characters'` (the default) steps through each character. `'atomic'` steps over the control as one unit. The editor reads this value once, at creation. For details, see [Caret movement in content-locked controls](/docs/2.x/guides/content-controls#caret-movement-in-content-locked-controls). |
+| `headerFooterEditing` | `boolean` | Set to `false` to make headers and footers read-only in the editor. Collaborator edits, review actions, and automation still change them. Defaults to `true`. The editor reads this value once, at creation. For details, see [Read-only headers and footers](/docs/2.x/guides/headers-footers#read-only-headers-and-footers). |
 
 `DocumentSource` accepts `Uint8Array`, `ArrayBuffer`, `'blank'`, or an existing `DocumentHandle`. Resolve URLs and paths with [`useDocxSource()`](/docs/2.x/vue/composables#usedocxsource).
 

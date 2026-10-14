@@ -893,7 +893,8 @@
     "nothingToPaint": "Biçimlendirmeyi uygulamak için bir metin seçin",
     "noReviewAuthors": "Bu belgede gözden geçiren yazar yok",
     "suggestingNeedsAuthor": "Öneri modu için bir yazar gerekir. Düzenleyici yapılandırmasında yazarı ayarlayın.",
-    "pictureSelected": "Bir resim seçili. Resim eklemek için imleci metne yerleştirin."
+    "pictureSelected": "Bir resim seçili. Resim eklemek için imleci metne yerleştirin.",
+    "headerFooterReadOnly": "Bu düzenleyicide üstbilgiler ve altbilgiler salt okunurdur."
   },
   "equationPopup": {
     "apply": "Uygula",

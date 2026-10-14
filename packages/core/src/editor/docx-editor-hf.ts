@@ -9,6 +9,38 @@ import type { PaginatedSurface } from './paginated-surface-contract.ts';
 
 export type FurnitureVariant = 'default' | 'first' | 'even';
 
+export const HEADER_FOOTER_READ_ONLY_REASON = 'headers and footers are read-only in this editor';
+
+/** The commands that open, create, remove, relink or write a header or footer story. */
+const HEADER_FOOTER_COMMANDS: ReadonlySet<EditorCommand['type']> = new Set([
+  'editHeaderFooter',
+  'removeHeaderFooter',
+  'setHeaderFooterOptions',
+  'linkHeaderFooterToPrevious',
+  'unlinkHeaderFooterFromPrevious',
+  'insertPageField',
+]);
+
+const readOnlyHeaderFooters = new WeakSet<PaginatedSurface>();
+
+/** Share `headerFooterEditing: false` with admission without adding it to the public surface API. */
+export function registerHeaderFooterEditing(
+  surface: PaginatedSurface,
+  enabled: boolean | undefined
+): void {
+  if (enabled === false) readOnlyHeaderFooters.add(surface);
+}
+
+/** Whether the surface was created with `headerFooterEditing: false`. */
+export function headerFootersReadOnly(surface: PaginatedSurface): boolean {
+  return readOnlyHeaderFooters.has(surface);
+}
+
+/** Whether `command` opens, creates, removes, relinks, or writes a header or footer story. */
+export function isHeaderFooterCommand(command: EditorCommand): boolean {
+  return HEADER_FOOTER_COMMANDS.has(command.type);
+}
+
 export function variantFromFlags(flags: {
   readonly firstPage?: boolean;
   readonly evenPage?: boolean;

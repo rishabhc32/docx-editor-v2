@@ -152,6 +152,12 @@ export interface PaginatedSurfaceOptions {
   readonly pointer?: 'engine' | 'native';
   /** How the caret moves through a content-locked inline control; see `LockedControlNavigation`. */
   readonly lockedControlNavigation?: LockedControlNavigation;
+  /**
+   * `false` makes headers and footers read-only for the reader: no gesture or call on this
+   * surface opens one, and a double click on a blank band creates none. Writes that do not open
+   * a story, such as remote collaboration edits, still apply. Fixed for the surface.
+   */
+  readonly headerFooterEditing?: boolean;
   readonly onChange?: (state: PaginatedSurfaceState) => void;
   /**
    * Told each time an edit is refused, with the raw reason: a store code such as `'locked'`,
