@@ -1,0 +1,10 @@
+{
+  "impact": "compatible",
+  "fields": [],
+  "before": "A VML group of v:line members placed by from and to points in group coordinates had no projection. It took no paragraph offset, reserved no wrap space, and painted nothing.",
+  "after": "A VML group whose members are all such lines is one read-only drawing atom. It projects as a vector shape with one component per line, wraps, and paints as a standalone VML line does. The source XML is unchanged.",
+  "reason": "The change is a read-only projection of existing document XML. It adds no shared state, operations, snapshot fields, or protocol messages, and it writes nothing to the document. Each participant derives paragraph offsets from the shared tree locally. As for earlier projection subset changes, a published selection after a newly supported VML atom can differ by one offset between versions.",
+  "tests": ["packages/core/src/store/__tests__/legacy-vml-textbox.test.ts"],
+  "changeset": "vml-line-groups",
+  "migration": null
+}
