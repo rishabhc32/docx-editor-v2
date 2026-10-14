@@ -21,7 +21,11 @@ import type {
   AutomationErrorCode,
   AutomationOperation,
 } from '@docx-editor.dev/core/automation';
-import { diagnosticCause, storeEditDiagnosticCode } from '@docx-editor.dev/core/automation';
+import {
+  diagnosticCause,
+  reviewDiagnosticCode,
+  storeEditDiagnosticCode,
+} from '@docx-editor.dev/core/automation';
 import { DocxEditorError, type DocxEditorErrorCode } from './errors.ts';
 import type { QueuedAction } from './queue.ts';
 
@@ -90,7 +94,12 @@ export function hostFailure(
 ): DocxEditorError {
   const code = HOST_CODES[error.code] ?? 'GeneralException';
   const stale = code === 'StaleDocument';
-  const diagnostic = error.detail === undefined ? null : storeEditDiagnosticCode(error.detail);
+  // A refused review decision names the planner's skip reason. A reason with no edit code, such
+  // as `incomplete-group`, takes the review code the editor reports for the same skip.
+  const diagnostic =
+    error.detail === undefined
+      ? null
+      : (storeEditDiagnosticCode(error.detail) ?? reviewDiagnosticCode(error.detail));
   const failure = new DocxEditorError({
     code,
     ...(diagnostic === null ? {} : { diagnostic }),

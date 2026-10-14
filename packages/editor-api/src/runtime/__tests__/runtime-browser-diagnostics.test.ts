@@ -104,3 +104,41 @@ test('a browser agent refused by a viewing editor gets the read-only code and hi
     editor.destroy();
   }
 });
+
+test('a browser agent deciding one change of a group gets the review reason', async () => {
+  const events: EditorDiagnostic[] = [];
+  const container = document.createElement('div');
+  document.body.append(container);
+  // Grace's deletion inside Ada's insertion: two changes, one decision group.
+  const nested =
+    '<w:p><w:ins w:id="1" w:author="Ada"><w:r><w:t xml:space="preserve">kept </w:t></w:r>' +
+    '<w:del w:id="2" w:author="Grace"><w:r><w:delText>gone</w:delText></w:r></w:del></w:ins></w:p>';
+  const editor = createDocxEditor({
+    container,
+    document: docx(nested),
+    modules: [{ id: 'observer', onDiagnostic: (event) => events.push(event) }],
+  });
+  const runtime = DocxEditor.createBrowser(editor);
+  let failure: unknown;
+  try {
+    await runtime.run(async (context) => {
+      const revisions = context.document.revisions;
+      revisions.load('items');
+      await context.sync();
+      revisions.items[1]!.accept();
+      await context.sync().catch((error: unknown) => {
+        failure = error;
+      });
+    });
+    expect(failure).toMatchObject({
+      code: 'NotImplemented',
+      debugInfo: { innerError: { code: 'review.incomplete-group' } },
+    });
+    expect(events.filter((event) => event.kind === 'edit.rejected')).toEqual([
+      expect.objectContaining({ origin: 'automation', cause: 'incomplete-group' }),
+    ]);
+  } finally {
+    runtime.dispose();
+    editor.destroy();
+  }
+});

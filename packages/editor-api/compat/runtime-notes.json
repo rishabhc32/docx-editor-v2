@@ -577,11 +577,11 @@
   },
   "Word.Revision#accept": {
     "status": "partial",
-    "notes": "Resolves the addressed supported revision by stable identity. Unsupported revision structures, including malformed content wrappers, refuse without partial changes. Browser decisions require the review module and an editable document. Individual decisions resolve only the selected source revision sites. Matching deletion and insertion IDs do not combine their decisions."
+    "notes": "Resolves the addressed supported revision by stable identity. Unsupported revision structures, including malformed content wrappers, refuse without partial changes. Browser decisions require the review module and an editable document. Individual decisions resolve only the selected source revision sites. Matching deletion and insertion IDs do not combine their decisions. A revision that cannot be decided alone refuses with NotImplemented, changes nothing, and fails the whole sync. debugInfo.innerError names the reason: review.incomplete-group for a change grouped with others, such as one author's deletion inside another author's insertion; review.retained-structure for a row kept to preserve a nested table; edit.revision-unsupported for an unsupported structure. RevisionCollection.resolve reports the same reasons in skipped."
   },
   "Word.Revision#reject": {
     "status": "partial",
-    "notes": "Resolves the addressed supported revision by stable identity. Unsupported revision structures, including malformed content wrappers, refuse without partial changes. Browser decisions require the review module and an editable document. Individual decisions resolve only the selected source revision sites. Matching deletion and insertion IDs do not combine their decisions."
+    "notes": "Resolves the addressed supported revision by stable identity. Unsupported revision structures, including malformed content wrappers, refuse without partial changes. Browser decisions require the review module and an editable document. Individual decisions resolve only the selected source revision sites. Matching deletion and insertion IDs do not combine their decisions. A revision that cannot be decided alone refuses with NotImplemented, changes nothing, and fails the whole sync. debugInfo.innerError names the reason: review.incomplete-group for a change grouped with others, such as one author's deletion inside another author's insertion; review.retained-structure for a row kept to preserve a nested table; edit.revision-unsupported for an unsupported structure. RevisionCollection.resolve reports the same reasons in skipped."
   },
   "Word.RevisionCollection#acceptAll": {
     "status": "partial",

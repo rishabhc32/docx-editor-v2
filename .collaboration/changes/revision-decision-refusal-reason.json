@@ -1,0 +1,13 @@
+{
+  "impact": "no-impact",
+  "fields": [],
+  "before": "Revision.accept() and Revision.reject() refuse a change that cannot be decided alone with NotImplemented and no reason.",
+  "after": "The same refusal names the skip reason in debugInfo.innerError, such as review.incomplete-group.",
+  "reason": "The planner refuses the decision before any write, as before. Only the refusal detail and the thrown error change, so no shared field, operation, snapshot, or protocol message changes.",
+  "tests": [
+    "packages/editor-api/src/runtime/__tests__/runtime-revision-decisions.test.ts",
+    "packages/editor-api/src/runtime/__tests__/runtime-browser-diagnostics.test.ts"
+  ],
+  "changeset": "revision-decision-refusal-reason",
+  "migration": null
+}
