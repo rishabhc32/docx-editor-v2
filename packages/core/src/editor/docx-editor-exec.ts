@@ -427,6 +427,10 @@ export function execEditorCommand(
           reason: mounted.state().lastRejection ?? 'the table could not be inserted here',
         };
       }
+      // The caret is in the first cell, but DOM focus is still on the host control that ran
+      // the command, and a keystroke there never reaches the pages. Take focus, as
+      // `insertTextbox` does: Word leaves you typing in cell one.
+      mounted.focus();
       break;
     case 'insertToc':
       if (!mounted.insertToc()) {
