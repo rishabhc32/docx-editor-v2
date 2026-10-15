@@ -170,6 +170,7 @@ import { createSurfaceHosting } from './surface-host-move.ts';
 import { reviewItemsAtSelection } from '../store/store/review-items.ts';
 import { mergedPredecessorsOf } from '../layout/line-segments.ts';
 import { surfaceSelectionMarkRects } from './surface-selection-ops.ts';
+import { watchCommittedCaret } from './committed-caret.ts';
 import type { CaretGeometry } from '../layout/semantic-interaction.ts';
 import { paintSelectionOverlay, type OverlayRect } from '@docx-editor.dev/core/output';
 // By module path, like the roster walk below: dropping a retained paint is an engine
@@ -4108,13 +4109,10 @@ export function mountPaginatedSurface(
     if (!op) return false;
     // The op publishes the first cell's paragraph as its caret hint, and that hint is the
     // whole point of the gesture — Word leaves you typing in cell one. Adopting it needs the
-    // committed-caret subscription, the same way a table command plan does: without it the
+    // committed-caret watch, the same way a table command plan does: without it the
     // pre-edit selection mark is restored and the caret stays in the anchor paragraph
     // BELOW the new table.
-    let committedCaret: { readonly paragraphId: string; readonly start: number } | null = null;
-    const unsubscribe = session.subscribe((change) => {
-      if (change.caret) committedCaret = change.caret;
-    });
+    const committedCaret = watchCommittedCaret(session, editingParagraphIds);
     let committed = false;
     try {
       commit(
@@ -4130,14 +4128,12 @@ export function mountPaginatedSurface(
           return applied;
         },
         () => {
-          const caret = committedCaret;
-          return caret
-            ? collapsedAt({ paragraphId: caret.paragraphId, offset: caret.start })
-            : null;
+          const caret = committedCaret.position();
+          return caret ? collapsedAt(caret) : null;
         }
       );
     } finally {
-      unsubscribe();
+      committedCaret.stop();
     }
     return committed;
   }
@@ -5607,16 +5603,7 @@ export function mountPaginatedSurface(
       if (!plan.ok) {
         return { ok: false, code: plan.code, reason: plan.reason };
       }
-      let committedCaret: {
-        readonly paragraphId: string;
-        readonly start: number;
-        readonly end: number;
-      } | null = null;
-      const unsub = session.subscribe((change) => {
-        if (change.caret) {
-          committedCaret = change.caret;
-        }
-      });
+      const committedCaret = watchCommittedCaret(session, editingParagraphIds);
       try {
         const selectionBefore = selectionMark();
         const adoptCaret = plan.selection.kind === 'adoptCommittedCaret';
@@ -5624,18 +5611,14 @@ export function mountPaginatedSurface(
           () => applyOps(plan.ops, selectionBefore),
           adoptCaret
             ? () => {
-                const caret = committedCaret;
-                if (!caret) return null;
-                return collapsedAt({
-                  paragraphId: caret.paragraphId,
-                  offset: caret.start,
-                });
+                const caret = committedCaret.position();
+                return caret ? collapsedAt(caret) : null;
               }
             : undefined,
           plan.selection.kind === 'preserveSelection' ? { keepCellSelection: true } : undefined
         );
       } finally {
-        unsub();
+        committedCaret.stop();
       }
       if (lastRejection) {
         return { ok: false, code: 'invalidArgs', reason: lastRejection };

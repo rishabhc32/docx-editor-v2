@@ -1,0 +1,13 @@
+{
+  "impact": "compatible",
+  "fields": [],
+  "before": "After a new table, row, or column, the caret named the paragraph id the store minted. In a room that id is renamed before the caret is placed, so typing was refused as unknown-paragraph. insertTable also left DOM focus on the control that ran it.",
+  "after": "The caret follows the created paragraph to its replicated id by its position in reading order, so typing lands in the new cell, and insertTable focuses the pages.",
+  "reason": "Only the local caret and focus change. The inserted table, row, and column ops, shared nodes, ids, and protocol messages are unchanged; presence now names an id the room holds.",
+  "tests": [
+    "packages/core/src/editor/__tests__/insert-table-caret.test.ts",
+    "packages/pro/src/collaboration/__tests__/document-table-insert-caret.test.ts"
+  ],
+  "changeset": "insert-table-caret",
+  "migration": null
+}
