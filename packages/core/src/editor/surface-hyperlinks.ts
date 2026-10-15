@@ -18,6 +18,18 @@ import {
 import { relationshipTargetIn, storyParagraphs, storyRootsOf } from '@docx-editor.dev/core/store';
 import type { TreeApplyResult, TreeDocxSessionView } from '@docx-editor.dev/core/binding';
 import {
+  hyperlinkStyleWrite,
+  unlinkedStyleId,
+  type HyperlinkStyleWrite,
+} from './hyperlink-style.ts';
+import {
+  linkSuggestionRefusal,
+  suggestLink,
+  suggestUnlink,
+  unlinkSuggestionRefusal,
+} from './hyperlink-suggestion.ts';
+import { orderedRangeOf } from './surface-selection-ops.ts';
+import {
   hardBreakText,
   hyperlinkTargetOf,
   isInstrText,
@@ -346,7 +358,8 @@ export interface HyperlinkOps {
   /**
    * Apply a link to the selection, or retarget the one the caret is already in.
    *
-   * `text` replaces the display text when supplied. Returns whether anything committed;
+   * `text` replaces the display text and `tooltip` the link's tooltip when supplied; an
+   * omitted tooltip keeps the link's own. Returns whether anything committed;
    * a refusal leaves the document exactly as it was.
    */
   applyHyperlink(input: {
@@ -357,6 +370,22 @@ export interface HyperlinkOps {
   }): boolean;
   /** Take the link off the one at the caret (or a named one). Returns whether it committed. */
   removeHyperlink(linkId?: string): boolean;
+  /**
+   * Why {@link HyperlinkOps.applyHyperlink} would refuse `input` as a suggestion, or null.
+   * Writes nothing and settles no queued typing, so a dry run can ask. The target is checked
+   * only when the link is written.
+   */
+  applyRefusal(input: {
+    readonly url?: string;
+    readonly anchor?: string;
+    readonly text?: string;
+    readonly tooltip?: string;
+  }): string | null;
+  /**
+   * Why {@link HyperlinkOps.removeHyperlink} would refuse to take off the link at the caret (or
+   * a named one) as a suggestion, or null. Null too when there is no such link. Writes nothing.
+   */
+  removeRefusal(linkId?: string): string | null;
 }
 
 export function createHyperlinkOps(deps: HyperlinkOpsDeps): HyperlinkOps {
@@ -367,8 +396,9 @@ export function createHyperlinkOps(deps: HyperlinkOpsDeps): HyperlinkOps {
   const applyOps = (
     ops: Parameters<TreeDocxSessionView['applyTreeOps']>[0],
     before?: Parameters<TreeDocxSessionView['applyTreeOps']>[1],
-    after?: Parameters<TreeDocxSessionView['applyTreeOps']>[2]
-  ) => deps.session.applyTreeOps(ops, before, after, scope());
+    after?: Parameters<TreeDocxSessionView['applyTreeOps']>[2],
+    options?: Parameters<TreeDocxSessionView['applyTreeOps']>[4]
+  ) => deps.session.applyTreeOps(ops, before, after, scope(), options);
 
   const linksIn = (paragraphId: string): SurfaceHyperlink[] => {
     const part = storyPart();
@@ -416,6 +446,8 @@ export function createHyperlinkOps(deps: HyperlinkOpsDeps): HyperlinkOps {
     return null;
   };
 
+  const lane = { linkAtCaret, storyPart, applyOps, withinLink };
+
   return {
     linksInCaretParagraph: () => linksIn(deps.selection().head.paragraphId),
     linkAtCaret,
@@ -423,11 +455,7 @@ export function createHyperlinkOps(deps: HyperlinkOpsDeps): HyperlinkOps {
     linkById,
 
     applyHyperlink(requested) {
-      // Labels are shown and selected with visible hyphens; they write the hyphen elements.
-      const input =
-        requested.text === undefined
-          ? requested
-          : { ...requested, text: fromHyphenGlyphs(requested.text) };
+      const input = withHyphenElements(requested);
       const wantsExternal = input.url !== undefined && input.url.length > 0;
       const wantsInternal = input.anchor !== undefined && input.anchor.length > 0;
       // Exactly one target, matching the op's own rule — a caller that supplies both does
@@ -440,6 +468,8 @@ export function createHyperlinkOps(deps: HyperlinkOpsDeps): HyperlinkOps {
       // outlives the refusal that the ops do not survive.
       const active = scope();
       if (!storyPart() || deps.refusesWrite()) return false;
+      const suggested = suggestLink(deps, lane, input);
+      if (suggested !== null) return suggested;
 
       // The relationship is minted BEFORE the transaction: it lives on the package, outside
       // the undo stack, and a refused URL must not leave a half-applied edit behind.
@@ -467,6 +497,7 @@ export function createHyperlinkOps(deps: HyperlinkOpsDeps): HyperlinkOps {
       // `w:history` / `w:tgtFrame` and its identity.
       if (existing && (collapsed || withinLink(existing, range))) {
         const ops: TreeDocOp[] = [];
+        let packageEdits: HyperlinkStyleWrite['packageEdits'] = [];
         // Replacing the display text is a delete plus an insert over the link's own range;
         // both land inside the link because the range is strictly inside it.
         if (input.text !== undefined && input.text !== fromHyphenGlyphs(existing.text)) {
@@ -524,7 +555,8 @@ export function createHyperlinkOps(deps: HyperlinkOpsDeps): HyperlinkOps {
             // A copy left bare comes out unlinked once the strikes are accepted — so
             // propose a FRESH link over the copy, and still retarget the old one in case
             // a zero-length marker keeps it alive.
-            const styleId = hyperlinkStyleId(deps.session);
+            const style = hyperlinkStyleWrite(deps.session.documentStyles());
+            packageEdits = style.packageEdits;
             ops.push(
               { op: 'setHyperlinkTarget', linkId: existing.id, ...target },
               ...suggestReplaceOps(existing, landing, input.text),
@@ -533,8 +565,9 @@ export function createHyperlinkOps(deps: HyperlinkOpsDeps): HyperlinkOps {
                 paragraphId: existing.paragraphId,
                 start: landing,
                 end: landing + input.text.length,
+                ...(existing.tooltip !== undefined ? { tooltip: existing.tooltip } : {}),
                 ...target,
-                ...(styleId ? { styleId } : {}),
+                styleId: style.styleId,
               }
             );
           } else {
@@ -556,7 +589,7 @@ export function createHyperlinkOps(deps: HyperlinkOpsDeps): HyperlinkOps {
         let committed = false;
         deps.commit(
           () => {
-            const result = applyOps(ops, deps.selectionMark());
+            const result = applyOps(ops, deps.selectionMark(), undefined, { packageEdits });
             committed = result.committed;
             return result;
           },
@@ -615,28 +648,28 @@ export function createHyperlinkOps(deps: HyperlinkOpsDeps): HyperlinkOps {
       // Word marks a new link's text with the `Hyperlink` CHARACTER STYLE, and without it
       // the user gets a link indistinguishable from the words around it — no way to tell
       // the command worked. The op carries it, so wrapping and marking are one step and one
-      // undo. Only when the document actually declares the style: a reference to a style
-      // that is not there is a dangling one, and a link with the surrounding appearance is
-      // the honest fallback.
-      const styleId = hyperlinkStyleId(deps.session);
+      // undo. A document with no such style gets Word's definition in the same transaction,
+      // as Word adds it on a document's first link.
+      const style = hyperlinkStyleWrite(deps.session.documentStyles());
       ops.push({
         op: 'insertHyperlink',
         paragraphId,
         start,
         end,
         ...target,
-        ...(styleId ? { styleId } : {}),
+        styleId: style.styleId,
       });
 
       let committed = false;
       const after = { paragraphId, offset: end };
       deps.commit(
         () => {
-          const result = applyOps(ops, deps.selectionMark(), {
-            paragraphId,
-            start: end,
-            end,
-          });
+          const result = applyOps(
+            ops,
+            deps.selectionMark(),
+            { paragraphId, start: end, end },
+            { packageEdits: style.packageEdits }
+          );
           committed = result.committed;
           return result;
         },
@@ -649,14 +682,18 @@ export function createHyperlinkOps(deps: HyperlinkOpsDeps): HyperlinkOps {
       if (!storyPart()) return false;
       const link = linkId ? linkById(linkId) : linkAtCaret();
       if (!link) return false;
+      const suggested = suggestUnlink(deps, lane, link);
+      if (suggested !== null) return suggested;
       let committed = false;
       // The caret stays where the text is: unlinking must not move it, because the user's
       // next keystroke is aimed at the word they were just looking at.
       const after = { paragraphId: link.paragraphId, offset: link.end };
+      // The link's character style goes with it, as Word's Remove Hyperlink takes it off.
+      const styleId = unlinkedStyleId(deps.session.documentStyles());
       deps.commit(
         () => {
           const result = applyOps(
-            [{ op: 'removeHyperlink', linkId: link.id }],
+            [{ op: 'removeHyperlink', linkId: link.id, styleId }],
             deps.selectionMark()
           );
           committed = result.committed;
@@ -666,23 +703,27 @@ export function createHyperlinkOps(deps: HyperlinkOpsDeps): HyperlinkOps {
       );
       return committed;
     },
+
+    applyRefusal(requested) {
+      if (!storyPart()) return null;
+      // The selection as it stands: settling queued typing would commit it.
+      const range = orderedRangeOf(deps.layout(), deps.selection());
+      return linkSuggestionRefusal(deps, lane, withHyphenElements(requested), range);
+    },
+
+    removeRefusal(linkId) {
+      if (!storyPart()) return null;
+      const link = linkId ? linkById(linkId) : linkAtCaret();
+      return link ? unlinkSuggestionRefusal(deps, lane, link) : null;
+    },
   };
 }
 
-/**
- * The document's own hyperlink character style, or null when it declares none.
- *
- * Matched by STYLE ID (`Hyperlink`, Word's own, case-insensitively) among the character
- * styles. Creating the style when it is absent belongs to a styles-editing lane; until then
- * a document without it gets a working link with the surrounding appearance, which is
- * lossless and honest — rather than a reference to a style that does not exist.
- */
-function hyperlinkStyleId(session: TreeDocxSessionView): string | null {
-  for (const style of session.documentStyles()) {
-    if (style.type !== 'character') continue;
-    if (style.styleId.toLowerCase() === 'hyperlink') return style.styleId;
-  }
-  return null;
+/** Labels are shown and selected with visible hyphens; they write the hyphen elements. */
+function withHyphenElements<T extends { readonly text?: string }>(requested: T): T {
+  return requested.text === undefined
+    ? requested
+    : { ...requested, text: fromHyphenGlyphs(requested.text) };
 }
 
 /** Whether a selection lies entirely within one link's display text. */

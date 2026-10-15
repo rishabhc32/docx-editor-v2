@@ -176,11 +176,11 @@ export interface DocEdits {
         target: DocTarget;
         title?: string;
     };
-    // (undocumented)
     insertHyperlink: {
         href: string;
         target: DocTarget;
         text?: string;
+        tooltip?: string;
     };
     // (undocumented)
     insertImage: {

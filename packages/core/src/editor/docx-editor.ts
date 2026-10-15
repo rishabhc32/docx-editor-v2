@@ -118,6 +118,7 @@ import {
 import { createDocumentOpenFailureState } from './document-open-failure.ts';
 import { execEditorCommand } from './docx-editor-exec.ts';
 import { replaceMatchStoryRefusal } from './docx-editor-replace-match.ts';
+import { hyperlinkCommandRefusal } from './docx-editor-hyperlinks.ts';
 import { createMountHistoryGroups } from './editor-history-groups.ts';
 import { createPublishSignal } from './surface-publish-signal.ts';
 import { FORMAT_PAINTER_OFF } from './surface-format-painter-contract.ts';
@@ -2003,6 +2004,8 @@ export function createDocxEditor(config: DocxEditorConfig): DocxEditorInstance {
         const story = replaceMatchStoryRefusal(surface!, command.match);
         if (story) return story;
       }
+      const linkRefusal = hyperlinkCommandRefusal(command, surface!);
+      if (linkRefusal) return linkRefusal;
       if (
         command.type === 'proposeInsertion' ||
         command.type === 'proposeDeletion' ||

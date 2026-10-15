@@ -543,17 +543,16 @@ export type TreeDocOp =
     }
   | {
       /**
-       * Unlink: splice the `w:hyperlink`'s children into the paragraph in its place.
-       *
-       * The runs keep their identity, their formatting and their order, and any bookmark
-       * markers inside the link stay exactly where they were. Only the link element goes,
-       * which is what Word's Remove Hyperlink does — the text is not the link's, it was
-       * only wrapped by it.
+       * Unlink: splice the `w:hyperlink`'s children into the paragraph in its place. The runs
+       * keep their identity, formatting and order, and bookmark markers inside stay where they
+       * were. Only the link goes, and with `styleId` the `w:rStyle` naming the style it gave
+       * its words, normally `Hyperlink`, as Word's Remove Hyperlink takes it off.
        */
       readonly op: 'removeHyperlink';
       readonly linkId: string;
       /** Optional exact paragraph offsets for an ordinary text subrange of this link. */
       readonly range?: { readonly start: number; readonly end: number };
+      readonly styleId?: string;
     }
   | {
       /**
