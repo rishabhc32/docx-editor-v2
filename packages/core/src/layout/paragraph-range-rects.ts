@@ -12,13 +12,12 @@ import { clipParagraphBox } from './paragraph-frame-clip.ts';
 import { paragraphFragmentsOfBlocks } from './semantic-records.ts';
 import type {
   BlockFragmentRecord,
-  LineRecord,
   PageRecord,
   SemanticLayout,
   TextMeasurer,
 } from './semantic-records.ts';
 import type { SelectionRect } from './semantic-interaction.ts';
-import { storyBoxContentOffset } from './selection-rects.ts';
+import { glyphBand, storyBoxContentOffset } from './selection-rects.ts';
 import { bottomToTopRectInLayout } from './table-cell-text-direction.ts';
 
 /** A range inside one paragraph, as half-open model offsets. */
@@ -31,18 +30,6 @@ export interface ParagraphRange {
 /** A painted band and the range it belongs to, in page-content coordinates. */
 export interface KeyedParagraphRect extends SelectionRect {
   readonly key: number;
-}
-
-/**
- * The glyph band of a line: the line box without the spacing above or below the text, so a
- * mark or an underline sits on the glyphs under double or exact line spacing.
- */
-function glyphBand(line: LineRecord): { readonly y: number; readonly height: number } {
-  const leading = Math.max(0, line.leading);
-  const height = line.box.height - leading - Math.max(0, line.trailingSpacing ?? 0);
-  return height > 0
-    ? { y: line.box.y + leading, height }
-    : { y: line.box.y, height: line.box.height };
 }
 
 /**

@@ -17,6 +17,7 @@ import { clipParagraphBox } from './paragraph-frame-clip.ts';
 import { paragraphFragmentsOf, paragraphFragmentsOfBlocks } from './semantic-records.ts';
 import type {
   BlockFragmentRecord,
+  LineRecord,
   PageRecord,
   SemanticLayout,
   TextMeasurer,
@@ -28,6 +29,8 @@ import { bottomToTopRectInLayout } from './table-cell-text-direction.ts';
 
 /**
  * The physical rectangles covering a selection, including disjoint bands within bidi lines.
+ * Each covers the line's glyph band, the height a text highlight paints, not the spaced line
+ * box.
  *
  * BODY fragments only, and a selection outside the body paints nothing. That is a real gap —
  * a retained pin in a header shows no highlight, and a comment anchored in one draws no band
@@ -227,6 +230,18 @@ function indexesOf(order: readonly string[]): ReadonlyMap<string, number> {
   return index;
 }
 
+/**
+ * The glyph band of a line: the line box without the spacing above or below the text, so a
+ * selection, a mark, or an underline sits on the glyphs under double or exact line spacing.
+ */
+export function glyphBand(line: LineRecord): { readonly y: number; readonly height: number } {
+  const leading = Math.max(0, line.leading);
+  const height = line.box.height - leading - Math.max(0, line.trailingSpacing ?? 0);
+  return height > 0
+    ? { y: line.box.y + leading, height }
+    : { y: line.box.y, height: line.box.height };
+}
+
 /** A compact Word-like block for a selected paragraph mark, in layout points. */
 function paragraphMarkWidth(lineHeight: number): number {
   return Math.max(3, Math.min(8, lineHeight * 0.25));
@@ -279,9 +294,7 @@ function rangeRects(
               ? rangeBandsWithinLine(line, overlap.start, overlap.end, measurer, segment)
               : [];
           if (markSelected) {
-            const width = paragraphMarkWidth(
-              Math.max(0, line.box.height - line.leading - (line.trailingSpacing ?? 0))
-            );
+            const width = paragraphMarkWidth(glyphBand(line).height);
             const baseLevel = segment.spans[0]?.style.shaping?.baseLevel;
             const rtl =
               baseLevel === undefined ? paragraphIsRtl(fragment.props) : baseLevel % 2 === 1;
@@ -295,12 +308,13 @@ function rangeRects(
             bands.push({ x: rtl ? markX - width : markX, width });
           }
           for (const band of mergeLineRangeBands(bands)) {
+            // The glyph band, not the line box: the browser paints its own selection to the
+            // text, and a retained pin or a mark beside a native highlight stands in for it.
             const clipped = clipParagraphBox(
               {
                 pageIndex: page.index,
                 ...band,
-                y: line.box.y,
-                height: line.box.height,
+                ...glyphBand(line),
               },
               fragment.clipToBox ? fragment.box : undefined
             );
