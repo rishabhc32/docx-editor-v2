@@ -100,6 +100,7 @@ import { formsProtectionEnabled, sectionProtectsForms } from '@docx-editor.dev/c
 import { attributeTrackedOps, isTrackedEdit } from './surface-tracked-ops.ts';
 import { createTrackedTableDeletion } from './surface-tracked-table-deletion.ts';
 import { heldTableRowRefusal } from './surface-tracked-table-refusal.ts';
+import { createUntrackedEditGate, isDocumentEdit } from './surface-untracked-edits.ts';
 import { isMissingAuthorRefusal } from './docx-editor-author.ts';
 import { openTreeSession, type TreeDocxSession } from '@docx-editor.dev/core/binding';
 import {
@@ -2908,13 +2909,13 @@ export function mountPaginatedSurface(
     scope: StoryScope = storyScope(),
     packageEdits?: NonNullable<Parameters<TreeDocxSession['applyTreeOps']>[4]>['packageEdits']
   ): ReturnType<TreeDocxSession['applyTreeOps']> {
-    const collaborationRefusal = collaborationSession?.gateOperations(ops, scope);
-    if (collaborationRefusal) {
+    const refusal = untrackedEdits.refusal(ops) ?? collaborationSession?.gateOperations(ops, scope);
+    if (refusal) {
       return {
         committed: false,
         rejected: true,
         opCount: 0,
-        reason: collaborationRefusal,
+        reason: refusal,
       };
     }
     collaborationOperationCounter += 1;
@@ -3003,17 +3004,6 @@ export function mountPaginatedSurface(
     () => session.editable
   );
 
-  /** Ops that change the DOCUMENT, as opposed to reading or resolving it. */
-  function isDocumentEdit(op: TreeDocOp): boolean {
-    return (
-      op.op !== 'acceptRevision' &&
-      op.op !== 'rejectRevision' &&
-      op.op !== 'acceptAllRevisions' &&
-      op.op !== 'rejectAllRevisions' &&
-      op.op !== 'setRevisionAttribution'
-    );
-  }
-
   /** Ops that create or extend a reviewable proposal. */
   /**
    * The ops that carry per-op revision attribution, spelled ONCE.
@@ -3042,6 +3032,18 @@ export function mountPaginatedSurface(
   /** Whether this document wants its formatting changes recorded at all. */
   const formattingTracked = (): boolean =>
     markupSettings.current().trackFormatting && !session.trackingSettings().doNotTrackFormatting;
+  const untrackedEdits = createUntrackedEditGate({
+    policy: options.reviewModel?.untrackedEdits,
+    suggesting: () => editingMode === 'suggest',
+    formattingTracked,
+    // A node made in a shared room has an actor-scoped id that names no part, so the story
+    // parts are searched for it: a read, where `partFor` would retain a story store.
+    partOf: (id) =>
+      partOfNodeId(session, id) ??
+      session.storyParts().find((part) => findNode(part, id) !== null) ??
+      null,
+    author: trackedAuthorOrNone,
+  });
   /**
    * The author this edit will be attributed to, or undefined when it lands untracked.
    *
@@ -4297,6 +4299,7 @@ export function mountPaginatedSurface(
    * `false` return says so rather than claiming freshness.
    */
   function refreshRefFieldResults(): boolean {
+    if (untrackedEdits.inForce()) return false;
     return refreshSurfaceRefFieldResults({
       session,
       editingMode,
@@ -5242,7 +5245,9 @@ export function mountPaginatedSurface(
               reason: 'review-module-required',
             });
           }
-          return (result = applyOps(ops, undefined, undefined, story, false, packageEdits));
+          return (result = untrackedEdits.exempt(() =>
+            applyOps(ops, undefined, undefined, story, false, packageEdits)
+          ));
         },
         () => {
           // Flushed before the clamp for the same reason `commitReviewOps` does it: the clamp

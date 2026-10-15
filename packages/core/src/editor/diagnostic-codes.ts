@@ -34,6 +34,7 @@ import {
   SUGGESTED_BREAK_REFUSAL,
   TABLE_CELL_BREAK_REFUSAL,
 } from './surface-section-breaks.ts';
+import { UNTRACKED_EDIT_REFUSAL } from './surface-untracked-edits.ts';
 import {
   FRESH_STRIKE_REFUSAL,
   LINK_SUGGESTION_REFUSAL,
@@ -80,6 +81,7 @@ const EDIT_SENTENCES: ReadonlyMap<string, EditDiagnosticCode> = new Map([
   [COLLABORATION_FIELD_RESULTS_REFUSAL, 'edit.unsupported-story'],
   [FIELD_CODE_INPUT_REFUSAL, 'edit.field-structure'],
   [SUGGESTED_BREAK_REFUSAL, 'edit.tracked-structure-unsupported'],
+  [UNTRACKED_EDIT_REFUSAL, 'edit.tracked-structure-unsupported'],
   [LINK_SUGGESTION_REFUSAL, 'edit.tracked-structure-unsupported'],
   [NEW_LINK_REFUSAL, 'edit.tracked-structure-unsupported'],
   [UNLINK_REFUSAL, 'edit.tracked-structure-unsupported'],
