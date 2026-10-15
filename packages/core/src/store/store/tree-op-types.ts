@@ -637,6 +637,8 @@ export type TreeDocOp =
        */
       readonly op: 'deleteBlock';
       readonly blockId: string;
+      /** Propose a table's removal instead (Word's tracked row deletions); other blocks refuse. */
+      readonly revision?: RevisionAttributionInput;
     }
   | {
       /**
@@ -682,6 +684,8 @@ export type TreeDocOp =
       readonly tableId: string;
       readonly where: 'left' | 'right';
       readonly gridColumnId: string;
+      /** Propose the column instead: `w:cellIns` on each new cell. */
+      readonly revision?: RevisionAttributionInput;
     }
   | {
       /**
@@ -692,12 +696,16 @@ export type TreeDocOp =
       readonly tableId: string;
       readonly where: 'left' | 'right';
       readonly referenceCellId: string;
+      /** Refused: a proposed column needs `w:tblGrid` to take its width from. */
+      readonly revision?: RevisionAttributionInput;
     }
   | {
       /** Delete one canonical grid column; refuses the final column. */
       readonly op: 'deleteTableColumn';
       readonly tableId: string;
       readonly gridColumnId: string;
+      /** Propose the deletion instead: `w:cellDel` on each cell of the column. */
+      readonly revision?: RevisionAttributionInput;
     }
   | {
       /**
@@ -710,6 +718,7 @@ export type TreeDocOp =
       readonly rightGridColumnId: string;
       readonly leftWidthTwips: number;
       readonly rightWidthTwips: number;
+      readonly revision?: RevisionAttributionInput;
     }
   | {
       /**
@@ -720,6 +729,7 @@ export type TreeDocOp =
       readonly gridColumnId: string;
       readonly columnWidthTwips: number;
       readonly tableWidthTwips: number;
+      readonly revision?: RevisionAttributionInput;
     }
   | {
       /** Atomic semantic table authoring. Newly created nodes never need caller-supplied IDs. */
@@ -748,6 +758,7 @@ export type TreeDocOp =
       readonly styleId?: string;
       readonly headerRowCount?: number;
       readonly columnWidthsTwips?: readonly number[];
+      readonly revision?: RevisionAttributionInput;
     }
   | {
       /** Set one authored table row to an exact height in twips. */
@@ -755,6 +766,7 @@ export type TreeDocOp =
       readonly tableId: string;
       readonly rowId: string;
       readonly heightTwips: number;
+      readonly revision?: RevisionAttributionInput;
     }
   | {
       /** Clear the active edge target on a bounded rectangular cell selection. */
@@ -763,6 +775,7 @@ export type TreeDocOp =
       readonly cellIds: readonly string[];
       readonly scope: 'none';
       readonly target: TableBorderEdgeTarget;
+      readonly revision?: RevisionAttributionInput;
     }
   | {
       /** Apply a complete border spec to the requested edge target. */
@@ -771,6 +784,7 @@ export type TreeDocOp =
       readonly cellIds: readonly string[];
       readonly scope: TableBorderEdgeTarget;
       readonly spec: TableBorderSpecInput;
+      readonly revision?: RevisionAttributionInput;
     }
   | {
       /** Write or remove direct selected-cell shading (`w:tcPr/w:shd`). */
@@ -778,6 +792,7 @@ export type TreeDocOp =
       readonly tableId: string;
       readonly cellIds: readonly string[];
       readonly color: TreeDocColorValue | null;
+      readonly revision?: RevisionAttributionInput;
     }
   | {
       /** Set direct selected-cell vertical alignment (`w:tcPr/w:vAlign`). */
@@ -785,6 +800,7 @@ export type TreeDocOp =
       readonly tableId: string;
       readonly cellIds: readonly string[];
       readonly alignment: 'top' | 'center' | 'bottom';
+      readonly revision?: RevisionAttributionInput;
     }
   | {
       /** Allocate an empty header/footer part and declare it on a section. Package-level. */

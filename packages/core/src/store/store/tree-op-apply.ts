@@ -182,6 +182,7 @@ import {
   applyTableCellPropertyOp,
 } from './tree-op-tables.ts';
 import { contentControlAtCaret, validateTreeOp } from './tree-op-validate.ts';
+import { applyTrackedTableEdit } from './tree-op-tracked-table-ops.ts';
 import { isDrawingTreeDocOp } from './tree-op-drawings.ts';
 import { applyInsertFragment } from './tree-op-fragment.ts';
 import { applyDrawingContentEdit } from './drawing-content-edit.ts';
@@ -233,6 +234,8 @@ export function applyTreeOp(part: OoxmlPart, op: TreeDocOp, options?: EditOption
 function applyValidatedTreeOp(part: OoxmlPart, op: TreeDocOp, options?: EditOptions): TreeOpResult {
   const rejection = validateTreeOp(part, op, options);
   if (rejection) return { ok: false, reason: rejection };
+  const trackedTable = applyTrackedTableEdit(part, op, options);
+  if (trackedTable) return trackedTable;
 
   if (op.op === 'replaceStoryBlocks') {
     return applyReplaceStoryBlocks(part, op.storyRootId, op.paragraphs, options);

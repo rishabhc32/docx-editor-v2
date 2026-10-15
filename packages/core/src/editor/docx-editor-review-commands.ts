@@ -38,6 +38,7 @@ import type { PaginatedSurface } from './paginated-surface-contract.ts';
 import type { EditorDiagnostics } from './editor-diagnostics.ts';
 import { PRO_REVIEW_REASON, READ_ONLY_REVISION_REASON } from './opening-editing-mode.ts';
 import { reviewWriteRefusal } from './review-write-refusal.ts';
+import { heldChangeRefusal } from './review-held-changes.ts';
 import {
   findReviewPlacement,
   isReplacementPairKey,
@@ -453,6 +454,8 @@ export function createReviewCommands(deps: ReviewCommandDependencies) {
         reason: READ_ONLY_REVISION_REASON,
       };
     let applied: { committed: boolean; reason?: unknown } | undefined;
+    // The story the decision read, so a refusal can say what holds it without opening another.
+    let decided: Parameters<typeof heldChangeRefusal>[0] = null;
     const refused = deps.surface()!.commitReviewOps((historyToken) => {
       const session = deps.surface()!.session;
       const part = partOfNodeId(session, revisionSiteNodeIdsOf(item)[0]);
@@ -463,10 +466,11 @@ export function createReviewCommands(deps: ReviewCommandDependencies) {
         });
         return applied;
       }
+      decided = deps.surface()!.session.partFor(deps.scope(item));
       applied = deps
         .surface()!
         .session.applyTreeOps(
-          resolutionOps(item, action, deps.surface()!.session.partFor(deps.scope(item))),
+          resolutionOps(item, action, decided),
           undefined,
           undefined,
           deps.scope(item),
@@ -474,7 +478,11 @@ export function createReviewCommands(deps: ReviewCommandDependencies) {
         );
       return applied;
     }, 'revision-resolve');
-    if (!applied?.committed) return reviewWriteRefusal(refused, 'the revision was refused');
+    if (!applied?.committed)
+      return reviewWriteRefusal(
+        refused,
+        heldChangeRefusal(decided, item, action) ?? 'the revision was refused'
+      );
     return { ok: true, changed: true };
   };
   const exec = (command: EditorCommand): ExecResult | null => {

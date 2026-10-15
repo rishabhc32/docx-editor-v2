@@ -1,6 +1,7 @@
 import { parentNodeOf } from '../package/ooxml-edit.ts';
 import type { OoxmlPart } from '../package/ooxml-tree.ts';
 import type { RevisionSite } from './tree-op-revisions.ts';
+import { selectedWithItsGesture } from './revision-table-gesture.ts';
 
 /** A shared grid snapshot survives until the last direct row-formatting decision. */
 export function deferredTableGridSites(
@@ -24,6 +25,7 @@ export function deferredTableGridSites(
   }
   const deferred = new Set<string>();
   for (const grid of grids) {
+    if (selectedWithItsGesture(part, grid, sites, selected)) continue;
     const table = grid.parent && parentNodeOf(part, grid.parent.id);
     const rows = table && rowsByTable.get(table.id);
     // Explicitly resolving a standalone grid remains supported. Defer only when

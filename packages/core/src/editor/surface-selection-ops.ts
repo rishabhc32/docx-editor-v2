@@ -9,6 +9,7 @@ import { selectionMarkRects } from '../layout/selection-rects.ts';
 import type { TextMeasurer } from '../layout/semantic-records.ts';
 import type { TreeDocxSessionView } from '@docx-editor.dev/core/binding';
 import { hiddenMarkRemovedIds, type RevisionView } from './hidden-mark-joins.ts';
+import type { RevisionAttributionInput } from '../store/store/tree-op-types.ts';
 import { mergedPredecessorsOf } from '../layout/line-segments.ts';
 import { fieldResultSpeller } from '../layout/field-copy-text.ts';
 import { cellSelectionText, type CellSelection } from '../layout/semantic-cell-selection.ts';
@@ -444,7 +445,9 @@ export function planRangeDeletion(
   from: SemanticPosition,
   to: SemanticPosition,
   order?: readonly string[],
-  view: RevisionView = { displayMode: layout.displayMode ?? 'all-markup', authorFilter: undefined }
+  view: RevisionView = { displayMode: layout.displayMode ?? 'all-markup', authorFilter: undefined },
+  /** Tracked: each covered table is proposed for deletion under this attribution, and stays. */
+  tableRevision?: RevisionAttributionInput
 ): RangeDeletionPlan {
   const textOf = (paragraphId: string): string => paragraphTextFromLayout(layout, paragraphId);
   if (from.paragraphId === to.paragraphId) {
@@ -518,7 +521,10 @@ export function planRangeDeletion(
   // across a table is not a paragraph edit and the store refuses it. Without a structural
   // removal the text cleared everywhere while every row, cell and border stayed — pages of
   // blank table skeletons, and a paste over the selection that looked like a no-op.
-  for (const tableId of removableTables.keys()) ops.push({ op: 'deleteBlock', blockId: tableId });
+  const proposal = tableRevision && { revision: tableRevision };
+  for (const tableId of removableTables.keys()) {
+    ops.push({ op: 'deleteBlock', blockId: tableId, ...proposal });
+  }
   // Fully covered content controls unwrap (content kept) so emptied shells do not survive as
   // join boundaries. Lock refusal is the store's job on the atomic transaction.
   for (const controlId of removableControls) {
@@ -566,7 +572,7 @@ export function planRangeDeletion(
     const visit = (nodes: readonly OoxmlNode[]): void => {
       for (const child of nodes) {
         if (child.kind === 'textValue') continue;
-        if (removableTables.has(child.id)) continue;
+        if (removableTables.has(child.id) && !tableRevision) continue;
         if (removableControls.has(child.id)) {
           const content = child.children.find(isContentControlContent);
           if (content && content.kind !== 'textValue') visit(content.children);

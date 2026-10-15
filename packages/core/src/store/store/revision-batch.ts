@@ -9,6 +9,7 @@ import {
   tableMergeDependencies,
 } from './revision-table-plan.ts';
 import { paragraphMergeSources } from './revision-paragraph-merge.ts';
+import { containedOwnChangeSites } from './revision-contained-changes.ts';
 import { preservedRevisionProperty } from './revision-property-records.ts';
 import { recordedProperties } from './tree-op-tracked-properties.ts';
 import { findNode, parentNodeOf } from '../package/ooxml-edit.ts';
@@ -111,6 +112,8 @@ export function planRevisionBatch(
   const sites = collectRevisionSites(scopedPart);
   const movePlan = planOrdinaryMoves(root, sites, selectedSites, action);
   for (const id of movePlan.selected) selectedSites.add(id);
+  for (const id of containedOwnChangeSites(part, sites, selectedSites, action))
+    selectedSites.add(id);
   for (const item of items) {
     const ids = revisionSiteNodeIdsOf(item);
     if (ids.length && ids.every((id) => selectedSites.has(id))) selected.add(reviewItemKey(item));

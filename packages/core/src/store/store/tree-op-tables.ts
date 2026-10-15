@@ -260,7 +260,7 @@ function projectWmlAttributes(
   return projected;
 }
 
-function freshWmlElement(
+export function freshWmlElement(
   localName: string,
   nextId: () => string,
   wml: WmlFreshNamespaceContext,
@@ -279,7 +279,7 @@ function freshWmlElement(
   } as OoxmlElement;
 }
 
-function trackedRevisionAttributes(
+export function trackedRevisionAttributes(
   revisionId: string,
   revision: RevisionAttributionInput,
   wml: WmlFreshNamespaceContext
@@ -1423,7 +1423,7 @@ function readGridColWidthTwips(column: OoxmlElement): number | null {
   return value !== null && value >= 0 ? value : null;
 }
 
-function gridColWithWidth(
+export function gridColWithWidth(
   column: OoxmlElement,
   widthTwips: number,
   wml: WmlFreshNamespaceContext

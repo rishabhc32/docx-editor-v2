@@ -26,6 +26,7 @@ import { isValidXmlText } from '../package/sinks.ts';
 import { isDangerousKey } from '../package/safe-record.ts';
 import { isAuthorableDataBinding } from '../package/custom-node-payloads.ts';
 import { validateDeleteBlock } from './tree-op-blocks.ts';
+import { validateTrackedTableEdit } from './tree-op-tracked-table-ops.ts';
 import { validateSetRevisionAttribution } from './revision-author-change.ts';
 import {
   CONTENT_CONTROL_LOCKS,
@@ -256,6 +257,10 @@ export function validateTreeOp(
 ): TreeOpRejection | null {
   const policy = options?.contentLockPolicy;
   if (!TREE_DOC_OP_KINDS.includes(op.op)) return 'unknown-op';
+  const trackedTable = validateTrackedTableEdit(part, op, (untracked) =>
+    validateTreeOp(part, untracked, options)
+  );
+  if (trackedTable !== undefined) return trackedTable;
   if (
     (op.op === 'insertText' || op.op === 'deleteText') &&
     op.textFormFieldId !== undefined &&

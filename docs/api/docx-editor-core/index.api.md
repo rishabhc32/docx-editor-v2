@@ -3331,6 +3331,7 @@ export interface ReviewRevisionItem {
     // (undocumented)
     readonly revisionKind: ReviewRevisionKind;
     readonly structuralChanges?: readonly ('rowInsert' | 'rowDelete' | 'cellInsert' | 'cellDelete' | 'cellMerge' | 'numberingInsert')[];
+    readonly structuralColumns?: number;
     readonly text: string;
 }
 

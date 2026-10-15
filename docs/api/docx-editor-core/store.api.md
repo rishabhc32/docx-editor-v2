@@ -4021,6 +4021,7 @@ export interface ReviewRevisionItem {
     // (undocumented)
     readonly revisionKind: ReviewRevisionKind;
     readonly structuralChanges?: readonly ('rowInsert' | 'rowDelete' | 'cellInsert' | 'cellDelete' | 'cellMerge' | 'numberingInsert')[];
+    readonly structuralColumns?: number;
     readonly text: string;
 }
 
@@ -4768,6 +4769,7 @@ export type TreeDocOp = SetFieldCodeOp | {
 } | {
     readonly blockId: string;
     readonly op: 'deleteBlock';
+    readonly revision?: RevisionAttributionInput;
 } | {
     readonly beforeParagraphId: string;
     readonly cols: number;
@@ -4790,21 +4792,25 @@ export type TreeDocOp = SetFieldCodeOp | {
 } | {
     readonly gridColumnId: string;
     readonly op: 'insertTableColumn';
+    readonly revision?: RevisionAttributionInput;
     readonly tableId: string;
     readonly where: 'left' | 'right';
 } | {
     readonly op: 'insertTableColumn';
     readonly referenceCellId: string;
+    readonly revision?: RevisionAttributionInput;
     readonly tableId: string;
     readonly where: 'left' | 'right';
 } | {
     readonly gridColumnId: string;
     readonly op: 'deleteTableColumn';
+    readonly revision?: RevisionAttributionInput;
     readonly tableId: string;
 } | {
     readonly leftGridColumnId: string;
     readonly leftWidthTwips: number;
     readonly op: 'setTableColumnWidths';
+    readonly revision?: RevisionAttributionInput;
     readonly rightGridColumnId: string;
     readonly rightWidthTwips: number;
     readonly tableId: string;
@@ -4812,6 +4818,7 @@ export type TreeDocOp = SetFieldCodeOp | {
     readonly columnWidthTwips: number;
     readonly gridColumnId: string;
     readonly op: 'setTableRightEdgeWidth';
+    readonly revision?: RevisionAttributionInput;
     readonly tableId: string;
     readonly tableWidthTwips: number;
 } | {
@@ -4833,22 +4840,26 @@ export type TreeDocOp = SetFieldCodeOp | {
     readonly columnWidthsTwips?: readonly number[];
     readonly headerRowCount?: number;
     readonly op: 'setTableProperties';
+    readonly revision?: RevisionAttributionInput;
     readonly styleId?: string;
     readonly tableId: string;
 } | {
     readonly heightTwips: number;
     readonly op: 'setTableRowHeight';
+    readonly revision?: RevisionAttributionInput;
     readonly rowId: string;
     readonly tableId: string;
 } | {
     readonly cellIds: readonly string[];
     readonly op: 'setTableCellBorders';
+    readonly revision?: RevisionAttributionInput;
     readonly scope: 'none';
     readonly tableId: string;
     readonly target: TableBorderEdgeTarget;
 } | {
     readonly cellIds: readonly string[];
     readonly op: 'setTableCellBorders';
+    readonly revision?: RevisionAttributionInput;
     readonly scope: TableBorderEdgeTarget;
     readonly spec: TableBorderSpecInput;
     readonly tableId: string;
@@ -4856,11 +4867,13 @@ export type TreeDocOp = SetFieldCodeOp | {
     readonly cellIds: readonly string[];
     readonly color: TreeDocColorValue | null;
     readonly op: 'setTableCellFill';
+    readonly revision?: RevisionAttributionInput;
     readonly tableId: string;
 } | {
     readonly alignment: 'top' | 'center' | 'bottom';
     readonly cellIds: readonly string[];
     readonly op: 'setTableCellVerticalAlignment';
+    readonly revision?: RevisionAttributionInput;
     readonly tableId: string;
 } | {
     readonly evenAndOddHeaders?: boolean;

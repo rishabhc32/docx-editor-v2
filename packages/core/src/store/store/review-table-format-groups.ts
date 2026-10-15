@@ -1,4 +1,5 @@
 import { implicitTableRowAlignments } from './revision-table-implicit-alignment.ts';
+import { withTableRecordsJoined } from './review-table-property-groups.ts';
 import { ooxmlTreesEqual } from '../package/ooxml-serialize.ts';
 import { WML_NAMESPACE_URI, type OoxmlNode, type OoxmlPart } from '../package/ooxml-tree.ts';
 import {
@@ -188,5 +189,9 @@ export function groupTableFormatting(
     );
     for (const item of entries.slice(1)) consumed.add(item);
   }
-  return items.filter((item) => !consumed.has(item)).map((item) => replaced.get(item) ?? item);
+  return withTableRecordsJoined(
+    part,
+    items.filter((item) => !consumed.has(item)).map((item) => replaced.get(item) ?? item),
+    formatting
+  );
 }

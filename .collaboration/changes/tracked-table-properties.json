@@ -1,0 +1,14 @@
+{
+  "impact": "compatible",
+  "fields": [],
+  "before": "In suggesting mode, row height, column divider, and table right-edge resizes wrote untracked edits.",
+  "after": "They write Word tracked markup: w:trPrChange, w:tblPrChange, and w:tblGridChange beside w:tcPrChange on each cell of a changed row, under one revision per gesture. A tracked table change to a row that holds another author's pending property change is refused.",
+  "reason": "Only the markup a local edit writes changes, and a refused edit writes nothing. Released replicas already preserve, replay, and resolve these row, table, and grid revision forms when they come from a file, and shared nodes, identities, offsets, and synchronization stay unchanged.",
+  "tests": [
+    "packages/core/src/store/__tests__/tracked-table-properties.test.ts",
+    "packages/core/src/editor/__tests__/tracked-table-properties-commands.test.ts",
+    "packages/pro/src/collaboration/__tests__/document-tracked-table-properties.test.ts"
+  ],
+  "changeset": "tracked-table-edits",
+  "migration": null
+}

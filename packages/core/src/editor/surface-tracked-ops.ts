@@ -2,6 +2,7 @@
 import type { TreeDocOp } from '../store/store/tree-ops.ts';
 import type { RevisionAttributionInput } from '../store/store/tree-op-types.ts';
 import { PROPERTY_CHANGE_WRAPPER_OF_OP } from '../store/store/tree-op-tracked-properties.ts';
+import { REVISION_CAPABLE_TABLE_OPS } from '../store/store/tree-op-tracked-table-ops.ts';
 import type { OoxmlParagraphNode } from '../store/package/ooxml-tree.ts';
 import { retractedLengthOf } from '../store/store/tree-op-retraction.ts';
 import { trackedInsertionLanding } from '../store/store/tree-op-tracked-adjacency.ts';
@@ -24,7 +25,8 @@ type RevisionCapableOp = Extract<
       | 'setParagraphProperties'
       | 'setParagraphMarkProperties'
       | 'setListNumbering'
-      | 'setListLevel';
+      | 'setListLevel'
+      | (typeof REVISION_CAPABLE_TABLE_OPS)[number];
   }
 >;
 const REVISION_CAPABLE_OPS: ReadonlySet<TreeDocOp['op']> = new Set<RevisionCapableOp['op']>([
@@ -45,6 +47,7 @@ const REVISION_CAPABLE_OPS: ReadonlySet<TreeDocOp['op']> = new Set<RevisionCapab
   // `w:pPrChange`. Left out, the list buttons and a list item's indent applied untracked.
   'setListNumbering',
   'setListLevel',
+  ...REVISION_CAPABLE_TABLE_OPS,
 ]);
 
 export function isRevisionCapable(op: TreeDocOp): op is RevisionCapableOp {
@@ -61,6 +64,7 @@ export function isTrackedEdit(op: TreeDocOp): boolean {
     // tracked edit with no `insertText` beside it to report for it.
     case 'insertContentControl':
     case 'authorTable':
+    case 'deleteBlock':
     case 'splitParagraphMany':
       return op.revision !== undefined;
     default:
