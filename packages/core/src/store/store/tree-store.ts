@@ -532,7 +532,10 @@ export class TreeDocumentStore {
       for (const held of revisionIdsOfPart.values()) held.mint = null;
     };
     const sharedRevisionIds = (op: TreeDocOp, part: OoxmlPart): (() => string) | null => {
-      const wrapper = PROPERTY_CHANGE_WRAPPER_OF_OP.get(op.op);
+      // Delete Columns writes one op per column too, and its gesture is one decision as well.
+      const wrapper =
+        PROPERTY_CHANGE_WRAPPER_OF_OP.get(op.op) ??
+        (op.op === 'deleteTableColumn' ? 'cellDel' : undefined);
       if (wrapper === undefined) {
         revisionIdOfGroup.clear();
         return null;

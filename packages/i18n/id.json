@@ -457,6 +457,10 @@
       "cellDelete": "Sel tabel dihapus",
       "cellInsert": "Sel tabel disisipkan",
       "cellMerge": "Penggabungan sel diubah",
+      "columnDelete": "Kolom dihapus",
+      "columnInsert": "Kolom disisipkan",
+      "columnsDelete": "Kolom dihapus",
+      "columnsInsert": "Kolom disisipkan",
       "numberingInsert": "Referensi penomoran disisipkan",
       "rowDelete": "Baris tabel dihapus",
       "rowInsert": "Baris tabel disisipkan"
@@ -961,7 +965,9 @@
     "noReviewAuthors": "Dokumen ini tidak memiliki penulis tinjauan",
     "suggestingNeedsAuthor": "Mode saran memerlukan penulis. Tetapkan penulis dalam konfigurasi editor.",
     "pictureSelected": "Sebuah gambar dipilih. Letakkan kursor di teks untuk menyisipkan gambar.",
-    "headerFooterReadOnly": "Header dan footer hanya baca di editor ini."
+    "headerFooterReadOnly": "Header dan footer hanya baca di editor ini.",
+    "revisionHoldsPendingChange": "Terima atau tolak dahulu perubahan di dalamnya",
+    "tableRowHoldsPendingChange": "Penulis lain memiliki perubahan pemformatan yang tertunda pada baris yang terpengaruh. Terima atau tolak dahulu perubahan itu."
   },
   "equationPopup": {
     "apply": "Terapkan",

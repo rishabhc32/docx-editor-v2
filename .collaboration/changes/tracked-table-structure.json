@@ -1,0 +1,14 @@
+{
+  "impact": "compatible",
+  "fields": [],
+  "before": "In suggesting mode, inserting or deleting a table column, and deleting a selection that covered a whole table, wrote untracked edits. Rejecting a proposed table that its author had typed into was refused.",
+  "after": "They write Word tracked markup: w:cellIns or w:cellDel on each cell of the column, and w:del and w:cellDel on every row of a covered table. Rejecting a proposed row, cell, or table, or accepting a proposed deletion of one, also resolves the same author's pending changes inside it.",
+  "reason": "Only the markup a local edit writes, and which sites one review decision selects, change. Released replicas already preserve, replay, and resolve these cell and row revision forms when they come from a file, and a decision still travels as the ordinary resolution of the sites it names. Shared nodes, identities, offsets, and synchronization stay unchanged.",
+  "tests": [
+    "packages/core/src/store/__tests__/tracked-table-structure.test.ts",
+    "packages/core/src/editor/__tests__/tracked-table-structure-commands.test.ts",
+    "packages/pro/src/collaboration/__tests__/document-tracked-table-structure.test.ts"
+  ],
+  "changeset": "tracked-table-edits",
+  "migration": null
+}

@@ -70,6 +70,12 @@ export const DISABLED_REASON_KEYS: Readonly<Record<string, TranslationKey>> = Ob
     'disabledReason.lockedSectionBreak',
   'a section break cannot be inserted in locked or linked content':
     'disabledReason.lockedContentBreak',
+  // Keyed on `HELD_CHANGE_REASON` in the engine's review lane.
+  'another pending change sits inside this one; accept or reject that change first':
+    'disabledReason.revisionHoldsPendingChange',
+  // Keyed on `HELD_ROW_REASON` in the engine's tracked table lane.
+  "another author's formatting change is pending on a row this change affects; accept or reject that change first":
+    'disabledReason.tableRowHoldsPendingChange',
 });
 
 /**

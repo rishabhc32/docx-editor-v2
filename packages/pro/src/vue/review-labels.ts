@@ -9,6 +9,7 @@ import type {
   ReviewRevisionItem,
   ReviewRevisionKind,
 } from '@docx-editor.dev/core/contracts/editor';
+import { structuralDetailKey } from '../review/structural-detail-key.ts';
 
 /**
  * The packaged sentence for a revision kind that carries no quoted characters of its own.
@@ -75,7 +76,7 @@ export function revisionItemLabel(
 ): string {
   if (item.revisionKind === 'structural' && item.structuralChanges?.length) {
     return item.structuralChanges
-      .map((kind) => translate(`revisions.structuralDetails.${kind}`))
+      .map((kind) => translate(structuralDetailKey(kind, item.structuralColumns)))
       .join(', ');
   }
   const label = `${translate(revisionItemLabelKey(item))}${revisionItemCountSuffix(item)}`;

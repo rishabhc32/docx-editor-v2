@@ -697,6 +697,10 @@
       "cellDelete": "已删除表格单元格",
       "cellInsert": "已插入表格单元格",
       "cellMerge": "已更改单元格合并",
+      "columnDelete": "已删除表格列",
+      "columnInsert": "已插入表格列",
+      "columnsDelete": "已删除表格列",
+      "columnsInsert": "已插入表格列",
       "numberingInsert": "已插入编号引用",
       "rowDelete": "已删除表格行",
       "rowInsert": "已插入表格行"
@@ -961,7 +965,9 @@
     "noReviewAuthors": "此文档没有审阅作者",
     "suggestingNeedsAuthor": "建议模式需要作者。请在编辑器配置中设置作者。",
     "pictureSelected": "已选中一张图片。请将光标放在文本中以插入图片。",
-    "headerFooterReadOnly": "此编辑器中的页眉和页脚为只读。"
+    "headerFooterReadOnly": "此编辑器中的页眉和页脚为只读。",
+    "revisionHoldsPendingChange": "请先接受或拒绝其中的修订",
+    "tableRowHoldsPendingChange": "受影响的行中有其他作者待处理的格式更改。请先接受或拒绝该更改。"
   },
   "equationPopup": {
     "apply": "应用",

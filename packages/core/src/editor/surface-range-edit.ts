@@ -255,7 +255,7 @@ export function createSurfaceRangeEditOps(deps: SurfaceRangeEditDeps): SurfaceRa
     // every reader below sees either a non-empty author or undefined, never a blank.
     const author = trackedAuthor?.trim() || undefined;
     const plan = withEnclosedBookmarks(
-      rangeDeletionPlan(),
+      rangeDeletionPlan(author ?? deps.trackedAuthorOrNone()),
       !author && deps.editingMode() !== 'suggest'
     );
     // A GETTER, so delete-only lanes — Backspace, Delete, proposeDeletion — never pay for a
@@ -288,7 +288,8 @@ export function createSurfaceRangeEditOps(deps: SurfaceRangeEditDeps): SurfaceRa
     return drops.length === 0 ? plan : { ...plan, ops: [...drops, ...plan.ops] };
   }
 
-  function rangeDeletionPlan(): RangeDeletionPlan {
+  /** `proposer` is the tracked author: covered tables are then proposed for deletion. */
+  function rangeDeletionPlan(proposer: string | undefined): RangeDeletionPlan {
     // Every edit op builds its plan from here first, so this is where queued
     // typing must land: a plan computed against the pre-buffer selection would
     // edit beside text the user has already typed. The plan reads `currentLayout`
@@ -328,7 +329,8 @@ export function createSurfaceRangeEditOps(deps: SurfaceRangeEditDeps): SurfaceRa
       from,
       to,
       deps.paragraphOrder(),
-      deps.revisionView()
+      deps.revisionView(),
+      proposer === undefined ? undefined : { author: proposer, date: deps.trackedDate() }
     );
   }
 
@@ -516,6 +518,7 @@ export function createSurfaceRangeEditOps(deps: SurfaceRangeEditDeps): SurfaceRa
     // caret misplacement again, this time only for ranges ending inside a removed block. A
     // removed block elsewhere in the range leaves the last paragraph standing, so only its
     // own ancestry decides.
+    // A table proposed for deletion stays, but its cells are no place for the replacement.
     const removedBlocks = new Set(
       plan.ops.flatMap((op) => (op.op === 'deleteBlock' ? [op.blockId] : []))
     );

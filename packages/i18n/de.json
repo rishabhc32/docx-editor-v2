@@ -697,6 +697,10 @@
       "cellDelete": "Tabellenzelle gelöscht",
       "cellInsert": "Tabellenzelle eingefügt",
       "cellMerge": "Zellverbindung geändert",
+      "columnDelete": "Spalte gelöscht",
+      "columnInsert": "Spalte eingefügt",
+      "columnsDelete": "Spalten gelöscht",
+      "columnsInsert": "Spalten eingefügt",
       "numberingInsert": "Nummerierungsverweis eingefügt",
       "rowDelete": "Tabellenzeile gelöscht",
       "rowInsert": "Tabellenzeile eingefügt"
@@ -961,7 +965,9 @@
     "noReviewAuthors": "Dieses Dokument enthält keine Überarbeitungsautoren",
     "suggestingNeedsAuthor": "Vorschläge benötigen einen Autor. Legen Sie den Autor in der Editorkonfiguration fest.",
     "pictureSelected": "Ein Bild ist ausgewählt. Setzen Sie den Cursor in den Text, um ein Bild einzufügen.",
-    "headerFooterReadOnly": "Kopf- und Fußzeilen sind in diesem Editor schreibgeschützt."
+    "headerFooterReadOnly": "Kopf- und Fußzeilen sind in diesem Editor schreibgeschützt.",
+    "revisionHoldsPendingChange": "Nehmen Sie zuerst die Änderung darin an oder lehnen Sie sie ab",
+    "tableRowHoldsPendingChange": "Ein anderer Autor hat eine ausstehende Formatierungsänderung in einer betroffenen Zeile. Nehmen Sie sie zuerst an oder lehnen Sie sie ab."
   },
   "equationPopup": {
     "apply": "Übernehmen",

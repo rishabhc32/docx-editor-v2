@@ -39,7 +39,9 @@
     "nothingToCopyFormatting": "書式のコピー元のテキストを選択してください",
     "nothingToPaint": "書式の適用先のテキストを選択してください",
     "pictureSelected": "画像が選択されています。画像を挿入するには、テキスト内にカーソルを置いてください。",
-    "headerFooterReadOnly": "このエディターでは、ヘッダーとフッターは読み取り専用です。"
+    "headerFooterReadOnly": "このエディターでは、ヘッダーとフッターは読み取り専用です。",
+    "revisionHoldsPendingChange": "先に内部の変更を承諾または却下してください",
+    "tableRowHoldsPendingChange": "影響を受ける行に、別の作成者の保留中の書式の変更があります。先にその変更を承諾または却下してください。"
   },
   "toolbar": {
     "ariaLabel": "書式設定ツールバー",
@@ -496,6 +498,10 @@
       "rowDelete": "表の行を削除",
       "cellInsert": "表のセルを挿入",
       "cellDelete": "表のセルを削除",
+      "columnInsert": "表の列を挿入",
+      "columnsInsert": "表の列を挿入",
+      "columnDelete": "表の列を削除",
+      "columnsDelete": "表の列を削除",
       "cellMerge": "セルの結合を変更",
       "numberingInsert": "段落番号の参照を挿入"
     }

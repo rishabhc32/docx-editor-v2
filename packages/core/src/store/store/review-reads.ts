@@ -3,6 +3,7 @@ import { ordinaryMoveRanges, ordinaryMoveInsertionSites } from './revision-move-
 import { mergeAdjacentSameKindEdits } from './review-inline-groups.ts';
 import { groupTableRevisions } from './review-table-groups.ts';
 import { structuralChangeOf } from './review-structural-details.ts';
+import { structuralColumnsField } from './review-table-columns.ts';
 import { textUnder } from './review-text.ts';
 export { commentBodyText, commentInitials } from './review-text.ts';
 // Derive pending review decisions from the canonical tree, not the visible spans:
@@ -351,6 +352,7 @@ function computeRevisionItemsOf(
           ...(entry.structuralChanges?.length
             ? { structuralChanges: entry.structuralChanges }
             : {}),
+          ...structuralColumnsField(part, entry.structuralChanges, entry.siteNodeIds),
           ...(entry.formattingChanges?.length
             ? { formattingChanges: entry.formattingChanges }
             : {}),

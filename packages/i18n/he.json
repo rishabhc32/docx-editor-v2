@@ -697,6 +697,10 @@
       "cellDelete": "נמחק תא בטבלה",
       "cellInsert": "נוסף תא בטבלה",
       "cellMerge": "מיזוג התאים השתנה",
+      "columnDelete": "נמחקה עמודה",
+      "columnInsert": "נוספה עמודה",
+      "columnsDelete": "נמחקו עמודות",
+      "columnsInsert": "נוספו עמודות",
       "numberingInsert": "נוספה הפניה למספור",
       "rowDelete": "נמחקה שורת טבלה",
       "rowInsert": "נוספה שורת טבלה"
@@ -961,7 +965,9 @@
     "noReviewAuthors": "אין במסמך זה מחברי סקירה",
     "suggestingNeedsAuthor": "מצב הצעות מחייב מחבר. הגדר את המחבר בתצורת העורך.",
     "pictureSelected": "תמונה נבחרה. מקמו את הסמן בטקסט כדי להוסיף תמונה.",
-    "headerFooterReadOnly": "כותרות עליונות ותחתונות הן לקריאה בלבד בעורך זה."
+    "headerFooterReadOnly": "כותרות עליונות ותחתונות הן לקריאה בלבד בעורך זה.",
+    "revisionHoldsPendingChange": "קבלו או דחו תחילה את השינוי שבתוכו",
+    "tableRowHoldsPendingChange": "למחבר אחר יש שינוי עיצוב ממתין בשורה מושפעת. קבלו או דחו אותו תחילה."
   },
   "equationPopup": {
     "apply": "החלה",

@@ -39,7 +39,9 @@
     "nothingToCopyFormatting": "Selecciona texto para copiar su formato",
     "nothingToPaint": "Selecciona texto para aplicar el formato",
     "pictureSelected": "Hay una imagen seleccionada. Coloque el cursor en el texto para insertar una imagen.",
-    "headerFooterReadOnly": "Los encabezados y pies de página son de solo lectura en este editor."
+    "headerFooterReadOnly": "Los encabezados y pies de página son de solo lectura en este editor.",
+    "revisionHoldsPendingChange": "Primero acepte o rechace el cambio que contiene",
+    "tableRowHoldsPendingChange": "Otro autor tiene un cambio de formato pendiente en una fila afectada. Primero acéptelo o recházelo."
   },
   "toolbar": {
     "ariaLabel": "Barra de formato",
@@ -496,6 +498,10 @@
       "rowDelete": "Fila de tabla eliminada",
       "cellInsert": "Celda de tabla insertada",
       "cellDelete": "Celda de tabla eliminada",
+      "columnInsert": "Columna insertada",
+      "columnsInsert": "Columnas insertadas",
+      "columnDelete": "Columna eliminada",
+      "columnsDelete": "Columnas eliminadas",
       "cellMerge": "Combinación de celdas modificada",
       "numberingInsert": "Referencia de numeración insertada"
     }

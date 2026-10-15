@@ -697,6 +697,10 @@
       "cellDelete": "Cellule de tableau supprimée",
       "cellInsert": "Cellule de tableau insérée",
       "cellMerge": "Fusion de cellules modifiée",
+      "columnDelete": "Colonne supprimée",
+      "columnInsert": "Colonne insérée",
+      "columnsDelete": "Colonnes supprimées",
+      "columnsInsert": "Colonnes insérées",
       "numberingInsert": "Référence de numérotation insérée",
       "rowDelete": "Ligne de tableau supprimée",
       "rowInsert": "Ligne de tableau insérée"
@@ -961,7 +965,9 @@
     "noReviewAuthors": "Ce document ne contient aucun auteur de révision",
     "suggestingNeedsAuthor": "Les suggestions nécessitent un auteur. Définissez l’auteur dans la configuration de l’éditeur.",
     "pictureSelected": "Une image est sélectionnée. Placez le curseur dans le texte pour insérer une image.",
-    "headerFooterReadOnly": "Les en-têtes et pieds de page sont en lecture seule dans cet éditeur."
+    "headerFooterReadOnly": "Les en-têtes et pieds de page sont en lecture seule dans cet éditeur.",
+    "revisionHoldsPendingChange": "Acceptez ou refusez d'abord la modification qu'elle contient",
+    "tableRowHoldsPendingChange": "Un autre auteur a une modification de mise en forme en attente sur une ligne concernée. Acceptez-la ou refusez-la d'abord."
   },
   "equationPopup": {
     "apply": "Appliquer",
