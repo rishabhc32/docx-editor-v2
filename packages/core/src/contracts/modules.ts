@@ -95,6 +95,11 @@ export interface ReviewModuleContribution {
    * The review pane settings the editor starts with. `setReviewPaneOptions` changes them later.
    */
   readonly pane?: ReviewPaneOptions;
+  /**
+   * What suggesting does with a local edit it cannot record as a suggestion. Default `'apply'`.
+   * Custom node writes are not checked under either value.
+   */
+  readonly untrackedEdits?: 'apply' | 'refuse';
   /** The review queue derivation. */
   readonly collectReviewItems: CollectReviewItems;
   /**

@@ -34,6 +34,7 @@ import {
   SUGGESTED_BREAK_REFUSAL,
   TABLE_CELL_BREAK_REFUSAL,
 } from './surface-section-breaks.ts';
+import { UNTRACKED_EDIT_REFUSAL } from './surface-untracked-edits.ts';
 
 export { openDiagnosticCode, reviewDiagnosticCode } from '@docx-editor.dev/core/automation';
 
@@ -74,6 +75,7 @@ const EDIT_SENTENCES: ReadonlyMap<string, EditDiagnosticCode> = new Map([
   [COLLABORATION_FIELD_RESULTS_REFUSAL, 'edit.unsupported-story'],
   [FIELD_CODE_INPUT_REFUSAL, 'edit.field-structure'],
   [SUGGESTED_BREAK_REFUSAL, 'edit.tracked-structure-unsupported'],
+  [UNTRACKED_EDIT_REFUSAL, 'edit.tracked-structure-unsupported'],
   [TABLE_CELL_BREAK_REFUSAL, 'edit.section-mark'],
   [LOCKED_SECTION_BREAK_REFUSAL, 'edit.protected-content'],
   [LOCKED_CONTENT_BREAK_REFUSAL, 'edit.protected-content'],

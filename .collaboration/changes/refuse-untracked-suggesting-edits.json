@@ -1,0 +1,14 @@
+{
+  "impact": "compatible",
+  "fields": [],
+  "before": "Suggesting mode applied a local edit with no tracked form, such as a page-setup change, directly and without a suggestion.",
+  "after": "With reviewModule({ untrackedEdits: 'refuse' }), suggesting mode refuses such a local edit before it commits, so nothing is journaled or sent. The default 'apply' keeps the previous behavior.",
+  "reason": "Only local command handling changes. Remote operations, undo and redo, shared nodes, text offsets, operations, and package serialization remain unchanged.",
+  "tests": [
+    "packages/core/src/editor/__tests__/surface-untracked-edits.test.ts",
+    "packages/pro/src/__tests__/untracked-edits-refusal.test.ts",
+    "packages/pro/src/collaboration/__tests__/document-untracked-edits-refusal.test.ts"
+  ],
+  "changeset": "refuse-untracked-suggesting-edits",
+  "migration": null
+}
