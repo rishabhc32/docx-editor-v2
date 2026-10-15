@@ -4737,6 +4737,7 @@ export type TreeDocOp = SetFieldCodeOp | {
         readonly end: number;
         readonly start: number;
     };
+    readonly styleId?: string;
 } | {
     readonly equationId: string;
     readonly linear: string;

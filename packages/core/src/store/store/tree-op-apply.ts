@@ -26,6 +26,7 @@ import {
   textWithHyphens,
 } from './tree-op-inline-elements.ts';
 import { characterStyleElement, emptyParagraphRunProperties } from './mark-character-style-run.ts';
+import { withoutCharacterStyle } from './tree-op-unlink-style.ts';
 import { withFreshIds } from '../package/hf-lifecycle-shell.ts';
 import {
   isContentRevisionKind,
@@ -315,7 +316,8 @@ function applyValidatedTreeOp(part: OoxmlPart, op: TreeDocOp, options?: EditOpti
     return applyPartialHyperlink(part, op, options);
   }
   if (op.op === 'setHyperlinkTarget') return applySetHyperlinkTarget(part, op, options);
-  if (op.op === 'removeHyperlink') return applyRemoveHyperlink(part, op.linkId, options);
+  if (op.op === 'removeHyperlink')
+    return applyRemoveHyperlink(part, op.linkId, options, op.styleId);
   if (op.op === 'setMathEquation' || op.op === 'removeMathEquation') {
     const equation = findNode(part, op.equationId);
     if (!equation || equation.kind === 'textValue') {
@@ -1864,7 +1866,7 @@ function applyPartialHyperlink(
       impact: 'paragraph-local',
     });
   return op.op === 'removeHyperlink'
-    ? applyRemoveHyperlink(split.part, selected.id, options)
+    ? applyRemoveHyperlink(split.part, selected.id, options, op.styleId)
     : applySetHyperlinkTarget(split.part, { ...op, linkId: selected.id }, options);
 }
 
@@ -1960,20 +1962,24 @@ function applySetHyperlinkTarget(
  *
  * Everything inside keeps its identity — runs, their `w:rPr`, and any bookmark markers — so
  * the text, its formatting and every anchor around it are exactly what they were. Only the
- * wrapper goes. A link with no children removes cleanly rather than leaving an empty slot.
+ * wrapper goes, and with `styleId` the character style it gave its words. A link with no
+ * children removes cleanly rather than leaving an empty slot.
  */
 function applyRemoveHyperlink(
   part: OoxmlPart,
   linkId: string,
-  options?: EditOptions
+  options?: EditOptions,
+  styleId?: string
 ): TreeOpResult {
   const link = findNode(part, linkId);
   if (!link || link.kind !== 'hyperlink') return { ok: false, reason: 'tree-invariant' };
   const owner = parentOf(part, link.id);
   if (!owner) return { ok: false, reason: 'tree-invariant' };
-  const children = owner.children.flatMap((child) =>
-    child.id === link.id ? [...link.children] : [child]
-  );
+  const kept: readonly OoxmlNode[] =
+    styleId === undefined
+      ? link.children
+      : link.children.map((child) => withoutCharacterStyle(child, styleId));
+  const children = owner.children.flatMap((child) => (child.id === link.id ? kept : [child]));
   const effect: TreeOpEffect = {
     dirty: [owner.id],
     created: [],

@@ -25,6 +25,7 @@ import { isDocAnchor, isDocAnchorRange } from './anchor-resolution.ts';
 import { blankDocumentBytes } from './blank-document.ts';
 import { tableCommandCanSupport } from './table-command-plan.ts';
 import { replaceMatchArgumentRefusal } from './docx-editor-replace-match.ts';
+import { hyperlinkTooltipRefusal } from './docx-editor-hyperlinks.ts';
 
 /** Recursively freeze plain objects and arrays (idempotent). */
 export function deepFreezeValue<T>(value: T): T {
@@ -371,6 +372,8 @@ export function classifyCommand(command: EditorCommand): CommandSupport {
           reason: 'insertHyperlink requires an href',
         };
       }
+      const refusal = hyperlinkTooltipRefusal(command.tooltip);
+      if (refusal) return { supported: false, code: 'invalidArgs', reason: refusal };
       return { supported: true, mutating: true };
     }
     case 'removeHyperlink':

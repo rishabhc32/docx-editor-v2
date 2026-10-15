@@ -5,6 +5,11 @@ import { fragmentContainsClipboardObject } from './clipboard-object-selection.ts
 import { fragmentFromHtml } from './clipboard-fragment-codec.ts';
 import { FIELD_CODE_INPUT_REFUSAL } from './surface-field-code-input.ts';
 import { execReplaceMatch } from './docx-editor-replace-match.ts';
+import {
+  hyperlinkInputOf,
+  NO_HYPERLINK_AT_SELECTION,
+  removeHyperlinkRefusal,
+} from './docx-editor-hyperlinks.ts';
 // Command dispatch for `createDocxEditor` (editor seam).
 //
 // One switch, one vocabulary: every `EditorCommand` the gate admitted lands here and is
@@ -334,11 +339,7 @@ export function execEditorCommand(
       // `#name` is a bookmark in this document; anything else is an external target and
       // goes through the package's URL allowlist on the way to a relationship. A refusal
       // there surfaces as one rather than committing a link with nowhere to go.
-      const internal = command.href.startsWith('#');
-      const applied = mounted.hyperlinks.applyHyperlink({
-        ...(internal ? { anchor: command.href.slice(1) } : { url: command.href }),
-        ...(command.text !== undefined ? { text: command.text } : {}),
-      });
+      const applied = mounted.hyperlinks.applyHyperlink(hyperlinkInputOf(command));
       if (!applied) {
         return {
           ok: false,
@@ -352,11 +353,9 @@ export function execEditorCommand(
     }
     case 'removeHyperlink':
       if (!mounted.hyperlinks.removeHyperlink()) {
-        return {
-          ok: false,
-          code: 'notFound',
-          reason: 'there is no hyperlink at the selection',
-        };
+        const refused = removeHyperlinkRefusal(mounted);
+        if (refused) return refused;
+        return { ok: false, code: 'notFound', reason: NO_HYPERLINK_AT_SELECTION };
       }
       break;
     case 'insertTextBox':

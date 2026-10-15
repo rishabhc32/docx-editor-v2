@@ -2015,11 +2015,18 @@ export interface HyperlinkOps {
         readonly tooltip?: string;
         readonly url?: string;
     }): boolean;
+    applyRefusal(input: {
+        readonly anchor?: string;
+        readonly text?: string;
+        readonly tooltip?: string;
+        readonly url?: string;
+    }): string | null;
     fieldLinkAtCaret(): SurfaceHyperlink | null;
     linkAtCaret(): SurfaceHyperlink | null;
     linkById(linkId: string): SurfaceHyperlink | null;
     linksInCaretParagraph(): SurfaceHyperlink[];
     removeHyperlink(linkId?: string): boolean;
+    removeRefusal(linkId?: string): string | null;
 }
 
 // @public

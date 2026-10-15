@@ -34,6 +34,12 @@ import {
   SUGGESTED_BREAK_REFUSAL,
   TABLE_CELL_BREAK_REFUSAL,
 } from './surface-section-breaks.ts';
+import {
+  FRESH_STRIKE_REFUSAL,
+  LINK_SUGGESTION_REFUSAL,
+  NEW_LINK_REFUSAL,
+  UNLINK_REFUSAL,
+} from './hyperlink-suggestion.ts';
 
 export { openDiagnosticCode, reviewDiagnosticCode } from '@docx-editor.dev/core/automation';
 
@@ -74,6 +80,10 @@ const EDIT_SENTENCES: ReadonlyMap<string, EditDiagnosticCode> = new Map([
   [COLLABORATION_FIELD_RESULTS_REFUSAL, 'edit.unsupported-story'],
   [FIELD_CODE_INPUT_REFUSAL, 'edit.field-structure'],
   [SUGGESTED_BREAK_REFUSAL, 'edit.tracked-structure-unsupported'],
+  [LINK_SUGGESTION_REFUSAL, 'edit.tracked-structure-unsupported'],
+  [NEW_LINK_REFUSAL, 'edit.tracked-structure-unsupported'],
+  [UNLINK_REFUSAL, 'edit.tracked-structure-unsupported'],
+  [FRESH_STRIKE_REFUSAL, 'edit.tracked-own-pending-change'],
   [TABLE_CELL_BREAK_REFUSAL, 'edit.section-mark'],
   [LOCKED_SECTION_BREAK_REFUSAL, 'edit.protected-content'],
   [LOCKED_CONTENT_BREAK_REFUSAL, 'edit.protected-content'],

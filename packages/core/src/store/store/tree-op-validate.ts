@@ -129,7 +129,7 @@ function validateProperties(
 }
 
 /** Longest `r:id`, `w:anchor` or `w:tooltip` an op may write. */
-const MAX_HYPERLINK_ATTRIBUTE_LENGTH = 512;
+export const MAX_HYPERLINK_ATTRIBUTE_LENGTH = 512;
 
 /** Longest `w:pStyle` value an op may write — the same ceiling the styles reader applies. */
 const MAX_STYLE_ID_LENGTH = 128;
@@ -547,6 +547,10 @@ export function validateTreeOp(
       if (rejection) return rejection;
     }
     if (op.op === 'setHyperlinkTarget') return validateHyperlinkTarget(op);
+    const { styleId } = op;
+    if (styleId !== undefined && (typeof styleId !== 'string' || styleId.length === 0)) {
+      return 'invalid-property-value';
+    }
     return null;
   }
 
