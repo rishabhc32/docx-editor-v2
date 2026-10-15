@@ -1,0 +1,15 @@
+{
+  "impact": "compatible",
+  "fields": [],
+  "before": "insertHyperlink took no tooltip, a first link in a document without a Hyperlink style got no character style, and in suggesting mode a new link target changed the link in place and removing a link unwrapped it, both with no revision.",
+  "after": "insertHyperlink writes a tooltip, a first link adds Word's Hyperlink character style in the same transaction, and in suggesting mode a new target, a new link over existing words, or a link removal strikes plain one-format text and inserts a tracked copy with its format, in a link unless the link is removed; other text refuses the change.",
+  "reason": "Every write uses operations and package edits that released replicas already apply: insertText, deleteText, setRunProperties, insertHyperlink with a styleId and tooltip, removeHyperlink with a range, and a styles part edit replicated as canonical primitives, as the List Paragraph style already is. A removeHyperlink range may now cover tracked text in the link; only the writing replica validates the operation, and peers replay its canonical primitives. Shared nodes, text offsets, and the operation vocabulary are unchanged.",
+  "tests": [
+    "packages/core/src/editor/__tests__/hyperlink-commands.test.ts",
+    "packages/core/src/editor/__tests__/suggesting-hyperlink.test.ts",
+    "packages/core/src/editor/__tests__/suggesting-insert-lanes.test.ts",
+    "packages/pro/src/collaboration/__tests__/document-hyperlink-commands.test.ts"
+  ],
+  "changeset": "hyperlink-commands",
+  "migration": null
+}

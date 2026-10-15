@@ -87,7 +87,11 @@ export interface DocEdits {
   setParagraphStyle: { target: DocTarget; styleId: string };
   insertTable: { target: DocTarget; rows: number; cols: number };
   insertImage: { target: DocTarget; data: Uint8Array; extent?: Extent };
-  insertHyperlink: { target: DocTarget; href: string; text?: string };
+  /**
+   * `tooltip` is the ScreenTip Word shows on hover (`w:tooltip`). On a link the caret is
+   * already in, a supplied tooltip replaces the old one and an omitted one keeps it.
+   */
+  insertHyperlink: { target: DocTarget; href: string; text?: string; tooltip?: string };
   removeHyperlink: { target: DocTarget };
   /**
    * `'section'` is Word's Next Page break; `'sectionContinuous'` keeps the new section on

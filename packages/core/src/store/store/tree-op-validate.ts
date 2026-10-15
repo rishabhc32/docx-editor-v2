@@ -129,7 +129,7 @@ function validateProperties(
 }
 
 /** Longest `r:id`, `w:anchor` or `w:tooltip` an op may write. */
-const MAX_HYPERLINK_ATTRIBUTE_LENGTH = 512;
+export const MAX_HYPERLINK_ATTRIBUTE_LENGTH = 512;
 
 /** Longest `w:pStyle` value an op may write — the same ceiling the styles reader applies. */
 const MAX_STYLE_ID_LENGTH = 128;

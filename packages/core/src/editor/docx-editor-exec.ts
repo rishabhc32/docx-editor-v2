@@ -5,6 +5,7 @@ import { fragmentContainsClipboardObject } from './clipboard-object-selection.ts
 import { fragmentFromHtml } from './clipboard-fragment-codec.ts';
 import { FIELD_CODE_INPUT_REFUSAL } from './surface-field-code-input.ts';
 import { execReplaceMatch } from './docx-editor-replace-match.ts';
+import { removeHyperlinkRefusal } from './docx-editor-hyperlinks.ts';
 // Command dispatch for `createDocxEditor` (editor seam).
 //
 // One switch, one vocabulary: every `EditorCommand` the gate admitted lands here and is
@@ -338,6 +339,7 @@ export function execEditorCommand(
       const applied = mounted.hyperlinks.applyHyperlink({
         ...(internal ? { anchor: command.href.slice(1) } : { url: command.href }),
         ...(command.text !== undefined ? { text: command.text } : {}),
+        ...(command.tooltip !== undefined ? { tooltip: command.tooltip } : {}),
       });
       if (!applied) {
         return {
@@ -352,6 +354,8 @@ export function execEditorCommand(
     }
     case 'removeHyperlink':
       if (!mounted.hyperlinks.removeHyperlink()) {
+        const refused = removeHyperlinkRefusal(mounted);
+        if (refused) return refused;
         return {
           ok: false,
           code: 'notFound',

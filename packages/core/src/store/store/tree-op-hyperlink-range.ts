@@ -1,5 +1,6 @@
 import { findNode } from '../package/ooxml-edit.ts';
 import { WML_NAMESPACE_URI, type OoxmlNode, type OoxmlPart } from '../package/ooxml-tree.ts';
+import { isDivisibleHyperlink } from './tree-op-hyperlink-divisible.ts';
 import { parentOf } from './tree-op-nodes.ts';
 import { paragraphOffsetIndex, splitsSurrogate } from './tree-op-segments.ts';
 import type { TreeOpRejection } from './tree-op-types.ts';
@@ -27,7 +28,7 @@ export function validateHyperlinkRange(
 ): TreeOpRejection | null {
   const link = findNode(part, linkId);
   const paragraph = link && parentOf(part, linkId);
-  if (!link || !isTextHyperlink(link) || paragraph?.kind !== 'paragraph')
+  if (!link || !isDivisibleHyperlink(link) || paragraph?.kind !== 'paragraph')
     return 'invalid-property-value';
   const span = paragraphOffsetIndex(paragraph).spanOf(link);
   if (
