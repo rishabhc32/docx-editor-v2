@@ -3203,6 +3203,7 @@ export interface ReviewModuleContribution {
     readonly displayModes: readonly ReviewDisplayMode[];
     readonly pane?: ReviewPaneOptions;
     readonly revisionItemsOfParagraph: (part: OoxmlPart, paragraphId: string) => readonly ReviewRevisionItem[];
+    readonly untrackedEdits?: 'apply' | 'refuse';
 }
 
 // @internal

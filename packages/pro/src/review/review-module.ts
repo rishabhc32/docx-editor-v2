@@ -46,12 +46,31 @@ export interface ReviewModuleOptions extends ProLicenseOptions {
    * value throws a `TypeError`.
    */
   readonly pane?: ReviewPaneOptions;
+  /**
+   * What suggesting mode does with a local edit it cannot record as a suggestion, such as a
+   * page-setup or list change. `'apply'` (the default) applies it directly, with no markup and
+   * no review card. `'refuse'` refuses the whole edit and reports why in
+   * `snapshot().lastRejection`, so every change a reviewer sees arrives as a suggestion.
+   *
+   * Tracked edits, comments, bookmarks, accepting or rejecting changes, and formatting left
+   * untracked by `trackFormatting: false` or the document's `w:doNotTrackFormatting` stay
+   * allowed. A save in suggesting mode keeps the cached REF field results instead of updating
+   * them. Remote edits from collaborators, undo and redo, and editing API batches are not
+   * affected. Any other value throws a `TypeError`.
+   *
+   * Custom node writes are not checked: `insertCustomNode`, `updateCustomNode`, and
+   * `removeCustomNode` apply directly under either value.
+   */
+  readonly untrackedEdits?: 'apply' | 'refuse';
 }
 
 /** Build the review module. Construction never validates the key and never touches the network. */
 export function reviewModule(options: ReviewModuleOptions = {}): EditorModule {
   // Validate now, so a misspelled setting fails where the host wrote it.
   const pane = options.pane === undefined ? undefined : { ...resolveReviewPane(options.pane) };
+  const { untrackedEdits } = options;
+  if (untrackedEdits !== undefined && untrackedEdits !== 'apply' && untrackedEdits !== 'refuse')
+    throw new TypeError('Invalid untrackedEdits');
   rememberLicenseKey(options.licenseKey);
   return {
     id: 'review',
@@ -61,6 +80,7 @@ export function reviewModule(options: ReviewModuleOptions = {}): EditorModule {
       collectReviewItems,
       revisionItemsOfParagraph,
       ...(pane ? { pane } : {}),
+      ...(untrackedEdits ? { untrackedEdits } : {}),
     },
   };
 }
