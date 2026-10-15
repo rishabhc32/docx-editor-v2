@@ -98,6 +98,8 @@ import { formsProtectionEnabled, sectionProtectsForms } from '@docx-editor.dev/c
 /* eslint-disable max-lines -- composition root; seams live in surface-*.ts */
 
 import { attributeTrackedOps, isTrackedEdit } from './surface-tracked-ops.ts';
+import { createTrackedTableDeletion } from './surface-tracked-table-deletion.ts';
+import { heldTableRowRefusal } from './surface-tracked-table-refusal.ts';
 import { isMissingAuthorRefusal } from './docx-editor-author.ts';
 import { openTreeSession, type TreeDocxSession } from '@docx-editor.dev/core/binding';
 import {
@@ -3060,6 +3062,7 @@ export function mountPaginatedSurface(
     if (author === undefined) return [...ops];
     return attributeTrackedOps(ops, { author, date: trackedDate() }, formattingTracked());
   }
+  const trackedTableOps = createTrackedTableDeletion({ trackedAuthorOrNone, trackedDate });
 
   /**
    * The history mark for a caret, which is what REDO restores.
@@ -5608,7 +5611,7 @@ export function mountPaginatedSurface(
         const selectionBefore = selectionMark();
         const adoptCaret = plan.selection.kind === 'adoptCommittedCaret';
         commit(
-          () => applyOps(plan.ops, selectionBefore),
+          () => applyOps(trackedTableOps(plan.ops), selectionBefore),
           adoptCaret
             ? () => {
                 const caret = committedCaret.position();
@@ -5621,7 +5624,10 @@ export function mountPaginatedSurface(
         committedCaret.stop();
       }
       if (lastRejection) {
-        return { ok: false, code: 'invalidArgs', reason: lastRejection };
+        const ops = trackedOps(trackedTableOps(plan.ops));
+        const part = partOfNodeId(session, selection.head.paragraphId) ?? session.part();
+        const held = heldTableRowRefusal(lastRejection, part, ops);
+        return held ?? { ok: false, code: 'invalidArgs', reason: lastRejection };
       }
       return { ok: true, changed: true };
     },

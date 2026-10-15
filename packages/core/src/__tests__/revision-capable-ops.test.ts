@@ -74,6 +74,13 @@ const NOT_STAMPED = {
       'Only automation emits it (plan-tables.ts). The planner attributes it when tracking and ' +
       'refuses table mutations that have no tracked form.',
   },
+  deleteBlock: {
+    tracked: true,
+    reason:
+      'Its revision proposes a table deletion, and the store refuses it for any other block. ' +
+      'The table commands (createTrackedTableDeletion) and a range deletion over a whole table ' +
+      '(planRangeDeletion) attribute it; stamping every removal would refuse paragraph joins.',
+  },
   insertDrawing: {
     tracked: false,
     reason:

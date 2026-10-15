@@ -35,6 +35,7 @@ import type {
   TableRowOccurrenceTarget,
 } from '../layout/table-interaction-targets.ts';
 import { lowerColorValueForBorder, lowerColorValueForFill } from './color-value-lower.ts';
+import { storedGridColumnOf } from './stored-grid-column.ts';
 import type {
   TableBorderEdgeTarget,
   TableBorderSpecInput,
@@ -467,7 +468,8 @@ function resolveAnchor(input: TableCommandPlannerInput): ResolvedAnchor | null {
     rowId: anchor.rowId,
     cellId: anchor.cellId,
     cellIds: [...anchor.cellIds],
-    gridColumnIndex: anchor.gridColumnIndex,
+    gridColumnIndex:
+      storedGridColumnOf(input.part, anchor.tableId, anchor.cellId) ?? anchor.gridColumnIndex,
     isHeaderRepeat: anchor.isHeaderRepeat,
   };
 }

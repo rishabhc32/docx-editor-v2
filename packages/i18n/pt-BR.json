@@ -697,6 +697,10 @@
       "cellDelete": "Célula de tabela excluída",
       "cellInsert": "Célula de tabela inserida",
       "cellMerge": "Mesclagem de células alterada",
+      "columnDelete": "Coluna excluída",
+      "columnInsert": "Coluna inserida",
+      "columnsDelete": "Colunas excluídas",
+      "columnsInsert": "Colunas inseridas",
       "numberingInsert": "Referência de numeração inserida",
       "rowDelete": "Linha de tabela excluída",
       "rowInsert": "Linha de tabela inserida"
@@ -961,7 +965,9 @@
     "noReviewAuthors": "Este documento não tem autores de revisão",
     "suggestingNeedsAuthor": "O modo de sugestão precisa de um autor. Defina o autor na configuração do editor.",
     "pictureSelected": "Uma imagem está selecionada. Coloque o cursor no texto para inserir uma imagem.",
-    "headerFooterReadOnly": "Cabeçalhos e rodapés são somente leitura neste editor."
+    "headerFooterReadOnly": "Cabeçalhos e rodapés são somente leitura neste editor.",
+    "revisionHoldsPendingChange": "Primeiro aceite ou rejeite a alteração dentro dela",
+    "tableRowHoldsPendingChange": "Outro autor tem uma alteração de formatação pendente em uma linha afetada. Primeiro aceite-a ou rejeite-a."
   },
   "equationPopup": {
     "apply": "Aplicar",

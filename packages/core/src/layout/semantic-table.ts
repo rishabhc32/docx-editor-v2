@@ -12,6 +12,7 @@ import {
   retargetSharedGridLineSideRules,
 } from './legacy-table-side-rules.ts';
 import { withRowMinimumContentInsets } from './table-row-minimum-insets.ts';
+import { tableWithResolvedCells } from './tracked-cell-projection.ts';
 // Bounded table structure over the typed canonical tree.
 //
 // Reads `w:tbl`/`w:tr`/`w:tc` into the bounded structure consumed by table layout. All widths
@@ -483,7 +484,7 @@ export function readTableStructure(
 }
 
 function readTableStructureUncached(
-  table: OoxmlNode,
+  authored: OoxmlNode,
   contentWidthPt: number,
   depth: number,
   styleCascade: StyleCascadeTable | undefined,
@@ -493,7 +494,9 @@ function readTableStructureUncached(
   textBox = false
 ): SemanticTableStructure | null {
   if (depth >= MAX_TABLE_NESTING) return null;
-  if (table.kind !== 'table') return null;
+  if (authored.kind !== 'table') return null;
+  // A resolved view lays out a proposed column as Accept or Reject would leave the table.
+  const table = tableWithResolvedCells(authored, displayMode, authorFilter);
 
   const tblPr = childNamed(table, 'tblPr');
   // A table's appearance mostly lives in its STYLE. Word writes
@@ -758,7 +761,10 @@ function readTableStructureUncached(
         ...revisionCellMetadata(cellProperties, displayMode, authorFilter, plan.revision),
         gridSpan,
         gridColumn,
-        ...(gridCols[gridColumn]?.id ? { gridColumnId: gridCols[gridColumn]!.id } : {}),
+        // A resolved grid is not the authored one, so it names no `w:gridCol` to edit.
+        ...(table === authored && gridCols[gridColumn]?.id
+          ? { gridColumnId: gridCols[gridColumn]!.id }
+          : {}),
         vMergeContinue: vMerge === 'continue' && mergedAbove.has(gridColumn),
         hideEndMark: cellIgnoresEndMark(tableStyle, conditions, cellProperties),
         vAlign: readCellVerticalAlign(cellProperties),

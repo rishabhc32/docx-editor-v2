@@ -1,0 +1,14 @@
+{
+  "impact": "compatible",
+  "fields": [],
+  "before": "In suggesting mode, deleting a whole table and changing cell fill, vertical alignment, or borders wrote untracked edits.",
+  "after": "They write Word tracked markup: w:del and w:cellDel on every row of the table, except a row the author proposed, which is withdrawn, and w:tcPrChange on each cell of a changed row.",
+  "reason": "Only the markup a local edit writes changes. Released replicas already preserve, replay, and resolve these row and cell revision forms when they come from a file, and shared nodes, identities, offsets, and synchronization stay unchanged.",
+  "tests": [
+    "packages/core/src/store/__tests__/tracked-table-edits.test.ts",
+    "packages/core/src/editor/__tests__/tracked-table-commands.test.ts",
+    "packages/pro/src/collaboration/__tests__/document-tracked-table-edits.test.ts"
+  ],
+  "changeset": "tracked-table-edits",
+  "migration": null
+}

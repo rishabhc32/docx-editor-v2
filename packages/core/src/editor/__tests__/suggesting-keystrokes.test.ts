@@ -496,13 +496,13 @@ describe('replacing a selection that spans paragraphs, in suggesting mode', () =
       `<w:tr>${cell('CellA')}${cell('CellB')}</w:tr></w:tbl>`;
     withSurface(plainParagraph('Alpha one') + table + plainParagraph('Beta two'), (surface) => {
       // Ends at the far edge of the LAST cell paragraph, so the table is fully covered and
-      // goes with the range — the last paragraph of the range does not survive. The
+      // is proposed for deletion with the range — it stays, struck, until review. The
       // replacement then belongs after the struck tail of the surviving start paragraph,
       // in typing order.
       selectAcross(surface, 0, 0, 2, 'CellB'.length);
       typeEach(surface, 'New');
       expect(surface.state().lastRejection).toBeNull();
-      expect(paragraphTexts(surface)).toEqual(['Alpha oneNew', 'Beta two']);
+      expect(paragraphTexts(surface)).toEqual(['Alpha oneNew', 'CellA', 'CellB', 'Beta two']);
       expect(surface.state().selection.head).toEqual({
         paragraphId: surface.session.paragraphIds()[0]!,
         offset: 'Alpha oneNew'.length,
@@ -522,8 +522,9 @@ describe('replacing a selection that spans paragraphs, in suggesting mode', () =
       selectAcross(surface, 0, 0, last, 'Beta two'.length);
       typeEach(surface, 'New');
       expect(surface.state().lastRejection).toBeNull();
-      // The fully covered table goes; the last paragraph survives and hosts the replacement.
-      expect(paragraphTexts(surface)).toEqual(['Alpha one', 'Beta twoNew']);
+      // The fully covered table is proposed for deletion and stays, struck, until review; the
+      // last paragraph survives and hosts the replacement.
+      expect(paragraphTexts(surface)).toEqual(['Alpha one', 'CellA', 'CellB', 'Beta twoNew']);
       expect(surface.state().selection.head.offset).toBe('Beta twoNew'.length);
     });
   });

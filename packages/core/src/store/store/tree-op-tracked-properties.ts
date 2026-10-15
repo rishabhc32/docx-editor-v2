@@ -12,6 +12,7 @@ import { REVISION_PROPERTY_CONTAINERS } from './revision-property-records.ts';
 //   w:rPr        → w:rPrChange/w:rPr   (CT_RPrChange over CT_RPrOriginal,      §17.13.5.30)
 //   w:pPr/w:rPr  → w:rPrChange/w:rPr   (CT_ParaRPrChange over CT_ParaRPrOriginal, §17.13.5.31)
 //   w:pPr        → w:pPrChange/w:pPr   (CT_PPrChange over CT_PPrBase,           §17.13.5.29)
+//   the table containers → `tree-op-tracked-table-records.ts`
 //
 // TWO RULES DO ALL THE WORK.
 //
@@ -44,6 +45,12 @@ import { equivalentNodes } from './ooxml-node-equality.ts';
 import { attributeValueOf, cloneWithNewIds, isParagraphMarkRevision } from './tree-op-nodes.ts';
 import { build, isWmlNamed, revisionAttributes } from './tree-op-tracked.ts';
 import type { RevisionAttributionInput } from './tree-op-validate.ts';
+import {
+  isTableContainer,
+  TABLE_CHANGE_WRAPPER_OF_OP,
+  TABLE_RECORDS,
+  type TableContainer,
+} from './tree-op-tracked-table-records.ts';
 
 /**
  * Which container is being recorded.
@@ -52,7 +59,7 @@ import type { RevisionAttributionInput } from './tree-op-validate.ts';
  * `w:rPrChange`, and the only difference — `CT_ParaRPrOriginal` also admits the mark's own
  * `w:ins`/`w:del` — is a widening, so one code path covers both.
  */
-export type PropertyChangeContainer = 'runProperties' | 'paragraphProperties';
+export type PropertyChangeContainer = 'runProperties' | 'paragraphProperties' | TableContainer;
 
 /**
  * The change wrapper each property op writes, and — by omission — which ops write none.
@@ -62,7 +69,7 @@ export type PropertyChangeContainer = 'runProperties' | 'paragraphProperties';
  * so one press is one card. Spelled twice, the two lists drifted apart the moment a fourth
  * property op appeared.
  */
-export const PROPERTY_CHANGE_WRAPPER_OF_OP: ReadonlyMap<string, 'rPrChange' | 'pPrChange'> =
+export const PROPERTY_CHANGE_WRAPPER_OF_OP: ReadonlyMap<string, string> =
   // A MAP, not an object literal: the key is an op name off a `TreeDocOp`, which reaches this
   // from untyped JS and before validation. An object literal answers `__proto__`,
   // `constructor` and `toString` through its prototype, so a crafted op name would read as a
@@ -73,15 +80,18 @@ export const PROPERTY_CHANGE_WRAPPER_OF_OP: ReadonlyMap<string, 'rPrChange' | 'p
     ['setParagraphProperties', 'pPrChange'],
     ['setListLevel', 'pPrChange'],
     ['setListNumbering', 'pPrChange'],
+    ...TABLE_CHANGE_WRAPPER_OF_OP,
   ]);
 
 /** `w:rPr` records through `w:rPrChange`; `w:pPr` through `w:pPrChange`. */
-function changeNameOf(container: PropertyChangeContainer): 'rPrChange' | 'pPrChange' {
+function changeNameOf(container: PropertyChangeContainer): string {
+  if (isTableContainer(container)) return TABLE_RECORDS[container].changeName;
   return container === 'runProperties' ? 'rPrChange' : 'pPrChange';
 }
 
 /** The element the wrapper holds its copy in. */
-function recordNameOf(container: PropertyChangeContainer): 'rPr' | 'pPr' {
+function recordNameOf(container: PropertyChangeContainer): string {
+  if (isTableContainer(container)) return TABLE_RECORDS[container].recordName;
   return container === 'runProperties' ? 'rPr' : 'pPr';
 }
 
@@ -112,6 +122,7 @@ function recordable(
   return children.filter((child) => {
     if (child.kind === 'textValue') return true;
     if (isWmlNamed(child, changeName)) return false;
+    if (isTableContainer(container)) return TABLE_RECORDS[container].recordable(child);
     if (container === 'paragraphProperties') {
       return !isWmlNamed(child, 'rPr') && !isWmlNamed(child, 'sectPr');
     }
@@ -176,6 +187,8 @@ export function withPropertyChangeRecord(options: {
   readonly revision: RevisionAttributionInput;
   readonly mint: () => string;
   readonly nextRevisionId: () => string;
+  /** Record even a write back at the original (a table row's cells; `withTablePropertyChanges`). */
+  readonly recordUnchanged?: boolean;
 }): readonly OoxmlNode[] {
   const { container, prior, next, revision, mint, nextRevisionId } = options;
   const changeName = changeNameOf(container);
@@ -191,7 +204,7 @@ export function withPropertyChangeRecord(options: {
   // in beside the live one, two revisions sharing an `@w:id`.
   const recorded = recordable((existing ? recordedProperties(existing) : null) ?? prior, container);
   const body = next.filter((child) => !isWmlNamed(child, changeName));
-  if (sameProperties(recordable(body, container), recorded)) {
+  if (!options.recordUnchanged && sameProperties(recordable(body, container), recorded)) {
     // Back at the original. This author's own record goes; anyone else's stays exactly as
     // they wrote it — see the doc comment.
     return existing !== undefined && !ownedBy(existing, revision.author)
@@ -203,7 +216,8 @@ export function withPropertyChangeRecord(options: {
   // The record's inner container carries the TYPED kind, because that is what re-reading the
   // emitted XML produces (`w:rPr` is `runProperties` wherever it sits) and a save/reopen
   // digest compares the two trees.
-  const record = build(mint(), container, recordNameOf(container), [], copy);
+  const kind = isTableContainer(container) ? TABLE_RECORDS[container].recordKind : container;
+  const record = build(mint(), kind, recordNameOf(container), [], copy);
   const wrapper = build(
     mint(),
     'generic',

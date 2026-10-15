@@ -92,6 +92,8 @@ export interface ReviewRevisionItem {
     | 'cellMerge'
     | 'numberingInsert'
   )[];
+  /** Whole table columns the decision inserts or deletes, when its cell changes are exactly those. */
+  readonly structuralColumns?: number;
   /** Changed direct formatting values, ready for localized review summaries. */
   readonly formattingChanges?: readonly {
     readonly property:
