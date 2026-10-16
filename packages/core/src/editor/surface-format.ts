@@ -1,4 +1,5 @@
 import { createContextualRunFormatting } from '../layout/complex-script-formatting.ts';
+import { withoutInheritedToggles } from '../layout/inherited-toggle-writes.ts';
 
 // Run and paragraph property edits at the selection (paginated-surface seam).
 //
@@ -175,7 +176,8 @@ export function createSurfaceFormat(deps: SurfaceFormatDeps): FormatMethods {
   const writeRunProperty = (
     from: SemanticPosition,
     to: SemanticPosition,
-    incoming: SurfaceProperty
+    incoming: SurfaceProperty,
+    settle: (ops: readonly TreeDocOp[]) => readonly TreeDocOp[] = (ops) => ops
   ): void => {
     const part = storyPart();
     if (from.paragraphId === to.paragraphId) {
@@ -193,7 +195,7 @@ export function createSurfaceFormat(deps: SurfaceFormatDeps): FormatMethods {
       const markProperties = mergedParagraphMarkProperties(part, from.paragraphId, incoming);
       commit(() =>
         applyOps(
-          [
+          settle([
             ...edits.map((edit) => ({
               op: 'setRunProperties' as const,
               paragraphId: from.paragraphId,
@@ -205,7 +207,7 @@ export function createSurfaceFormat(deps: SurfaceFormatDeps): FormatMethods {
             ...(deps.paragraphMarkVisible(from.paragraphId)
               ? paragraphMarkOps(textOf(from.paragraphId), from, to, markProperties)
               : []),
-          ],
+          ]),
           selectionMark()
         )
       );
@@ -267,7 +269,7 @@ export function createSurfaceFormat(deps: SurfaceFormatDeps): FormatMethods {
       }
     }
     if (ops.length === 0) return;
-    commit(() => applyOps(ops, selectionMark()));
+    commit(() => applyOps(settle(ops), selectionMark()));
   };
 
   /**
@@ -280,7 +282,8 @@ export function createSurfaceFormat(deps: SurfaceFormatDeps): FormatMethods {
    */
   const writeRunPropertyOverCells = (
     cells: readonly string[],
-    incoming: SurfaceProperty
+    incoming: SurfaceProperty,
+    settle: (ops: readonly TreeDocOp[]) => readonly TreeDocOp[] = (ops) => ops
   ): boolean => {
     const part = storyPart();
     const ops: TreeDocOp[] = [];
@@ -318,7 +321,7 @@ export function createSurfaceFormat(deps: SurfaceFormatDeps): FormatMethods {
     }
     if (ops.length === 0) return false;
     // Word leaves the cells selected after formatting them, so the rectangle survives.
-    commit(() => applyOps(ops, selectionMark()), undefined, {
+    commit(() => applyOps(settle(ops), selectionMark()), undefined, {
       keepCellSelection: true,
     });
     return true;
@@ -500,8 +503,20 @@ export function createSurfaceFormat(deps: SurfaceFormatDeps): FormatMethods {
       const incoming = active
         ? { localName, attributes: { val: OFF_VALUES[localName] ?? '0' } }
         : { localName, ...(attributes ? { attributes } : {}) };
+      // Over a pending format suggestion, a value the styles alone give is removed instead,
+      // so pressing twice takes the suggestion back rather than leaving an empty one.
+      const settle = (ops: readonly TreeDocOp[]) =>
+        withoutInheritedToggles(
+          storyPart(),
+          ops,
+          localName,
+          session.stylesRoot(),
+          session.settingsRoot(),
+          displayMode(),
+          authorFilter()
+        );
       if (cells && cells.length > 0) {
-        writeRunPropertyOverCells(cells, incoming);
+        writeRunPropertyOverCells(cells, incoming, settle);
         return;
       }
       const { from, to } = orderedRange();
@@ -530,7 +545,7 @@ export function createSurfaceFormat(deps: SurfaceFormatDeps): FormatMethods {
         }
         return;
       }
-      writeRunProperty(from, to, incoming);
+      writeRunProperty(from, to, incoming, settle);
     },
 
     clearFormatting() {
