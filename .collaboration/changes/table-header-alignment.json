@@ -1,0 +1,14 @@
+{
+  "impact": "compatible",
+  "fields": [],
+  "before": "Repeat Header Rows and table alignment and width were refused in every editing mode.",
+  "after": "They write w:trPr/w:tblHeader, w:tblPr/w:jc and w:tblPr/w:tblW. In suggesting mode they write w:trPrChange or w:tblPrChange with w:tcPrChange on the affected cells, under one revision per gesture.",
+  "reason": "Only the markup a local edit writes changes. Released replicas already preserve, replay, and resolve these table properties and revision forms when they come from a file, and shared nodes, identities, offsets, and synchronization stay unchanged.",
+  "tests": [
+    "packages/core/src/store/__tests__/table-placement.test.ts",
+    "packages/core/src/editor/__tests__/table-header-alignment-commands.test.ts",
+    "packages/pro/src/collaboration/__tests__/document-table-header-alignment.test.ts"
+  ],
+  "changeset": "table-header-alignment",
+  "migration": null
+}

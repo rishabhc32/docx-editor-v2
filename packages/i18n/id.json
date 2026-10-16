@@ -967,7 +967,9 @@
     "pictureSelected": "Sebuah gambar dipilih. Letakkan kursor di teks untuk menyisipkan gambar.",
     "headerFooterReadOnly": "Header dan footer hanya baca di editor ini.",
     "revisionHoldsPendingChange": "Terima atau tolak dahulu perubahan di dalamnya",
-    "tableRowHoldsPendingChange": "Penulis lain memiliki perubahan pemformatan yang tertunda pada baris yang terpengaruh. Terima atau tolak dahulu perubahan itu."
+    "tableRowHoldsPendingChange": "Penulis lain memiliki perubahan pemformatan yang tertunda pada baris yang terpengaruh. Terima atau tolak dahulu perubahan itu.",
+    "headerRowFromStyle": "Gaya tabel menjadikan baris ini baris header",
+    "floatingTableAlignment": "Teks membungkus tabel ini, jadi perataan tidak memindahkannya"
   },
   "equationPopup": {
     "apply": "Terapkan",

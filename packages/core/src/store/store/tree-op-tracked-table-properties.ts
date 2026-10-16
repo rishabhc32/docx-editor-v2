@@ -152,7 +152,11 @@ function insideOwnRow(part: OoxmlPart, row: OoxmlElement, author: string): boole
 export function withTablePropertyChanges(
   part: OoxmlPart,
   result: TreeOpResult,
-  op: { readonly tableId: string; readonly revision?: RevisionAttributionInput },
+  op: {
+    readonly tableId: string;
+    readonly justification?: string | null;
+    readonly revision?: RevisionAttributionInput;
+  },
   options?: EditOptions
 ): TreeOpResult {
   const { revision } = op;
@@ -199,6 +203,19 @@ export function withTablePropertyChanges(
   ): readonly OoxmlNode[] => {
     const now = wmlChildNamed(owner, name);
     const was = wmlChildNamed(prior, name);
+    if (!now && was) {
+      // The write emptied the container away; the record still needs one to stand in, placed
+      // after a row's `w:tblPrEx` as `CT_Row` orders them.
+      const children = record(container, was.children, []);
+      if (children.length === 0) return children;
+      const at = owner.children.findIndex((child) => isWmlNamed(child, 'tblPrEx')) + 1;
+      const restored = build(nextId(), 'generic', name, [], children);
+      replace(owner, {
+        ...owner,
+        children: [...owner.children.slice(0, at), restored, ...owner.children.slice(at)],
+      } as OoxmlElement);
+      return children;
+    }
     if (!now || now === was) return now?.children ?? [];
     const children = record(container, was?.children ?? [], now.children);
     if (!sameChildren(children, now.children)) replace(owner, { ...now, children } as OoxmlElement);
@@ -214,14 +231,19 @@ export function withTablePropertyChanges(
       .map((row) => row.id)
   );
   // A table this author proposed whole goes, properties and grid too, when that is rejected.
+  let aligned = false;
   if (rows.some((row) => !ownRows.has(row.id))) {
-    recordContainer('tableProperties', 'tblPr', before, after);
+    const tableProperties = recordContainer('tableProperties', 'tblPr', before, after);
     recordContainer('tableGrid', 'tblGrid', before, after);
+    // A table ALIGNMENT records every cell too, the form Word writes for it. Word reads a lone
+    // `w:tblPrChange` that only adds a `w:jc` as unused history, not a decision
+    // (`unboundTableHistories`), so on its own the proposal would offer nothing to review.
+    aligned = op.justification !== undefined && hasRecord(tableProperties, 'tblPrChange');
   }
 
   for (const row of rows) {
     const prior = elementOf(findNode(part, row.id));
-    if (prior === undefined || prior === row || ownRows.has(row.id)) continue;
+    if (prior === undefined || ownRows.has(row.id) || (prior === row && !aligned)) continue;
     if (holdsOtherAuthorsRowChange(prior, revision.author)) {
       return { ok: false, reason: 'unsupported-revision', detail: OTHER_AUTHORS_ROW_CHANGE };
     }
@@ -249,6 +271,7 @@ export function withTablePropertyChanges(
         : current[index]!;
     });
     if (
+      aligned ||
       hasRecord(rowProperties, 'trPrChange') ||
       hasRecord(propertiesOf(row, 'tblPrEx'), 'tblPrExChange') ||
       next.some((children) => hasRecord(children, 'tcPrChange'))

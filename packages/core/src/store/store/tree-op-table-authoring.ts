@@ -14,6 +14,7 @@ import {
   patchTcPrChild,
   removeTrPrChild,
 } from './tree-op-table-properties.ts';
+import { nonPlacementKeys, validatePlacement, withPlacement } from './tree-op-table-placement.ts';
 import { isWmlElement, wmlChildNamed } from './tree-op-table-shared.ts';
 import { readEditableTableTopology } from './tree-op-table-topology.ts';
 import { MIN_TABLE_COLUMN_WIDTH_TWIPS } from './table-constraints.ts';
@@ -23,7 +24,7 @@ type Op = Extract<TreeDocOp, { op: 'setTableProperties' }>;
 
 export function validateTableProperties(part: OoxmlPart, op: Op): TreeOpRejection | null {
   if (
-    !Object.keys(op).every((key) =>
+    !nonPlacementKeys(op).every((key) =>
       ['op', 'tableId', 'styleId', 'headerRowCount', 'columnWidthsTwips'].includes(key)
     )
   )
@@ -58,7 +59,7 @@ export function validateTableProperties(part: OoxmlPart, op: Op): TreeOpRejectio
       return 'invalidArgs';
     if (op.columnWidthsTwips.reduce((a, b) => a + b, 0) > 31680) return 'invalidArgs';
   }
-  return null;
+  return validatePlacement(op);
 }
 
 export function applyTableProperties(part: OoxmlPart, op: Op, options?: EditOptions): TreeOpResult {
@@ -137,6 +138,9 @@ export function applyTableProperties(part: OoxmlPart, op: Op, options?: EditOpti
       'tblPr',
       leaf(wmlChildNamed(updated, 'tblPr') ?? fresh('tblPr'), 'tblStyle', { val: op.styleId })
     );
+  updated = withPlacement(updated, op, (table, name, attrs) =>
+    patch(table, 'tblPr', leaf(wmlChildNamed(table, 'tblPr') ?? fresh('tblPr'), name, attrs))
+  );
   const replacements = new Map<string, OoxmlNode>();
   rows.forEach(({ row, cells }, rowIndex) => {
     let edited: OoxmlElement = row;
@@ -154,7 +158,10 @@ export function applyTableProperties(part: OoxmlPart, op: Op, options?: EditOpti
           if (removed.ok)
             edited = {
               ...edited,
-              children: edited.children.map((n) => (n.id === props.id ? removed.container : n)),
+              // An emptied `w:trPr` goes, as it does when a row revision resolves.
+              children: removed.container.children.length
+                ? edited.children.map((n) => (n.id === props.id ? removed.container : n))
+                : edited.children.filter((n) => n.id !== props.id),
             } as OoxmlElement;
         }
       }

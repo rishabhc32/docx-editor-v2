@@ -967,7 +967,9 @@
     "pictureSelected": "Zaznaczono obraz. Umieść kursor w tekście, aby wstawić obraz.",
     "headerFooterReadOnly": "Nagłówki i stopki są w tym edytorze tylko do odczytu.",
     "revisionHoldsPendingChange": "Najpierw zaakceptuj lub odrzuć zmianę wewnątrz",
-    "tableRowHoldsPendingChange": "Inny autor ma oczekującą zmianę formatowania w zmienianym wierszu. Najpierw ją zaakceptuj lub odrzuć."
+    "tableRowHoldsPendingChange": "Inny autor ma oczekującą zmianę formatowania w zmienianym wierszu. Najpierw ją zaakceptuj lub odrzuć.",
+    "headerRowFromStyle": "Styl tabeli ustawia ten wiersz jako wiersz nagłówka",
+    "floatingTableAlignment": "Tekst opływa tę tabelę, więc wyrównanie jej nie przesuwa"
   },
   "equationPopup": {
     "apply": "Zastosuj",
