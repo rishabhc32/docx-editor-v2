@@ -1,0 +1,14 @@
+{
+  "impact": "compatible",
+  "fields": [],
+  "before": "Accept All, Reject All and author changes skipped tracked changes whose nodes have room logical ids, Accept All for the document wrote a header created in the session to the body, and navigation from a paragraph the room created started at the first change.",
+  "after": "Review commands find the part of a change from the part its review ranges name, route each document part by its name, and find the story of the caret through the node index, so every participant can decide, reattribute and navigate every change.",
+  "reason": "Only the part a review command addresses changes. The commands emit the existing revision operations and package writes, so shared nodes, text offsets, operations, and package serialization keep their meaning for released participants.",
+  "tests": [
+    "packages/pro/src/collaboration/__tests__/document-review-all-on-peers.test.ts",
+    "packages/pro/src/collaboration/__tests__/document-revision-author.test.ts",
+    "packages/pro/src/collaboration/__tests__/document-history-groups-review.test.ts"
+  ],
+  "changeset": "review-all-on-peers",
+  "migration": null
+}
