@@ -653,6 +653,7 @@ Use `useReviewOf(editor, query)` with an existing editor. React accepts `Editor 
 | `excludeRevisionKinds`          | Removes those kinds from returned `items`.                     |
 | `placement: false`              | Keeps metadata and sets placement fields to `null`.            |
 | `pairReplacements: false`       | Lists both halves of each replacement as separate items.       |
+| `wholeParagraphFormat: true`    | Treats a paragraph formatting change as its whole paragraph.   |
 | `setReviewActivationExclusions` | Prevents caret-driven activation for hidden kinds.             |
 | `DocxEditorReview`              | Sets activation exclusions from `structural` and `formatting`. |
 
@@ -741,6 +742,25 @@ An item hits when the character under the pointer is inside its range. The right
 
 To anchor a tracked change balloon to an item without a pointer, call `editor.getReviewItemRects(key)`. It returns the item's bands on painted pages in client coordinates, or an empty array.
 
+A paragraph formatting change, such as a new alignment, spacing, or indent, covers no characters. By default, it never hits, it has no bands, and it is active only while the caret is at the paragraph end. To treat the change as its whole paragraph, add `wholeParagraphFormat: true` to the query:
+
+- `getReviewItemsAt` returns the change for a point anywhere on the lines of the paragraph, including the list number. The change comes after every narrower item, so a change to a word or a comment in the paragraph comes first.
+- `getReviewItemRects(key, query)` returns one band for each line of the paragraph, on each painted page that shows a part of it.
+- `isActive` is true while the caret is anywhere in the paragraph.
+
+Pass the same query to each method:
+
+```ts
+const query = { wholeParagraphFormat: true };
+
+pages.addEventListener('click', (event) => {
+  const [hit] = editor.getReviewItemsAt(event.clientX, event.clientY, query);
+  if (!hit) return;
+  const [band] = editor.getReviewItemRects(hit.placement.key, query);
+  if (band) openCard(hit.placement.key, band);
+});
+```
+
 Use `reviewItemReveal` to open your component after **Next Change**, **Previous Change**, or `setActiveReviewItem(key, { announce: true })`. It fires again for an already active item, so a closed component can reopen.
 
 Caret movement, page clicks, dismissal, refused activation, and remote edits do not emit this event.
@@ -768,7 +788,7 @@ The packaged tracked change balloons and review pane use the same event. With th
 | Host API | Returns |
 | --- | --- |
 | `getReviewItemsAt(clientX, clientY, query?)` | The review items under a point, narrowest first. |
-| `getReviewItemRects(key)` | The item's bands on painted pages, in client coordinates. |
+| `getReviewItemRects(key, query?)` | The item's bands on painted pages, in client coordinates. |
 | `getActivatedReviewItemKey(query?)` | The activated item's key under `query`, or `null`. |
 | `on('reviewItemReveal', handler)` | Each explicit reveal, as `{ key, pairKey, source }`. |
 

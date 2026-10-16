@@ -2279,7 +2279,7 @@ export interface EditorQueryResults extends DocQueryResults {
 
 // @public
 export interface EditorReviewHits {
-    getReviewItemRects(key: string): readonly HighlightRect[];
+    getReviewItemRects(key: string, query?: ReviewItemQuery): readonly HighlightRect[];
     getReviewItemsAt(clientX: number, clientY: number, query?: ReviewItemQuery): readonly ReviewItemHit[];
 }
 
@@ -3244,6 +3244,7 @@ export interface ReviewItemQuery {
     readonly excludeRevisionKinds?: readonly ReviewRevisionKind[];
     readonly pairReplacements?: boolean;
     readonly placement?: boolean;
+    readonly wholeParagraphFormat?: boolean;
 }
 
 // @public

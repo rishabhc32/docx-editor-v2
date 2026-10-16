@@ -36,7 +36,7 @@ export interface KeyedParagraphRect extends SelectionRect {
  * Visit each story's blocks on one page: the body with no offset, then headers, footers, and
  * notes with their story box's offset into page-content coordinates.
  */
-function forEachStory(
+export function forEachStory(
   page: PageRecord,
   visit: (
     blocks: readonly BlockFragmentRecord[],
