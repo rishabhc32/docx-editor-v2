@@ -1,0 +1,13 @@
+{
+  "impact": "compatible",
+  "fields": [],
+  "before": "In suggesting mode, a second press of a formatting toggle over a pending format suggestion wrote an explicit off value, such as w:u w:val=\"none\", and left a w:rPrChange that changed nothing visible.",
+  "after": "Over a pending format suggestion that does not record the property, the second press removes the direct property when the styles alone give the same look, so the run lands back on its original and the w:rPrChange goes.",
+  "reason": "Only the property list of an existing run-format operation changes. Released replicas already apply, replay, and resolve that operation and its records, and shared nodes, identities, offsets, and synchronization stay unchanged.",
+  "tests": [
+    "packages/core/src/editor/__tests__/toggle-inherited-format.test.ts",
+    "packages/pro/src/collaboration/__tests__/document-toggle-suggestion.test.ts"
+  ],
+  "changeset": "toggle-format-suggestion",
+  "migration": null
+}
