@@ -41,4 +41,26 @@ export interface ReviewItemQuery {
    * and replies to either half are listed under the pair.
    */
   readonly pairReplacements?: boolean;
+  /**
+   * Whether a paragraph's own formatting change (`w:pPrChange`), such as a new alignment,
+   * spacing, or indent, stands for its whole paragraph. Default false.
+   *
+   * The change covers no characters, so its range is collapsed at the paragraph end. By
+   * default `getReviewItemRects` returns no bands for it, `getReviewItemsAt` never hits it,
+   * and it is `isActive` only while the caret is at that end. When this is true:
+   *
+   * - `getReviewItemRects(key, query)` returns one band per line of the paragraph, on every
+   *   painted page that holds a part of it. Each band spans the line's text column at glyph
+   *   height, and the first band also covers the list number.
+   * - `getReviewItemsAt` hits the change anywhere in those bands. It comes after every
+   *   narrower item, so a change to a word in the paragraph, or a comment on it, comes first.
+   * - `getReviewItems` reports the change `isActive` while the caret is anywhere in the
+   *   paragraph, together with any narrower active item. A change that
+   *   `setReviewActivationExclusions` excludes stays inactive.
+   *
+   * The item's ranges, `anchorY`, and `pageIndex` do not change. A formatting change on the
+   * paragraph mark (`w:pPr/w:rPr/w:rPrChange`) keeps its collapsed range.
+   * @public
+   */
+  readonly wholeParagraphFormat?: boolean;
 }

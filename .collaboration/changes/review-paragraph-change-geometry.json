@@ -1,0 +1,10 @@
+{
+  "impact": "no-impact",
+  "fields": [],
+  "before": "A paragraph formatting change (w:pPrChange) had only a collapsed range at the paragraph end, so getReviewItemRects returned no bands for it, getReviewItemsAt never hit it, and isActive was true only with the caret at that end.",
+  "after": "With the opt-in query option wholeParagraphFormat, getReviewItemRects returns one band per line of the paragraph, getReviewItemsAt hits the change anywhere on those lines after every narrower item, and getReviewItems reports it isActive while the caret is in the paragraph. Without the option the reads are unchanged.",
+  "reason": "Only three review reads change, and they compute from the local review queue, the local layout, and the local caret. They write nothing. Shared document state, operations, awareness, and package formats stay unchanged, so released clients share rooms as before. A paragraph formatting change from a remote participant is an ordinary review item in the local queue, and the reads treat it as they treat a local one.",
+  "tests": ["packages/pro/src/__tests__/review-paragraph-change-geometry.test.ts"],
+  "changeset": "review-paragraph-change-geometry",
+  "migration": null
+}
