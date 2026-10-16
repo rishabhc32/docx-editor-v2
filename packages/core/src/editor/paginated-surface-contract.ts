@@ -985,10 +985,10 @@ export type ScaleMutableSurface = PaginatedSurface & {
   automationWriteRefusal(ops: readonly TreeDocOp[], packageEdits: boolean): string | null;
   /**
    * The gated, attributed session write for command lanes that live OUTSIDE this file —
-   * today the content-control commands. Same collaboration gate and actor attribution as
-   * the typing lane (`applyJournaledOps`); the command's own mode/lock gate has already
-   * run. Internal, reached by cast like `setScale` — see `applyGatedSurfaceTreeOps` in
-   * `content-controls.ts` for the accessor.
+   * today the content-control commands. Same collaboration gate, actor and revision
+   * attribution as the typing lane (`trackedOps`, `applyJournaledOps`); the command's own
+   * mode/lock gate has already run. Internal, reached by cast like `setScale` — see
+   * `applyGatedSurfaceTreeOps` in `content-controls.ts` for the accessor.
    */
   applyGatedTreeOps(
     ops: readonly TreeDocOp[],

@@ -384,6 +384,7 @@ export type TreeDocOp =
        * the write is then a plain paragraph-level replace.
        */
       readonly inForcePositionsTwips?: readonly number[];
+      readonly revision?: RevisionAttributionInput;
     }
   | {
       readonly op: 'splitParagraph';
@@ -913,6 +914,8 @@ export type TreeDocOp =
       readonly controlId: string;
       /** String is the editor-facing v2 form; structured input is the automation form. */
       readonly value: string | ContentControlValueInput;
+      /** Propose the pick instead: the old content in `w:del`, the new value in `w:ins`. */
+      readonly revision?: RevisionAttributionInput;
     }
   | {
       /**

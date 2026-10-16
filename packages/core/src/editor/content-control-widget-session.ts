@@ -25,7 +25,8 @@ interface Host {
 }
 function valueText(node: OoxmlNode): string {
   if (node.kind === 'textValue') return node.value;
-  if (node.localName === 'sdtPr') return '';
+  // Struck text is a pending suggestion's old value, not what the control shows now.
+  if (node.localName === 'sdtPr' || node.kind === 'deletedText') return '';
   return node.children.map(valueText).join('');
 }
 /** The mapped list value, or authored free text. Shared by engine and host sessions. */

@@ -1,5 +1,6 @@
 import { documentProtectionRefusal } from '../store/store/forms-protection.ts';
 import { formsProtectionRefusal } from '../store/store/tree-op-content-controls.ts';
+import { trackedValueRefusal } from '../store/store/tracked-content-control-value.ts';
 import { settingsPartOf } from '../store/package/note-properties.ts';
 // Content-control query derivation for the Editor facade.
 //
@@ -775,6 +776,10 @@ function storeVerdict(surface: PaginatedSurface, op: TreeDocOp, nodeId: string):
       reason: treeOpRejectionMessage(rejection),
     };
   }
+  // Suggesting mode writes a value as a revision, and some controls cannot hold one.
+  const author = surface.editingMode() === 'suggest' ? surface.author() : undefined;
+  const tracked = trackedValueRefusal(part, op, author);
+  if (tracked) return { ok: false, code: 'unsupported', reason: tracked };
   return { ok: true };
 }
 
