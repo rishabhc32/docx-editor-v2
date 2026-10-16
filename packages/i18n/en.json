@@ -41,7 +41,9 @@
     "nothingToCopyFormatting": "Select some text to copy its formatting",
     "nothingToPaint": "Select some text to paint",
     "revisionHoldsPendingChange": "Accept or reject the change inside it first",
-    "tableRowHoldsPendingChange": "Another author has a pending formatting change on an affected row. Accept or reject it first."
+    "tableRowHoldsPendingChange": "Another author has a pending formatting change on an affected row. Accept or reject it first.",
+    "headerRowFromStyle": "The table style makes this row a header row",
+    "floatingTableAlignment": "Text wraps around this table, so alignment does not move it"
   },
   "toolbar": {
     "ariaLabel": "Formatting toolbar",

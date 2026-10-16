@@ -41,7 +41,9 @@
     "pictureSelected": "Hay una imagen seleccionada. Coloque el cursor en el texto para insertar una imagen.",
     "headerFooterReadOnly": "Los encabezados y pies de página son de solo lectura en este editor.",
     "revisionHoldsPendingChange": "Primero acepte o rechace el cambio que contiene",
-    "tableRowHoldsPendingChange": "Otro autor tiene un cambio de formato pendiente en una fila afectada. Primero acéptelo o recházelo."
+    "tableRowHoldsPendingChange": "Otro autor tiene un cambio de formato pendiente en una fila afectada. Primero acéptelo o recházelo.",
+    "headerRowFromStyle": "El estilo de tabla convierte esta fila en fila de encabezado",
+    "floatingTableAlignment": "El texto se ajusta alrededor de esta tabla, por lo que la alineación no la mueve"
   },
   "toolbar": {
     "ariaLabel": "Barra de formato",

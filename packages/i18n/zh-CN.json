@@ -967,7 +967,9 @@
     "pictureSelected": "已选中一张图片。请将光标放在文本中以插入图片。",
     "headerFooterReadOnly": "此编辑器中的页眉和页脚为只读。",
     "revisionHoldsPendingChange": "请先接受或拒绝其中的修订",
-    "tableRowHoldsPendingChange": "受影响的行中有其他作者待处理的格式更改。请先接受或拒绝该更改。"
+    "tableRowHoldsPendingChange": "受影响的行中有其他作者待处理的格式更改。请先接受或拒绝该更改。",
+    "headerRowFromStyle": "表格样式将此行设为标题行",
+    "floatingTableAlignment": "文字环绕此表格，因此对齐方式不会移动它"
   },
   "equationPopup": {
     "apply": "应用",

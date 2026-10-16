@@ -967,7 +967,9 @@
     "pictureSelected": "Uma imagem está selecionada. Coloque o cursor no texto para inserir uma imagem.",
     "headerFooterReadOnly": "Cabeçalhos e rodapés são somente leitura neste editor.",
     "revisionHoldsPendingChange": "Primeiro aceite ou rejeite a alteração dentro dela",
-    "tableRowHoldsPendingChange": "Outro autor tem uma alteração de formatação pendente em uma linha afetada. Primeiro aceite-a ou rejeite-a."
+    "tableRowHoldsPendingChange": "Outro autor tem uma alteração de formatação pendente em uma linha afetada. Primeiro aceite-a ou rejeite-a.",
+    "headerRowFromStyle": "O estilo da tabela define esta linha como linha de cabeçalho",
+    "floatingTableAlignment": "O texto contorna esta tabela, então o alinhamento não a move"
   },
   "equationPopup": {
     "apply": "Aplicar",

@@ -6,6 +6,9 @@
 
 import type { EditorCommand } from '../contracts/editor.ts';
 import type { RunFormatting } from '../contracts/types.ts';
+import { buildTableCommandPlannerInput } from './docx-editor-derive.ts';
+import type { PaginatedSurface } from './paginated-surface-contract.ts';
+import { headerRowToggleActive } from './table-command-plan.ts';
 
 /**
  * Whether a formatting command is currently applied, from the snapshot's `formatting`.
@@ -51,4 +54,14 @@ export function formattingCommandActive(
     default:
       return false;
   }
+}
+
+/**
+ * Whether Repeat Header Rows is pressed: every row the selection covers repeats atop each page
+ * the table continues onto. The planner answers, so the toggle and its pressed state agree.
+ */
+export function headerRowActive(surface: PaginatedSurface | null): boolean {
+  if (!surface) return false;
+  const command = { type: 'toggleHeaderRow' } as const;
+  return headerRowToggleActive(buildTableCommandPlannerInput(command, surface));
 }

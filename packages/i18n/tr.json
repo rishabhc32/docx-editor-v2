@@ -967,7 +967,9 @@
     "pictureSelected": "Bir resim seçili. Resim eklemek için imleci metne yerleştirin.",
     "headerFooterReadOnly": "Bu düzenleyicide üstbilgiler ve altbilgiler salt okunurdur.",
     "revisionHoldsPendingChange": "Önce içindeki değişikliği kabul edin veya reddedin",
-    "tableRowHoldsPendingChange": "Etkilenen bir satırda başka bir yazarın bekleyen biçimlendirme değişikliği var. Önce bu değişikliği kabul edin veya reddedin."
+    "tableRowHoldsPendingChange": "Etkilenen bir satırda başka bir yazarın bekleyen biçimlendirme değişikliği var. Önce bu değişikliği kabul edin veya reddedin.",
+    "headerRowFromStyle": "Tablo stili bu satırı başlık satırı yapıyor",
+    "floatingTableAlignment": "Metin bu tablonun etrafını sarıyor, bu nedenle hizalama onu taşımaz"
   },
   "equationPopup": {
     "apply": "Uygula",

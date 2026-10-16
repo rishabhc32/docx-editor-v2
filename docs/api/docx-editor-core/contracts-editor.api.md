@@ -1039,7 +1039,6 @@ export interface EditorCommands extends EditorCommandShape<DocEdits>, EditorHead
         rows: number;
     };
     toggleDocumentProtection: Record<never, never>;
-    // (undocumented)
     toggleHeaderRow: Record<never, never>;
     // (undocumented)
     toggleList: {
