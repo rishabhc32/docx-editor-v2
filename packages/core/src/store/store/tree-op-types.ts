@@ -759,6 +759,13 @@ export type TreeDocOp =
       readonly styleId?: string;
       readonly headerRowCount?: number;
       readonly columnWidthsTwips?: readonly number[];
+      /** `w:jc`, in document order (`left` leads a right-to-left table); `null` removes it. */
+      readonly justification?: 'left' | 'center' | 'right' | null;
+      /** `w:tblW`: twips (`dxa`), fiftieths of a percent (`pct`) or 0 (`auto`); `null` removes. */
+      readonly preferredWidth?: {
+        readonly type: 'auto' | 'dxa' | 'pct';
+        readonly value: number;
+      } | null;
       readonly revision?: RevisionAttributionInput;
     }
   | {

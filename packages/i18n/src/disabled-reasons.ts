@@ -76,6 +76,11 @@ export const DISABLED_REASON_KEYS: Readonly<Record<string, TranslationKey>> = Ob
   // Keyed on `HELD_ROW_REASON` in the engine's tracked table lane.
   "another author's formatting change is pending on a row this change affects; accept or reject that change first":
     'disabledReason.tableRowHoldsPendingChange',
+  // Keyed on `HEADER_ROW_FROM_STYLE_REASON` and `FLOATING_TABLE_ALIGNMENT_REASON` in the
+  // engine's table lane.
+  'the table style makes this row a header row': 'disabledReason.headerRowFromStyle',
+  'text wraps around this table, so alignment does not move it':
+    'disabledReason.floatingTableAlignment',
 });
 
 /**

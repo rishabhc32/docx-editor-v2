@@ -1101,6 +1101,7 @@ export interface EditorCommands
   setCellFill: { color: ColorValue | null };
   /** Vertically align content inside the selected table cells. */
   setTableCellVerticalAlignment: { alignment: TableCellVerticalAlignment };
+  /** Repeat Header Rows, on the leading rows through the selection (Word's rule). */
   toggleHeaderRow: Record<never, never>;
   /**
    * Selected-cell borders. Concrete edge scopes require a complete spec;

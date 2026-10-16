@@ -967,7 +967,9 @@
     "pictureSelected": "Une image est sélectionnée. Placez le curseur dans le texte pour insérer une image.",
     "headerFooterReadOnly": "Les en-têtes et pieds de page sont en lecture seule dans cet éditeur.",
     "revisionHoldsPendingChange": "Acceptez ou refusez d'abord la modification qu'elle contient",
-    "tableRowHoldsPendingChange": "Un autre auteur a une modification de mise en forme en attente sur une ligne concernée. Acceptez-la ou refusez-la d'abord."
+    "tableRowHoldsPendingChange": "Un autre auteur a une modification de mise en forme en attente sur une ligne concernée. Acceptez-la ou refusez-la d'abord.",
+    "headerRowFromStyle": "Le style du tableau fait de cette ligne une ligne d'en-tête",
+    "floatingTableAlignment": "Le texte entoure ce tableau, donc l'alignement ne le déplace pas"
   },
   "equationPopup": {
     "apply": "Appliquer",

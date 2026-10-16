@@ -4840,7 +4840,12 @@ export type TreeDocOp = SetFieldCodeOp | {
 } | {
     readonly columnWidthsTwips?: readonly number[];
     readonly headerRowCount?: number;
+    readonly justification?: 'left' | 'center' | 'right' | null;
     readonly op: 'setTableProperties';
+    readonly preferredWidth?: {
+        readonly type: 'auto' | 'dxa' | 'pct';
+        readonly value: number;
+    } | null;
     readonly revision?: RevisionAttributionInput;
     readonly styleId?: string;
     readonly tableId: string;

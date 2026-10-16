@@ -36,6 +36,12 @@ import type {
 } from '../layout/table-interaction-targets.ts';
 import { lowerColorValueForBorder, lowerColorValueForFill } from './color-value-lower.ts';
 import { storedGridColumnOf } from './stored-grid-column.ts';
+import {
+  headerRowsActive,
+  planHeaderRowToggle,
+  planTablePlacement,
+  tablePropertiesShapeError,
+} from './table-property-commands.ts';
 import type {
   TableBorderEdgeTarget,
   TableBorderSpecInput,
@@ -326,9 +332,12 @@ function validateTableCommandShape(command: EditorCommand): TableCommandPlan | n
       }
       return null;
     case 'deleteTable':
+    case 'toggleHeaderRow':
       return !isPlainObject(command) || !ownKeysExactly(command, ['type'])
-        ? refusal('invalidArgs', 'deleteTable command shape is invalid')
+        ? refusal('invalidArgs', `${command.type} command shape is invalid`)
         : null;
+    case 'setTableProperties':
+      return tablePropertiesShapeError(command);
     case 'setCellFill':
       if (!isPlainObject(command) || !ownKeysExactly(command, ['type', 'color'])) {
         return refusal('invalidArgs', 'setCellFill command shape is invalid');
@@ -729,9 +738,7 @@ export function planTableCommand(input: TableCommandPlannerInput): TableCommandP
       return refusal('unsupported', 'cell merge is not supported yet');
     case 'splitCell':
       return refusal('unsupported', 'cell split is not supported yet');
-    case 'toggleHeaderRow':
     case 'selectTableRegion':
-    case 'setTableProperties':
       return refusal(
         'unsupported',
         `command '${command.type}' is not supported by the tree editor`
@@ -935,9 +942,36 @@ export function planTableCommand(input: TableCommandPlannerInput): TableCommandP
         command.columnWidthTwips,
         command.tableWidthTwips
       );
+    case 'toggleHeaderRow':
+    case 'setTableProperties': {
+      if (!anchor) return refusal('unsupported', 'the selection is not inside a table');
+      const planned =
+        command.type === 'toggleHeaderRow'
+          ? planHeaderRowToggle(
+              part,
+              input.layout,
+              anchor.tableId,
+              rowIdsOfSelection(part, anchor).rowIds
+            )
+          : planTablePlacement(
+              command,
+              input.layout,
+              anchor.tableId,
+              isVisualRtlTable(input.layout, anchor.tableId)
+            );
+      return planned.ok ? planValidated(part, planned.ops, planned.selection) : planned;
+    }
     default:
       return refusal('unsupported', `command '${command.type}' is not a table command`);
   }
+}
+
+/** Whether `toggleHeaderRow` is on: every row the selection covers repeats as a header row. */
+export function headerRowToggleActive(input: TableCommandPlannerInput): boolean {
+  const anchor = resolveAnchor(input);
+  if (!anchor || anchor.isHeaderRepeat) return false;
+  const { rowIds } = rowIdsOfSelection(input.part, anchor);
+  return headerRowsActive(input.part, input.layout, anchor.tableId, rowIds);
 }
 
 export function tableCommandCanSupport(command: EditorCommand): {
@@ -952,9 +986,7 @@ export function tableCommandCanSupport(command: EditorCommand): {
       return { supported: false, reason: 'cell merge is not supported yet' };
     case 'splitCell':
       return { supported: false, reason: 'cell split is not supported yet' };
-    case 'toggleHeaderRow':
     case 'selectTableRegion':
-    case 'setTableProperties':
       return {
         supported: false,
         reason: `command '${command.type}' is not supported by the tree editor`,

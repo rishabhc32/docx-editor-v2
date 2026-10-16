@@ -22,7 +22,7 @@ import { bindCommentDraftRequests } from './comment-draft-chrome.ts';
 import { completePendingSuggesting } from './opening-editing-mode.ts';
 import { subscribeDocumentChanges } from './docx-editor-document-changes.ts';
 import { attachTargetRefusal, registerEditorHost } from './host-realm.ts';
-import { formattingCommandActive } from './docx-editor-active.ts';
+import { formattingCommandActive, headerRowActive } from './docx-editor-active.ts';
 import { createEditorScrolling } from './docx-editor-scroll.ts';
 import { createAnchorNavigation } from './docx-editor-anchor-navigation.ts';
 import { createTextHighlights } from './text-highlights.ts';
@@ -2048,10 +2048,10 @@ export function createDocxEditor(config: DocxEditorConfig): DocxEditorInstance {
       return { ok: true };
     },
 
-    // Derived for marks and alignment from the cached snapshot's formatting — Word's
-    // agreement rule, the same one `toggleRunProperty` toggles against. Everything else
-    // stays honest-false until its derivation exists.
+    // Marks and alignment follow the snapshot's formatting (Word's agreement rule) and the header
+    // row its table. Everything else stays honest-false until its derivation exists.
     isActive(command) {
+      if (command.type === 'toggleHeaderRow') return headerRowActive(surface);
       const marksActive = views.isActive(command);
       if (marksActive !== null) return marksActive;
       if (command.type === 'toggleDocumentProtection') return protection.isActive();
