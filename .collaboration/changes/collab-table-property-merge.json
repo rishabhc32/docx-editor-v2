@@ -1,0 +1,13 @@
+{
+  "impact": "migration-required",
+  "fields": ["repairVersion"],
+  "before": "Participants who changed the properties of one table row or cell at the same time, such as its height, fill, borders, or column width, or who proposed its deletion, left two `w:trPr` or `w:tcPr` elements, or two copies of one property, in shared state. Every replica showed both, every later edit of that table refused with `duplicate-property-container`, and the saved document was not valid for Word. A `w:trPr` written while a peer inserted a first cell could also show after that cell. A losing paragraph or run property copy that two undos listed twice showed again.",
+  "after": "Each replica shows one `w:tblPrEx` and one `w:trPr` in a row, one `w:tcPr` in a cell, one `w:tblGridChange` in a grid, and one of each WML child of `w:tblPrEx`, `w:trPr`, `w:tcPr`, and `w:tcBorders`: the first live copy in shared child order. A winning `w:trPr`, `w:tcPr`, `w:tblPrEx`, or `w:tcBorders` also shows the properties its hidden copies hold, so a fill and a vertical alignment written at once both stay. A row's `w:trPr` shows ahead of its cells and a cell's `w:tcPr` ahead of its paragraphs and tables, where a local edit writes them. Losing copies stay in shared state for undo, a repeated listing of a losing copy hides with it, and a file's own duplicates stay as loaded.",
+  "reason": "The change extends the rule that decides which conflicting node a replica shows, which is repair semantics. No stored field or update meaning changes, but replicas of format 1.4.2.1 show every copy for the same shared state, so a room shared by both versions would show and save different documents, and the released replicas would still refuse edits of that table. repairVersion increases to 3, and saved rooms are exported and reseeded. The rule acts only on child groups that a participant wrote into, and the materializer and the journal projection read it from one function, so live replicas, cold joiners, and exports agree.",
+  "tests": [
+    "packages/pro/src/collaboration/__tests__/document-concurrent-table-properties.test.ts",
+    "packages/pro/src/collaboration/__tests__/singleton-children-tables.test.ts"
+  ],
+  "changeset": "collab-table-property-merge",
+  "migration": "upgrade-rooms-to-format-1431"
+}

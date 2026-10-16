@@ -31,6 +31,7 @@ import { rejectDangerousKey } from './limits.ts';
 import { replicaOfLogicalId, type LogicalId } from './identity.ts';
 import { childArrayOf, isNodeMap, namespaceUriOf, readNodeShell } from './schema.ts';
 import type { DocumentRegistry } from './registry.ts';
+import { leadingPrecedes, ruleKindOf, TABLE_RULES } from './singleton-table-rules.ts';
 
 /** What the rule needs to know about one child. Null for a child that does not exist. */
 export interface ChildShell {
@@ -69,6 +70,7 @@ const SINGLETON_KINDS: ReadonlyMap<string, readonly string[]> = new Map(
       'drawingGraphicFramePr',
       'drawingGraphic',
     ],
+    ...TABLE_RULES.singletonKinds,
   })
 );
 
@@ -119,10 +121,11 @@ const CHOICE_GROUPS: ReadonlyMap<string, (child: ChildShell) => string | null> =
   })
 );
 
-/** The singleton that has to be its parent's first child. */
+/** The singleton that has to precede its parent's other children, as `leadingPrecedes` says. */
 const LEADING_KIND: Readonly<Record<string, string>> = {
   paragraph: 'paragraphProperties',
   run: 'runProperties',
+  ...TABLE_RULES.leadingKinds,
 };
 
 /**
@@ -149,10 +152,12 @@ const UNIQUE_PROPERTY_PARENTS = new Set([
   'paragraphProperties',
   'runProperties',
   'tableProperties',
+  ...TABLE_RULES.propertyContainers,
 ]);
 
 function groupKey(parentKind: string, child: ChildShell): string | null {
-  if (SINGLETON_KINDS.get(parentKind)?.includes(child.kind)) return `kind:${child.kind}`;
+  const childKind = ruleKindOf(child);
+  if (SINGLETON_KINDS.get(parentKind)?.includes(childKind)) return `kind:${childKind}`;
   const choice = CHOICE_GROUPS.get(parentKind)?.(child);
   if (choice) return choice;
   if (
@@ -209,7 +214,7 @@ export function singletonLayout<Id extends string>(
   const shells: (ChildShell | null)[] = [];
   const notAllowed = NOT_ALLOWED.get(kind);
   const hidden = new Set<number>();
-  let firstShown = -1;
+  let leadBefore = -1;
   for (let index = 0; index < children.length; index += 1) {
     const id = children[index]!;
     if (seen.has(id)) continue;
@@ -222,7 +227,7 @@ export function singletonLayout<Id extends string>(
       continue;
     }
     // A hidden copy always follows its group's winner, so the first live child is shown.
-    if (firstShown < 0) firstShown = index;
+    if (leadBefore < 0 && leadingPrecedes(kind, shell)) leadBefore = index;
     const key = groupKey(kind, shell);
     if (key === null) continue;
     const members = groups.get(key);
@@ -245,7 +250,7 @@ export function singletonLayout<Id extends string>(
   }
   const leadingKey = LEADING_KIND[kind] ? `kind:${LEADING_KIND[kind]}` : null;
   const leading = leadingKey ? groups.get(leadingKey)?.[0] : undefined;
-  const moveLeading = leading !== undefined && firstShown !== leading;
+  const moveLeading = leading !== undefined && leadBefore >= 0 && leadBefore < leading;
   // The paragraph mark's `w:rPr` goes after the last shown sibling it may not precede.
   const trailing =
     kind === 'paragraphProperties' ? groups.get('kind:runProperties')?.[0] : undefined;
@@ -257,10 +262,12 @@ export function singletonLayout<Id extends string>(
     }
   }
   if (hidden.size === 0 && !moveLeading && trailAfter < 0) return null;
+  // Two undos that restore one child can list it twice: a hidden copy hides at each listing.
+  const hiddenIds = new Set([...hidden].map((index) => children[index]!));
   const order: number[] = [];
-  if (moveLeading) order.push(leading);
   for (let index = 0; index < children.length; index += 1) {
-    if (hidden.has(index) || (moveLeading && index === leading)) continue;
+    if (moveLeading && index === leadBefore) order.push(leading);
+    if (hiddenIds.has(children[index]!) || (moveLeading && index === leading)) continue;
     if (trailAfter >= 0 && index === trailing) continue;
     order.push(index);
     if (index === trailAfter) order.push(trailing!);
@@ -314,6 +321,7 @@ export const MERGED_KINDS: ReadonlySet<string> = new Set([
   'paragraphProperties',
   'runProperties',
   'tableProperties',
+  ...TABLE_RULES.propertyContainers,
 ]);
 
 /**
@@ -349,7 +357,7 @@ function containerMerges<Id extends string>(
   let merges: Map<Id, readonly Id[]> | null = null;
   for (const [winner, losers] of layout.companions) {
     const shell = shellOf(childIds[winner]!);
-    if (!shell || !MERGED_KINDS.has(shell.kind)) continue;
+    if (!shell || !MERGED_KINDS.has(ruleKindOf(shell))) continue;
     merges ??= new Map();
     merges.set(
       childIds[winner]!,
