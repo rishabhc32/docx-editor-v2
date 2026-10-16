@@ -6,6 +6,7 @@ This fork keeps a small set of patches on top of EigenPal's [`docx-editor`](http
 
 - `main` mirrors `eigenpal/docx-editor` `main`. It never holds a patch.
 - `patched` is an upstream commit plus the patches, one commit for each patch.
+- `prod-v<release>`, such as `prod-v2.31.0`, is an upstream release tag plus the patches. The fork's releases are built from it.
 
 To list the patches, run:
 
@@ -79,5 +80,7 @@ git rebase --onto <commit>^ <commit> patched
 ```
 
 ## Releases
+
+The fork does not publish to npm. Each fork release is a GitHub release with npm tarballs, such as `prod-v2.31.0-sp.1`. Apps install the tarballs by their URLs. To build, audit, and publish a release, see steps 9 to 12 of [Upgrade the fork to a new upstream release](FORK-UPGRADE.md#step-9-build-the-tarballs).
 
 GitHub keeps the upstream workflows off in this fork. If you turn them on in the **Actions** tab, keep the `Release` workflow off. On a push to `main`, it versions and publishes the packages with changesets.
