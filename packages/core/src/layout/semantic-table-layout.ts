@@ -57,6 +57,7 @@ import { paragraphLayoutKey, type ParagraphLayoutCache } from './layout-cache.ts
 import { cellBreakKeyInputs, cellBreakKeyParts } from './cell-break-key.ts';
 import { rememberCellLine } from './table-row-geometry-reuse.ts';
 import { alignCellLine } from './cell-line-alignment.ts';
+import { lineAlignmentMeasure } from './paragraph-alignment.ts';
 import {
   cellParagraphLines,
   zonesReachingCellParagraph,
@@ -120,6 +121,7 @@ import type {
 import { type ResolvedListItem } from './list-resolve.ts';
 import {
   directionalListFirstLineShift,
+  listMarkerAlignShift,
   listMarkerFirstLineMetrics,
   publishListMarker,
 } from './list-marker.ts';
@@ -666,6 +668,7 @@ function placeCellParagraph(
     rtl,
     inTableCell: options?.inTableCell === true,
   };
+  let markerShift = 0;
   for (let lineIndex = lineStart; lineIndex < lineEnd; lineIndex += 1) {
     const pendingLine = lines[lineIndex]!;
     const isLastLine = lineIndex === lines.length - 1;
@@ -724,6 +727,11 @@ function placeCellParagraph(
       ...(pendingLine.anchorRevisions ? { anchorRevisions: pendingLine.anchorRevisions } : {}),
       ...(pendingLine.changeSites ? { changeSites: pendingLine.changeSites } : {}),
     });
+    // A list marker opens the first line, so it moves as far as alignment moved that line.
+    if (lineIndex === 0 && listItem) {
+      const measure = lineAlignmentMeasure(pendingLine, penX, lineIndent, lineAvailableWidth);
+      markerShift = listMarkerAlignShift(rawRecords[0]!, alignment, rtl, measure);
+    }
     if (!collapseHeight) y += pendingLine.height;
     nextLineIndex = lineIndex + 1;
     fitted = true;
@@ -886,7 +894,8 @@ function placeCellParagraph(
         rawRecords[0],
         originX,
         rtl ? indent.left + available + indent.right : undefined,
-        deps.inlineDrawingLayout?.pictureBulletResource
+        deps.inlineDrawingLayout?.pictureBulletResource,
+        markerShift
       )
     : undefined;
 
