@@ -244,6 +244,7 @@ Format `docx-collaboration:1.4.3.1` changes how participants resolve concurrent 
 
 - When two participants change the properties of one table row or cell at the same time, such as its height, fill, borders, or column width, the row or cell keeps one set of properties. Different properties written at the same time both stay.
 - Earlier formats kept both copies. The table then refused further property changes, and the saved document was not valid.
+- When two participants suggest formatting changes to one table row at the same time, the row shows one suggestion. It carries the name and date of the change that came first, and each tracked property change is the last element in its properties element. Earlier formats showed each cell's first record, so one row mixed both authors, and rejecting both suggestions could reset cell widths.
 
 Participants with format `docx-collaboration:1.4.2.1` would show different documents for the same room, so the formats refuse to share a room. Migrate each saved room. For rooms that you store, see [Migrate rooms on a server](#migrate-rooms-on-a-server).
 

@@ -968,6 +968,8 @@
     "headerFooterReadOnly": "Kopf- und Fußzeilen sind in diesem Editor schreibgeschützt.",
     "revisionHoldsPendingChange": "Nehmen Sie zuerst die Änderung darin an oder lehnen Sie sie ab",
     "tableRowHoldsPendingChange": "Ein anderer Autor hat eine ausstehende Formatierungsänderung in einer betroffenen Zeile. Nehmen Sie sie zuerst an oder lehnen Sie sie ab.",
+    "tableFormattingNeedsConnection": "Stellen Sie die Verbindung wieder her, um Tabellenformatierungen vorzuschlagen.",
+    "tableRowSuggestedFirst": "Eine andere Person hat zuerst eine Änderung an dieser Zeile vorgeschlagen. Ihre Tabellenformatierung wurde entfernt.",
     "headerRowFromStyle": "Die Tabellenformatvorlage macht diese Zeile zur Überschriftenzeile",
     "floatingTableAlignment": "Text umfließt diese Tabelle, daher verschiebt die Ausrichtung sie nicht"
   },

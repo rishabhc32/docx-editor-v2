@@ -14,6 +14,8 @@ Production use requires a commercial agreement: licensing@eigenpal.com
  */
 
 import { WML_NAMESPACE_URI } from '@docx-editor.dev/core/store';
+import { ROW_PROPERTY_CONTAINERS } from '@docx-editor.dev/core/collaboration/replication';
+import { replicaOfLogicalId } from './identity.ts';
 import type { ChildShell } from './singleton-children.ts';
 
 /**
@@ -78,4 +80,51 @@ export function leadingPrecedes(parentKind: string, child: ChildShell): boolean 
     default:
       return true;
   }
+}
+
+/** The ECMA-376 child order of each row and cell property container, by `ruleKindOf`. */
+const PROPERTY_SEQUENCES: ReadonlyMap<string, readonly string[]> = new Map(
+  Object.entries(ROW_PROPERTY_CONTAINERS).map(([name, { sequence }]) => [`wml:${name}`, sequence])
+);
+
+/**
+ * `order` with the WML children of a row's or cell's property container in ECMA-376 order, its
+ * revision record last, or null when none moves. `order` lists the indexes of `children` a
+ * replica shows; null shows them all where they are.
+ *
+ * Concurrent peers each insert a property where they found room, and a winning container shows
+ * its hidden copies' properties after its own, so a merged `w:tcPr` could hold `w:shd` after
+ * `w:tcPrChange`, which the schema forbids. Only a container some peer wrote into is reordered:
+ * a file's own order stays as loaded, as a local edit leaves it until it patches the container.
+ */
+export function inPropertyOrder<Id extends string>(
+  parentKind: string,
+  order: readonly number[] | null,
+  children: readonly Id[],
+  shells: readonly (ChildShell | null | undefined)[]
+): number[] | null {
+  const sequence = PROPERTY_SEQUENCES.get(parentKind);
+  if (!sequence) return null;
+  const shown = order ?? children.map((_, index) => index);
+  const rank = (index: number): number => {
+    const shell = shells[index];
+    return shell?.kind === 'generic' && shell.namespaceUri === WML_NAMESPACE_URI
+      ? sequence.indexOf(shell.localName)
+      : -1;
+  };
+  // Positions in `shown` of the children the sequence orders; the rest keep theirs.
+  const slots = shown.flatMap((index, at) => (rank(index) >= 0 ? [at] : []));
+  const modelled = slots.map((at) => shown[at]!);
+  const sorted = [...modelled].sort((left, right) => rank(left) - rank(right));
+  if (
+    sorted.every((index, at) => index === modelled[at]) ||
+    shown.every((index) => replicaOfLogicalId(children[index]!) === null)
+  ) {
+    return null;
+  }
+  const result = [...shown];
+  slots.forEach((slot, at) => {
+    result[slot] = sorted[at]!;
+  });
+  return result;
 }

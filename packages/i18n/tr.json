@@ -968,6 +968,8 @@
     "headerFooterReadOnly": "Bu düzenleyicide üstbilgiler ve altbilgiler salt okunurdur.",
     "revisionHoldsPendingChange": "Önce içindeki değişikliği kabul edin veya reddedin",
     "tableRowHoldsPendingChange": "Etkilenen bir satırda başka bir yazarın bekleyen biçimlendirme değişikliği var. Önce bu değişikliği kabul edin veya reddedin.",
+    "tableFormattingNeedsConnection": "Tablo biçimlendirmesi önermek için yeniden bağlanın.",
+    "tableRowSuggestedFirst": "Başka biri bu satırda önce bir değişiklik önerdi. Tablo biçimlendirmeniz kaldırıldı.",
     "headerRowFromStyle": "Tablo stili bu satırı başlık satırı yapıyor",
     "floatingTableAlignment": "Metin bu tablonun etrafını sarıyor, bu nedenle hizalama onu taşımaz"
   },

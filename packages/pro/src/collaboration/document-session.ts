@@ -42,6 +42,7 @@ import type {
 } from '@docx-editor.dev/core/collaboration';
 import {
   historyGroupOfJournal,
+  recordsTableFormatting,
   type CanonicalPrimitiveJournal,
   type CollaborationDocumentPort,
 } from '@docx-editor.dev/core/collaboration/replication';
@@ -346,8 +347,11 @@ class DocumentSession implements DocumentCollaborationSession {
     if (this.destroyed) return 'collaboration-session-destroyed';
     if (!this.canWriteSharedState()) return 'collaboration-session-not-ready';
     if (!this.port) return 'collaboration-session-not-attached';
-    // An edit that a held-back update would refuse after the commit waits for it instead.
+    // An edit that a held-back update would refuse after the commit waits for it instead. So does
+    // a table format suggestion offline: only an online one can be taken back if it loses its row.
     if (this.editWait.refuses(ops)) return 'collaboration-session-not-ready';
+    if (this.statusState.status() === 'disconnected' && ops.some(recordsTableFormatting))
+      return 'collaboration-session-not-ready';
     return this.textLimitFailure(ops);
   }
 

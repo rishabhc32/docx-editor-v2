@@ -9,10 +9,16 @@ Production use requires a commercial agreement: licensing@eigenpal.com
 
 import { afterEach, describe, expect, test } from 'bun:test';
 import type { TreeDocOp } from '@docx-editor.dev/core/store';
-import { createPeerHarness } from './document-peer-support.ts';
+import { createPeerHarness, zipDocument } from './document-peer-support.ts';
 import { collaborationDocx } from './support.ts';
 
 const proseBytes = (): Uint8Array => collaborationDocx();
+const tableBytes = (): Uint8Array =>
+  zipDocument(
+    '<w:p><w:r><w:t>before</w:t></w:r></w:p><w:tbl><w:tblPr><w:tblW w:w="0" w:type="auto"/>' +
+      '</w:tblPr><w:tblGrid><w:gridCol w:w="3000"/></w:tblGrid><w:tr><w:tc><w:p><w:r>' +
+      '<w:t>a1</w:t></w:r></w:p></w:tc></w:tr></w:tbl><w:p/>'
+  );
 
 const offlineHarness = createPeerHarness('offline-editing', { offlineEditing: true });
 const defaultHarness = createPeerHarness('offline-editing-default');
@@ -82,6 +88,40 @@ describe('offline editing', () => {
         { kind: 'body' }
       )
     ).toBeNull();
+  });
+
+  test('a suggested table format waits for the room while disconnected', async () => {
+    const { alice } = await offlineHarness.pair(tableBytes());
+    const tableId = offlineHarness
+      .packageOf(alice)
+      .parts.get('/word/document.xml')!
+      .root.children.flatMap((body) => (body.kind === 'textValue' ? [] : body.children))
+      .find((node) => node.kind === 'table')!.id;
+    const center = (revision?: { readonly author: string }): TreeDocOp[] => [
+      {
+        op: 'setTableProperties',
+        tableId,
+        justification: 'center',
+        ...(revision ? { revision } : {}),
+      } as TreeDocOp,
+    ];
+    const gate = (ops: readonly TreeDocOp[]) =>
+      alice.room.session.gateOperations(ops, { kind: 'body' });
+    expect(gate(center({ author: 'alice' }))).toBeNull();
+    alice.room.session.setTransportStatus('disconnected', 'transport-disconnected', 'test-drop');
+    expect(gate(center({ author: 'alice' }))).toBe('collaboration-session-not-ready');
+    // The same format, untracked, and a suggested text edit still go through.
+    expect(gate(center())).toBeNull();
+    expect(
+      gate([
+        {
+          ...insertTextOp(offlineHarness.paragraphIdAt(alice, 0), 0, 'x'),
+          revision: { author: 'alice' },
+        } as TreeDocOp,
+      ])
+    ).toBeNull();
+    alice.room.session.setTransportStatus('ready');
+    expect(gate(center({ author: 'alice' }))).toBeNull();
   });
 
   test('offlineEditing: false refuses edits while disconnected', async () => {

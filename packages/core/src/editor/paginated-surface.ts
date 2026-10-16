@@ -99,7 +99,8 @@ import { formsProtectionEnabled, sectionProtectsForms } from '@docx-editor.dev/c
 
 import { attributeTrackedOps, isTrackedEdit } from './surface-tracked-ops.ts';
 import { createTrackedTableDeletion } from './surface-tracked-table-deletion.ts';
-import { heldTableRowRefusal } from './surface-tracked-table-refusal.ts';
+import { heldTableRowRefusal, offlineTableRefusal } from './surface-tracked-table-refusal.ts';
+import { createTableRowRace } from './surface-table-row-race.ts';
 import { createUntrackedEditGate, isDocumentEdit } from './surface-untracked-edits.ts';
 import { isMissingAuthorRefusal } from './docx-editor-author.ts';
 import { openTreeSession, type TreeDocxSession } from '@docx-editor.dev/core/binding';
@@ -3060,6 +3061,7 @@ export function mountPaginatedSurface(
     return attributeTrackedOps(ops, { author, date: trackedDate() }, formattingTracked());
   }
   const trackedTableOps = createTrackedTableDeletion({ trackedAuthorOrNone, trackedDate });
+  const tableRowRace = createTableRowRace(session, collaborationSession, publishRefusal);
 
   /**
    * The history mark for a caret, which is what REDO restores.
@@ -5607,6 +5609,7 @@ export function mountPaginatedSurface(
         return { ok: false, code: plan.code, reason: plan.reason };
       }
       const committedCaret = watchCommittedCaret(session, editingParagraphIds);
+      const raced = tableRowRace.watch(trackedOps(trackedTableOps(plan.ops)));
       try {
         const selectionBefore = selectionMark();
         const adoptCaret = plan.selection.kind === 'adoptCommittedCaret';
@@ -5626,9 +5629,12 @@ export function mountPaginatedSurface(
       if (lastRejection) {
         const ops = trackedOps(trackedTableOps(plan.ops));
         const part = partOfNodeId(session, selection.head.paragraphId) ?? session.part();
-        const held = heldTableRowRefusal(lastRejection, part, ops);
+        const held =
+          heldTableRowRefusal(lastRejection, part, ops) ??
+          offlineTableRefusal(lastRejection, collaborationSession, ops);
         return held ?? { ok: false, code: 'invalidArgs', reason: lastRejection };
       }
+      raced();
       return { ok: true, changed: true };
     },
     enterHeaderFooter: (args) => {
@@ -5769,6 +5775,7 @@ export function mountPaginatedSurface(
         unsubscribeCollaborationStatus();
         detachCollaboration();
         unsubscribe();
+        tableRowRace.destroy();
         container.replaceChildren();
       }
     },

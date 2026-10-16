@@ -968,6 +968,8 @@
     "headerFooterReadOnly": "Cabeçalhos e rodapés são somente leitura neste editor.",
     "revisionHoldsPendingChange": "Primeiro aceite ou rejeite a alteração dentro dela",
     "tableRowHoldsPendingChange": "Outro autor tem uma alteração de formatação pendente em uma linha afetada. Primeiro aceite-a ou rejeite-a.",
+    "tableFormattingNeedsConnection": "Reconecte-se para sugerir formatação de tabela.",
+    "tableRowSuggestedFirst": "Outra pessoa sugeriu primeiro uma alteração nesta linha. Sua formatação de tabela foi removida.",
     "headerRowFromStyle": "O estilo da tabela define esta linha como linha de cabeçalho",
     "floatingTableAlignment": "O texto contorna esta tabela, então o alinhamento não a move"
   },
