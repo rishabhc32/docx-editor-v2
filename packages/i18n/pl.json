@@ -968,6 +968,8 @@
     "headerFooterReadOnly": "Nagłówki i stopki są w tym edytorze tylko do odczytu.",
     "revisionHoldsPendingChange": "Najpierw zaakceptuj lub odrzuć zmianę wewnątrz",
     "tableRowHoldsPendingChange": "Inny autor ma oczekującą zmianę formatowania w zmienianym wierszu. Najpierw ją zaakceptuj lub odrzuć.",
+    "tableFormattingNeedsConnection": "Połącz się ponownie, aby zasugerować formatowanie tabeli.",
+    "tableRowSuggestedFirst": "Inna osoba jako pierwsza zasugerowała zmianę w tym wierszu. Twoje formatowanie tabeli zostało usunięte.",
     "headerRowFromStyle": "Styl tabeli ustawia ten wiersz jako wiersz nagłówka",
     "floatingTableAlignment": "Tekst opływa tę tabelę, więc wyrównanie jej nie przesuwa"
   },

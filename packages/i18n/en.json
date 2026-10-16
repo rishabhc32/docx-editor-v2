@@ -42,6 +42,8 @@
     "nothingToPaint": "Select some text to paint",
     "revisionHoldsPendingChange": "Accept or reject the change inside it first",
     "tableRowHoldsPendingChange": "Another author has a pending formatting change on an affected row. Accept or reject it first.",
+    "tableFormattingNeedsConnection": "Reconnect to suggest table formatting.",
+    "tableRowSuggestedFirst": "Another person suggested a change to this row first. Your table formatting was removed.",
     "headerRowFromStyle": "The table style makes this row a header row",
     "floatingTableAlignment": "Text wraps around this table, so alignment does not move it"
   },

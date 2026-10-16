@@ -31,7 +31,12 @@ import { rejectDangerousKey } from './limits.ts';
 import { replicaOfLogicalId, type LogicalId } from './identity.ts';
 import { childArrayOf, isNodeMap, namespaceUriOf, readNodeShell } from './schema.ts';
 import type { DocumentRegistry } from './registry.ts';
-import { leadingPrecedes, ruleKindOf, TABLE_RULES } from './singleton-table-rules.ts';
+import {
+  inPropertyOrder,
+  leadingPrecedes,
+  ruleKindOf,
+  TABLE_RULES,
+} from './singleton-table-rules.ts';
 
 /** What the rule needs to know about one child. Null for a child that does not exist. */
 export interface ChildShell {
@@ -261,7 +266,10 @@ export function singletonLayout<Id extends string>(
       if (shell && !hidden.has(index) && !mayFollowMarkProperties(shell)) trailAfter = index;
     }
   }
-  if (hidden.size === 0 && !moveLeading && trailAfter < 0) return null;
+  if (hidden.size === 0 && !moveLeading && trailAfter < 0) {
+    const sorted = inPropertyOrder(kind, null, children, shells);
+    return sorted && { order: sorted, companions };
+  }
   // Two undos that restore one child can list it twice: a hidden copy hides at each listing.
   const hiddenIds = new Set([...hidden].map((index) => children[index]!));
   const order: number[] = [];
@@ -272,7 +280,7 @@ export function singletonLayout<Id extends string>(
     order.push(index);
     if (index === trailAfter) order.push(trailing!);
   }
-  return { order, companions };
+  return { order: inPropertyOrder(kind, order, children, shells) ?? order, companions };
 }
 
 /** The indexes of `children` a replica shows, in order, or null when nothing changes. */

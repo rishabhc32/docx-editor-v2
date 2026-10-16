@@ -76,6 +76,10 @@ export const DISABLED_REASON_KEYS: Readonly<Record<string, TranslationKey>> = Ob
   // Keyed on `HELD_ROW_REASON` in the engine's tracked table lane.
   "another author's formatting change is pending on a row this change affects; accept or reject that change first":
     'disabledReason.tableRowHoldsPendingChange',
+  // Keyed on `OFFLINE_TABLE_REASON` and `ROW_TAKEN_REASON` in the engine's tracked table lane.
+  'reconnect to suggest table formatting': 'disabledReason.tableFormattingNeedsConnection',
+  'another person suggested a change to this row first; your table formatting was removed':
+    'disabledReason.tableRowSuggestedFirst',
   // Keyed on `HEADER_ROW_FROM_STYLE_REASON` and `FLOATING_TABLE_ALIGNMENT_REASON` in the
   // engine's table lane.
   'the table style makes this row a header row': 'disabledReason.headerRowFromStyle',

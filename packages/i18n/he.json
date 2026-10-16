@@ -968,6 +968,8 @@
     "headerFooterReadOnly": "כותרות עליונות ותחתונות הן לקריאה בלבד בעורך זה.",
     "revisionHoldsPendingChange": "קבלו או דחו תחילה את השינוי שבתוכו",
     "tableRowHoldsPendingChange": "למחבר אחר יש שינוי עיצוב ממתין בשורה מושפעת. קבלו או דחו אותו תחילה.",
+    "tableFormattingNeedsConnection": "התחברו מחדש כדי להציע עיצוב טבלה.",
+    "tableRowSuggestedFirst": "אדם אחר הציע קודם שינוי בשורה זו. עיצוב הטבלה שלכם הוסר.",
     "headerRowFromStyle": "סגנון הטבלה הופך שורה זו לשורת כותרת",
     "floatingTableAlignment": "הטקסט עוטף טבלה זו, ולכן היישור אינו מזיז אותה"
   },

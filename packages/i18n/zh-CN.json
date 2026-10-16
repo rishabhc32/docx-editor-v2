@@ -968,6 +968,8 @@
     "headerFooterReadOnly": "此编辑器中的页眉和页脚为只读。",
     "revisionHoldsPendingChange": "请先接受或拒绝其中的修订",
     "tableRowHoldsPendingChange": "受影响的行中有其他作者待处理的格式更改。请先接受或拒绝该更改。",
+    "tableFormattingNeedsConnection": "请重新连接以建议表格格式。",
+    "tableRowSuggestedFirst": "其他人先对此行提出了更改建议。你的表格格式已被移除。",
     "headerRowFromStyle": "表格样式将此行设为标题行",
     "floatingTableAlignment": "文字环绕此表格，因此对齐方式不会移动它"
   },

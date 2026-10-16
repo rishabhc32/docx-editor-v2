@@ -20,3 +20,18 @@ test("the refusal for a row holding another author's change is translatable", ()
     en.disabledReason.tableRowHoldsPendingChange
   );
 });
+
+// In a shared room, a table formatting suggestion is refused while the room is disconnected,
+// and taken back when another author's change to the same row came first. The engine says so
+// in English (`OFFLINE_TABLE_REASON` and `ROW_TAKEN_REASON` in core's tracked table lane).
+test('the table formatting refusals of a shared room are translatable', () => {
+  expect(localizeDisabledReason('reconnect to suggest table formatting', createT(en))).toBe(
+    en.disabledReason.tableFormattingNeedsConnection
+  );
+  expect(
+    localizeDisabledReason(
+      'another person suggested a change to this row first; your table formatting was removed',
+      createT(en)
+    )
+  ).toBe(en.disabledReason.tableRowSuggestedFirst);
+});

@@ -511,6 +511,8 @@ Preserve a recovery copy outside the editor before you call `rejoin`. `preserveR
 
 The session accepts edits while its status is `disconnected`. It merges buffered updates after reconnection. Show the status so users know when edits have not reached the room.
 
+In suggesting mode, the session refuses table formatting changes while disconnected, such as a cell fill, a border, a row height, or a column width. When two participants suggest changes to one row at the same time, the editor of the later change removes it when the earlier change arrives, which requires a connection. The editor gives the reason, and the same change succeeds after reconnection. Text suggestions, and table formatting outside suggesting mode, continue offline. For more information, see [Concurrent editing](#concurrent-editing).
+
 Buffered edits live in the browser's memory until they reach the room. A reload, an unmount, or a change of the `room` option drops them. To keep them across reloads, persist the Yjs document. For example, attach `y-indexeddb` to the `ydoc` you pass to `useDocumentCollaboration`.
 
 `useHocuspocusCollaboration` and `useWebrtcCollaboration` return `unsyncedChanges`. Its meaning depends on the transport:
@@ -1119,6 +1121,7 @@ Participants see the same document after their updates synchronize. These rules 
 | Paste several paragraphs at the same position. | Both pastes stay. Surrounding text appears once. |
 | Insert pictures at the same time, from the editor or the document API. | Both pictures stay. Each participant allocates picture identifiers and media part names from its own range, so they rarely collide. |
 | Insert a picture into a paragraph that another participant deletes. | The deletion wins. The picture's media part and its relationship stay in the package, the same on every participant. |
+| Suggest table formatting on the same row, such as a cell fill, a row height, or a column width. | The change with the earlier date keeps the row. The other participant's editor removes their change and gives the reason. If that participant edits again first, the row shows one suggestion with the earlier author's name, and accepting or rejecting it keeps every cell width. |
 
 Local and remote carets stay beside the same characters during edits and reconnection. A paragraph split or join moves each caret with its text. Text inserted exactly at your caret appears after it.
 
@@ -1192,7 +1195,7 @@ The **Recovery** column uses these terms:
 
 | Code | Cause | Recovery | What the host does |
 | --- | --- | --- | --- |
-| `collaboration-session-not-ready` | The status is `initializing` or `error`, or `disconnected` with `offlineEditing: false`. Edits also wait while a peer's update is held back for an update it depends on. | Refused edit | Wait for `ready`, then edit again. |
+| `collaboration-session-not-ready` | The status is `initializing` or `error`, or `disconnected` with `offlineEditing: false`. Edits also wait while a peer's update is held back for an update it depends on. A table formatting suggestion also waits while the status is `disconnected`. | Refused edit | Wait for `ready`, then edit again. |
 | `collaboration-session-not-attached` | No editor attached its document port to the session. | Refused edit | Remount the editor with the room's `modules`. |
 | `collaboration-session-destroyed` | The session was destroyed. | Refused edit | Mount a new session. |
 | `collaboration-text-limit` | One insert is longer than the shared text limit. | Refused edit | Insert the text in smaller pieces. |

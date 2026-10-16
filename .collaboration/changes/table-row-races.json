@@ -1,0 +1,15 @@
+{
+  "impact": "migration-required",
+  "fields": ["repairVersion"],
+  "before": "Two participants who suggested formatting changes to one table row at the same time, such as a cell fill, a row height, or a column width, each recorded every cell of the row. Each replica showed the first record of each cell in shared child order, so one row mixed both authors: one review card named one of them, a merged `w:tcPr` could hold `w:shd` after `w:tcPrChange`, and rejecting both suggestions in either order reset some cells to `w:tcW` `auto`. A disconnected replica admitted table formatting suggestions, which reached the room too late to settle such a race.",
+  "after": "Each replica gives such a row one owner from shared state alone: the record with the earliest `w:date`, then the lesser author, then the lesser revision id. Every pending property record of the row shows the owner's `w:author`, `w:date`, and `w:id`, so the row is one decision with one card, and the children of a row's or cell's property container that a peer wrote into show in ECMA-376 order, the record last. The editor whose change lost takes it back with collaborative undo, removes it from redo, and says why, while the change is still its last local step. A disconnected session refuses tracked table formatting with `collaboration-session-not-ready`.",
+  "reason": "The projection of shared state changes, which is repair semantics: a replica of the earlier rule shows other attributions and child orders for the same records. No stored field or update meaning changes, the records stay in shared state as written, and the materializer and the journal projection read one rule, so live replicas, cold joiners, and exports agree. Format 1.4.3.1 (repairVersion 3) is not published yet, so the release that first ships it carries this rule and needs no further bump. The take-back is an ordinary local undo, and an offline refusal writes nothing.",
+  "tests": [
+    "packages/pro/src/collaboration/__tests__/document-table-row-races.test.ts",
+    "packages/pro/src/collaboration/__tests__/document-offline-editing.test.ts",
+    "packages/pro/src/collaboration/__tests__/singleton-children-tables.test.ts",
+    "packages/core/src/store/__tests__/table-row-owner.test.ts"
+  ],
+  "changeset": "table-row-races",
+  "migration": "upgrade-rooms-to-format-1431"
+}
