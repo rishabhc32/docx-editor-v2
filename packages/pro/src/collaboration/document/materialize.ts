@@ -51,6 +51,7 @@ import { rescuedPartEntries, typeUntypedParts } from './materialize-rescued-part
 import { PackageProjectionCache } from './materialize-package-cache.ts';
 import { MaterializeSplitProjection } from './materialize-split-projection.ts';
 import { hasSingletonRules, partitionWithMerges, sharedChildShell } from './singleton-children.ts';
+import { ruleKindOf } from './singleton-table-rules.ts';
 import { spineChildren } from './materialize-spine.ts';
 import { NodeCache } from './materialize-node-cache.ts';
 import { dedupeIssues, ListingContests } from './materialize-contests.ts';
@@ -497,7 +498,7 @@ export class PackageMaterializer {
     if (winnerOrder) childIds = winnerOrder.map((index) => childIds[index]!);
     const children: OoxmlNode[] = [];
     // Concurrent peers can each write a child OOXML allows once; show one, in one order.
-    const order = partitionWithMerges(record.kind, childIds, (id) =>
+    const order = partitionWithMerges(ruleKindOf(record), childIds, (id) =>
       this.splitProjection.losers.has(id) ? null : sharedChildShell(this.registry, id)
     );
     for (const id of order.hidden) placed.add(id);
@@ -611,7 +612,7 @@ export class PackageMaterializer {
       previous.kind === 'textValue' ||
       this.rawDirty.has(logicalId) ||
       !this.cache.isComplete(logicalId) ||
-      hasSingletonRules(previous.kind) ||
+      hasSingletonRules(ruleKindOf(previous)) ||
       this.builtMerges.has(logicalId) ||
       this.mergeSources.has(logicalId) ||
       this.splitProjection.losers.size > 0 ||
