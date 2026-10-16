@@ -14,16 +14,19 @@ import {
   type KeyedParagraphRect,
   type ParagraphRange,
 } from '../layout/paragraph-range-rects.ts';
+import { paragraphLineRects } from '../layout/paragraph-line-rects.ts';
 import { paragraphFragmentsOfBlocks } from '../layout/semantic-records.ts';
 import type {
   BlockFragmentRecord,
   PageRecord,
   SemanticLayout,
+  TextMeasurer,
 } from '../layout/semantic-records.ts';
 import type { ReviewRange } from '../store/store/review-items.ts';
 import type { SurfaceOverlayFrame } from './surface-overlay-sheet.ts';
 import { textboxPresenceLayout } from './textbox-presence-layout.ts';
 import { findReviewPlacement } from './review-replacement-pairs.ts';
+import { standsForParagraph } from './review-paragraph-changes.ts';
 
 /** Where a paragraph sits: the story it belongs to and its position in that story. */
 interface StoryPosition {
@@ -139,21 +142,50 @@ interface RangeSource {
   readonly width: number;
 }
 
+interface RangePieces {
+  readonly byParagraph: Map<string, ParagraphRange[]>;
+  /** Keys of the ranges that band every line of a paragraph, by paragraph. */
+  readonly wholeParagraphs: Map<string, number[]>;
+  readonly sources: RangeSource[];
+}
+
 /** Every range of every placement, split per paragraph and keyed back to its placement. */
 function piecesOf(
   placements: readonly ReviewItemPlacement[],
-  order: StoryOrder
-): { readonly byParagraph: Map<string, ParagraphRange[]>; readonly sources: RangeSource[] } {
+  order: StoryOrder,
+  query: ReviewItemQuery | undefined
+): RangePieces {
   const byParagraph = new Map<string, ParagraphRange[]>();
+  const wholeParagraphs = new Map<string, number[]>();
   const sources: RangeSource[] = [];
   placements.forEach((placement, at) => {
     for (const range of rangesOf(placement)) {
       const key = sources.length;
+      if (standsForParagraph(placement.item, range, query)) {
+        // As wide as the paragraph, so every narrower item under the point comes first.
+        sources.push({ placement: at, width: range.start.offset });
+        const keys = wholeParagraphs.get(range.start.paragraphId);
+        if (keys) keys.push(key);
+        else wholeParagraphs.set(range.start.paragraphId, [key]);
+        continue;
+      }
       sources.push({ placement: at, width: rangeWidth(range, order) });
       addRangePieces(range, key, order, byParagraph);
     }
   });
-  return { byParagraph, sources };
+  return { byParagraph, wholeParagraphs, sources };
+}
+
+/** The bands of every piece over the named pages: character bands, then line bands. */
+function bandsOf(
+  layout: SemanticLayout,
+  pieces: RangePieces,
+  pages: ReadonlySet<number>,
+  measurer: TextMeasurer | undefined
+): KeyedParagraphRect[] {
+  const bands = paragraphRangeRects(layout, pieces.byParagraph, pages, measurer);
+  for (const band of paragraphLineRects(layout, pieces.wholeParagraphs, pages)) bands.push(band);
+  return bands;
 }
 
 function painted(frame: SurfaceOverlayFrame, page: PageRecord): boolean {
@@ -216,13 +248,14 @@ export function createReviewItemsAt(deps: {
       const placements = deps.placements(query);
       if (placements.length === 0) return [];
       const order = storyOrderOf(frame.layout);
-      const { byParagraph, sources } = piecesOf(placements, order);
+      const pieces = piecesOf(placements, order, query);
+      const { sources } = pieces;
       const contentX = x - (frame.pageOffsetX?.get(page.index) ?? 0) - page.contentBox.x;
       const contentY = y - page.contentBox.y;
       const best = new Map<number, { width: number; rect: KeyedParagraphRect }>();
-      const rects = paragraphRangeRects(
+      const rects = bandsOf(
         textboxPresenceLayout(frame.layout),
-        byParagraph,
+        pieces,
         new Set([page.index]),
         frame.measurer
       );
@@ -255,7 +288,7 @@ export function createReviewItemsAt(deps: {
       }));
     },
 
-    getReviewItemRects(key: string): readonly HighlightRect[] {
+    getReviewItemRects(key: string, query?: ReviewItemQuery): readonly HighlightRect[] {
       if (typeof key !== 'string' || key.length === 0) return [];
       const live = liveFrame();
       if (!live) return [];
@@ -265,13 +298,10 @@ export function createReviewItemsAt(deps: {
       const pages = new Set(
         frame.layout.pages.filter((page) => painted(frame, page)).map((page) => page.index)
       );
-      const { byParagraph } = piecesOf([placement], storyOrderOf(frame.layout));
-      return paragraphRangeRects(
-        textboxPresenceLayout(frame.layout),
-        byParagraph,
-        pages,
-        frame.measurer
-      ).map((rect) => clientRect(frame, origin, frame.layout.pages[rect.pageIndex]!, rect));
+      const pieces = piecesOf([placement], storyOrderOf(frame.layout), query);
+      return bandsOf(textboxPresenceLayout(frame.layout), pieces, pages, frame.measurer).map(
+        (rect) => clientRect(frame, origin, frame.layout.pages[rect.pageIndex]!, rect)
+      );
     },
   };
 }

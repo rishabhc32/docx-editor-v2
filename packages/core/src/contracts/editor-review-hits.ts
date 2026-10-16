@@ -20,7 +20,9 @@ export interface EditorReviewHits {
    * An item hits when the CHARACTER under the point is inside one of its ranges, so the
    * right half of a range's last character still hits, and the left half of the next
    * character does not. Ranges that cover no characters, such as a tracked paragraph mark or
-   * a comment on an empty range, never hit. Items without a range never hit.
+   * a comment on an empty range, never hit. Items without a range never hit. To hit a
+   * paragraph formatting change on its whole paragraph, set
+   * {@link ReviewItemQuery.wholeParagraphFormat}.
    *
    * The test covers every story the review queue lists and the pages paint: the body,
    * tables, headers, footers, footnotes, and endnotes. Only painted pages are tested, so a
@@ -61,6 +63,10 @@ export interface EditorReviewHits {
    * key, an item without a range, or an item with no text on a painted page returns an
    * empty array. Anchor a balloon to the first band, or join the bands for an outline.
    *
+   * Pass the query you read the key with. Only {@link ReviewItemQuery.wholeParagraphFormat}
+   * changes the result: with it, a paragraph formatting change returns one band per line of
+   * its paragraph.
+   *
    * @example
    * ```ts
    * const [first] = editor.getReviewItemRects(placement.key);
@@ -68,5 +74,5 @@ export interface EditorReviewHits {
    * ```
    * @public
    */
-  getReviewItemRects(key: string): readonly HighlightRect[];
+  getReviewItemRects(key: string, query?: ReviewItemQuery): readonly HighlightRect[];
 }

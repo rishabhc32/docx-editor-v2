@@ -28,6 +28,7 @@ import { createAnchorNavigation } from './docx-editor-anchor-navigation.ts';
 import { createTextHighlights } from './text-highlights.ts';
 import { createReviewItemsAt } from './review-items-at.ts';
 import { reviewItemPlacement } from './review-placement-cache.ts';
+import { withActiveParagraphChanges } from './review-paragraph-changes.ts';
 import {
   findReviewPlacement,
   keyUnderQuery,
@@ -1572,7 +1573,13 @@ export function createDocxEditor(config: DocxEditorConfig): DocxEditorInstance {
       const layout = surface?.publishedLayout() ?? null;
       if (layout) anchors = anchorIndexOf(layout);
     }
-    const activeKeys = litReviewKeys(() => visible, activeReviewKeyNow(), pairedPin.lightsPair());
+    const activeKeys = withActiveParagraphChanges(
+      litReviewKeys(() => visible, activeReviewKeyNow(), pairedPin.lightsPair()),
+      items,
+      query,
+      () => surface?.state().selection.head ?? null,
+      reviewItemActivatable
+    );
     // The queue ranks furniture stories after the whole body (tree order), but the rail
     // stacks cards top-down and never moves one UP past its anchor — a header card sorted
     // after page 40's cards would render at the rail's bottom, pages away from the header
