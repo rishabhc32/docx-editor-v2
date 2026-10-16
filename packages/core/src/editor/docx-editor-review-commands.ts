@@ -6,7 +6,8 @@ import type {
   ReviewModuleContribution,
 } from '../contracts/modules.ts';
 
-import { partOfNodeId, storyScopeOfNodeId } from './surface-scope.ts';
+import { storyScopeOfPartName } from './surface-scope.ts';
+import { partOfReviewItem } from './review-item-part.ts';
 import { stylesPartOf } from '../store/package/ooxml-indexes.ts';
 import { planRevisionBatch, type RevisionBatchResult } from '../store/store/revision-batch.ts';
 import {
@@ -31,6 +32,7 @@ import type { StoryScope, TreeDocOp } from '../store/index.ts';
 import {
   deepParagraphOrderOfPart,
   collectRevisionSites,
+  hasNode,
   WML_NAMESPACE_URI,
   type OoxmlPart,
 } from '../store/index.ts';
@@ -163,14 +165,14 @@ export function createReviewCommands(deps: ReviewCommandDependencies) {
       const session = deps.surface()!.session;
       for (const part of session.storyParts())
         scopes.set(part.name, {
-          scope: storyScopeOfNodeId(session, part.root.id, { kind: 'body' }),
+          scope: storyScopeOfPartName(session, part.name, { kind: 'body' }),
           part,
           keys: [],
         });
     }
     for (const item of items) {
       const scope = deps.scope(item);
-      const part = partOfNodeId(deps.surface()!.session, revisionSiteNodeIdsOf(item)[0]);
+      const part = partOfReviewItem(deps.surface()!.session, item);
       if (!part) continue;
       let group = scopes.get(part.name);
       if (!group) {
@@ -458,7 +460,7 @@ export function createReviewCommands(deps: ReviewCommandDependencies) {
     let decided: Parameters<typeof heldChangeRefusal>[0] = null;
     const refused = deps.surface()!.commitReviewOps((historyToken) => {
       const session = deps.surface()!.session;
-      const part = partOfNodeId(session, revisionSiteNodeIdsOf(item)[0]);
+      const part = partOfReviewItem(session, item);
       if (part && part.name === stylesPartOf(session.currentPackage())?.name) {
         applied = session.applyTreeOpsAtomic([], {
           partOps: [{ partName: part.name, ops: resolutionOps(item, action, part) }],
@@ -563,7 +565,7 @@ export function createReviewCommands(deps: ReviewCommandDependencies) {
         revisionOf,
         (item, action) => {
           const session = deps.surface()?.session;
-          const part = session && partOfNodeId(session, revisionSiteNodeIdsOf(item)[0]);
+          const part = session && partOfReviewItem(session, item);
           if (!part) return {};
           try {
             const plan = planRevisionBatch(part, action, [reviewItemKey(item)]);
@@ -587,7 +589,7 @@ function nextFromCaret(
   const caret = surface.state().selection.head;
   const part = surface.session
     .storyParts()
-    .find((candidate) => caret.paragraphId.startsWith(`${candidate.name}#`));
+    .find((candidate) => hasNode(candidate, caret.paragraphId));
   const order = part ? deepParagraphOrderOfPart(part) : new Map<string, number>();
   const rank = order.get(caret.paragraphId);
   if (rank !== undefined) {
