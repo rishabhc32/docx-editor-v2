@@ -56,7 +56,10 @@ import {
 } from '../package/ooxml-edit.ts';
 import { wmlFreshNamespaceContextAt } from '../package/wml-namespace.ts';
 import { contentControlLevelOf } from '../package/content-control-nodes.ts';
-import { resolveRevisionOperation } from './tree-op-revisions.ts';
+import {
+  applyTrackedContentControlValue,
+  resolveKeepingCheckboxState,
+} from './tracked-content-control-value.ts';
 import { applySetRevisionAttribution } from './revision-author-change.ts';
 import { applyInsertCommentMarker } from './tree-op-comments.ts';
 import { applyDeleteTracked } from './tree-op-tracked-delete.ts';
@@ -134,10 +137,10 @@ import {
   applySetParagraphMarkProperties,
   withoutSectionMark,
   applySetListNumbering,
-  applySetParagraphTabStops,
   applySetSectionMark,
   applySetSectionProperties,
 } from './tree-op-section.ts';
+import { applyParagraphTabStopsOp } from './tree-op-tracked-tab-stops.ts';
 import { pageFieldContentBuilders, pageFieldModelLength } from './tree-op-fields.ts';
 import { applyTrackedContentControl } from './tracked-content-control-insert.ts';
 import { applyInsertContentControl as applyAutomationInsertContentControl } from './tree-op-content-control-insert.ts';
@@ -240,6 +243,9 @@ function applyValidatedTreeOp(part: OoxmlPart, op: TreeDocOp, options?: EditOpti
 
   if (op.op === 'replaceStoryBlocks') {
     return applyReplaceStoryBlocks(part, op.storyRootId, op.paragraphs, options);
+  }
+  if (op.op === 'setContentControlValue' && op.revision) {
+    return applyTrackedContentControlValue(part, op, options);
   }
   if (op.op === 'setContentControlValue' && typeof op.value !== 'string') {
     return applyAutomationSetContentControlValue(part, op, options);
@@ -374,7 +380,7 @@ function applyValidatedTreeOp(part: OoxmlPart, op: TreeDocOp, options?: EditOpti
     op.op === 'rejectAllRevisions'
   ) {
     const accept = op.op === 'acceptRevision' || op.op === 'acceptAllRevisions';
-    const resolved = resolveRevisionOperation(part, accept ? 'accept' : 'reject', op, options);
+    const resolved = resolveKeepingCheckboxState(part, accept ? 'accept' : 'reject', op, options);
     if (!resolved.ok || !resolved.part || !resolved.effect) {
       return { ok: false, reason: resolved.reason ?? 'tree-invariant' };
     }
@@ -469,14 +475,7 @@ function applyValidatedTreeOp(part: OoxmlPart, op: TreeDocOp, options?: EditOpti
         op.revision
       );
     case 'setParagraphTabStops':
-      return applySetParagraphTabStops(
-        part,
-        paragraph,
-        op.stops,
-        op.inForcePositionsTwips,
-        options,
-        nextId
-      );
+      return applyParagraphTabStopsOp(part, paragraph, op, options, nextId);
     case 'insertPageField': {
       // ONE builder list per field, shared by the tracked and untracked arms — the same
       // rule the tab/break ops state, so suggesting mode cannot insert a different field

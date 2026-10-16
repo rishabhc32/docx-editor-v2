@@ -4388,7 +4388,7 @@ export function mountPaginatedSurface(
     // commands wrote `session.applyTreeOps` directly, which skipped the collaboration gate
     // and actor binding every other lane goes through.
     applyGatedTreeOps: (ops, before, after, scope) =>
-      applyJournaledOps(ops, before, after, scope ?? storyScope()),
+      applyJournaledOps(trackedOps(ops), before, after, scope ?? storyScope()),
     storyScope,
     imageDecodePort: () => decodePort,
     textMeasurer: () => measurer,
