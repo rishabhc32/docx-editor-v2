@@ -21,6 +21,7 @@ import {
   singletonLayout,
   type ChildShell,
 } from './singleton-children.ts';
+import { ruleKindReader } from './singleton-table-rules.ts';
 import { PACKAGE_NODES_KEY, NODE_TEXT_FIELD, makeTextRecord, type SharedRecord } from './schema.ts';
 import { splitWinnerOrder } from './split-dedup.ts';
 import { typedInsertOf, type TypedInsert } from './paragraph-text-typing.ts';
@@ -372,6 +373,7 @@ export function projectJournalToShared(
           localName: descriptor.qname.localName,
         };
   };
+  const ruleKindAt = ruleKindReader(kindOf, shellOf);
   // Indexes of the children a replica shows under `parentId`, in the order it shows them.
   // This is the materializer's rule, so a local edit's visible indexes map back exactly:
   // no split losers, tombstones, repeats, or self-listing, and one copy of each singleton a
@@ -402,7 +404,7 @@ export function projectJournalToShared(
       base.push(index);
     });
     const layout = singletonLayout(
-      kindOf(parentId),
+      ruleKindAt(parentId),
       base.map((index) => children[index]!),
       shellOf
     );
@@ -551,7 +553,7 @@ export function projectJournalToShared(
   };
   // The children a winning property container shows from its hidden copies, in shared state.
   const mergedCopiesOf = (containerId: LogicalId): LogicalId[] => {
-    if (!MERGED_KINDS.has(kindOf(containerId) ?? '')) return [];
+    if (!MERGED_KINDS.has(ruleKindAt(containerId) ?? '')) return [];
     const parentId = registry.parentOf(containerId);
     const parent = parentId ? raw.node(parentId) : null;
     if (!parentId || !parent || parent.isText) return [];

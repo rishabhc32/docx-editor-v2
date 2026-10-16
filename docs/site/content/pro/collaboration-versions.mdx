@@ -238,6 +238,15 @@ Choose one of two procedures:
 
 Try the procedure on copies of your rooms in a test deployment before you upgrade production rooms. Collaboration undo history starts afresh in a migrated room.
 
+### Upgrade rooms to format 1.4.3.1
+
+Format `docx-collaboration:1.4.3.1` changes how participants resolve concurrent changes to table properties:
+
+- When two participants change the properties of one table row or cell at the same time, such as its height, fill, borders, or column width, the row or cell keeps one set of properties. Different properties written at the same time both stay.
+- Earlier formats kept both copies. The table then refused further property changes, and the saved document was not valid.
+
+Participants with format `docx-collaboration:1.4.2.1` would show different documents for the same room, so the formats refuse to share a room. Migrate each saved room. For rooms that you store, see [Migrate rooms on a server](#migrate-rooms-on-a-server).
+
 ### Upgrade rooms to format 1.4.2.1
 
 Format `docx-collaboration:1.4.2.1` stores each paragraph's text, runs, and character formatting as one shared text, and changes how participants resolve concurrent edits:
