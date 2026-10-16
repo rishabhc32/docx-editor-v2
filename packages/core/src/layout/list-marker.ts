@@ -3,13 +3,14 @@
 import type { ResolvedTabStops } from './paragraph-tabs.ts';
 import type { TextMeasurer } from './semantic-records.ts';
 import type { ImageResourceState } from '../store/package/image-resources.ts';
-import type { LayoutBox, ListMarkerRecord } from './semantic-records.ts';
+import type { LayoutBox, LineRecord, ListMarkerRecord } from './semantic-records.ts';
 import type { ResolvedListItem } from './list-resolve.ts';
 import type { OoxmlProperty } from '../store/store/tree-op-types.ts';
+import type { Alignment } from './paragraph-alignment.ts';
 import { firstLineShift, listMarkerBox, listMarkerWidth } from './list-marker-geometry.ts';
 import { rtlListMarkerPieces } from './list-marker-bidi.ts';
 import { paragraphIsRtl } from './rtl-paragraph.ts';
-import { holdsOnlyPageBreak, type PendingLine } from './pending-line.ts';
+import { holdsOnlyPageBreak, lineContentEdges, type PendingLine } from './pending-line.ts';
 
 /**
  * What a picture-bullet marker needs from the package, resolved by the host.
@@ -151,9 +152,34 @@ export function markerLineStart(lines: readonly PendingLine[]): number | undefin
 }
 
 /**
+ * How far a list marker moves with its line's alignment (`w:jc`, §17.3.1.13).
+ *
+ * Word sets the marker, its `w:suff` and the first line's text as ONE line that opens at the
+ * marker's slot, so a centred or right-aligned list paragraph carries its number with its
+ * text. Centring that line from the slot moves it as far as centring the text alone from the
+ * text start, so the marker takes the text's own shift and the gap between them holds.
+ *
+ * `measure` is the box the line aligned inside. The shift is read at the paragraph's LEADING
+ * edge, the right one in a right-to-left paragraph, and never runs back past it: a line wider
+ * than its measure leaves the marker in its slot. A leading or justified line moves nothing.
+ */
+export function listMarkerAlignShift(
+  line: Pick<LineRecord, 'contentX' | 'spans' | 'drawings'>,
+  alignment: Alignment,
+  rtl: boolean,
+  measure: { readonly indent: number; readonly available: number }
+): number {
+  if (alignment !== 'center' && alignment !== (rtl ? 'left' : 'right')) return 0;
+  if (!rtl) return Math.max(0, line.contentX - measure.indent);
+  const right = lineContentEdges(line.spans, line.drawings ?? [])?.right ?? line.contentX;
+  return Math.min(0, right - measure.indent - measure.available);
+}
+
+/**
  * Build a marker record for the first fragment of a list paragraph.
  *
- * `originX` shifts cell-relative markers into page/content space (0 for body).
+ * `originX` shifts cell-relative markers into page/content space (0 for body), and
+ * `alignShift` moves the marker with its aligned first line ({@link listMarkerAlignShift}).
  * Returns undefined when the marker is empty, vanished, or has no geometry.
  */
 export function publishListMarker(
@@ -162,7 +188,8 @@ export function publishListMarker(
   firstLine: { readonly box: LayoutBox; readonly baseline: number } | undefined,
   originX = 0,
   rtlExtent?: number,
-  resolvePictureBullet?: ListPictureBulletResolver
+  resolvePictureBullet?: ListPictureBulletResolver,
+  alignShift = 0
 ): ListMarkerRecord | undefined {
   if (!item || !firstLine) return undefined;
   if (!item.markerText && !item.picBullet) return undefined;
@@ -174,7 +201,8 @@ export function publishListMarker(
     firstLine.box.height
   );
   if (!box) return undefined;
-  const x = originX + (rtlExtent === undefined ? box.x : rtlExtent - box.x - box.width);
+  const x =
+    originX + alignShift + (rtlExtent === undefined ? box.x : rtlExtent - box.x - box.width);
   // The image sits with its BOTTOM on the first line's baseline, which is where Word puts it
   // and why `firstLineMinimumBaseline` made the line tall enough for it.
   const picBullet = item.picBullet;
