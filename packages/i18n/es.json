@@ -42,6 +42,8 @@
     "headerFooterReadOnly": "Los encabezados y pies de página son de solo lectura en este editor.",
     "revisionHoldsPendingChange": "Primero acepte o rechace el cambio que contiene",
     "tableRowHoldsPendingChange": "Otro autor tiene un cambio de formato pendiente en una fila afectada. Primero acéptelo o recházelo.",
+    "tableFormattingNeedsConnection": "Vuelva a conectarse para sugerir formato de tabla.",
+    "tableRowSuggestedFirst": "Otra persona sugirió primero un cambio en esta fila. Se quitó su formato de tabla.",
     "headerRowFromStyle": "El estilo de tabla convierte esta fila en fila de encabezado",
     "floatingTableAlignment": "El texto se ajusta alrededor de esta tabla, por lo que la alineación no la mueve"
   },

@@ -52,6 +52,7 @@ import { PackageProjectionCache } from './materialize-package-cache.ts';
 import { MaterializeSplitProjection } from './materialize-split-projection.ts';
 import { hasSingletonRules, partitionWithMerges, sharedChildShell } from './singleton-children.ts';
 import { ruleKindOf } from './singleton-table-rules.ts';
+import { rowOwnedRecord, rowRecordsToRebuild } from './singleton-row-owner.ts';
 import { spineChildren } from './materialize-spine.ts';
 import { NodeCache } from './materialize-node-cache.ts';
 import { dedupeIssues, ListingContests } from './materialize-contests.ts';
@@ -246,6 +247,8 @@ export class PackageMaterializer {
       }
     }
     for (const id of this.splitProjection.update(this.registry)) rawDirty.add(id);
+    // A row's records show its owner's attribution, which a change to any of them can move.
+    for (const id of rowRecordsToRebuild(this.registry, rawDirty)) rawDirty.add(id);
     const dirty = expandAncestors(this.registry, rawDirty);
     // Every ancestor of a changed node has to rebuild. The registry's parent index says
     // where a node lives NOW; a node a peer moved or detached is still shown
@@ -451,7 +454,7 @@ export class PackageMaterializer {
     if (spine) return spine;
     placed.add(logicalId);
     countRecordRead();
-    const record = this.registry.record(logicalId);
+    const record = rowOwnedRecord(this.registry, this.registry.record(logicalId));
     if (!record) {
       this.push('missing-node', logicalId);
       return null;

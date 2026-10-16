@@ -968,6 +968,8 @@
     "headerFooterReadOnly": "Header dan footer hanya baca di editor ini.",
     "revisionHoldsPendingChange": "Terima atau tolak dahulu perubahan di dalamnya",
     "tableRowHoldsPendingChange": "Penulis lain memiliki perubahan pemformatan yang tertunda pada baris yang terpengaruh. Terima atau tolak dahulu perubahan itu.",
+    "tableFormattingNeedsConnection": "Hubungkan kembali untuk menyarankan pemformatan tabel.",
+    "tableRowSuggestedFirst": "Orang lain lebih dahulu menyarankan perubahan pada baris ini. Pemformatan tabel Anda telah dihapus.",
     "headerRowFromStyle": "Gaya tabel menjadikan baris ini baris header",
     "floatingTableAlignment": "Teks membungkus tabel ini, jadi perataan tidak memindahkannya"
   },

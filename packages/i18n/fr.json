@@ -968,6 +968,8 @@
     "headerFooterReadOnly": "Les en-têtes et pieds de page sont en lecture seule dans cet éditeur.",
     "revisionHoldsPendingChange": "Acceptez ou refusez d'abord la modification qu'elle contient",
     "tableRowHoldsPendingChange": "Un autre auteur a une modification de mise en forme en attente sur une ligne concernée. Acceptez-la ou refusez-la d'abord.",
+    "tableFormattingNeedsConnection": "Reconnectez-vous pour suggérer une mise en forme de tableau.",
+    "tableRowSuggestedFirst": "Une autre personne a d'abord suggéré une modification de cette ligne. Votre mise en forme de tableau a été supprimée.",
     "headerRowFromStyle": "Le style du tableau fait de cette ligne une ligne d'en-tête",
     "floatingTableAlignment": "Le texte entoure ce tableau, donc l'alignement ne le déplace pas"
   },

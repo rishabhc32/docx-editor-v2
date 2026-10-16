@@ -191,6 +191,9 @@ export interface CollaborationParagraphTextUpdate {
     readonly text: string;
 }
 
+// @internal
+export function compareRowRecordOwners(left: RowRecordOwner, right: RowRecordOwner): number;
+
 // @public
 export function createCollaborationDocumentPort(store: TreePackageStore, options: CreateCollaborationDocumentPortOptions): CollaborationDocumentPort;
 
@@ -210,9 +213,35 @@ export function historyGroupOfJournal(journal: CanonicalPrimitiveJournal): Histo
 export function mapOffsetAcrossText(offset: number, before: string, after: string): number;
 
 // @internal
+export function recordsTableFormatting(op: TreeDocOp): op is TreeDocOp & {
+    readonly revision: RevisionAttributionInput;
+    readonly tableId: string;
+};
+
+// @internal
 export function registerUndoHistoryPosition(owner: object, position: UndoHistoryPosition): void;
 
 // @public (undocumented)
 export function reportHistoryGroup(group: HistoryGroup | undefined, kind: HistoryCaptureKind, reason?: HistoryCaptureReason): void;
+
+// @internal
+export const ROW_PROPERTY_CONTAINERS: Readonly<Record<string, {
+    readonly record: string;
+    readonly sequence: readonly string[];
+}>>;
+
+// @internal
+export interface RowRecordOwner {
+    readonly author: string;
+    readonly date: string;
+    readonly id: string;
+}
+
+// @internal
+export function rowRecordOwnerOf(attributes: readonly {
+    readonly localName: string;
+    readonly namespaceUri: string;
+    readonly value: string;
+}[]): RowRecordOwner;
 
 ```

@@ -137,3 +137,11 @@ export type {
 export { reportHistoryGroup } from '../store/store/history-group.ts';
 
 export { registerUndoHistoryPosition } from '../store/store/undo-history-position.ts';
+
+export {
+  compareRowRecordOwners,
+  recordsTableFormatting,
+  ROW_PROPERTY_CONTAINERS,
+  rowRecordOwnerOf,
+  type RowRecordOwner,
+} from '../store/store/table-row-owner.ts';

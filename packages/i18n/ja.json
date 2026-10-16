@@ -42,6 +42,8 @@
     "headerFooterReadOnly": "このエディターでは、ヘッダーとフッターは読み取り専用です。",
     "revisionHoldsPendingChange": "先に内部の変更を承諾または却下してください",
     "tableRowHoldsPendingChange": "影響を受ける行に、別の作成者の保留中の書式の変更があります。先にその変更を承諾または却下してください。",
+    "tableFormattingNeedsConnection": "表の書式を提案するには、再接続してください。",
+    "tableRowSuggestedFirst": "別のユーザーが先にこの行の変更を提案しました。あなたの表の書式は削除されました。",
     "headerRowFromStyle": "表のスタイルによって、この行は見出し行になっています",
     "floatingTableAlignment": "この表には文字列の折り返しが設定されているため、配置では移動しません"
   },

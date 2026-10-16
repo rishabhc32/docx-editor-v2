@@ -116,6 +116,50 @@ describe('table singleton child layout', () => {
     expect(result.hidden).toEqual([peer('b', 6)]);
   });
 
+  test('a w:tcPr a peer wrote into shows in schema order, its record last', () => {
+    // A peer's `w:shd` landed after another peer's `w:tcPrChange` and `w:vAlign`.
+    const local: Record<string, ChildShell> = {
+      [seed(11)]: generic('tcW'),
+      [peer('b', 8)]: generic('tcPrChange'),
+      [peer('a', 8)]: generic('vAlign'),
+      [peer('a', 9)]: generic('shd'),
+      [seed(12)]: { kind: 'generic', namespaceUri: 'urn:extension', localName: 'shd' },
+    };
+    const localShell = (id: string) => local[id] ?? null;
+    expect(
+      singletonLayout(
+        'wml:tcPr',
+        [seed(11), peer('b', 8), seed(12), peer('a', 8), peer('a', 9)],
+        localShell
+      )?.order
+    ).toEqual([0, 4, 2, 3, 1]);
+    // A losing copy still hides, and the property its peer wrote shows ahead of the record.
+    const merged = partitionWithMerges(
+      'wml:trPr',
+      [peer('a', 10), peer('b', 10), peer('b', 11)],
+      (id) =>
+        ({
+          [peer('a', 10)]: generic('trPrChange'),
+          [peer('b', 10)]: generic('trHeight'),
+          [peer('b', 11)]: generic('trPrChange'),
+        })[id] ?? null
+    );
+    expect(merged.shown).toEqual([peer('b', 10), peer('a', 10)]);
+    expect(merged.hidden).toEqual([peer('b', 11)]);
+  });
+
+  test("a container in schema order, or holding a file's own order, takes no layout", () => {
+    const local: Record<string, ChildShell> = {
+      [seed(13)]: generic('shd'),
+      [seed(14)]: generic('tcW'),
+      [peer('a', 12)]: generic('trHeight'),
+      [peer('a', 13)]: generic('trPrChange'),
+    };
+    const localShell = (id: string) => local[id] ?? null;
+    expect(singletonLayout('wml:tcPr', [seed(13), seed(14)], localShell)).toBeNull();
+    expect(singletonLayout('wml:trPr', [peer('a', 12), peer('a', 13)], localShell)).toBeNull();
+  });
+
   test('a repeated listing of a hidden copy hides with it', () => {
     // Two undos that each restore one deleted child list it twice.
     const local: Record<string, ChildShell> = {
