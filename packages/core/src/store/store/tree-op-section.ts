@@ -910,7 +910,7 @@ export function applySetParagraphMarkProperties(
   return fromEdit(insertChildren(part, paragraph.id, 0, [created], options), effect);
 }
 
-function trackListProperties(
+export function trackListProperties(
   part: OoxmlPart,
   paragraph: OoxmlParagraphNode,
   result: TreeOpResult,

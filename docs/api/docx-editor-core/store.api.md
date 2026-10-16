@@ -4670,6 +4670,7 @@ export type TreeDocOp = SetFieldCodeOp | {
     readonly inForcePositionsTwips?: readonly number[];
     readonly op: 'setParagraphTabStops';
     readonly paragraphId: string;
+    readonly revision?: RevisionAttributionInput;
     readonly stops: readonly TabStopWrite[];
 } | {
     readonly offset: number;
@@ -4930,6 +4931,7 @@ export type TreeDocOp = SetFieldCodeOp | {
 } | {
     readonly controlId: string;
     readonly op: 'setContentControlValue';
+    readonly revision?: RevisionAttributionInput;
     readonly value: string | ContentControlValueInput;
 } | {
     readonly alias?: string | null;

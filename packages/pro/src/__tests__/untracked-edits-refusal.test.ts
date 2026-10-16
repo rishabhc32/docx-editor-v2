@@ -131,18 +131,17 @@ describe("untrackedEdits: 'refuse' while suggesting", () => {
     expect(editor.getTrackedChanges()).toEqual([]);
   });
 
-  test('a batch with one change it cannot record is refused whole', () => {
+  test('tab stops pressed with spacing land as one suggestion', () => {
     const editor = mount();
-    const before = body(editor);
     select(editor, 1, 2);
     const result = editor.exec({
       type: 'setParagraphFormat',
       spaceBeforePt: 12,
       tabStops: [{ positionTwips: 720, alignment: 'left' }],
     });
-    expect(result.ok).toBe(false);
-    expect(body(editor)).toBe(before);
-    expect(editor.getTrackedChanges()).toEqual([]);
+    expect(result.ok).toBe(true);
+    expect(body(editor)).toMatch(/<w:pPrChange[^>]*>.*<\/w:pPrChange>/);
+    expect(editor.getTrackedChanges()).toHaveLength(1);
   });
 
   test('edits it can record still land as suggestions beside a refused one', () => {
@@ -182,16 +181,12 @@ describe("untrackedEdits: 'refuse' while suggesting", () => {
     expect(body(editor).match(/<w:ins /g)?.length).toBe(2);
   });
 
-  test('a content-control widget write is refused when it runs, as a command is', () => {
+  test('a content-control pick is recorded, so the widget write lands as a suggestion', () => {
     const editor = mount({ document: zipDocument(CHOICE) });
-    const before = body(editor);
     const id = controlId(editor);
-    // The widget asks only the mode rules before the press; this rule answers the write.
     expect(editor.surface!.contentControls.disabledReason(id, 'edit')).toBeNull();
-    expect(editor.surface!.contentControls.setValue(id, 'No')).toBe(false);
-    expect(accepted(editor)).toBe(REASON);
-    expect(body(editor)).toBe(before);
-    expect(editor.getTrackedChanges()).toEqual([]);
+    expect(editor.surface!.contentControls.setValue(id, 'No')).toBe(true);
+    expect(body(editor)).toMatch(/<w:del .*Yes.*<w:ins .*No/);
   });
 
   test('bookmarks are inserted, removed and deduplicated: they are not revisions', () => {

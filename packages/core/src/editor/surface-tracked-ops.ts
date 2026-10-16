@@ -26,7 +26,9 @@ type RevisionCapableOp = Extract<
       | 'setParagraphMarkProperties'
       | 'setListNumbering'
       | 'setListLevel'
-      | (typeof REVISION_CAPABLE_TABLE_OPS)[number];
+      | (typeof REVISION_CAPABLE_TABLE_OPS)[number]
+      | 'setParagraphTabStops'
+      | 'setContentControlValue';
   }
 >;
 const REVISION_CAPABLE_OPS: ReadonlySet<TreeDocOp['op']> = new Set<RevisionCapableOp['op']>([
@@ -48,6 +50,11 @@ const REVISION_CAPABLE_OPS: ReadonlySet<TreeDocOp['op']> = new Set<RevisionCapab
   'setListNumbering',
   'setListLevel',
   ...REVISION_CAPABLE_TABLE_OPS,
+  // `w:tabs` is a paragraph property too, recorded the same way.
+  'setParagraphTabStops',
+  // A control's value is CONTENT: the old text struck and the new one inserted inside the
+  // control, as Word records a pick. Never a format record, so formatting tracking off keeps it.
+  'setContentControlValue',
 ]);
 
 export function isRevisionCapable(op: TreeDocOp): op is RevisionCapableOp {

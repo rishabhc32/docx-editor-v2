@@ -1,0 +1,16 @@
+{
+  "impact": "compatible",
+  "fields": [],
+  "before": "In suggesting mode, tab stop changes and content control values from the editor applied without a revision: the paragraph dialog rewrote w:tabs, and drop-down, combo box, date, checkbox, and text control values replaced the control content.",
+  "after": "Tab stops write a w:pPrChange that holds the previous w:pPr. A control value strikes the previous content in a w:del and inserts the new value in a w:ins inside w:sdtContent, and moves w:sdtPr untracked. Accepting or rejecting a revision sets w14:checked to the checkbox glyph that the decision leaves visible.",
+  "reason": "The replicated results are existing w:pPrChange, w:del, w:ins, and w14:checked structures that released participants already read, and the value write keeps the node identities of w:sdtPr. No stored field, operation kind, or identity rule changes. A released participant that rejects a checkbox suggestion leaves w14:checked unchanged, and its result still replicates to every participant.",
+  "tests": [
+    "packages/core/src/editor/__tests__/suggesting-tab-stop-revisions.test.ts",
+    "packages/core/src/editor/__tests__/suggesting-control-value-revisions.test.ts",
+    "packages/core/src/store/__tests__/tracked-content-control-value.test.ts",
+    "packages/pro/src/collaboration/__tests__/document-suggested-tab-stops.test.ts",
+    "packages/pro/src/collaboration/__tests__/document-suggested-control-values.test.ts"
+  ],
+  "changeset": "tracked-list-edits",
+  "migration": null
+}
