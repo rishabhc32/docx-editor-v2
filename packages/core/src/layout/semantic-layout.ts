@@ -201,7 +201,12 @@ import { withResolvedListItems, withResolvedListItemsForSession } from './list-r
 import { listItemToken, markerFlowToken, relabelListMarkers } from './list-marker-reuse.ts';
 import { limitBodyBlocks } from './body-block-limit.ts';
 import { refTokenForTableBlock } from './field-ref.ts';
-import { createListFirstLineMetrics, markerLineStart, publishListMarker } from './list-marker.ts';
+import {
+  createListFirstLineMetrics,
+  listMarkerAlignShift,
+  markerLineStart,
+  publishListMarker,
+} from './list-marker.ts';
 import { FlowCheckpointOwner, flowCheckpointsMatch } from './flow-checkpoint.ts';
 import { sectionReserveResume } from './note-reserve-resume.ts';
 import type { FlowCheckpoint, LayoutSession } from './layout-session.ts';
@@ -2238,6 +2243,8 @@ function* layoutBlocksPass(
     let fragmentParagraphStartY = cursorY;
     /** Clearance applied above the fragment's first placed line, for anchor framing. */
     let fragmentFirstLineSkip = 0;
+    /** How far alignment moved the fragment's first line, which a list marker on it follows. */
+    let fragmentMarkerShift = 0;
     const appliedSkipByLineIndex = new Map<number, number>();
     previousSpaceAfter = 0;
     const paragraphHasAnchors =
@@ -2315,7 +2322,8 @@ function* layoutBlocksPass(
             pending[0],
             0,
             rtl ? indent.left + available + indent.right : undefined,
-            options.inlineDrawingLayout?.pictureBulletResource
+            options.inlineDrawingLayout?.pictureBulletResource,
+            fragmentMarkerShift
           )
         : undefined;
       const marker = rawMarker
@@ -2689,7 +2697,10 @@ function* layoutBlocksPass(
         ...(pendingLine.changeSites ? { changeSites: pendingLine.changeSites } : {}),
       };
       lineCounter += 1;
-      if (pending.length === 0) fragmentFirstLineSkip = skipBefore;
+      if (pending.length === 0) {
+        fragmentFirstLineSkip = skipBefore;
+        fragmentMarkerShift = listItem ? listMarkerAlignShift(record, alignment, rtl, measure) : 0;
+      }
       pending.push(record);
       cursorY += pendingLine.height;
       if (pendingLine.columnBreakAfter) {
