@@ -1,9 +1,12 @@
-// A control a content edit emptied shows its prompt again.
+// A control a content edit or a revision decision emptied shows its prompt again.
 //
 // Word's rule: delete the last character of a text, date or list control and the
 // placeholder comes back under `w:showingPlcHdr`, ready for the next keystroke to replace
-// it whole. The store lane cannot read the glossary, so the type's own prompt stands in
-// for the block's text; the `w:placeholder` reference itself survives for Word and for the
+// it whole. A decision empties a control the same way: rejecting the value typed over a
+// prompt, or accepting the deletion of a control's last characters. The prompt is the text
+// of the glossary block the control's `w:placeholder` names when the transaction can read
+// the glossary (`EditOptions.placeholderText`), and the type's own prompt otherwise, in the
+// placeholder style the open gives it; the reference itself survives for Word and for the
 // next open, where `materializeGlossaryPlaceholders` resolves it. Split from
 // `tree-op-content-controls.ts` to keep that file under its line cap.
 
@@ -20,8 +23,10 @@ import {
 } from '../package/ooxml-edit.ts';
 import { MAX_INLINE_CONTAINER_DEPTH } from '../package/ooxml-shared.ts';
 import type { OoxmlNode, OoxmlPart } from '../package/ooxml-tree.ts';
-import { isInlineControl } from './content-control-checkbox.ts';
-import { contentWithText, editedProperties, promptFor } from './tree-op-content-controls.ts';
+import { isInlineControl, isWml } from './content-control-checkbox.ts';
+import { valueContent } from './content-control-value-content.ts';
+import { placeholderRunProperties } from './placeholder-materialize.ts';
+import { editedProperties, promptFor, textRun } from './tree-op-content-controls.ts';
 import {
   contentControlContentOf,
   findContentControl,
@@ -47,12 +52,18 @@ function holdsContent(node: OoxmlNode, depth: number): boolean {
   return node.children.some((child) => holdsContent(child, depth + 1));
 }
 
+/** Whether a control holds any content, struck text included. */
+export function controlHoldsContent(control: OoxmlNode): boolean {
+  const content = contentControlContentOf(control);
+  return content !== undefined && holdsContent(content, 0);
+}
+
 /**
  * Restore the prompt of a control the edit in `result` has just emptied. The wrapper stays,
- * the type's prompt goes back under `w:showingPlcHdr`, and the next keystroke replaces it
- * whole. Deleting the last character used to leave a zero-width control the caret could not
- * enter, which read as the control having vanished. A control that still holds content,
- * already shows its prompt, or has no prompt to show leaves `result` unchanged.
+ * the prompt goes back under `w:showingPlcHdr`, and the next keystroke replaces it whole.
+ * Deleting the last character used to leave a zero-width control the caret could not enter,
+ * which read as the control having vanished. A control that still holds content, already
+ * shows its prompt, or has no prompt to show leaves `result` unchanged.
  */
 export function restoreEmptiedPlaceholder(
   result: TreeOpResult,
@@ -60,16 +71,38 @@ export function restoreEmptiedPlaceholder(
   options?: EditOptions
 ): TreeOpResult {
   if (!result.ok) return result;
-  const control = findContentControl(result.part, controlId);
-  if (!control) return result;
+  const part = withRestoredPrompt(result.part, controlId, options);
+  return part === result.part ? result : { ...result, part };
+}
+
+/**
+ * `part` with the prompt of an empty control back under `w:showingPlcHdr`, or `part` itself
+ * when the control holds content, already shows its prompt, or has none to show.
+ */
+export function withRestoredPrompt(
+  part: OoxmlPart,
+  controlId: string,
+  options?: EditOptions
+): OoxmlPart {
+  const control = findContentControl(part, controlId);
+  if (!control) return part;
   const summary = contentControlPropertiesOf(control);
-  if (summary.showingPlaceholder || !PROMPT_KINDS.has(summary.type)) return result;
+  if (summary.showingPlaceholder || !PROMPT_KINDS.has(summary.type)) return part;
   const content = contentControlContentOf(control);
-  if (!content || holdsContent(content, 0)) return result;
-  const nextId = createNodeIdAllocator(result.part);
-  const inline = isInlineControl(result.part, control.id);
-  const children = contentWithText(content, promptFor(summary.type), nextId, inline);
-  if (!children) return result;
+  if (!content || holdsContent(content, 0)) return part;
+  const nextId = createNodeIdAllocator(part);
+  const inline = isInlineControl(part, control.id);
+  const docPart = summary.placeholderDocPart;
+  const prompt =
+    (docPart === undefined ? undefined : options?.placeholderText?.(docPart)) ??
+    promptFor(summary.type);
+  const children = valueContent(
+    content,
+    (properties) => textRun(nextId, prompt, promptProperties(properties, nextId)),
+    nextId,
+    inline
+  );
+  if (!children) return part;
   const sdtPr = contentControlPropertiesContainerOf(control);
   const properties = editedProperties(sdtPr, { showingPlaceholder: true }, nextId);
   const rebuilt = {
@@ -80,8 +113,20 @@ export function restoreEmptiedPlaceholder(
       { ...content, children } as OoxmlNode,
     ],
   } as OoxmlNode;
-  const written = replaceNode(result.part, control.id, rebuilt, options);
-  return written.ok ? { ...result, part: written.part } : result;
+  const written = replaceNode(part, control.id, rebuilt, options);
+  return written.ok ? written.part : part;
+}
+
+/**
+ * The emptied content's face in Word's placeholder style, as the open styles a prompt. A face
+ * with a character style of its own keeps it: a run takes one.
+ */
+function promptProperties(face: OoxmlNode | undefined, nextId: () => string): OoxmlNode {
+  if (!face || face.kind === 'textValue') return placeholderRunProperties(nextId);
+  if (face.children.some((child) => isWml(child, 'rStyle'))) return face;
+  const style = placeholderRunProperties(nextId);
+  const rStyle = style.kind === 'textValue' ? [] : style.children;
+  return { ...face, children: [...rStyle, ...face.children] } as OoxmlNode;
 }
 
 /**

@@ -3,8 +3,8 @@
 // A dropdown pick, a checkbox toggle and a date pick wrote the control outright in suggesting
 // mode: the value changed with no card and nothing to reject. They now strike the old display
 // text and insert the new one inside the control, the form Word records. The control's own
-// record of the value has no tracked form; a checkbox's follows its glyph back on Reject, and the
-// others keep the value the suggestion wrote.
+// record of the value has no tracked form, so a decision reads it back from what the control
+// shows: a checkbox's from its glyph, a list's from its item, a date's from its text.
 
 import { GlobalRegistrator } from '@happy-dom/global-registrator';
 if (!GlobalRegistrator.isRegistered) GlobalRegistrator.register();
@@ -177,7 +177,7 @@ describe('content-control values in suggesting mode', () => {
     expect(content(surface)).toContain('w:char="2612"');
   });
 
-  test('Reject restores a date’s text; w:fullDate keeps the picked date', () => {
+  test('Reject restores a date’s text, and w:fullDate follows it back', () => {
     const { surface } = suggesting(DATE);
     surface.contentControls.setValue(controlId(surface), '2026-03-04');
     expect(content(surface)).toBe(
@@ -187,8 +187,8 @@ describe('content-control values in suggesting mode', () => {
 
     resolveAll(surface, 'reject');
     expect(content(surface)).toBe('<w:r><w:t>1/2/2026</w:t></w:r>');
-    // `w:sdtPr` has no tracked form, so nothing records the date the pick replaced.
-    expect(contentControlWidgetDate(control(surface))).toBe('2026-03-04T00:00:00Z');
+    // `w:sdtPr` has no tracked form, so the date is read back from the text, as Word reads it.
+    expect(contentControlWidgetDate(control(surface))).toBe('2026-01-02T00:00:00Z');
   });
 
   test('a value is content, so Track formatting off still proposes it', () => {

@@ -1327,6 +1327,7 @@ export interface EditOptions {
     // (undocumented)
     readonly deferValidation?: boolean;
     readonly fieldResults?: FieldResultsMode;
+    readonly placeholderText?: (docPart: string) => string | undefined;
     readonly revisionIds?: () => string;
     readonly trackedRevisionIds?: TransactionRevisionIds;
 }

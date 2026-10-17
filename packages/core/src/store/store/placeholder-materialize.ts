@@ -88,7 +88,8 @@ function collectEmptyControls(root: OoxmlNode): EmptyControl[] {
   return found;
 }
 
-function placeholderRunProperties(nextId: () => string): OoxmlNode {
+/** `w:rPr` holding only Word's placeholder character style. */
+export function placeholderRunProperties(nextId: () => string): OoxmlNode {
   return wmlElement(nextId, 'rPr', {
     kind: 'runProperties' as OoxmlNode['kind'],
     children: [wmlElement(nextId, 'rStyle', { attributes: [['val', 'PlaceholderText']] })],
@@ -169,4 +170,35 @@ export function materializeGlossaryPlaceholders(pkg: OoxmlPackage, part: OoxmlPa
     if (edited.ok) current = edited.part;
   }
   return current;
+}
+
+/**
+ * The text of the glossary block named `docPart`: its first paragraph's characters, for a prompt
+ * shown again after an edit empties its control. Undefined when the package holds no such block,
+ * or the block no text.
+ */
+export function placeholderTextOf(pkg: OoxmlPackage, docPart: string): string | undefined {
+  const block = buildingBlocksOf(pkg).find((entry) => entry.name === docPart);
+  const paragraph = block?.blocks.find((entry) => entry.kind === 'paragraph' || isWml(entry, 'p'));
+  if (!paragraph) return undefined;
+  let text = '';
+  const visit = (node: OoxmlNode, depth: number): void => {
+    if (depth > MAX_DEPTH) return;
+    if (node.kind === 'textValue') {
+      text += node.value;
+      return;
+    }
+    if (
+      node.kind === 'revisionDelete' ||
+      node.kind === 'deletedText' ||
+      node.kind === 'instrText' ||
+      isWml(node, 'rPr') ||
+      isWml(node, 'pPr')
+    ) {
+      return;
+    }
+    for (const child of node.children) visit(child, depth + 1);
+  };
+  visit(paragraph, 0);
+  return text.length > 0 ? text : undefined;
 }

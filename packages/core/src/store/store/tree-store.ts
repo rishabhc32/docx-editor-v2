@@ -24,9 +24,10 @@ import { applyProtectedTextFormEdit } from './tree-op-field-results.ts';
 
 import { runWithTransactionActor } from '../package/actor-scoped-ids.ts';
 import { validateOoxmlPartDelta, type OoxmlPart } from '../package/ooxml-tree.ts';
-import { withPart, type OoxmlPackage } from '../package/ooxml-package.ts';
+import { singlePartPackage, withPart, type OoxmlPackage } from '../package/ooxml-package.ts';
 import { validatePackageInvariants } from '../package/package-edit.ts';
 import { settingsPartOf } from '../package/note-properties.ts';
+import { placeholderTextOf } from './placeholder-materialize.ts';
 import { documentProtectionRefusal, lifecycleProtectionRefusal } from './forms-protection.ts';
 import { isCommentPackageEdit } from './comment-package-edit.ts';
 import { isPackageEditRefusal } from './package-edit-refusal.ts';
@@ -199,21 +200,6 @@ const IMPACT_RANK: Record<ImpactClass, number> = {
   'flow-structural': 2,
   global: 3,
 };
-
-/** A package holding exactly one part, for callers that never open a real one. */
-function singlePartPackage(part: OoxmlPart): OoxmlPackage {
-  return Object.freeze({
-    parts: new Map([[part.name, part]]),
-    partBytes: new Map(),
-    relationships: new Map(),
-    externalTargets: [],
-    contentTypes: {
-      defaults: new Map(),
-      overrides: new Map([[part.name.toLowerCase(), part.contentType]]),
-    },
-    mainDocumentPart: part.name,
-  }) as OoxmlPackage;
-}
 
 /**
  * Opaque document+history checkpoint for package-coordinator rollback.
@@ -624,6 +610,7 @@ export class TreeDocumentStore {
           : null;
       const editOptions = {
         deferValidation: true,
+        placeholderText: (docPart: string) => placeholderTextOf(working, docPart),
         ...(this.contentLockPolicy ? { contentLockPolicy: this.contentLockPolicy } : {}),
         ...(revisionIds ? { revisionIds } : {}),
         ...(trackedRevisionIds ? { trackedRevisionIds } : {}),

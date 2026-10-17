@@ -3,10 +3,18 @@
 // Word records a pick, a toggle or a date as content inside the control: the old display text in
 // a `w:del`, the new one in a `w:ins`. The control's own record of the value (`w:lastValue`,
 // `w:fullDate`, `w14:checked`) has no tracked form and moves with the value, and a checkbox's
-// `w14:checked` follows its glyph again when a decision changes which glyph is live.
+// `w14:checked` follows its glyph again when a decision changes which glyph is live. A prompt
+// goes without a revision, as Word removes it, and a decision that empties a control shows the
+// prompt again.
 
 import { describe, expect, test } from 'bun:test';
-import { contentControlsIn, readOoxmlPart, serializeOoxmlPart, type OoxmlPart } from '../index.ts';
+import {
+  contentControlsIn,
+  readOoxmlPart,
+  serializeOoxmlPart,
+  type OoxmlElement,
+  type OoxmlPart,
+} from '../index.ts';
 import { applyTreeOp } from '../store/tree-op-apply.ts';
 import type { TreeDocOp } from '../store/tree-op-types.ts';
 
@@ -84,11 +92,61 @@ describe('a proposed value', () => {
     // `w:lastValue` has no tracked form, so it moves with the value as Word moves it.
     expect(body(part)).toContain('<w:dropDownList w:lastValue="2">');
 
+    // A decision reads `w:lastValue` back from the item the control shows.
+    const rejected = body(apply(part, { op: 'rejectAllRevisions' }));
+    expect(rejected).toContain('<w:sdtContent><w:r><w:t>One</w:t></w:r></w:sdtContent>');
+    expect(rejected).toContain('<w:dropDownList w:lastValue="1">');
+    const accepted = body(apply(part, { op: 'acceptAllRevisions' }));
+    expect(accepted).toContain('<w:sdtContent><w:r><w:t>Two</w:t></w:r></w:sdtContent>');
+    expect(accepted).toContain('<w:dropDownList w:lastValue="2">');
+  });
+
+  test('of a date: a decision reads w:fullDate back from the date the text shows, as Word does', () => {
+    const date = (format: string, fullDate: string) =>
+      `<w:date w:fullDate="${fullDate}"><w:dateFormat w:val="${format}"/><w:lid w:val="en-US"/></w:date>`;
+    for (const [format, shown] of [
+      ['M/d/yyyy', '1/2/2026'],
+      ['dd-MMM-yy', '02-Jan-26'],
+    ] as const) {
+      const part = propose(
+        parse(inline(date(format, '2026-01-02T00:00:00Z'), `<w:r><w:t>${shown}</w:t></w:r>`)),
+        '2026-03-04'
+      );
+      expect(body(part)).toContain('w:fullDate="2026-03-04T00:00:00Z"');
+      expect(body(apply(part, { op: 'rejectAllRevisions' }))).toContain(
+        'w:fullDate="2026-01-02T00:00:00Z"'
+      );
+      expect(body(apply(part, { op: 'acceptAllRevisions' }))).toContain(
+        'w:fullDate="2026-03-04T00:00:00Z"'
+      );
+    }
+    // Text the format does not write names no date: the record stays as it is.
+    const typed = parse(
+      inline(date('M/d/yyyy', '2026-01-02T00:00:00Z'), '<w:r><w:t>soon</w:t></w:r>')
+    );
+    const struck = apply(typed, {
+      op: 'deleteText',
+      paragraphId: paragraphId(typed),
+      start: 0,
+      end: 2,
+      revision,
+    });
+    expect(body(apply(struck, { op: 'acceptAllRevisions' }))).toContain(
+      'w:fullDate="2026-01-02T00:00:00Z"'
+    );
+  });
+
+  test('of a combo box: rejecting free text reads back the item the control shows again', () => {
+    const combo =
+      '<w:comboBox w:lastValue="1"><w:listItem w:displayText="One" w:value="1"/>' +
+      '<w:listItem w:displayText="Two" w:value="2"/></w:comboBox>';
+    const part = propose(parse(inline(combo, '<w:r><w:t>One</w:t></w:r>')), 'Other');
+    expect(body(part)).toContain('<w:comboBox w:lastValue="Other">');
     expect(body(apply(part, { op: 'rejectAllRevisions' }))).toContain(
-      '<w:sdtContent><w:r><w:t>One</w:t></w:r></w:sdtContent>'
+      '<w:comboBox w:lastValue="1">'
     );
     expect(body(apply(part, { op: 'acceptAllRevisions' }))).toContain(
-      '<w:sdtContent><w:r><w:t>Two</w:t></w:r></w:sdtContent>'
+      '<w:comboBox w:lastValue="Other">'
     );
   });
 
@@ -145,13 +203,20 @@ describe('a proposed value', () => {
     );
   });
 
-  test('a prompt is struck like text, and the control stops showing it', () => {
+  test('over a prompt is proposed alone, and rejecting it shows the prompt again', () => {
+    // Word removes a prompt without a revision: it is the control's state, not its text.
     const prompt =
       '<w:r><w:rPr><w:rStyle w:val="PlaceholderText"/></w:rPr><w:t>Choose an item.</w:t></w:r>';
     const part = propose(parse(inline(`<w:showingPlcHdr/>${DROPDOWN}`, prompt)), '2');
     expect(body(part)).not.toContain('showingPlcHdr');
-    expect(body(part)).toContain('<w:delText>Choose an item.</w:delText>');
-    expect(body(part)).toContain('<w:ins w:author="Bea"><w:r><w:t>Two</w:t></w:r></w:ins>');
+    expect(content(part)).toBe('<w:ins w:author="Bea"><w:r><w:t>Two</w:t></w:r></w:ins>');
+
+    // Showing its prompt again, the control holds no value.
+    const rejected = apply(part, { op: 'rejectAllRevisions' });
+    expect(body(rejected)).toContain('<w:showingPlcHdr/>');
+    expect(body(rejected)).not.toContain('lastValue');
+    expect(content(rejected)).toBe(prompt);
+    expect(content(apply(part, { op: 'acceptAllRevisions' }))).toBe('<w:r><w:t>Two</w:t></w:r>');
   });
 
   for (const [shape, xml] of [
@@ -227,5 +292,115 @@ describe('a proposed checkbox toggle', () => {
       '<w14:checked w14:val="0"/>',
       '<w14:checked w14:val="1"/>',
     ]);
+  });
+});
+
+/** "Name: " and a text control showing its bold prompt, then " end.". */
+const PROMPT_RUN =
+  '<w:r><w:rPr><w:rStyle w:val="PlaceholderText"/><w:b/></w:rPr><w:t>Enter a name.</w:t></w:r>';
+const PROMPTED =
+  '<w:p><w:r><w:t xml:space="preserve">Name: </w:t></w:r>' +
+  sdt(
+    '<w:placeholder><w:docPart w:val="Name"/></w:placeholder><w:showingPlcHdr/><w:text/>',
+    PROMPT_RUN
+  ) +
+  '<w:r><w:t xml:space="preserve"> end.</w:t></w:r></w:p>';
+const PROMPT_START = 'Name: '.length;
+const PROMPT_END = 'Name: Enter a name.'.length;
+
+/** The id of the body's first paragraph. */
+function paragraphId(part: OoxmlPart): string {
+  return ((part.root as OoxmlElement).children[0] as OoxmlElement).children[0]!.id;
+}
+
+function typeAt(part: OoxmlPart, offset: number, text: string, inside?: string): OoxmlPart {
+  return apply(part, {
+    op: 'insertText',
+    paragraphId: paragraphId(part),
+    offset,
+    text,
+    revision,
+    ...(inside === undefined ? {} : { inside }),
+  });
+}
+
+describe('a prompt in suggesting mode', () => {
+  test('typing over it proposes only the words, in the prompt’s format without its style', () => {
+    for (const offset of [PROMPT_START, PROMPT_END]) {
+      const part = typeAt(parse(PROMPTED), offset, 'Ana');
+      expect(body(part)).not.toContain('showingPlcHdr');
+      expect(body(part)).not.toContain('Enter a name.');
+      expect(content(part)).toBe(
+        '<w:ins w:author="Bea"><w:r><w:rPr><w:b/></w:rPr><w:t>Ana</w:t></w:r></w:ins>'
+      );
+    }
+  });
+
+  test('the next keystroke at the end of the words extends them inside the control', () => {
+    const typed = typeAt(parse(PROMPTED), PROMPT_START, 'A');
+    const part = typeAt(typed, PROMPT_START + 1, 'n', controlId(typed));
+    expect(content(part)).toBe(
+      '<w:ins w:author="Bea"><w:r><w:rPr><w:b/></w:rPr><w:t>An</w:t></w:r></w:ins>'
+    );
+  });
+
+  test('a deletion inside it proposes nothing, as Word keeps showing it', () => {
+    const part = parse(PROMPTED);
+    const deleted = apply(part, {
+      op: 'deleteText',
+      paragraphId: paragraphId(part),
+      start: PROMPT_START,
+      end: PROMPT_END,
+      revision,
+    });
+    expect(body(deleted)).toBe(body(part));
+  });
+
+  test('rejecting the words shows the prompt again, and accepting keeps them as the value', () => {
+    const part = typeAt(parse(PROMPTED), PROMPT_START, 'Ana');
+    const rejected = apply(part, { op: 'rejectAllRevisions' });
+    expect(body(rejected)).toContain('<w:showingPlcHdr/>');
+    // The store reads no glossary here, so the type's own prompt stands in.
+    expect(content(rejected)).toBe(
+      '<w:r><w:rPr><w:rStyle w:val="PlaceholderText"/></w:rPr><w:t>Click here to enter text.</w:t></w:r>'
+    );
+    const accepted = apply(part, { op: 'acceptAllRevisions' });
+    expect(body(accepted)).not.toContain('showingPlcHdr');
+    expect(content(accepted)).toBe('<w:r><w:rPr><w:b/></w:rPr><w:t>Ana</w:t></w:r>');
+  });
+});
+
+describe('a decision that empties a control', () => {
+  const filled = () =>
+    parse(
+      '<w:p>' +
+        sdt(
+          '<w:placeholder><w:docPart w:val="Name"/></w:placeholder><w:text/>',
+          '<w:r><w:rPr><w:b/></w:rPr><w:t>Acme</w:t></w:r>'
+        ) +
+        '</w:p>'
+    );
+  const struck = (part: OoxmlPart) =>
+    apply(part, { op: 'deleteText', paragraphId: paragraphId(part), start: 0, end: 4, revision });
+
+  test('shows its prompt again, in the glossary’s words when the transaction lends them', () => {
+    const part = struck(filled());
+    const accepted = applyTreeOp(
+      part,
+      { op: 'acceptAllRevisions' },
+      { placeholderText: (name) => (name === 'Name' ? 'Enter a name.' : undefined) }
+    );
+    if (!accepted.ok) throw new Error(accepted.reason);
+    expect(body(accepted.part)).toContain('<w:showingPlcHdr/>');
+    expect(content(accepted.part)).toBe(
+      '<w:r><w:rPr><w:rStyle w:val="PlaceholderText"/></w:rPr><w:t>Enter a name.</w:t></w:r>'
+    );
+  });
+
+  test('leaves a control that keeps content alone', () => {
+    const part = struck(filled());
+    const rejected = apply(part, { op: 'rejectAllRevisions' });
+    expect(body(rejected)).not.toContain('showingPlcHdr');
+    expect(content(rejected)).toBe('<w:r><w:rPr><w:b/></w:rPr><w:t>Acme</w:t></w:r>');
   });
 });

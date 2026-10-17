@@ -1196,10 +1196,16 @@ export function cloneWithFreshIds(node: OoxmlNode, nextId: () => string): OoxmlN
   } as OoxmlNode;
 }
 
-function withAttribute(node: OoxmlElement, localName: string, value: string): OoxmlElement {
+/** `node` with its `localName` attribute set to `value`, or without it for null. */
+function withAttribute(node: OoxmlElement, localName: string, value: string | null): OoxmlElement {
   const existing = node.attributes.findIndex(
     (attribute) => attribute.localName === localName && attribute.namespaceUri !== ''
   );
+  if (value === null) {
+    if (existing < 0) return node;
+    const attributes = node.attributes.filter((_, index) => index !== existing);
+    return { ...node, attributes } as OoxmlElement;
+  }
   const attribute = {
     ...(existing >= 0
       ? node.attributes[existing]!
@@ -1381,8 +1387,9 @@ interface PropertyEdits {
   readonly lock?: ContentControlLock;
   readonly id?: number;
   readonly showingPlaceholder?: boolean;
-  readonly lastValue?: string;
-  readonly fullDate?: string;
+  /** Null removes the record, for a control that shows its prompt. */
+  readonly lastValue?: string | null;
+  readonly fullDate?: string | null;
   readonly checked?: boolean;
   readonly temporary?: false;
 }
@@ -1439,7 +1446,10 @@ export function editedProperties(
   if (edits.id !== undefined) setSimple('id', String(edits.id));
   if (edits.showingPlaceholder !== undefined) setFlag('showingPlcHdr', edits.showingPlaceholder);
   if (edits.temporary === false) setFlag('temporary', false);
-  if (edits.lastValue !== undefined) {
+  const lastValue = edits.lastValue;
+  if (lastValue !== undefined) {
+    // An attribute cannot hold U+001E or U+001F, so it keeps the hyphens as they are seen.
+    const written = lastValue === null ? null : withDisplayedHyphens(lastValue);
     children = children.map((child) => {
       if (
         child.kind === 'textValue' ||
@@ -1448,16 +1458,16 @@ export function editedProperties(
       ) {
         return child;
       }
-      // An attribute cannot hold U+001E or U+001F, so it keeps the hyphens as they are seen.
-      return withAttribute(child, 'lastValue', withDisplayedHyphens(edits.lastValue!));
+      return withAttribute(child, 'lastValue', written);
     });
   }
-  if (edits.fullDate !== undefined) {
+  const fullDate = edits.fullDate;
+  if (fullDate !== undefined) {
     children = children.map((child) =>
       child.kind !== 'textValue' &&
       child.namespaceUri === WML_NAMESPACE_URI &&
       child.localName === 'date'
-        ? withAttribute(child, 'fullDate', edits.fullDate!)
+        ? withAttribute(child, 'fullDate', fullDate)
         : child
     );
   }
@@ -1715,6 +1725,25 @@ export function placeholderControlForInsertion(
       return { control: entry.node, offset: span.start };
   }
   return null;
+}
+
+/** Whether `[start, end)` lies in a prompt: one control showing its prompt holds all of it. */
+export function promptHoldsRange(
+  part: OoxmlPart,
+  paragraphId: string,
+  start: number,
+  end: number
+): boolean {
+  const chain = enclosingContentControls(part, paragraphId);
+  if (chain.some((control) => contentControlPropertiesOf(control).showingPlaceholder)) return true;
+  const paragraph = findNode(part, paragraphId);
+  if (!paragraph || paragraph.kind !== 'paragraph') return false;
+  const index = paragraphOffsetIndex(paragraph);
+  return contentControlsIn(paragraph).some(({ node }) => {
+    if (!contentControlPropertiesOf(node).showingPlaceholder) return false;
+    const span = index.spanOf(node);
+    return span !== null && span.start <= start && end <= span.end;
+  });
 }
 
 /** Empty a control's prompt and clear the flag, so the caller's insert is the whole content. */

@@ -58,7 +58,8 @@ import { wmlFreshNamespaceContextAt } from '../package/wml-namespace.ts';
 import { contentControlLevelOf } from '../package/content-control-nodes.ts';
 import {
   applyTrackedContentControlValue,
-  resolveKeepingCheckboxState,
+  proposedOverPrompt,
+  resolveKeepingControlState,
 } from './tracked-content-control-value.ts';
 import { applySetRevisionAttribution } from './revision-author-change.ts';
 import { applyInsertCommentMarker } from './tree-op-comments.ts';
@@ -149,7 +150,9 @@ import {
   applySetContentControlProperties as applyAutomationSetContentControlProperties,
   applySetContentControlValue as applyAutomationSetContentControlValue,
   clearPlaceholder,
+  contentControlEffect,
   placeholderControlForInsertion,
+  promptHoldsRange,
 } from './tree-op-content-controls.ts';
 import {
   insertionDestination,
@@ -263,10 +266,13 @@ function applyValidatedTreeOp(part: OoxmlPart, op: TreeDocOp, options?: EditOpti
   }
   // Typing into a prompt REPLACES it. The transition belongs here rather than beside the
   // caret: an automation call and a paste insert text too, and a prompt that survived them
-  // would leave the typed characters appended to "Click here to enter text.".
-  if (op.op === 'insertText' && !op.revision) {
+  // would leave the typed characters appended to "Click here to enter text.". Suggesting
+  // mode replaces it the same way and proposes only the typed words, as Word does: struck,
+  // the prompt left an accepted value still marked `w:showingPlcHdr`, in the prompt's style.
+  if (op.op === 'insertText') {
     const prompt = placeholderControlForInsertion(part, op.paragraphId, op.offset);
     if (prompt) {
+      const { revision, ...untracked } = op;
       // The caret's paragraph is the one the prompt is emptied into, so the insert below
       // still finds it. A prompt whose content cannot be emptied in place is refused, not
       // flattened by the insertion path: that path would replace the wrapped cell too.
@@ -275,7 +281,7 @@ function applyValidatedTreeOp(part: OoxmlPart, op: TreeDocOp, options?: EditOpti
       const result = applyTreeOp(
         emptied,
         {
-          ...op,
+          ...untracked,
           offset: promptInsertionOffset(emptied, op.paragraphId, prompt.offset),
           inside: prompt.control.id,
         },
@@ -284,7 +290,13 @@ function applyValidatedTreeOp(part: OoxmlPart, op: TreeDocOp, options?: EditOpti
       // Emptying the prompt may drop its other paragraphs; the insert's effect must say so.
       const cleared = findNode(emptied, prompt.control.id);
       if (!result.ok || !cleared) return result;
-      return { ...result, effect: withParagraphDiff(result.effect, prompt.control, cleared) };
+      const replaced = {
+        ...result,
+        effect: withParagraphDiff(result.effect, prompt.control, cleared),
+      };
+      return revision
+        ? proposedOverPrompt(part, prompt.control, replaced, revision, options)
+        : replaced;
     }
   }
 
@@ -380,7 +392,7 @@ function applyValidatedTreeOp(part: OoxmlPart, op: TreeDocOp, options?: EditOpti
     op.op === 'rejectAllRevisions'
   ) {
     const accept = op.op === 'acceptRevision' || op.op === 'acceptAllRevisions';
-    const resolved = resolveKeepingCheckboxState(part, accept ? 'accept' : 'reject', op, options);
+    const resolved = resolveKeepingControlState(part, accept ? 'accept' : 'reject', op, options);
     if (!resolved.ok || !resolved.part || !resolved.effect) {
       return { ok: false, reason: resolved.reason ?? 'tree-invariant' };
     }
@@ -423,6 +435,10 @@ function applyValidatedTreeOp(part: OoxmlPart, op: TreeDocOp, options?: EditOpti
   switch (op.op) {
     case 'insertText':
       if (op.revision) {
+        const owner = op.inside === undefined ? null : findNode(part, op.inside);
+        if (op.inside !== undefined && (owner === null || owner.kind === 'textValue')) {
+          return { ok: false, reason: 'unknown-content-control' };
+        }
         return applyInsertTracked(
           part,
           paragraph,
@@ -430,7 +446,8 @@ function applyValidatedTreeOp(part: OoxmlPart, op: TreeDocOp, options?: EditOpti
           op.text,
           op.revision,
           options,
-          op.bias
+          op.bias,
+          owner
         );
       }
       return applyInsertContent(
@@ -496,6 +513,12 @@ function applyValidatedTreeOp(part: OoxmlPart, op: TreeDocOp, options?: EditOpti
     }
     case 'deleteText':
       if (op.revision) {
+        // A prompt is the control's state, not its text: striking it proposes nothing, and
+        // Word keeps showing it. Typing over a selected prompt sends this deletion first, and
+        // the insertion after it replaces the prompt.
+        if (promptHoldsRange(part, paragraph.id, op.start, op.end)) {
+          return ok(part, contentControlEffect(paragraph.id, 'text-local'));
+        }
         return applyDeleteTracked(part, paragraph, op.start, op.end, op.revision, options);
       }
       return applyDeleteText(part, paragraph, op.start, op.end, options);

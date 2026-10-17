@@ -72,3 +72,69 @@ export function formatContentControlDate(
   }
   return out;
 }
+
+/**
+ * The date a control's display text shows, read back through its own `w:dateFormat`: the
+ * inverse of {@link formatContentControlDate}, or null for text that formatter does not write.
+ * A two-digit year falls in `century`.
+ *
+ * Bounded like the formatter: one walk of the pattern and the text together, left to right.
+ * The result is formatted again and compared, so a pattern whose fields run together cannot
+ * read a date that would not print as this text.
+ */
+export function parseContentControlDate(
+  text: string,
+  pattern: string | undefined,
+  century = 2000
+): { year: number; month: number; day: number } | null {
+  if (!pattern || pattern.length === 0 || pattern.length > 64) return parseIsoDate(text);
+  let year: number | null = null;
+  let month: number | null = null;
+  let day: number | null = null;
+  let at = 0;
+  const digits = (min: number, max: number): number | null => {
+    let end = at;
+    while (end < text.length && end - at < max && text[end]! >= '0' && text[end]! <= '9') {
+      end += 1;
+    }
+    if (end - at < min) return null;
+    const value = Number(text.slice(at, end));
+    at = end;
+    return value;
+  };
+  let index = 0;
+  while (index < pattern.length) {
+    const char = pattern[index]!;
+    if (char !== 'y' && char !== 'M' && char !== 'd') {
+      if (text[at] !== char) return null;
+      at += 1;
+      index += 1;
+      continue;
+    }
+    let run = 0;
+    while (index + run < pattern.length && pattern[index + run] === char) run += 1;
+    index += run;
+    if (char === 'y') {
+      const value = run <= 2 ? digits(2, 2) : digits(1, 6);
+      if (value === null) return null;
+      year = run <= 2 ? century + value : value;
+    } else if (char === 'M' && run >= 3) {
+      const found = MONTH_NAMES.findIndex((name) =>
+        text.startsWith(run >= 4 ? name : name.slice(0, 3), at)
+      );
+      if (found < 0) return null;
+      at += run >= 4 ? MONTH_NAMES[found]!.length : 3;
+      month = found + 1;
+    } else {
+      const value = digits(Math.min(run, 2), 2);
+      if (value === null) return null;
+      if (char === 'M') month = value;
+      else day = value;
+    }
+  }
+  if (at !== text.length || year === null || month === null || day === null) return null;
+  const parsed = parseIsoDate(
+    `${String(year).padStart(4, '0')}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`
+  );
+  return parsed && formatContentControlDate(parsed, pattern) === text ? parsed : null;
+}

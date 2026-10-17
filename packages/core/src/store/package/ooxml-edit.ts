@@ -102,6 +102,12 @@ export interface EditOptions {
    * of the enclosing store call, which is `atomic` outside any editable transaction.
    */
   readonly fieldResults?: FieldResultsMode;
+  /**
+   * The text of the glossary block a control's `w:placeholder` names, for a prompt an edit
+   * brings back (`content-control-prompt-restore.ts`): a part alone cannot see the glossary.
+   * Absent, or undefined for a name, means the type's own prompt.
+   */
+  readonly placeholderText?: (docPart: string) => string | undefined;
 }
 
 /**

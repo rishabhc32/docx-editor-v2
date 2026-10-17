@@ -226,7 +226,9 @@ export function applyInsertTracked(
   text: string,
   revision: RevisionAttributionInput,
   options?: EditOptions,
-  bias: 'left' | 'right' = 'left'
+  bias: 'left' | 'right' = 'left',
+  /** The content control the caller says the text belongs to, as untracked typing takes it. */
+  owner: OoxmlNode | null = null
 ): TreeOpResult {
   return applyTrackedInsertion(
     part,
@@ -238,7 +240,8 @@ export function applyInsertTracked(
     },
     revision,
     options,
-    bias
+    bias,
+    owner
   );
 }
 
@@ -331,7 +334,8 @@ function applyTrackedInsertion(
   payload: TrackedInsertionPayload,
   revision: RevisionAttributionInput,
   options?: EditOptions,
-  bias: 'left' | 'right' = 'left'
+  bias: 'left' | 'right' = 'left',
+  owner: OoxmlNode | null = null
 ): TreeOpResult {
   const mint = createNodeIdAllocator(part);
   const offsets = paragraphOffsetIndex(paragraph);
@@ -404,8 +408,10 @@ function applyTrackedInsertion(
     : undefined;
   const fieldLeftRun = fieldLeftRunId ? findNode(part, fieldLeftRunId) : null;
   const fieldProperties = () => (fieldLeftRun ? insertedRunProperties(mint, fieldLeftRun) : []);
-  const rightBiasedDestination =
-    bias === 'right' ? insertionDestination(paragraph, offset, null, bias) : null;
+  // A right bias or a named owner, such as the control the caret types into (Word keeps typing
+  // inside it at its trailing edge), says which container the words belong in.
+  const requestedDestination =
+    bias === 'right' || owner ? insertionDestination(paragraph, offset, owner, bias) : null;
   // Minted LAZILY, on the first wrapper actually built: `nextRevisionId` walks the whole
   // part, and typing on inside your own `w:ins` — every keystroke after the first — extends
   // the existing wrapper and builds none, so it must not pay that walk. A transaction lends
@@ -614,7 +620,7 @@ function applyTrackedInsertion(
         insertionAuthor([node]) === revision.author &&
         sameEditingMoment(revisionDateOf(node), revision.date);
       const sharedTrailingOwner = trailingDestination?.path.has(node.id) === true;
-      const rightBiasedOwner = rightBiasedDestination?.path.has(node.id) === true;
+      const requestedOwner = requestedDestination?.path.has(node.id) === true;
       // THE REPLACEMENT FOLLOWS THE DELETION IT REPLACES — into a link or a control, and
       // only when the WHOLE deletion lives there. Replacing a link's display text strikes
       // runs INSIDE the `w:hyperlink`, and the insertion adopting that deletion aims at
@@ -649,7 +655,7 @@ function applyTrackedInsertion(
           ((ownInsertion ||
             holdsReplaced ||
             sharedTrailingOwner ||
-            rightBiasedOwner ||
+            requestedOwner ||
             fieldDestination?.path.has(node.id)) &&
             offset >= start &&
             offset <= end))
@@ -737,16 +743,21 @@ function applyTrackedInsertion(
         continue;
       }
 
-      // A right bias names the container the caller wants the words in, and a run ENDING at
-      // this offset is not it: taking the insertion here would leave the text outside the
-      // requested wrapper, which validation had already resolved as the destination. Walk on
-      // and let that container claim it.
+      // A right bias or an owner names the container the caller wants the words in, and a run
+      // ENDING at this offset is not it: taking the insertion here would leave the text outside
+      // the requested wrapper, which validation had already resolved as the destination. Walk
+      // on and let that container claim it. This author's own insertion inside that container
+      // is in it, and the words extend it.
       if (
         node.kind === 'run' &&
         offset === end &&
         offset !== start &&
-        rightBiasedDestination !== null &&
-        !rightBiasedDestination.path.has(node.id)
+        requestedDestination !== null &&
+        !requestedDestination.path.has(node.id) &&
+        !(
+          stack.some((held) => requestedDestination.path.has(held.id)) &&
+          insertionAuthor([...stack, node]) === revision.author
+        )
       ) {
         cursor.offset = end;
         out.push(node);

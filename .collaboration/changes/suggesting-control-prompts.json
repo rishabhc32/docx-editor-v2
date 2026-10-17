@@ -1,0 +1,15 @@
+{
+  "impact": "compatible",
+  "fields": [],
+  "before": "In suggesting mode, typing or a control value over a prompt struck the prompt in a w:del, and typed words kept the PlaceholderText style and w:showingPlcHdr, so an accepted value still acted as a prompt. Typing at the end of a control's value landed after the control. A decision that emptied a control left it empty, and a rejected value left w:lastValue and w:fullDate at the rejected value.",
+  "after": "Typing or a value over a prompt removes the prompt and w:showingPlcHdr without a revision and inserts the new text in a w:ins inside w:sdtContent, without the PlaceholderText style. A tracked deletion inside a prompt changes nothing. Tracked typing at a control's trailing edge stays inside the control. Accepting or rejecting a revision that empties a text, date, or list control restores its prompt under w:showingPlcHdr, with the text of the glossary block that w:placeholder names when the package holds one. A decision that changes what a list or date control shows also sets w:lastValue to the shown item's value, or a combo box's text, and w:fullDate to the date its text shows through w:dateFormat, and removes both when the control shows its prompt.",
+  "reason": "The replicated results are existing w:ins, w:sdtContent, w:sdtPr, and w:showingPlcHdr structures that released participants already read, written through the same prompt replacement and restore that untracked edits use. No stored field, operation kind, or identity rule changes. A released participant that rejects typed words leaves the control empty without its prompt, or a rejected value's record unchanged, and its result still replicates to every participant.",
+  "tests": [
+    "packages/core/src/editor/__tests__/suggesting-control-prompts.test.ts",
+    "packages/core/src/store/__tests__/content-control-dates.test.ts",
+    "packages/core/src/store/__tests__/tracked-content-control-value.test.ts",
+    "packages/pro/src/collaboration/__tests__/document-suggested-control-values.test.ts"
+  ],
+  "changeset": "suggesting-control-prompts",
+  "migration": null
+}

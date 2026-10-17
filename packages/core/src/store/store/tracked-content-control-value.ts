@@ -6,19 +6,30 @@
 // `w:date/@w:fullDate`, `w14:checked`, `w:showingPlcHdr` — moves to the new value untracked,
 // exactly as the untracked write moves it.
 //
-// So Reject restores the text and not those properties. One of them is read back from the text
-// it describes: a checkbox's state IS the glyph it shows, so when a decision changes which glyph
-// is live, `w14:checked` follows it (`resolveKeepingCheckboxState`). Without that, a rejected
+// So Reject restores the text, and each property is read back from the content it describes
+// once a decision changes what the control shows (`resolveKeepingControlState`). A checkbox's
+// state IS the glyph it shows, so `w14:checked` follows the live glyph: without that, a rejected
 // toggle left a box drawn unchecked that reported itself checked, and the next click wrote the
-// glyph it already showed. The others cannot be recovered from text and stay as the value left
-// them.
+// glyph it already showed. `w:lastValue` names the item a list shows, and `w:fullDate` the date
+// a date control's text shows through its format, as Word reads it back. An empty control shows
+// its prompt, so a decision that empties one brings the prompt back under `w:showingPlcHdr`, as
+// Word does, with no value record.
+//
+// A prompt is never struck. Word removes it without a revision, as the control's state rather
+// than its text, and proposes only what takes its place (`proposedOverPrompt`): struck, it came
+// back on Reject as text the control no longer marked as its prompt.
 //
 // The new content is never built here. The untracked write builds it — the display run, its
 // face, the glyph — and this module strikes the control's text and inserts what that write made.
 // The strike takes every character in the control, so a shape where the untracked write would
 // have KEPT text beside the value is refused rather than half-proposed.
 
-import { contentControlTextOf, contentControlsIn } from '../package/content-control-nodes.ts';
+import {
+  contentControlPropertiesOf as contentControlSummaryOf,
+  contentControlTextOf,
+  contentControlsIn,
+} from '../package/content-control-nodes.ts';
+import { parseContentControlDate, parseIsoDate } from './content-control-dates.ts';
 import {
   createNodeIdAllocator,
   findNode,
@@ -41,6 +52,7 @@ import {
   isWml,
   runContentOf,
 } from './content-control-checkbox.ts';
+import { controlHoldsContent, withRestoredPrompt } from './content-control-prompt-restore.ts';
 import { equivalentNodes } from './ooxml-node-equality.ts';
 import { applyTreeOp } from './tree-op-apply.ts';
 import { contentControlEffect, editedProperties } from './tree-op-content-controls.ts';
@@ -56,7 +68,10 @@ import {
   ok,
   paragraphContainingNode,
 } from './tree-op-nodes.ts';
-import { invalidRevisionAttribution } from './tree-op-revision-attribution.ts';
+import {
+  invalidRevisionAttribution,
+  type RevisionAttributionInput,
+} from './tree-op-revision-attribution.ts';
 import { nextRevisionId } from './tree-op-revision-ids.ts';
 import { resolveRevisionOperation, type RevisionResolveResult } from './tree-op-revisions.ts';
 import { paragraphLength, paragraphOffsetIndex } from './tree-op-segments.ts';
@@ -228,7 +243,7 @@ function showsSameValue(before: OoxmlElement, after: OoxmlElement): boolean {
  * Refused rather than approximated for what has no faithful tracked form: a control that no
  * value can be proposed in (`proposalShapeRefusal`), a value that clears the control back to
  * its prompt (`w:showingPlcHdr` cannot be pending), and content the value would replace only in
- * part.
+ * part. A value over a prompt is proposed alone (`proposedOverPrompt`).
  */
 export function applyTrackedContentControlValue(
   part: OoxmlPart,
@@ -253,6 +268,9 @@ export function applyTrackedContentControlValue(
   if (!after || isShowingPlaceholder(after)) return { ok: false, reason: 'unsupported' };
   if (showsSameValue(control, after))
     return ok(part, contentControlEffect(control.id, 'text-local'));
+  if (isShowingPlaceholder(control)) {
+    return proposedOverPrompt(part, control, written, revision, options);
+  }
   const before = valueSiteOf(part, control);
   const value = valueSiteOf(written.part, after);
   const runs = before && value ? writtenValueRuns(before, value) : null;
@@ -298,13 +316,54 @@ export function applyTrackedContentControlValue(
 }
 
 /**
- * Resolve revisions, then let each checkbox whose live glyph the decision changed say so in
- * `w14:checked`.
+ * A write over a control's prompt, proposed: the prompt goes without a revision, and the runs the
+ * untracked write put in its place go into one insertion where they stand. Rejecting it empties
+ * the control, and the decision shows the prompt again.
  *
- * Only a changed glyph moves the flag: a checkbox the decision did not reach keeps whatever its
- * file says, consistent or not.
+ * `written` is that untracked write. A control in the author's own pending insertion takes it
+ * directly, as a value does. A shape where the write left anything beside its new runs is
+ * refused rather than half-proposed.
  */
-export function resolveKeepingCheckboxState(
+export function proposedOverPrompt(
+  part: OoxmlPart,
+  control: OoxmlNode,
+  written: TreeOpResult,
+  revision: RevisionAttributionInput,
+  options?: EditOptions
+): TreeOpResult {
+  if (!written.ok || insideOwnInsertion(part, control.id, revision.author)) return written;
+  const after = findContentControl(written.part, control.id);
+  const site = after ? valueSiteOf(written.part, after) : null;
+  if (!site) return { ok: false, reason: 'unsupported' };
+  const children: OoxmlNode[] = [...site.container.children];
+  const offsets = paragraphOffsetIndex(site.paragraph);
+  const shown = children.filter((child) => offsets.lengthOf(child) > 0);
+  const first = shown.length > 0 ? children.indexOf(shown[0]!) : -1;
+  if (
+    first < 0 ||
+    shown.some((child, index) => child.kind !== 'run' || children[first + index] !== child)
+  ) {
+    return { ok: false, reason: 'unsupported' };
+  }
+  const mint = createNodeIdAllocator(written.part);
+  const id = options?.trackedRevisionIds?.mint() ?? nextRevisionId(written.part)();
+  const insertion = build(mint(), 'revisionInsert', 'ins', revisionAttributes(id, revision), shown);
+  children.splice(first, shown.length, insertion);
+  return fromEdit(
+    replaceChildren(written.part, site.container.id, children, options),
+    written.effect
+  );
+}
+
+/**
+ * Resolve revisions, then let each control the decision reached read its state back from its
+ * content: a checkbox whose live glyph changed says so in `w14:checked`, and a control the
+ * decision emptied shows its prompt again.
+ *
+ * Only a changed control moves: one the decision did not reach keeps whatever its file says,
+ * consistent or not.
+ */
+export function resolveKeepingControlState(
   part: OoxmlPart,
   action: Parameters<typeof resolveRevisionOperation>[1],
   operation: Parameters<typeof resolveRevisionOperation>[2],
@@ -313,20 +372,71 @@ export function resolveKeepingCheckboxState(
   const resolved = resolveRevisionOperation(part, action, operation, options);
   if (!resolved.ok || !resolved.part) return resolved;
   let next = resolved.part;
-  for (const { node } of contentControlsIn(part.root)) {
-    if (contentControlValueTypeOf(node) !== 'checkbox') continue;
+  // Innermost first: an inner control's prompt is content its emptied outer control holds.
+  for (const { node } of [...contentControlsIn(part.root)].reverse()) {
     const after = findContentControl(next, node.id);
-    // The same node shows the same glyph: the decision did not reach this control.
+    // The same node: the decision did not reach this control.
     if (!after || after === node) continue;
-    const shown = checkboxStateShown(after);
-    if (shown === null || shown === checkboxStateShown(node)) continue;
-    if (checkboxPayloadOf(after)?.checked === shown) continue;
-    const properties = contentControlPropertiesOf(after);
-    if (!properties) continue;
-    const edited = editedProperties(properties, { checked: shown }, createNodeIdAllocator(next));
+    if (controlHoldsContent(node) && !controlHoldsContent(after)) {
+      next = withRestoredPrompt(next, node.id, options);
+    }
+    const current = findContentControl(next, node.id);
+    const properties = current ? contentControlPropertiesOf(current) : undefined;
+    if (!current || !properties) continue;
+    const edits = recordEdits(node, current);
+    if (Object.keys(edits).length === 0) continue;
+    const edited = editedProperties(properties, edits, createNodeIdAllocator(next));
     const written = replaceNode(next, properties.id, edited, options);
     if (!written.ok) return { ok: false, reason: 'tree-invariant' };
     next = written.part;
   }
   return { ...resolved, part: next };
+}
+
+interface RecordEdits {
+  checked?: boolean;
+  lastValue?: string | null;
+  fullDate?: string | null;
+}
+
+/** The edits that make a control's own record agree with what a decision left it showing. */
+function recordEdits(before: OoxmlElement, after: OoxmlElement): RecordEdits {
+  if (contentControlValueTypeOf(after) === 'checkbox') {
+    const shown = checkboxStateShown(after);
+    if (shown === null || shown === checkboxStateShown(before)) return {};
+    return checkboxPayloadOf(after)?.checked === shown ? {} : { checked: shown };
+  }
+  const unchanged =
+    contentControlTextOf(after) === contentControlTextOf(before) &&
+    isShowingPlaceholder(after) === isShowingPlaceholder(before);
+  return unchanged ? {} : valueRecordEdits(after);
+}
+
+/**
+ * The value record a list or date control's content states: `w:lastValue` the value of the item
+ * it shows, or a combo box's own text, and `w:fullDate` the date it shows, read back through its
+ * format as Word reads it after a decision. A control showing its prompt holds no value. Text
+ * that names no item and no date leaves the record as it is.
+ */
+function valueRecordEdits(control: OoxmlElement): RecordEdits {
+  const summary = contentControlSummaryOf(control);
+  const text = contentControlTextOf(control);
+  if (summary.type === 'dropDownList' || summary.type === 'comboBox') {
+    if (summary.showingPlaceholder)
+      return summary.lastValue === undefined ? {} : { lastValue: null };
+    const item = summary.listItems.find((candidate) => candidate.displayText === text);
+    const value = item?.value ?? (summary.type === 'comboBox' ? text : undefined);
+    return value === undefined || value === summary.lastValue ? {} : { lastValue: value };
+  }
+  if (summary.type !== 'date') return {};
+  const current = summary.date?.fullDate;
+  if (summary.showingPlaceholder) return current === undefined ? {} : { fullDate: null };
+  // A two-digit year stays in the century the record already names.
+  const previous = current === undefined ? null : parseIsoDate(current);
+  const century = previous ? Math.floor(previous.year / 100) * 100 : undefined;
+  const shown = parseContentControlDate(text, summary.date?.dateFormat, century);
+  if (!shown) return {};
+  const iso = `${String(shown.year).padStart(4, '0')}-${String(shown.month).padStart(2, '0')}-${String(shown.day).padStart(2, '0')}`;
+  const fullDate = `${iso}T00:00:00Z`;
+  return fullDate === current ? {} : { fullDate };
 }

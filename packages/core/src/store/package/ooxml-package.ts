@@ -647,6 +647,21 @@ export function* writeOoxmlPackageSteps(pkg: OoxmlPackage): Generator<void, Uint
   return yield* writeZipSteps(entries);
 }
 
+/** A package holding exactly one part, for callers that never open a real one. */
+export function singlePartPackage(part: OoxmlPart): OoxmlPackage {
+  return Object.freeze({
+    parts: new Map([[part.name, part]]),
+    partBytes: new Map(),
+    relationships: new Map(),
+    externalTargets: [],
+    contentTypes: {
+      defaults: new Map(),
+      overrides: new Map([[part.name.toLowerCase(), part.contentType]]),
+    },
+    mainDocumentPart: part.name,
+  }) as OoxmlPackage;
+}
+
 /** Replace one part's tree, returning a new package. Pure, like the tree edits themselves. */
 export function withPart(pkg: OoxmlPackage, part: OoxmlPart): OoxmlPackage {
   // Copy the map directly instead of spreading through an intermediate entry array; this
