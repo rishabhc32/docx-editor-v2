@@ -1,0 +1,10 @@
+{
+  "impact": "compatible",
+  "fields": [],
+  "before": "In an ordered room, typing in the heading paragraph of a table of contents (Contents, inside the contents control, before the TOC field) was refused as not-covered, as every paragraph of the control was.",
+  "after": "The heading before the TOC field is ordinary text: the organiser types in it directly and a party suggests, as in Word and the editor alone. The field's rows and a contents control with no field stay read-only.",
+  "reason": "Change messages, the change log and its kinds keep their meaning, and the Yjs document format does not change. The room now admits changes it refused before, by one placement rule every copy applies alike. An ordered room admits only clients of its own code version, so the room and its pages always run the same engine. Ordered rooms are not deployed yet, so no migration is needed.",
+  "tests": ["packages/core/src/collaboration/ordered/__tests__/client/editor-toc-heading.test.ts"],
+  "changeset": "ordered-toc-heading",
+  "migration": null
+}

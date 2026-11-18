@@ -1,0 +1,14 @@
+{
+  "impact": "no-impact",
+  "fields": [],
+  "before": "After an editor committed a local edit, an ordered room session gave the editor its list's version of the edit in a later microtask, so the editor laid the pages out twice for one key. A review read that came after two commits derived the whole review queue again.",
+  "after": "The editor calls the optional EditorCollaborationSession.settleLocalCommit after a command it commits and before its layout; the ordered session gives its list's version there, and its queued flush still sends the changes. One layout pass shows both. A review read after commits that all rewrote the same paragraph reads that paragraph again and keeps the rest of the queue. While a local commit waits for that version, the editor's layout() and currentPage() reads keep the pages on screen, so a host that reads the editor on each change does not lay the commit out alone. The list's version of a paragraph keeps each child that says what the editor shows under the same id.",
+  "reason": "Change messages, their order and send timing, the change log, presence, and the package the editor shows after the edit do not change. Only when this replica's editor receives its own list's version, and how it derives its local review queue, change. Neither is shared. Sessions without settleLocalCommit, such as Yjs rooms, behave as before. The kept children say the same as the composed ones, so the editor's package and what it saves do not change.",
+  "tests": [
+    "packages/core/src/collaboration/ordered/__tests__/client/editor-layout-cost.test.ts",
+    "packages/core/src/collaboration/ordered/__tests__/client/editor-review-cost.test.ts",
+    "packages/core/src/binding/__tests__/review-trail.test.ts"
+  ],
+  "changeset": "room-key-one-layout",
+  "migration": null
+}

@@ -1,0 +1,18 @@
+{
+  "impact": "compatible",
+  "fields": [],
+  "before": "An ordered room stamped each change with the login's author name (by, a string) and wrote it as w:author. A namespace belonged to one author name, and the policy and the apply told a person's own suggestions from another person's by that name. Presence named a person by author. The checkpoint manifest (version 1) held the format, its version and the media. An attribution change could give suggestions another author. The protocol was version 2.",
+  "after": "The room stamps the login's person { id, name, org } (OrderedActor.person, OrderedServerFields.by) and writes the Word name 'Name (Org)', or 'Name' with no company. A namespace belongs to one person ID (stamp, log-stamp); the same person under a new name or company keeps it. The policy and the apply compare person IDs, and a suggestion loaded from a file has no person and belongs to nobody. OrderedAttribution keeps person beside author. An attribution change that names another author is refused for every sender (apply-refused, fixed-author). Presence carries person. The checkpoint manifest (version 2) lists the person of each pending room item by its revision w:ids, and a version 1 manifest is refused (checkpoint-version). Exported Word files carry names only. The protocol is version 3.",
+  "reason": "The Yjs document format does not change. The ordered protocol does: a page and a room of different versions refuse each other's frames by name (invalid-version, reload: version), and an ordered room admits only clients of its own code version, so old and new copies never share a room. Ordered rooms are not deployed yet, so no room, log or checkpoint holds the earlier shapes and no migration is needed.",
+  "tests": [
+    "packages/core/src/collaboration/ordered/__tests__/client/editor-identity.test.ts",
+    "packages/core/src/collaboration/ordered/__tests__/client/editor-lists-attribution.test.ts",
+    "packages/core/src/collaboration/ordered/__tests__/room.test.ts",
+    "packages/core/src/collaboration/ordered/__tests__/room-presence.test.ts",
+    "packages/core/src/collaboration/ordered/__tests__/protocol-codec.test.ts",
+    "packages/core/src/collaboration/ordered/__tests__/change-validate.test.ts",
+    "packages/core/src/collaboration/ordered/__tests__/checkpoint.test.ts"
+  ],
+  "changeset": "ordered-room-persons",
+  "migration": null
+}

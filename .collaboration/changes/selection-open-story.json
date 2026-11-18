@@ -1,0 +1,13 @@
+{
+  "impact": "no-impact",
+  "fields": [],
+  "before": "surface.setSelection accepted a paragraph id from a part that is not the open story.",
+  "after": "The surface refuses such a selection by name and keeps the caret.",
+  "reason": "A local selection guard. It writes no shared state; a refused selection publishes no presence and makes no edit.",
+  "tests": [
+    "packages/core/src/editor/__tests__/selection-open-story.test.ts",
+    "packages/core/src/collaboration/ordered/__tests__/client/editor-selection-open-story.test.ts"
+  ],
+  "changeset": "selection-open-story",
+  "migration": null
+}

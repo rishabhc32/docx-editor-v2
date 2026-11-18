@@ -22,7 +22,7 @@
     "storyScopeKinds": 3,
     "namedPackageIntents": 16,
     "unsupportedRows": 15,
-    "activeOpenSpecChanges": 28
+    "activeOpenSpecChanges": 29
   },
   "storyScopes": [
     {
@@ -1697,6 +1697,11 @@
       "name": "paragraph-text-collaboration",
       "role": "collaboration-packaging",
       "notes": "Changes how paragraph inline content is shared. Adds no TreeDocOp kind, so the freeze holds."
+    },
+    {
+      "name": "ordered-suggestion-collaboration",
+      "role": "collaboration-packaging",
+      "notes": "Ordered rooms: a second collaboration session over the same TreeDocOp batches. Adds no TreeDocOp kind, so the freeze holds."
     }
   ],
   "remainingAmbiguity": [

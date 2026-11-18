@@ -1,0 +1,14 @@
+{
+  "impact": "compatible",
+  "fields": [],
+  "before": "A run, paragraph-mark or paragraph property write that restates every value rewrote the container in schema order and split the run at the range edges.",
+  "after": "Such a write returns the part unchanged: no revision, no undo step, and nothing to replicate.",
+  "reason": "Shared state stores the written tree, not replayed ops. A new writer writes nothing for such a press; an old writer's reordered and split runs still read the same way on every version. The ordered room applies its own changes and receives none for such a press.",
+  "tests": [
+    "packages/core/src/store/__tests__/unchanged-format-no-op.test.ts",
+    "packages/core/src/editor/__tests__/unchanged-format-no-op.test.ts",
+    "packages/core/src/collaboration/ordered/__tests__/client/editor-format-unchanged.test.ts"
+  ],
+  "changeset": "unchanged-format-no-op",
+  "migration": null
+}

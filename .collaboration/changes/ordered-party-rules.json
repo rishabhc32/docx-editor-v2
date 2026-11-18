@@ -1,0 +1,14 @@
+{
+  "impact": "compatible",
+  "fields": [],
+  "before": "In an ordered room, the suggestions-only policy refused some party edits that the host's earlier check allows (words between another person's deletion and insertion, a property change on their new paragraph or row, a new row beside their pending records, a direct edit that changes nothing) and accepted some it refuses (a format or a deletion over their pending format, Enter in a block control's prompt, a take-back of a deletion with their format in it).",
+  "after": "The policy gives that check's verdict for each of these party edits. A policy can judge what a change did once applied (checkApplied); a refusal there takes the change back. The room keeps only the differences that come from that check's own Word-form faults (design D9).",
+  "reason": "Change messages, the change log and its kinds keep their meaning, and the Yjs document format does not change. Only the room's verdicts on party changes differ, and every copy applies the room's accepted changes as before. An ordered room admits only clients of its own code version, so the room and its pages always run the same engine. Ordered rooms are not deployed yet, so no room holds a log judged under the old rules and no migration is needed.",
+  "tests": [
+    "packages/core/src/collaboration/ordered/__tests__/client/editor-party-rules.test.ts",
+    "packages/core/src/collaboration/ordered/__tests__/room-policy-verdicts.test.ts",
+    "packages/core/src/collaboration/ordered/__tests__/room-policy.test.ts"
+  ],
+  "changeset": "ordered-party-rules",
+  "migration": null
+}

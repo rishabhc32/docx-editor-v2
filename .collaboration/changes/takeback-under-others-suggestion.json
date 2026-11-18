@@ -1,0 +1,10 @@
+{
+  "impact": "compatible",
+  "fields": [],
+  "before": "The suggestions-only policy accepted a party's deletion, join or take-back of their own pending words or paragraph mark while another person's pending deletion, format or property change was on them, so that person's suggestion shrank or was left with nothing.",
+  "after": "The suggestions-only policy refuses such a change from a party as policy-not-own with the reason others_suggestions, as the host's earlier check does. The organiser's change is accepted as before.",
+  "reason": "Change messages, the change log and its kinds keep their meaning, and the Yjs document format does not change. Only the room's policy verdict for a party changes; the room checks the policy before it applies a change, and every copy applies the same accepted log. An ordered room admits only clients of its own code version, so old and new clients never apply one log together.",
+  "tests": ["packages/core/src/collaboration/ordered/__tests__/room-policy-verdicts.test.ts"],
+  "changeset": "takeback-under-others-suggestion",
+  "migration": null
+}

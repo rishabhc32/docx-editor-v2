@@ -1,0 +1,12 @@
+{
+  "impact": "compatible",
+  "fields": [],
+  "before": "In an ordered room, a reject of a drag that changed no cell width (a lone w:tblGridChange) through the host's card decision gave the old grid back, live and on the saved file reopened, while Word and the editor alone keep the new grid.",
+  "after": "A suggestion whose only record is a table grid keeps its grid when it is rejected, whichever way it is decided, as Word and the editor alone keep it.",
+  "reason": "Change messages, the change log and its kinds keep their meaning, and the Yjs document format does not change. Every copy composes the same list the same way, so every copy shows the same grid. An ordered room admits only clients of its own code version, so the room and its pages always run the same engine. Ordered rooms are not deployed yet, so no room holds a log made under the old rule and no migration is needed.",
+  "tests": [
+    "packages/core/src/collaboration/ordered/__tests__/client/editor-table-lone-grid.test.ts"
+  ],
+  "changeset": "ordered-lone-grid-reject",
+  "migration": null
+}

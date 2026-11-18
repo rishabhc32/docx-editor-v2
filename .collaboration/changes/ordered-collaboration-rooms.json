@@ -1,0 +1,16 @@
+{
+  "impact": "no-impact",
+  "fields": [],
+  "before": "Full-document collaboration had one model: Yjs rooms through @docx-editor.dev/pro/collaboration.",
+  "after": "@docx-editor.dev/core/collaboration/ordered adds ordered rooms as a separate entry point: an editor session, a change format (version 1), a message protocol (version 1), and a room core that orders every change and applies a per-change policy. Yjs rooms keep their format.",
+  "reason": "The ordered entry point imports neither Yjs nor the Pro collaboration code, and it reads and writes no Yjs shared state, room metadata, or awareness. Its changes and messages carry their own version, and the codec and validator refuse other versions with invalid-version. The shared engine changes that Yjs rooms also see have their own records in this release, including control-move-range-markers and settings-note-separator-race for format 1.4.4.2.",
+  "tests": [
+    "packages/core/src/collaboration/ordered/__tests__/protocol-codec.test.ts",
+    "packages/core/src/collaboration/ordered/__tests__/change-validate.test.ts",
+    "packages/core/src/collaboration/ordered/__tests__/room.test.ts",
+    "packages/core/src/collaboration/ordered/__tests__/client/editor-two.test.ts",
+    "packages/pro/src/collaboration/__tests__/document-format.test.ts"
+  ],
+  "changeset": "ordered-collaboration-rooms",
+  "migration": null
+}

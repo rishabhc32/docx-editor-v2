@@ -1,0 +1,13 @@
+{
+  "impact": "compatible",
+  "fields": [],
+  "before": "convertNote copied the source note's w14:paraId values into the target notes part.",
+  "after": "The converted note's paragraphs take paragraph ids unique in the target notes part.",
+  "reason": "Only the ids a writer mints change. Readers of every version read stored paragraph ids as they are; the ordered room already minted new ids for a conversion.",
+  "tests": [
+    "packages/core/src/store/__tests__/note-convert-para-ids.test.ts",
+    "packages/core/src/collaboration/ordered/__tests__/client/editor-notes-convert-ids.test.ts"
+  ],
+  "changeset": "convert-note-paragraph-ids",
+  "migration": null
+}

@@ -67,6 +67,7 @@
     "pro/custom-nodes-reference",
     "pro/collaboration",
     "pro/collaboration-versions",
+    "pro/ordered-collaboration",
     "---Telemetry---",
     "telemetry/index",
     "telemetry/privacy",

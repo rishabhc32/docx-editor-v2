@@ -1,0 +1,17 @@
+{
+  "impact": "compatible",
+  "fields": [],
+  "before": "In an ordered room a discussion was a marker: a Word comment whose whole text was thread:<n>, made by a marker change (the editor's comment that named a discussion, or the host's marker request message), while the text stayed with the host. The suggestions-only policy took the host's ownsDiscussion and isMarked lookups and refused a party's marker in a batch (policy-marker). OrderedRoom.submit took a source option. A direct deletion over a comment's whole range took its markers away.",
+  "after": "A discussion is a Word comment that travels through the room: the change kinds comment, comment-reply and comment-resolve come in batches of changes. The model holds each room comment with its person, compose writes comments.xml and commentsExtended.xml from the model, and a checkpoint's manifest lists each room comment's person by its w:id. OrderedActor has comments; the suggestions-only policy refuses a comment with policy-comment (comments, resolve, resolved, limit) and one in a header or a footer with policy-furniture. The marker kind, the marker message, requestMarker, requestSelectionMarker, the policy's lookups and submit's source option are gone. A direct deletion keeps a comment's markers.",
+  "reason": "The Yjs document format does not change. The ordered change format and protocol change within protocol version 3 and checkpoint manifest version 2, which no build has handed out. Ordered rooms admit only clients of their own code version, so old and new copies never share a room, and ordered rooms are not deployed yet, so no room, log or checkpoint holds the earlier shapes and no migration is needed.",
+  "tests": [
+    "packages/core/src/collaboration/ordered/__tests__/client/editor-comments-room.test.ts",
+    "packages/core/src/collaboration/ordered/__tests__/room-policy-comments.test.ts",
+    "packages/core/src/collaboration/ordered/__tests__/room-policy.test.ts",
+    "packages/core/src/collaboration/ordered/__tests__/protocol-codec.test.ts",
+    "packages/core/src/collaboration/ordered/__tests__/change-validate.test.ts",
+    "packages/core/src/collaboration/ordered/__tests__/without-comments.test.ts"
+  ],
+  "changeset": "ordered-room-comments",
+  "migration": null
+}

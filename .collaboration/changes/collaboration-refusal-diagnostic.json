@@ -1,0 +1,13 @@
+{
+  "impact": "no-impact",
+  "fields": [],
+  "before": "A room gate refusal reached the editing API as a bare GeneralException, and exec insertText answered ok: true, changed: false.",
+  "after": "The sync names it with debugInfo.innerError edit.collaboration-refused, and exec insertText answers ok: false with the reason.",
+  "reason": "Only how a local refusal is reported changes. No shared state, update, or room rule changes.",
+  "tests": [
+    "packages/editor-api/src/runtime/__tests__/runtime-collaboration-refusal.test.ts",
+    "packages/core/src/editor/__tests__/exec-insert-text-refusal.test.ts"
+  ],
+  "changeset": "collaboration-refusal-diagnostic",
+  "migration": null
+}

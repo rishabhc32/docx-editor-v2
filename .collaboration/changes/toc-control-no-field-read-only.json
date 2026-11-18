@@ -1,0 +1,13 @@
+{
+  "impact": "compatible",
+  "fields": [],
+  "before": "In a table of contents control that holds no TOC field, the editor accepted edits, and a room refused them as not covered.",
+  "after": "The editor refuses edits in the rows of such a control with its table of contents reason, alone and in a room.",
+  "reason": "Only the editor's local write check changes. Shared nodes, text offsets, operations, the room's validation, and package serialization remain unchanged; the room already refused these edits.",
+  "tests": [
+    "packages/core/src/editor/__tests__/toc-boundary-editing.test.ts",
+    "packages/core/src/collaboration/ordered/__tests__/client/editor-bookmarks-toc.test.ts"
+  ],
+  "changeset": "toc-control-no-field-read-only",
+  "migration": null
+}

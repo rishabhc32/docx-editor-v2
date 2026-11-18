@@ -1,0 +1,13 @@
+{
+  "impact": "compatible",
+  "fields": [],
+  "before": "In an ordered room, when one of a person's pending changes threw something other than a refusal as the client applied it again (after the room's changes or a reconnect), the session ended with remote-apply-failed and kept the change. Every later join applied it again and failed the same way, so the person was locked out until a reload, which lost their unsent edits. A throw while the client composed its list for the editor also ended the session, and the editor's detach and the session's destroy threw it again, so the page could not close the session.",
+  "after": "The client takes such a change back and refuses it by name with the reason apply-failed, as the room refuses such a change; changes that need it are refused too, the others are sent, and the session stays ready. The new onApplyError option gives the host the error. A sent change stays pending until the room orders or refuses it, so the room's order decides. A compose failure sets the status error (remote-apply-failed) and heals at a later publish; detach and destroy always complete.",
+  "reason": "Change messages, the change log, the protocol frames and the Yjs document format do not change. Only one client's handling of its own pending changes and of its publish changes; the room and other clients see the same order, and a change the client refuses was never sent or is decided by the room as before.",
+  "tests": [
+    "packages/core/src/collaboration/ordered/__tests__/client/editor-pending-apply-failed.test.ts",
+    "packages/core/src/collaboration/ordered/__tests__/client/editor-publish-failed-teardown.test.ts"
+  ],
+  "changeset": "ordered-pending-apply-failed",
+  "migration": null
+}

@@ -1,0 +1,13 @@
+{
+  "impact": "compatible",
+  "fields": [],
+  "before": "In an ordered room, a party's undo of the deletion of their own new column, or of all their own new words, sent a retract of the suggestion that the deletion had already taken back. The undo changed nothing, while the editor alone gave the column or the words back. A redo of a step that named a cell its own earlier change made was refused as hidden-target.",
+  "after": "The client's undo of a step whose last change, a deletion, took back all the step made sends the step's earlier changes again under new ids, as a redo does, and keeps the deletion for redo. A redo renames a new cell's node id too, so it names the cells the step makes again.",
+  "reason": "Only the client's choice of which existing changes to send for undo and redo changes. The room receives insert, insert-column and delete-column changes it already knows, with the same meaning, so the change log, its kinds and the Yjs document format do not change. An ordered room admits only clients of its own code version.",
+  "tests": [
+    "packages/core/src/collaboration/ordered/__tests__/client/editor-table-own-column-undo.test.ts",
+    "packages/core/src/collaboration/ordered/__tests__/client/editor-tables.test.ts"
+  ],
+  "changeset": null,
+  "migration": null
+}

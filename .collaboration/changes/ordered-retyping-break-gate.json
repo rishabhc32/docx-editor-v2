@@ -1,0 +1,12 @@
+{
+  "impact": "no-impact",
+  "fields": [],
+  "before": "A party's section break that retyped the next section went to the room, which refused it (policy-direct, package), and the client took it back.",
+  "after": "With the client option suggests: true, the client refuses that break before it sends, with the same code and reason. The room's check is unchanged.",
+  "reason": "Opt-in and client-local. The client refuses only what the room already refuses; no message, shared state or room rule changes.",
+  "tests": [
+    "packages/core/src/collaboration/ordered/__tests__/client/editor-retyping-break-gate.test.ts"
+  ],
+  "changeset": "ordered-retyping-break-gate",
+  "migration": null
+}

@@ -1,0 +1,14 @@
+{
+  "impact": "compatible",
+  "fields": [],
+  "before": "In an ordered room, a person's undo of a deletion that took back part of their own new words took back the whole insertion, and an undo of a deletion over their own new note's reference left the reference and the note gone, where the editor alone and Word give back only what the deletion took.",
+  "after": "Each item a deletion takes back for its own author names that change. The undo of that deletion sends a retract change that also names the change in its undo field, so exactly those items show again with their own addresses and suggestion, and the step's earlier edits stay to undo next, as in the editor alone.",
+  "reason": "The retract change gains an optional undo field; every other message, the change log and its kinds keep their meaning, and the Yjs document format does not change. Every copy applies the same rule to the same log, so every copy makes the same list. An ordered room admits only clients of its own code version, so the room and its pages always run the same engine and no older client sends or reads the new field. Ordered rooms are not deployed yet, so no room holds a log made under the old rule and no migration is needed.",
+  "tests": [
+    "packages/core/src/collaboration/ordered/__tests__/client/editor-undo-own-words.test.ts",
+    "packages/core/src/collaboration/ordered/__tests__/client/editor-table-own-column-undo.test.ts",
+    "packages/core/src/collaboration/ordered/__tests__/change-validate.test.ts"
+  ],
+  "changeset": "ordered-undo-own-take-back",
+  "migration": null
+}

@@ -1,0 +1,13 @@
+{
+  "impact": "compatible",
+  "fields": [],
+  "before": "In an ordered room, a party's cell press that changed no value (a fill the cell already had, pressed before another party's same pending fill reached them) still took the cell's pending records over, so the first party's suggestion lost its author and could not be rejected alone. In the editor alone, an author's fill and row height on a row with no row properties wrote two record ids, so Reject All kept the row height.",
+  "after": "A cell press that changes no value makes no suggestion and no record, as in the editor alone. An author's second table change over their own pending cell record keeps that record's id and date, so the fill and the height are one decision in the editor alone, as in the room.",
+  "reason": "Change messages, the change log and its kinds keep their meaning, and the Yjs document format does not change. Every copy applies the same rule to the same log, so every copy makes the same list. An ordered room admits only clients of its own code version, so the room and its pages always run the same engine. Ordered rooms are not deployed yet, so no room holds a log made under the old rule and no migration is needed.",
+  "tests": [
+    "packages/core/src/collaboration/ordered/__tests__/client/editor-cell-records.test.ts",
+    "packages/core/src/editor/__tests__/tracked-table-properties-commands.test.ts"
+  ],
+  "changeset": "table-cell-one-record",
+  "migration": null
+}

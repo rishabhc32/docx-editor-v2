@@ -1,0 +1,14 @@
+{
+  "impact": "compatible",
+  "fields": [],
+  "before": "A remote package kept the store's local undo and redo entries, which nothing in a room reads, and each remote caret address hint kept the document tree it was checked in. A long session kept hundreds of old trees and every cache keyed by their nodes.",
+  "after": "A remote package drops the store's local undo and redo entries, and a hint names its tree by a number. Undo and redo in a room still go to the room's history or the CRDT undo manager; without a remote package the store's history is unchanged.",
+  "reason": "Change messages, the change log, the Yjs document format, package serialization and the installed package do not change. Only this replica's local legacy history and its presence memo change, and neither is shared; undoing a dropped entry would have put back a package without the remote change.",
+  "tests": [
+    "packages/core/src/store/__tests__/tree-package-remote.test.ts",
+    "packages/core/src/collaboration/__tests__/presence-address-retention.test.ts",
+    "packages/core/src/collaboration/ordered/__tests__/client/editor-history-retention.test.ts"
+  ],
+  "changeset": "undo-history-memory",
+  "migration": null
+}

@@ -1,0 +1,14 @@
+{
+  "impact": "compatible",
+  "fields": [],
+  "before": "The checkpoint manifest (version 2) held the format, its version, the media and the persons. A record that one suggestion took from another (policy 2) was lost at a close: Word keeps one change record for each properties element, so the reopened run, paragraph or section held one record of the later suggestion, and the earlier suggestion no longer existed.",
+  "after": "The checkpoint manifest (version 3) also lists each takeover (takeovers: part, record, id, occurrence, taken) and the suggestions records were taken from (suggestions: author, date, attributes, person, revisions), keyed by where the composed file writes the holder's change record. openOrderedCheckpoint puts the taken records back with replaced, so a take-back gives them back, and orderedReplacedSuggestions names them. A version 2 manifest is refused (checkpoint-version). Exported Word files and the Word parts of a checkpoint do not change.",
+  "reason": "The Yjs document format and the ordered protocol do not change. Only the checkpoint manifest does, and every copy of a room opens the same checkpoint with the same code version, so old and new copies never read each other's manifests. Ordered rooms are not deployed yet, so no checkpoint holds version 2 and no migration is needed.",
+  "tests": [
+    "packages/core/src/collaboration/ordered/__tests__/client/editor-takeovers.test.ts",
+    "packages/core/src/collaboration/ordered/__tests__/client/editor-identity.test.ts",
+    "packages/core/src/collaboration/ordered/__tests__/checkpoint.test.ts"
+  ],
+  "changeset": "ordered-room-takeovers",
+  "migration": null
+}

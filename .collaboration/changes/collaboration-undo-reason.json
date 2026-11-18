@@ -1,0 +1,13 @@
+{
+  "impact": "no-impact",
+  "fields": [],
+  "before": "An undo or redo while the collaboration session could not write was refused with \"nothing to undo\" or \"nothing to redo\", and the keyboard lane reported nothing.",
+  "after": "The refusal names the session's reason, such as collaboration-session-not-ready, through exec and the keyboard lane. Sessions report it through the new optional EditorCollaborationSession.writeRefusal member.",
+  "reason": "Only the local refusal reason changes. writeRefusal reads readiness and reports nothing. No shared state, update, room rule, or stored representation changes.",
+  "tests": [
+    "packages/core/src/collaboration/ordered/__tests__/client/editor-undo-unready.test.ts",
+    "packages/pro/src/collaboration/__tests__/document-offline-editing.test.ts"
+  ],
+  "changeset": "collaboration-undo-reason",
+  "migration": null
+}

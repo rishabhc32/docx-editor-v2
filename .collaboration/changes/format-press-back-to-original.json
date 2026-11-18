@@ -1,0 +1,12 @@
+{
+  "impact": "compatible",
+  "fields": [],
+  "before": "In an ordered room, a party's toggle off of their own pending format (Underline pressed twice) wrote the property's off value (w:u w:val=\"none\") with a change record, so the room showed a card and the file kept a record that changed nothing.",
+  "after": "A property the editor's op leaves out is a removal, as the engine does. A suggested press that gives the words back the face they had before the presser's own pending format cancels those records, so no card and no record remain; undo of the press gives them back.",
+  "reason": "Change messages and their kinds keep their meaning; a removal is the property form this release adds, and the Yjs document format does not change. Every copy applies the same rule to the same log, so every copy makes the same list. An ordered room admits only clients of its own code version, so the room and its pages always run the same engine. Ordered rooms are not deployed yet, so no room holds a log made under the old rule and no migration is needed.",
+  "tests": [
+    "packages/core/src/collaboration/ordered/__tests__/client/editor-format-toggle-twice.test.ts"
+  ],
+  "changeset": "format-press-back-to-original",
+  "migration": null
+}

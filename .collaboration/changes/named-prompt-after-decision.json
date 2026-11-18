@@ -1,0 +1,13 @@
+{
+  "impact": "compatible",
+  "fields": [],
+  "before": "In an ordered room, the content that replaced the shown prompt of a content control that names a glossary prompt could go by a decision or a deletion. The room then showed the prompt units it loaded from the body again, with another person's pending suggestion on them and its card, while the editor alone, a file saved before and Word showed the glossary's prompt.",
+  "after": "After each change, every copy puts units of the glossary's prompt in place of the control's prompt units at the moment the content went, in the change's undo record; the replaced units are marked gone. A decision is final. When a deletion that is not a decision is taken back, the glossary's units go and the replaced units show again. A gone prompt unit holds no suggestion for the party rule on prompts.",
+  "reason": "Change messages, the change log and its kinds keep their meaning, and the Yjs document format does not change. The settle is deterministic and uses the change's own ids, so every copy that applies the same log makes the same list. An ordered room admits only clients of its own code version, so old and new clients never apply one log together.",
+  "tests": [
+    "packages/core/src/collaboration/ordered/__tests__/client/editor-controls-prompt-named.test.ts",
+    "packages/core/src/collaboration/ordered/__tests__/client/editor-controls-prompt-others.test.ts"
+  ],
+  "changeset": null,
+  "migration": null
+}

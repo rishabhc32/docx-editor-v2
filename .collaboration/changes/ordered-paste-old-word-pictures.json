@@ -1,0 +1,15 @@
+{
+  "impact": "compatible",
+  "fields": [],
+  "before": "In an ordered room, a paste that held a VML picture whose image older Word names by o:relid or r:pict, a VML picture with its link r:href, or a drawing extension or choice of a namespace the change format does not hold was refused (insertFragment.object). The editor alone's copy left an o:relid picture's image out.",
+  "after": "The change format carries a VML picture's image by o:relid and r:pict as media by hash, checked by content, as it carries r:id. A VML picture's link r:href is a picture address: left out beside an embedded copy, refused alone (external-picture-link), never fetched. A DrawingML extension or a choice of a namespace the format does not hold is left out by the sending client, as Word older than the namespace reads it; a choice-holder left with no choice travels as its fallback. The editor alone copies an o:relid picture with its image.",
+  "reason": "Change messages and the change log keep their meaning: the format accepts two more attribute names as media references, and every copy and the room read them with the same validator and apply, so every copy makes the same list. The validator still refuses every element and attribute the format does not name, and every picture address. An ordered room admits only clients of its own code version, so the room and its pages always run the same engine. Ordered rooms are not deployed yet, so no migration is needed.",
+  "tests": [
+    "packages/core/src/collaboration/ordered/__tests__/client/editor-paste-shapes.test.ts",
+    "packages/core/src/collaboration/ordered/__tests__/client/editor-paste.test.ts",
+    "packages/core/src/collaboration/ordered/__tests__/fragment-refusals.test.ts",
+    "packages/core/src/store/__tests__/clipboard-fragment-office-relid.test.ts"
+  ],
+  "changeset": "ordered-paste-old-word-pictures",
+  "migration": null
+}

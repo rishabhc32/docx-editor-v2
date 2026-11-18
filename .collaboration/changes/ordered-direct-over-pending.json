@@ -1,0 +1,12 @@
+{
+  "impact": "compatible",
+  "fields": [],
+  "before": "In an ordered room, the organiser's direct run format or paragraph change made over another person's pending one stayed after a reject of that pending change, while the editor alone, Word and the saved file reopened dropped it, so the live room and the saved file differed.",
+  "after": "A direct format or paragraph change names the pending records it was made over and goes with their reject, as Word keeps one change record and the editor alone drops it. Table, row and cell changes use the same shared rule as before.",
+  "reason": "Change messages, the change log and its kinds keep their meaning, and the Yjs document format does not change. Every copy applies the same rule to the same log, so every copy makes the same list. An ordered room admits only clients of its own code version, so the room and its pages always run the same engine. Ordered rooms are not deployed yet, so no room holds a log made under the old rule and no migration is needed.",
+  "tests": [
+    "packages/core/src/collaboration/ordered/__tests__/client/editor-direct-over-pending.test.ts"
+  ],
+  "changeset": "ordered-direct-over-pending",
+  "migration": null
+}

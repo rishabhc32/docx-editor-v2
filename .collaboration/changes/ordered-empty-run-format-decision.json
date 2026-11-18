@@ -1,0 +1,13 @@
+{
+  "impact": "compatible",
+  "fields": [],
+  "before": "In an ordered room, a run with nothing in it but its properties was kept whole as the file wrote it, so a decision on the file's w:rPrChange there (shared with runs of words) left the record in every copy's Word form: after Reject All a card stayed on every screen and the save kept the change.",
+  "after": "The run keeps the file's format record as its suggestion's, and compose writes its properties as the decision leaves them: the new ones for an accept, the old ones for a reject; while pending, the run stays as the file wrote it.",
+  "reason": "Change messages and the change log keep their meaning, and the Yjs document format does not change. Every copy loads and composes with the same code, so every copy writes the same run. Ordered rooms admit only clients of their own code version and are not deployed yet, so no migration is needed.",
+  "tests": [
+    "packages/core/src/collaboration/ordered/__tests__/decide-many.test.ts",
+    "packages/core/src/collaboration/ordered/__tests__/client/editor-decide-many.test.ts"
+  ],
+  "changeset": "ordered-empty-run-format",
+  "migration": null
+}

@@ -1,0 +1,10 @@
+{
+  "impact": "compatible",
+  "fields": [],
+  "before": "In an ordered room, the editor's Accept All and Reject All were refused whole, with no change sent, when one of the revisions they reached sat on some runs of an equation only (the list keeps such marks as file content).",
+  "after": "They send one decide change that names every other card, and the session reports the equation's marks once by name (acceptRevision.equation-part); the publish takes the editor's own write on them back. A decision that reaches only such marks is still refused by that name.",
+  "reason": "Only what the client translates changes; the change format, the messages and the log keep their meaning, and the room applies a decide change as before. Ordered rooms admit only clients of their own code version and are not deployed yet, so no migration is needed. The Yjs document format does not change.",
+  "tests": ["packages/core/src/collaboration/ordered/__tests__/client/editor-equations.test.ts"],
+  "changeset": "ordered-accept-all-equation",
+  "migration": null
+}

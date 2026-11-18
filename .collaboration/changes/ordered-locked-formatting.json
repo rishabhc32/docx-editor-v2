@@ -1,0 +1,13 @@
+{
+  "impact": "compatible",
+  "fields": [],
+  "before": "In an ordered room, every format inside a content-locked control was refused (locked), also when the editor's contentLockPolicy.allowFormattingInLockedContent was on, where the editor alone and the 2.x room let the format pass.",
+  "after": "OrderedRoomOptions.contentLockPolicy sets the room's lock relaxation, welcome sends it to every client, and the room and every copy apply each change with it. With allowFormattingInLockedContent, the organiser's direct format passes a content lock, as the editor alone lets an untracked restyle pass; a suggested format and a property that hides text stay refused. Without it, nothing changes.",
+  "reason": "Change messages, the change log and its kinds keep their meaning; welcome gains one optional field that a room without the option leaves out, so such a room sends the same frames as before. The room and every copy read the policy from the same source, so every copy applies the same rule to the same log. An ordered room admits only clients of its own code version, so the room and its pages always run the same engine. Ordered rooms are not deployed yet, so no migration is needed.",
+  "tests": [
+    "packages/core/src/collaboration/ordered/__tests__/client/editor-locked-formatting.test.ts",
+    "packages/core/src/collaboration/ordered/__tests__/protocol-codec.test.ts"
+  ],
+  "changeset": "ordered-locked-formatting",
+  "migration": null
+}

@@ -66,6 +66,13 @@ export interface Lane {
    * under one prefix rather than a single entry point.
    */
   readonly subpathPrefix?: string;
+  /**
+   * Further entry points whose source lives in this lane's directory, beside its own subpath.
+   *
+   * A consumer, or another lane, importing one of these imports THIS lane, so the import
+   * check has to map them here; without the list it read them as external and checked nothing.
+   */
+  readonly subpaths?: readonly string[];
 }
 
 /**
@@ -100,6 +107,9 @@ export const CORE_LANES: Readonly<Record<LaneName, Lane>> = Object.freeze({
     mayImport: ['store'],
     environment: 'neutral',
     subpath: './collaboration',
+    // The provider seam, and the experimental ordered suggestion model. Both run in a browser
+    // and on a server, so both stay in the neutral lane.
+    subpaths: ['./collaboration/replication', './collaboration/ordered'],
   },
   binding: {
     directory: 'src/binding',
@@ -109,7 +119,8 @@ export const CORE_LANES: Readonly<Record<LaneName, Lane>> = Object.freeze({
     subpath: './binding',
   },
   // The legacy sync, server, and clients lanes were deleted with PackageModel. The
-  // collaboration lane is its provider-neutral replacement and contains no CRDT or transport.
+  // collaboration lane is its provider-neutral replacement and contains no CRDT. Its ordered
+  // client's transports read no script global: the WebSocket one takes the host's own socket.
   layout: {
     directory: 'src/layout',
     package: null,

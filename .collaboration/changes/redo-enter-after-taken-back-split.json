@@ -1,0 +1,13 @@
+{
+  "impact": "compatible",
+  "fields": [],
+  "before": "In an ordered room, after a party's Enter split a content control or a link and the words beyond the caret went, the party's undo of the Enter left the split's close item, mark and open item hidden in the list. Placement counted that hidden close item as the container's end: a redo of the Enter put the break inside the container with no split, and compose threw on every copy that drew it (the party's client first, so its session stopped); typing at that place went inside the container.",
+  "after": "Placement reads the items between the caret and the container's end as the view does: hidden close items, marks and open items end and start nothing, and a rejected new link the view keeps still counts. The redo's break and the typed text go after the container's own close item, as in the editor alone.",
+  "reason": "Change messages, the change log and its kinds keep their meaning, and the Yjs document format does not change. Placement is deterministic on the shared list, so every copy that applies the same log makes the same list. An ordered room admits only clients of its own code version.",
+  "tests": [
+    "packages/core/src/collaboration/ordered/__tests__/client/editor-enter-redo-container.test.ts",
+    "packages/core/src/collaboration/ordered/__tests__/client/editor-controls-emptied-more.test.ts"
+  ],
+  "changeset": null,
+  "migration": null
+}

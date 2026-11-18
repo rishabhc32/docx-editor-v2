@@ -1,0 +1,13 @@
+{
+  "impact": "compatible",
+  "fields": [],
+  "before": "In an ordered room, one paragraph drawn alone (the publish of a write, and the place an edit reads) took as its own the items before a paragraph mark that a block control's emptying dropped: the words that went from the control's later paragraphs. Text typed in an empty paragraph after such a control went into the control, so the list hid the control's prompt while the editor showed it.",
+  "after": "A paragraph drawn alone joins nothing past a dropped mark, as the story's drawing, by one shared rule (joinsNothing). Typing there goes after the control, the control keeps its prompt, and every editor shows what its list composes.",
+  "reason": "Change messages, the change log and its kinds keep their meaning, and the Yjs document format does not change. Placement is deterministic, so every copy that applies the same log makes the same list. An ordered room admits only clients of its own code version, so the room and its pages always run the same engine. Ordered rooms are not deployed yet, so no room holds a log made under the old placement and no migration is needed.",
+  "tests": [
+    "packages/core/src/collaboration/ordered/__tests__/client/editor-controls-emptied-more.test.ts",
+    "packages/core/src/collaboration/ordered/__tests__/paragraph-compose.test.ts"
+  ],
+  "changeset": "ordered-dropped-marks",
+  "migration": null
+}

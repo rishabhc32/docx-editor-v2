@@ -1,0 +1,13 @@
+{
+  "impact": "compatible",
+  "fields": [],
+  "before": "In an ordered room, the suggestions-only policy accepted a party's own comment that named a discussion they opened as a marker change in a batch, written under the party's name. A host had to map the editor's selection to node ids itself to send a marker request.",
+  "after": "The suggestions-only policy refuses a party's marker in a batch of changes by name (policy-marker, reason marker); a party marks a discussion through the marker request, which keeps its checks. OrderedRoom.submit tells the policy how a change came (source), OrderedLocalRoom checks a marker message as a request, and the session's requestSelectionMarker marks the editor's held selection.",
+  "reason": "Change messages, the change log, the protocol frames and the Yjs document format do not change. A logged marker replays as before, because replay runs no policy; only a new party marker in a batch is refused, as the host writes a party's marker after its request.",
+  "tests": [
+    "packages/core/src/collaboration/ordered/__tests__/client/editor-comments-room.test.ts",
+    "packages/core/src/collaboration/ordered/__tests__/room-policy.test.ts"
+  ],
+  "changeset": "ordered-marker-requests",
+  "migration": null
+}

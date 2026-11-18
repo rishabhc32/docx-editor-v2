@@ -1,0 +1,13 @@
+{
+  "impact": "no-impact",
+  "fields": [],
+  "before": "A bookmark insert, delete, or keep-first write that the room's gate or the document refused answered exec with a general reason, such as \"insertBookmark was refused\".",
+  "after": "The refusal carries the room's code (for example ordered-refused) or the document's reason (for example \"this content is locked\").",
+  "reason": "Only the local refusal reason changes. No shared state, update, or room rule changes, and nothing new is sent to the room.",
+  "tests": [
+    "packages/core/src/collaboration/ordered/__tests__/client/editor-bookmark-refusal-reason.test.ts",
+    "packages/core/src/editor/__tests__/bookmark-refusal-reason.test.ts"
+  ],
+  "changeset": "bookmark-refusal-reason",
+  "migration": null
+}

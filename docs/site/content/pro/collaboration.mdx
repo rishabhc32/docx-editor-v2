@@ -42,6 +42,7 @@ flowchart LR
 | Recover local work | [Replica recovery](#recover-a-diverged-replica) and [offline editing](#edit-offline) |
 | Connect a server agent | [Server agent redlines](#let-a-server-agent-propose-redlines) |
 | Upgrade a deployment | [Client checks and saved-room migration](/docs/2.x/pro/collaboration-versions) |
+| Let a server check and order every change | [Ordered collaboration rooms](/docs/2.x/pro/ordered-collaboration) |
 
 Check client compatibility before synchronization. Validate saved rooms before loading them into a live document. Prepare each server document before applying updates. Keep the editor mounted after connection failures so users can save local work.
 
@@ -1103,6 +1104,8 @@ Direct automation writes retain timed capture and can share an undo step within 
 
 Caret formatting has a separate local undo step. It does not create a shared document edit. Undo and redo preserve other participants' edits.
 
+If the session cannot write, for example while it is `disconnected` with `offlineEditing: false`, `editor.exec({ type: 'undo' })` and `redo` return `{ ok: false, code: 'unsupported', reason }` with the session's refusal code, such as `collaboration-session-not-ready`. The keyboard shortcuts report the same reason through `lastRejection`. A custom session reports this reason through the optional `writeRefusal()` member of `EditorCollaborationSession`.
+
 ### Concurrent editing
 
 Participants see the same document after their updates synchronize. These rules describe edits to the same content:
@@ -1200,6 +1203,7 @@ The **Recovery** column uses these terms:
 | `collaboration-session-destroyed` | The session was destroyed. | Refused edit | Mount a new session. |
 | `collaboration-text-limit` | One insert is longer than the shared text limit. | Refused edit | Insert the text in smaller pieces. |
 | `experimental-collaboration-body-text-only` | A review write has no named intent. | Refused edit | Use a named review command. |
+| `ordered-unsupported-op`, `ordered-opaque-write`, `ordered-refused` | Only an ordered room's session (`@docx-editor.dev/core/collaboration/ordered`) returns these: the edit holds an operation the room cannot record, is a write the session cannot see, or the room refused it. | Refused edit | Read the session's refusal report for the operation or the reason. |
 | `invalid-document-id`, `invalid-session-id`, `invalid-identity`, `invalid-identity-color` | An option is empty or too long. `setIdentity` also throws the identity codes. | Thrown | Fix the value. |
 | `already-initialized` | A `create` bootstrap found a seeded room. | Thrown | Use `join` or `create-or-join`. |
 | `document-id-mismatch` | The room holds another `documentId`, or an editor of another document attached. | Thrown or terminal | Check the room id and the document id. |

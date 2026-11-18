@@ -1,0 +1,12 @@
+{
+  "impact": "compatible",
+  "fields": [],
+  "before": "In an ordered room, a content control that was another person's pending insertion kept that insertion after the organiser deleted its words directly, and typing in the control was then refused (text-differs). The editor alone drops the person's insertion around the control.",
+  "after": "A direct edit that empties a control which is another person's pending insertion takes that insertion off the control, as the editor alone does: the control shows its prompt, takes typing, and stays after a decision on the person's suggestion. Taking the edit back gives the insertion back.",
+  "reason": "Change messages, the change log and its kinds keep their meaning, and the Yjs document format does not change. The settle after each change applies one rule on every copy, in the change's undo record, so every copy makes the same list. An ordered room admits only clients of its own code version, so the room and its pages always run the same engine. Ordered rooms are not deployed yet, so no migration is needed.",
+  "tests": [
+    "packages/core/src/collaboration/ordered/__tests__/client/editor-controls-emptied-more.test.ts"
+  ],
+  "changeset": "ordered-control-in-insertion",
+  "migration": null
+}

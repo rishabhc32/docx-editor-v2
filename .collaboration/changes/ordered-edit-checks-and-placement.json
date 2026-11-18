@@ -1,0 +1,17 @@
+{
+  "impact": "compatible",
+  "fields": [],
+  "before": "An ordered room accepted a new style name with an unpaired surrogate (every later save then threw), read sections: null as no sections, and put a top-level unknown key raw into a refusal path. It applied a direct remove-link or delete-paragraph in a text box that no longer shows, put words typed between two controls into the first one when one control id was a text prefix of the other, refused a new control there, reported a false takeover of an author's own press on their new paragraph, and refused a building block in a temporary gallery control. applyOrderedEdit retargeted a whole link when a linkTarget named only one of from and to.",
+  "after": "The validator refuses the style name and level text as invalid-text, sections: null as invalid-type, and labels a top-level key like a nested one. Every change kind that names an item uses one lookup that refuses an item or holder that does not show. Containers compare by whole segments. A press skips records that write no change record. A temporary gallery control takes the block and goes, as in the editor alone. applyOrderedEdit refuses a linkTarget with one end as invalid-edit.",
+  "reason": "Change messages, the change log and its kinds keep their meaning, and the Yjs document format does not change. Each fix makes the room refuse a change it applied wrongly, or apply a change it refused, the same on every copy. An ordered room admits only clients of its own code version, so the room and its pages always run the same engine. Ordered rooms are not deployed yet, so no room holds a log applied under the old rules and no migration is needed.",
+  "tests": [
+    "packages/core/src/collaboration/ordered/__tests__/resources.test.ts",
+    "packages/core/src/collaboration/ordered/__tests__/change-validate.test.ts",
+    "packages/core/src/collaboration/ordered/__tests__/edits.test.ts",
+    "packages/core/src/collaboration/ordered/__tests__/text-boxes.test.ts",
+    "packages/core/src/collaboration/ordered/__tests__/client/editor-control-id-prefix.test.ts",
+    "packages/core/src/collaboration/ordered/__tests__/client/editor-controls-gallery.test.ts"
+  ],
+  "changeset": "ordered-edit-checks-and-placement",
+  "migration": null
+}

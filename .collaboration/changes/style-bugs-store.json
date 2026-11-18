@@ -1,0 +1,19 @@
+{
+  "impact": "compatible",
+  "fields": [],
+  "before": "Several engine edits wrote a wrong result: a paste or Enter over a content control's prompt removed a field or a comment reference elsewhere in the paragraph; a tracked row height on a row with its own table exceptions replaced them with the table's; a tracked new table, row or table separator left empty paragraph properties after Accept; removing or rewriting a custom node in a header left its payload in the main part's store; a pasted diagram whose drawing part did not travel kept the source story's relationship id; and a text box's fallback copy kept a paragraph id that another paragraph held when its live copy was minted anew at load. The text limit gate's comment said it caught a short insert into a text near the limit.",
+  "after": "Each edit keeps what it did not change: only the empty run made for typing goes, the row keeps its own exceptions in its anchor and its record, the stamp's containers take the mark id family so Accept removes them, the payload goes from the main part's store, the pasted data part drops the stale drawing extension, and the fallback copy takes the id its live copy ends with. The gate's comment says what it catches.",
+  "reason": "No message, log entry, shared node or field changes meaning, and the Yjs document format does not change. In a Yjs session the replica that makes an edit publishes its result, and peers read that result. The mark container ids are replica-local node ids, never wire identity. Paragraph ids change only for a file whose text box repeats another paragraph's id, and a room takes them from its shared state or, in an ordered room, from the same code version on every copy: an ordered room admits only clients of its own code version. Ordered rooms are not deployed yet, so no migration is needed.",
+  "tests": [
+    "packages/core/src/store/__tests__/tracked-fragment-insert.test.ts",
+    "packages/core/src/editor/__tests__/block-prompt-enter.test.ts",
+    "packages/core/src/store/__tests__/revision-table-row-height-authors.test.ts",
+    "packages/core/src/store/__tests__/custom-node-payload-write.test.ts",
+    "packages/core/src/store/__tests__/insert-table-op.test.ts",
+    "packages/core/src/store/__tests__/revision-row-properties.test.ts",
+    "packages/core/src/store/__tests__/para-id.test.ts",
+    "packages/core/src/store/__tests__/clipboard-fragment-objects.test.ts"
+  ],
+  "changeset": "style-bugs-store",
+  "migration": null
+}

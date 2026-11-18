@@ -1,0 +1,13 @@
+{
+  "impact": "compatible",
+  "fields": [],
+  "before": "In an ordered room, only the main document's text boxes were stories, so an edit in a text box in a header or a footer (the editing API's shape body) was refused (out-of-step or not-covered).",
+  "after": "A text box in a header or a footer is a story of its own, as a main document's text box is: the organiser's edit reaches every copy and the saved file as in the editor alone, and a party's edit there is refused as in the rest of the header or footer.",
+  "reason": "Change messages, the change log and its kinds keep their meaning, and the Yjs document format does not change. Every copy loads the same Word file the same way, so every copy holds the same text box stories and names. An ordered room admits only clients of its own code version, so the room and its pages always run the same engine. Ordered rooms are not deployed yet, so no room holds a log made under the old load and no migration is needed.",
+  "tests": [
+    "packages/core/src/collaboration/ordered/__tests__/client/editor-text-boxes-furniture.test.ts",
+    "packages/core/src/collaboration/ordered/__tests__/text-box-reopen.test.ts"
+  ],
+  "changeset": "ordered-furniture-text-boxes",
+  "migration": null
+}

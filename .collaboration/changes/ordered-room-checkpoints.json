@@ -1,0 +1,14 @@
+{
+  "impact": "compatible",
+  "fields": [],
+  "before": "An ordered room's file was always a Word file that held every media part's bytes, so each close wrote every picture of the document again. Pages read the file's own pictures from the file.",
+  "after": "An ordered room's file may also be a checkpoint (writeOrderedCheckpoint): the Word file's parts without its media parts, in the same order, and one manifest part (/ordered-checkpoint.json, format docx-editor.dev/ordered-checkpoint, version 1) that names each media part by part name, SHA-256, content type, size and place. openOrderedCheckpoint loads it with no media bytes; a page reads each referenced part through its media reader, a change that copies one names its hash with no upload, and the room admits a change that names a referenced hash. composeOrderedPackage, orderedPackageBytes and writeOrderedPackage write the same Word file as from the Word file it came from. A reader refuses another format or version by name.",
+  "reason": "The Yjs document format does not change. Change messages, the change log and its kinds keep their meaning, and a change names media by SHA-256 as before. Only the room's file can now be a checkpoint, which a page tells from a Word file by the manifest part; a Word file that holds that part is refused by name. Ordered rooms are not deployed yet, so no room holds an earlier file and no migration is needed.",
+  "tests": [
+    "packages/core/src/collaboration/ordered/__tests__/checkpoint.test.ts",
+    "packages/core/src/collaboration/ordered/__tests__/client/editor-checkpoint.test.ts",
+    "packages/core/src/collaboration/ordered/__tests__/package-writer.test.ts"
+  ],
+  "changeset": "ordered-room-checkpoints",
+  "migration": null
+}

@@ -1,0 +1,10 @@
+{
+  "impact": "compatible",
+  "fields": [],
+  "before": "In an ordered room, a later deletion of a rejected move's words, or of its paragraph mark, was written as a w:moveFrom of the deleting person without range markers, so a save and reopen read it as a new move and wrote it again with range markers.",
+  "after": "Only a pending move's own deletion is written as w:moveFrom. A later deletion of a decided move's words is a plain w:del, and the change targets read it as struck text, so a save and reopen keep the document.",
+  "reason": "Change messages, the change log and its kinds keep their meaning, and the Yjs document format does not change. Only how a copy composes and targets an item that a decided move labels changes; every copy of one code version applies the same log the same way, and an ordered room admits only clients of its own code version.",
+  "tests": ["packages/core/src/collaboration/ordered/__tests__/move-into-link.test.ts"],
+  "changeset": "ordered-rejected-move-deletion",
+  "migration": null
+}

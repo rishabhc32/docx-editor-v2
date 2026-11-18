@@ -1,0 +1,13 @@
+{
+  "impact": "compatible",
+  "fields": [],
+  "before": "In an ordered room, one paragraph drawn alone (the publish of a write, and the place an edit reads) took as its own the items of a block before it that the story's drawing leaves out: a cell its author took back, or a note whose references show nowhere. Text typed at the mark of the cell after a taken-back cell went into that cell, where no copy and no save shows it, and the editor showed a note's markers or a cell's text that the list does not hold.",
+  "after": "A paragraph drawn alone leaves out the same blocks as the story's drawing, with every item in them, by one shared rule. Typing there goes into the cell that shows, and every editor shows what its list composes.",
+  "reason": "Change messages, the change log and its kinds keep their meaning, and the Yjs document format does not change. Placement is deterministic, so every copy that applies the same log makes the same list. An ordered room admits only clients of its own code version, so the room and its pages always run the same engine. Ordered rooms are not deployed yet, so no room holds a log made under the old placement and no migration is needed.",
+  "tests": [
+    "packages/core/src/collaboration/ordered/__tests__/client/editor-left-out-blocks.test.ts",
+    "packages/core/src/collaboration/ordered/__tests__/paragraph-compose.test.ts"
+  ],
+  "changeset": "ordered-left-out-blocks",
+  "migration": null
+}

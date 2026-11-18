@@ -1,0 +1,13 @@
+{
+  "impact": "no-impact",
+  "fields": [],
+  "before": "A format, indent, list, deletion, or typing over a range that ended on a page still being laid out, or in a paragraph hidden whole, did nothing and reported nothing.",
+  "after": "The write finishes any pending layout first and applies to the whole range. A range that ends in text the page does not show is refused locally with a named reason, and nothing is sent to the room.",
+  "reason": "The written operations are the ones the same command already writes for a laid-out range. A refused write sends nothing. No shared state, update, or room rule changes.",
+  "tests": [
+    "packages/core/src/collaboration/ordered/__tests__/client/editor-unplaced-selection-write.test.ts",
+    "packages/core/src/editor/__tests__/unplaced-selection-write.test.ts"
+  ],
+  "changeset": "unplaced-selection-write",
+  "migration": null
+}

@@ -1,0 +1,13 @@
+{
+  "impact": "compatible",
+  "fields": [],
+  "before": "In an ordered room, an edit of a legacy text form field inside an inline content control copied the whole control, so its other words showed twice. An edit whose engine-built words copied another person's pending move (that control, a new repeating item) kept the move's range ids in the revision id table, and a take-back did not remove them, so a copy that took its pending change back and applied it again gave other Word ids than the room. The copy also noted the move as one whose range markers are items, so the save wrote the move's own halves without range markers and a reopen added them.",
+  "after": "A form field edit copies only the field's own runs. An engine-built copy keeps no Word id, a take-back removes what a load inside an edit added to the document's tables, and a copy of a move the document holds is plain words without the move's range markers, so every copy gives the room's Word ids and a save and reopen keeps the document.",
+  "reason": "Change messages, the change log and its kinds keep their meaning, and the Yjs document format does not change. Only how a copy applies a form field edit and an engine-built copy, and what its take-back restores, changes; every copy of one code version applies the same log the same way, and an ordered room admits only clients of its own code version.",
+  "tests": [
+    "packages/core/src/collaboration/ordered/__tests__/copied-moves.test.ts",
+    "packages/core/src/collaboration/ordered/__tests__/client/editor-controls-repeating.test.ts"
+  ],
+  "changeset": "ordered-copied-moves",
+  "migration": null
+}

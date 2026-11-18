@@ -1,0 +1,12 @@
+{
+  "impact": "compatible",
+  "fields": [],
+  "before": "In an ordered room, an undo of a tab, a line or page break, a new note, or pasted lines inside one's own suggested words took back the whole suggestion, where the editor alone and Word take back only that edit.",
+  "after": "Enter's new mark and split container edges, and a new note's items, added to one's own earlier pending suggestion are noted by change, as typed text is. An undo of a tab, a break, Enter, a note, or pasted lines inside one's own pending words takes back that commit alone, by the retract change's undo field.",
+  "reason": "No message, field or change kind changes, and the Yjs document format does not change: the retract change's undo field now also takes back the items a split or a new note added to the sender's own earlier suggestion. Every copy applies the same rule to the same log, so every copy makes the same list. An ordered room admits only clients of its own code version, so the room and its pages always run the same engine. Ordered rooms are not deployed yet, so no room holds a log made under the old rule and no migration is needed.",
+  "tests": [
+    "packages/core/src/collaboration/ordered/__tests__/client/editor-undo-own-words.test.ts"
+  ],
+  "changeset": "ordered-undo-inside-own-words",
+  "migration": null
+}

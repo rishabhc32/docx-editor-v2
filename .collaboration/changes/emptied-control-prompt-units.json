@@ -1,0 +1,14 @@
+{
+  "impact": "compatible",
+  "fields": [],
+  "before": "In an ordered room, a decision or a direct edit that emptied a content control with no prompt drew the control's prompt in the composed part only. The list held no units for that prompt, so the editor's text differed from the list's and typing into the control was refused as text-differs.",
+  "after": "After each change, every copy gives such a control the prompt the engine writes, as list units in the change's undo record, and the control's open item shows a prompt. A decision's words are marked gone; when a direct emptying is taken back, the prompt's units go for good and the control is as it was. Typing then replaces the prompt as in the editor alone, and a suggestion over it keeps the prompt in the glossary.",
+  "reason": "Change messages, the change log and its kinds keep their meaning, and the Yjs document format does not change. The settle is deterministic and uses the change's own ids, so every copy that applies the same log makes the same list. An ordered room admits only clients of its own code version, so old and new clients never apply one log together.",
+  "tests": [
+    "packages/core/src/collaboration/ordered/__tests__/client/editor-controls-emptied.test.ts",
+    "packages/core/src/collaboration/ordered/__tests__/prompts.test.ts",
+    "packages/pro/src/collaboration/__tests__/document-control-prompts.test.ts"
+  ],
+  "changeset": null,
+  "migration": null
+}

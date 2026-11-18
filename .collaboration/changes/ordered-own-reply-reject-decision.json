@@ -1,0 +1,12 @@
+{
+  "impact": "compatible",
+  "fields": [],
+  "before": "In an ordered room, the editor's reject of a person's own change inside another author's suggestion sent one decide change for the whole card, so the other author's suggestion was rejected too. An undo after it sent an empty retract.",
+  "after": "It sends one retract of that person's own suggestion; the other author's suggestion stays pending. Their undo gives the change back and redo takes it back again. A reject of a card the person leads, or of another person's revision, is still a decide change for the whole card.",
+  "reason": "Only what the client translates changes; the change format, the messages and the log keep their meaning, and the room applies a retract change as before. Ordered rooms admit only clients of their own code version and are not deployed yet, so no migration is needed. The Yjs document format does not change.",
+  "tests": [
+    "packages/core/src/collaboration/ordered/__tests__/client/editor-own-reply-reject.test.ts"
+  ],
+  "changeset": "ordered-own-reply-reject",
+  "migration": null
+}

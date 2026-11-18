@@ -1,0 +1,14 @@
+{
+  "impact": "compatible",
+  "fields": [],
+  "before": "In an ordered room, Clear All Formatting and any run, mark or paragraph press that took off a property with no off value (a font, a size, a colour, shading, a style, a paragraph's alignment, indents or list) was refused as format-removes-property, mark-removes-property or paragraph-removes-property.",
+  "after": "A format, mark-format or paragraph-property change may name a property it takes off (remove: true, alone). The room applies it as the engine's property ops do, so Clear All Formatting gives the editor alone's result, directly for the organiser and as a suggestion for a party.",
+  "reason": "Existing change messages keep their meaning; the removal is a new optional form of a property entry, and the Yjs document format does not change. Every copy applies the same rule to the same log, so every copy makes the same list. An ordered room admits only clients of its own code version, so the room and its pages always run the same engine and an older client never reads a removal. Ordered rooms are not deployed yet, so no room holds a log made under the old rule and no migration is needed.",
+  "tests": [
+    "packages/core/src/collaboration/ordered/__tests__/client/editor-clear-formatting.test.ts",
+    "packages/core/src/collaboration/ordered/__tests__/change-validate.test.ts",
+    "packages/core/src/collaboration/ordered/__tests__/client/translate.test.ts"
+  ],
+  "changeset": "room-clear-formatting",
+  "migration": null
+}

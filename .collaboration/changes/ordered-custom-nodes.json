@@ -1,0 +1,13 @@
+{
+  "impact": "compatible",
+  "fields": [],
+  "before": "In an ordered room, a custom node (a data chip) that an editor or the editing API inserted, updated or removed was taken back by the room or refused, because the write reached the editor's document past the collaboration gate and its payload lived in a custom XML part the room did not carry.",
+  "after": "A custom node write goes through the collaboration gate with its package. The new control carries its payload in the insert-control change, the room keeps it as a custom XML resource, and every copy and the saved file hold the node in its store, as in the editor alone. A node id that another shown control already binds is refused by name (name-taken).",
+  "reason": "The change adds an optional payload field to the insert-control change and a new resource kind; existing changes keep their meaning, and the Yjs document format does not change. Every copy applies the same rule to the same log, so every copy makes the same list. An ordered room admits only clients of its own code version, so the room and its pages always run the same engine. Ordered rooms are not deployed yet, so no room holds a log made under the old rule and no migration is needed.",
+  "tests": [
+    "packages/pro/src/__tests__/custom-nodes-ordered-room.test.ts",
+    "packages/core/src/collaboration/ordered/__tests__/client/editor-custom-nodes.test.ts"
+  ],
+  "changeset": "ordered-custom-nodes",
+  "migration": null
+}

@@ -1,0 +1,10 @@
+{
+  "impact": "compatible",
+  "fields": [],
+  "before": "In an ordered room, a paragraph of a new table, row or other block the engine built kept the w14:paraId the engine minted on a scratch part. Two new tables before the same paragraph could take the same ids, and a save and reopen gave the second table's paragraphs new ids.",
+  "after": "Every paragraph of a block an edit builds takes its w14:paraId and w14:textId from the change's id, past every id the story and the room's earlier changes hold, so each paragraph has its own id and a saved file reopens to the same document.",
+  "reason": "Change messages, the change log and its kinds keep their meaning, and the Yjs document format does not change. Only the paragraph ids a copy gives the blocks a change builds change; every copy of one code version applies the same log the same way, and an ordered room admits only clients of its own code version.",
+  "tests": ["packages/core/src/collaboration/ordered/__tests__/client/editor-tables.test.ts"],
+  "changeset": "ordered-new-table-paragraph-ids",
+  "migration": null
+}

@@ -1,0 +1,10 @@
+{
+  "impact": "compatible",
+  "fields": [],
+  "before": "In an ordered room, the words a person typed in their own pending new row or cell in a later change were a card of their own, so a decision of the row's card left them a suggestion, also in the saved file.",
+  "after": "They join the row's or cell's card, so one decision decides the row and its words, as the editor alone shows them as one card.",
+  "reason": "The card rule changes on every copy the same way, since every copy runs the same code; the change format, the messages and the log keep their meaning. A decide change names whole cards, so a client and room on this code agree. Ordered rooms admit only clients of their own code version and are not deployed yet, so no migration is needed. The Yjs document format does not change.",
+  "tests": ["packages/core/src/collaboration/ordered/__tests__/client/editor-row-words.test.ts"],
+  "changeset": "ordered-row-words-card",
+  "migration": null
+}

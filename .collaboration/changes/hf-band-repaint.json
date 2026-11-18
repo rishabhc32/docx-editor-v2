@@ -1,0 +1,14 @@
+{
+  "impact": "no-impact",
+  "fields": [],
+  "before": "A local, remote, or taken-back header or footer change rebuilt every painted page that shows the story.",
+  "after": "Only the header and footer layer of those pages is painted again; the pages, their body, and its blocks are kept.",
+  "reason": "Only local paint reuse changes. Shared nodes, text offsets, operations, presence, and package serialization remain unchanged.",
+  "tests": [
+    "packages/core/src/editor/__tests__/hf-band-repaint.test.ts",
+    "packages/core/src/collaboration/ordered/__tests__/client/editor-hf-band-repaint.test.ts",
+    "packages/pro/src/collaboration/__tests__/document-header-footer-editing.test.ts"
+  ],
+  "changeset": "hf-band-repaint",
+  "migration": null
+}

@@ -1,0 +1,14 @@
+{
+  "impact": "compatible",
+  "fields": [],
+  "before": "An ordered room loaded the stories only, so a Word file's tracked changes to style definitions (change records in the styles part) had no suggestion: nobody in a room could decide them, Accept All left them, and they stayed in the save. The editor's accept of one style card found the card by its w:id, author and date alone, so it could decide a body card with the same three values. A file's format change on a run with no text and a revision of its own made no card, so a host's Accept all left it.",
+  "after": "Load makes one pending suggestion with no items for each card of the styles part, after the stories, so every copy derives the same id; a decide change names it as any other card, and compose writes the styles part from the file's with the decided records resolved by the engine. The client finds a style card by its part and element as well. A pending format record on an empty run that shows is a card.",
+  "reason": "The change format, the messages and the log do not change: a decide change names style cards as it names every card. Every copy loads, decides and composes with the same code, so every copy derives the same suggestions and writes the same styles part. Ordered rooms admit only clients of their own code version and are not deployed yet, so no migration is needed. The Yjs document format does not change.",
+  "tests": [
+    "packages/core/src/collaboration/ordered/__tests__/part-revisions.test.ts",
+    "packages/core/src/collaboration/ordered/__tests__/client/editor-style-revisions.test.ts",
+    "packages/core/src/collaboration/ordered/__tests__/client/editor-empty-run-format.test.ts"
+  ],
+  "changeset": "ordered-style-revisions",
+  "migration": null
+}

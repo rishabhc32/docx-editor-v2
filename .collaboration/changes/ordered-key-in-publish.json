@@ -1,0 +1,10 @@
+{
+  "impact": "compatible",
+  "fields": [],
+  "before": "In an ordered room, a key the editor committed while the client gave it the list's version (a host that reads the editor on each change lands waiting typing there) was admitted by the gate and then taken back with no word, as the client did not count that commit.",
+  "after": "The client counts an admitted commit inside its publish as any other commit, so the key's change is sent and the key stays on every editor.",
+  "reason": "Change messages, the change log, the protocol frames and the Yjs document format do not change. Only the client's own bookkeeping of the editor's commits changes.",
+  "tests": ["packages/core/src/collaboration/ordered/__tests__/client/editor-two.test.ts"],
+  "changeset": "ordered-key-in-publish",
+  "migration": null
+}

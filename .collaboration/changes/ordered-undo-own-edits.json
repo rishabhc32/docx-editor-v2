@@ -1,0 +1,13 @@
+{
+  "impact": "compatible",
+  "fields": [],
+  "before": "In an ordered room, an undo of typing over part of one's own suggested words, or of a format on them, took back the whole suggestion, where the editor alone and Word take back only that edit.",
+  "after": "An undo takes back exactly the last edit of one's own pending words: the words typed over come back and the new ones go, and a format comes off and leaves the words. A format on one's own pending words is now a record of one's own suggestion with no change record, and the retract change's undo field names the edits to take back.",
+  "reason": "The retract change's optional field is now named undo and also covers typing into and formatting one's own pending words; every other message, the change log and its kinds keep their meaning, and the Yjs document format does not change. Every copy applies the same rule to the same log, so every copy makes the same list. An ordered room admits only clients of its own code version, so the room and its pages always run the same engine. Ordered rooms are not deployed yet, so no room holds a log made under the old rule and no migration is needed.",
+  "tests": [
+    "packages/core/src/collaboration/ordered/__tests__/client/editor-undo-own-words.test.ts",
+    "packages/core/src/collaboration/ordered/__tests__/change-validate.test.ts"
+  ],
+  "changeset": "ordered-undo-own-edits",
+  "migration": null
+}

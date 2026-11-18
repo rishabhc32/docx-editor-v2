@@ -243,6 +243,27 @@ describe('every lane has somewhere to be imported from (task 10.1)', () => {
     }
   });
 
+  test("every further subpath is exported and resolves into its lane's directory", () => {
+    // `subpaths` maps an entry point to the lane that owns it. A name with no export, or with
+    // source in another lane, would map imports to the wrong lane.
+    const exports = Object.keys(coreManifest.exports);
+    const paths: Record<string, string[]> = JSON.parse(
+      readFileSync(join(PACKAGES, 'core', 'tsconfig.json'), 'utf8')
+    ).compilerOptions.paths;
+    const declared = laneNames.flatMap((lane) =>
+      (CORE_LANES[lane].subpaths ?? []).map((subpath) => ({ lane, subpath }))
+    );
+    expect(declared.length).toBeGreaterThan(0);
+    for (const { lane, subpath } of declared) {
+      const source = paths[`@docx-editor.dev/core${subpath.slice(1)}`]?.[0] ?? '';
+      expect({ subpath, exported: exports.includes(subpath), inLane: source }).toEqual({
+        subpath,
+        exported: true,
+        inLane: expect.stringMatching(new RegExp(`^\\./${CORE_LANES[lane].directory}/`)),
+      });
+    }
+  });
+
   test('each lane declares the directory it will occupy under the core package', () => {
     for (const lane of laneNames) {
       expect(CORE_LANES[lane].directory).toBe(`src/${lane}`);

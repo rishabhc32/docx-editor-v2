@@ -63,6 +63,7 @@ The root exports editor creation, contracts, font helpers, control definitions, 
 | `./automation` | The object model behind `@docx-editor.dev/editor-api`. |
 | `./collaboration` | Provider-neutral collaboration session contracts. |
 | `./collaboration/replication` | Replication helpers for collaboration providers. |
+| `./collaboration/ordered` | Experimental ordered suggestion model: Word load and compose of suggestion items. |
 | `./styles/editor.css` | The one editor stylesheet, shared by packaged and custom chrome. |
 
 ## Architecture

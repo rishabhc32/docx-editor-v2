@@ -1,0 +1,13 @@
+{
+  "impact": "compatible",
+  "fields": [],
+  "before": "In an ordered room, a part of a content control that Enter split, or a block control of several paragraphs, got no prompt units when an edit or a decision emptied it, so typing there was refused as text-differs. Enter in a prompt that showed again after a decision drew a prompt again, and its undo did not show the prompt. A party's Enter taken back while a part showed its prompt could fail to draw.",
+  "after": "After each change, every copy gives such a control the prompt the engine writes as units: a split part before the edge that ends it, a block control in its first paragraph with its later paragraph marks marked gone and dropped. A decision's words in a loaded prompt go for good at the decision. Taking the edit or the Enter back gives the control back as it was. Settle state lives in the change's undo record.",
+  "reason": "Change messages, the change log and its kinds keep their meaning, and the Yjs document format does not change. The settles are deterministic and use the change's own ids, so every copy that applies the same log makes the same list. An ordered room admits only clients of its own code version.",
+  "tests": [
+    "packages/core/src/collaboration/ordered/__tests__/client/editor-controls-emptied-more.test.ts",
+    "packages/core/src/collaboration/ordered/__tests__/client/editor-controls-emptied.test.ts"
+  ],
+  "changeset": null,
+  "migration": null
+}

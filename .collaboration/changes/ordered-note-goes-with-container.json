@@ -1,0 +1,10 @@
+{
+  "impact": "compatible",
+  "fields": [],
+  "before": "In an ordered room, a change that names its whole story (a row or column deletion, a picked control value, a move) did not draw the notes part again, so every editor kept a note whose reference the change hid, while the room's list and the saved file left it out.",
+  "after": "The publish after such a change also draws the notes part of each note reference the change reaches, so every editor shows the list's notes.",
+  "reason": "Change messages, the change log and its kinds keep their meaning, and the Yjs document format does not change. Only which parts a client draws again into its own editor after a change changes; the room's list and its saved file are the same as before.",
+  "tests": ["packages/core/src/collaboration/ordered/__tests__/client/editor-notes.test.ts"],
+  "changeset": "ordered-note-goes-with-container",
+  "migration": null
+}

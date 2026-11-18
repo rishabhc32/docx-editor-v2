@@ -1,0 +1,10 @@
+{
+  "impact": "compatible",
+  "fields": [],
+  "before": "In an ordered room, a toc-result change applied when its separator and end were not one TOC field's own pair, for example an end of a row's PAGEREF field inside the row's link. No copy then composed the body, so every later save, close and reopen of the room failed. A bookmark change could also remove another bookmark's end.",
+  "after": "Every copy refuses such a toc-result change by name (not-one-field): a field whose instruction is no TOC, a separator inside an inline container, an end of a field inside the result or of a later field, or an end inside a link. A bookmark change refuses an end that is not the end of a shown start of its name (invalid-edit). The room never orders these changes.",
+  "reason": "Change messages, the change log and its kinds keep their shape, and the Yjs document format does not change. Only the set of changes a copy refuses widens, toward changes no copy could compose; the editor never makes them. Every copy of one code version refuses the same changes, and an ordered room admits only clients of its own code version.",
+  "tests": ["packages/core/src/collaboration/ordered/__tests__/fields-apply.test.ts"],
+  "changeset": "toc-result-own-field",
+  "migration": null
+}

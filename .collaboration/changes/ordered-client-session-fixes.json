@@ -1,0 +1,16 @@
+{
+  "impact": "compatible",
+  "fields": [],
+  "before": "A page that joined read only the first four missing catch-up pictures before its first document. A rejoin whose catch-up did not apply ended the session and then set it ready again. The room client took the first default paragraph style, read w:default only as 1 or true, and read every styles part, so an Enter after a heading wrote the wrong tail style or was refused. A throw other than a refusal in a batch, an undo or a redo left the changes applied before it pending, and the next flush sent them; an undo step was lost. A paste cut into several changes carried a new list and style in each change, so the numbering started again in each change.",
+  "after": "The join reads every missing picture before the first document. A session that a rejoin ended stays ended. The room client reads the main document's styles part by the layout's rule: any on value, and the last default wins. Every error takes back what the batch applied and puts an undo step back. A long paste carries a list and a style once; its later changes name the list number the first change made, and redo renames that number with the change.",
+  "reason": "Change messages, the change log and its kinds keep their meaning, and the Yjs document format does not change. The room applies a later paste change that names a list an earlier change of the same author made, as it already did for any change that names such a list. The other fixes are on the client only. An ordered room admits only clients of its own code version, and ordered rooms are not deployed yet, so no migration is needed.",
+  "tests": [
+    "packages/core/src/collaboration/ordered/__tests__/client/editor-pictures.test.ts",
+    "packages/core/src/collaboration/ordered/__tests__/client/editor-restart.test.ts",
+    "packages/core/src/collaboration/ordered/__tests__/client/editor-two.test.ts",
+    "packages/core/src/collaboration/ordered/__tests__/client/editor-local-apply-defect.test.ts",
+    "packages/core/src/collaboration/ordered/__tests__/client/editor-paste-long.test.ts"
+  ],
+  "changeset": "ordered-client-session-fixes",
+  "migration": null
+}

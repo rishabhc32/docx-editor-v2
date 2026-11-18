@@ -1,0 +1,15 @@
+{
+  "impact": "compatible",
+  "fields": [],
+  "before": "In an ordered room, a decide change named one review card. The editor's Accept All and Reject All sent one decide change for each card, and a host's Accept all sent one request for each card, all at once: over about 64 cards the room server closed the organiser's connection and the room decided none.",
+  "after": "A decide change names cards (cards: [{ suggestions }]), each as the organiser saw it; one card is a one-entry list. Accept All, Reject All and any choice of several cards are one change: every copy decides each card that is unchanged and leaves a card that changed after the organiser saw it. A change that leaves every card is refused by name (stale-decision). requestDecisions sends the host's request as one change.",
+  "reason": "The Yjs document format does not change. The ordered change format of decide changes does: an ordered room admits only clients of its own code version, so the room and its pages always run the same validator and apply, and every copy applies the same change to the same list with the same result. Ordered rooms are not deployed yet, so no room holds a log with the old decide form and no migration is needed.",
+  "tests": [
+    "packages/core/src/collaboration/ordered/__tests__/decide-many.test.ts",
+    "packages/core/src/collaboration/ordered/__tests__/client/editor-decide-many.test.ts",
+    "packages/core/src/collaboration/ordered/__tests__/client/editor-review-actions.test.ts",
+    "packages/core/src/collaboration/ordered/__tests__/protocol-codec.test.ts"
+  ],
+  "changeset": "ordered-decide-many-cards",
+  "migration": null
+}

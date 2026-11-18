@@ -1,0 +1,10 @@
+{
+  "impact": "compatible",
+  "fields": [],
+  "before": "In an ordered room, after the organiser's direct deletion of a row that held a note's last reference, the card list showed no card for another person's pending words in that note, but orderedCardOf, orderedCardSeen and requestDecision still gave their card, and the room applied a decision on it. The organiser's undo of the row deletion then brought the note back with the words already decided.",
+  "after": "orderedCards and orderedCardOf read their units through one rule that leaves out a note no reference shows. orderedCardOf and orderedCardSeen give no card for a suggestion only in such a note, requestDecision returns null, and the room refuses a decide change that names it with hidden-target. A decision of several cards passes over that card and decides the others. The undo brings the words back pending, with their card.",
+  "reason": "Change messages, the change log and its kinds keep their meaning, and the Yjs document format does not change. The room now refuses one decision it applied before; every copy reads the same cards from the list, and an ordered room admits only clients of its own code version. Ordered rooms are not deployed yet, so no migration is needed.",
+  "tests": ["packages/core/src/collaboration/ordered/__tests__/client/editor-notes.test.ts"],
+  "changeset": "ordered-hidden-note-card-decision",
+  "migration": null
+}

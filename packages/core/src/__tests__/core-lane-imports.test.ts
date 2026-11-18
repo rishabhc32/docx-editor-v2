@@ -94,6 +94,7 @@ function laneOfSpecifier(specifier: string, fromFile: string): LaneName | null {
   for (const lane of LANES) {
     const declared = CORE_LANES[lane];
     if (declared.subpath === subpath) return lane;
+    if (declared.subpaths?.includes(subpath)) return lane;
     if (declared.subpathPrefix && subpath.startsWith(declared.subpathPrefix)) return lane;
   }
   return null;

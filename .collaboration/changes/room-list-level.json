@@ -1,0 +1,13 @@
+{
+  "impact": "compatible",
+  "fields": [],
+  "before": "In an ordered room, Increase Indent to a list level that the list's definition did not declare moved the paragraph to the level, but the level reached numbering.xml on no copy and not in the saved file, so the item showed no number or bullet. No refusal named it.",
+  "after": "A new list-level change declares the level in Word's default format for its depth and moves the paragraphs there. Every copy replays the engine's own declaration on the numbering part while the change's suggestion shows, so the item keeps its number in the room and in the saved file, as in the editor alone.",
+  "reason": "Existing change messages keep their meaning; list-level is a new change kind, and the Yjs document format does not change. Every copy applies the same declaration to the same log, so every copy makes the same list and the same numbering part. An ordered room admits only clients of its own code version, so the room and its pages always run the same engine and an older client never reads the new kind. Ordered rooms are not deployed yet, so no room holds a log made under the old rule and no migration is needed.",
+  "tests": [
+    "packages/core/src/collaboration/ordered/__tests__/client/editor-list-level.test.ts",
+    "packages/core/src/collaboration/ordered/__tests__/change-validate.test.ts"
+  ],
+  "changeset": "room-list-level",
+  "migration": null
+}

@@ -1,0 +1,12 @@
+{
+  "impact": "compatible",
+  "fields": [],
+  "before": "In an ordered room, a discussion marker the room wrote (a marker change) was published to the editors as generic elements, so no editor found the comment's range until the file was opened again.",
+  "after": "The marker's range start, range end and reference are published under their typed kinds, as a file's load gives them, so every editor shows the comment on its words at once.",
+  "reason": "The saved XML and the change format do not change; only the in-memory node kinds the client publishes do. Ordered rooms admit only clients of their own code version and are not deployed yet, so no migration is needed. The Yjs document format does not change.",
+  "tests": [
+    "packages/core/src/collaboration/ordered/__tests__/client/editor-comments-room.test.ts"
+  ],
+  "changeset": "ordered-marker-shows",
+  "migration": null
+}

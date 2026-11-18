@@ -1,0 +1,14 @@
+{
+  "impact": "compatible",
+  "fields": [],
+  "before": "A first footnote or endnote in a file without a settings part created word/settings.xml, with its relationship and content type, only to list the new notes part's separators. Two people who added a first note at once in a Yjs room each created that part. Shared state kept one settings root, moved the other root's separator references into the notes part, and left a relationship that could point at no part, so every participant stopped applying changes.",
+  "after": "The separator list is written into a settings part the file already has. A file without settings keeps none, and a first note writes only its notes part, its relationship, and its content type, as before the list was added.",
+  "reason": "The edit writes fewer parts, and every part it still writes is one the journal already carried. No stored field, operation kind, or identity rule changes.",
+  "tests": [
+    "packages/core/src/store/__tests__/note-properties-order.test.ts",
+    "packages/core/src/collaboration/ordered/__tests__/notes.test.ts",
+    "packages/pro/src/collaboration/__tests__/document-part-races.test.ts"
+  ],
+  "changeset": null,
+  "migration": null
+}

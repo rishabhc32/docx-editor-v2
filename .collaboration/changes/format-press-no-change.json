@@ -1,0 +1,12 @@
+{
+  "impact": "compatible",
+  "fields": [],
+  "before": "In an ordered room, a format press that arrived at words that already had its value (pressed before another person's same format reached the presser) still left a pending format record there. A later direct format over those words then joined the party's change, so a reject of the party's change took it away.",
+  "after": "A run or paragraph-mark format press that changes no value makes no change and no record, as in the editor alone. Where a pending format record is already there, a tracked press writes it again under its own author, as the engine does.",
+  "reason": "Change messages, the change log and its kinds keep their meaning, and the Yjs document format does not change. Every copy applies the same rule to the same log, so every copy makes the same list. An ordered room admits only clients of its own code version, so the room and its pages always run the same engine. Ordered rooms are not deployed yet, so no room holds a log made under the old rule and no migration is needed.",
+  "tests": [
+    "packages/core/src/collaboration/ordered/__tests__/client/editor-format-no-change.test.ts"
+  ],
+  "changeset": "format-press-no-change",
+  "migration": null
+}

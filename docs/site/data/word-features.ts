@@ -1163,6 +1163,18 @@ export const wordFeatures: WordFeature[] = [
       'Yjs replicates text, formatting, document structure, review content, tables of contents, notes, headers, footers, drawings, and custom nodes. Presence includes participants, carets, and cross-paragraph selections. Each participant can undo only their edits. Concurrent changes to different properties of one paragraph, or to the formatting of the same characters, both apply. Typing survives a peer deleting, reformatting, splitting, or joining away the text it is in, and moves with that text. Text two peers split or join at once shows once, in document order. Formatting applied while a peer moves the same text to another paragraph is not kept. Use WebRTC, Hocuspocus, or another Yjs 13 provider. Editing continues while disconnected and merges buffered changes after reconnection. Applying an edited ProseMirror document is unavailable while a replica is attached.',
   },
   {
+    id: 'collab.ordered-rooms',
+    name: 'Ordered collaboration rooms (experimental)',
+    category: 'collaboration',
+    editing: 'partial',
+    rendering: 'partial',
+    roundTrip: 'preserved',
+    tier: 'premium',
+    docsLink: '/docs/2.x/pro/ordered-collaboration',
+    notes:
+      'A room server puts every change in one order and checks each change against a policy. The suggestions-only policy lets some participants only suggest. Other participants edit directly, and some can accept and reject. A refused edit is reported by name. Rooms support text, formatting, lists, tables, pictures, links, fields, and content controls. Sections, headers, footers, notes, equations, text boxes, and paste also work. Comments travel through the room: participants add and answer them, and the organiser resolves them. Undo, redo, reconnection, and late joins work. Typing in a table of contents result and paragraphs pasted inside a link are refused.',
+  },
+  {
     id: 'collab.find-replace',
     name: 'Find & replace',
     category: 'collaboration',

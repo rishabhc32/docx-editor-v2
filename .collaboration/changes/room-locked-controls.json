@@ -1,0 +1,14 @@
+{
+  "impact": "compatible",
+  "fields": [],
+  "before": "An ordered room checked a content control's lock only for a control bound to custom XML. It accepted typing, deletions, formats and other changes inside a contentLocked or sdtContentLocked control, from the organiser and from a party, and some removals of an sdtLocked control.",
+  "after": "Every copy refuses a change that a content control's lock forbids, as the editor alone does, by the name locked: an edit of the content of a contentLocked or sdtContentLocked control, and the removal of an sdtLocked or sdtContentLocked control. The engine's own lock refusal on the view has the same name. Typed words at a locked control's edge or prompt go beside it.",
+  "reason": "Change messages, the change log and its kinds keep their meaning, and the Yjs document format does not change. A refusal is a named outcome that every copy computes the same way from the same log, and a correct client never sends such a change, because the editor alone refuses it first. An ordered room admits only clients of its own code version, so old and new clients never apply one log together.",
+  "tests": [
+    "packages/core/src/collaboration/ordered/__tests__/room-locked-controls.test.ts",
+    "packages/core/src/collaboration/ordered/__tests__/room-locked-places.test.ts",
+    "packages/core/src/collaboration/ordered/__tests__/client/editor-random-controls.test.ts"
+  ],
+  "changeset": "room-locked-controls",
+  "migration": null
+}

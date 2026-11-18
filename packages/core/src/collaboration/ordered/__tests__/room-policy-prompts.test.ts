@@ -1,0 +1,227 @@
+// The suggestions-only policy at a control's prompt that carries another person's pending
+// suggestion (task 9.6; acceptance quick pass 101, cy-1:78). Content that takes the prompt's place
+// drops the prompt's runs, as Word does, and the save keeps the prompt as words only: the other
+// person's suggestion would be lost, and today's check refuses it (`others_suggestions`). The
+// room refuses it as nested. For each kind of edit at each place by a prompt, the verdict is
+// nested exactly when the edit, applied, loses that suggestion from the saved file.
+
+import { describe, expect, test } from 'bun:test';
+import { orderedChangeTargets } from '../change/targets.ts';
+import { orderedCards } from '../decide.ts';
+import { applyOrderedChange } from '../change/apply.ts';
+import { loadOrderedPackage } from '../index.ts';
+import { OrderedRefusal } from '../model/refusal.ts';
+import type { OrderedDocument } from '../model/types.ts';
+import { OrderedRoom } from '../room/room.ts';
+import { suggestionsOnlyPolicy } from '../room/suggestions-only.ts';
+import { addressOf, apply, at, markOf, opens, textOf } from './change-apply-fixture.ts';
+import { reopened, saved } from './matrix/word.ts';
+import { actor } from './room-harness.ts';
+import { docx, p, packageOf, t } from './word-fixtures.ts';
+
+const BODY = '/word/document.xml';
+const EDIT = { part: BODY, mode: 'suggest' } as const;
+const FACE = '<w:rStyle w:val="PlaceholderText"/>';
+const PROMPT = 'Click or tap here to enter text.';
+const sdt = (props: string, content: string) =>
+  `<w:sdt><w:sdtPr>${props}</w:sdtPr><w:sdtContent>${content}</w:sdtContent></w:sdt>`;
+/** The host's reproduction: a plain text control showing Word's default prompt. */
+const PLAIN = docx(
+  p(t('Prompt: ') + sdt('<w:showingPlcHdr/><w:text/>', t(PROMPT, FACE))) + p(t('after'))
+);
+const INLINE = docx(
+  p(t('Name: ') + sdt('<w:showingPlcHdr/>', t(PROMPT, FACE)) + t(' end.')) +
+    p(t('Moved words here.'))
+);
+const BLOCK = docx(
+  p(t('Name:')) + sdt('<w:showingPlcHdr/>', p(t(PROMPT, FACE))) + p(t('Moved words here.'))
+);
+
+const BOB = actor('Bob', 'bob-1', 'party');
+const CY = actor('Cy', 'cy-1', 'party');
+const OLGA = actor('Olga', 'olga-1', 'organiser');
+
+/** The prompt's first unit, and a format change on its words " here to " (12 to 21). */
+function promptOf(doc: OrderedDocument) {
+  const words = doc.stories
+    .get(BODY)
+    ?.tree.toArray()
+    .find((item) => item.kind === 'text' && item.prompt === true);
+  if (!words) throw new Error('fixture');
+  const place = (n: number) => ({ space: words.space, offset: words.offset + n });
+  const bold = {
+    kind: 'format',
+    ...EDIT,
+    from: place(12),
+    to: place(21),
+    properties: [{ localName: 'b' }],
+  };
+  return { place, bold };
+}
+
+function roomOn(file: Uint8Array) {
+  let tick = 0;
+  const room = new OrderedRoom({
+    document: loadOrderedPackage(packageOf(file)),
+    applyChange: (doc, change, ctx) => void applyOrderedChange(doc, change, ctx),
+    policy: suggestionsOnlyPolicy(),
+    now: () => Date.UTC(2026, 9, 30) + 1000 * tick++,
+  });
+  const counters = new Map<string, number>();
+  const send = (who: typeof BOB, change: Record<string, unknown>) => {
+    const k = (counters.get(who.namespace) ?? 0) + 1;
+    counters.set(who.namespace, k);
+    const result = room.submit(who, [{ v: 1, id: `${who.namespace}:${k}`, ...change } as never]);
+    const refusal = result.refused[0];
+    return refusal ? `${refusal.code}${refusal.reason ? `/${refusal.reason}` : ''}` : 'accepted';
+  };
+  return { doc: room.document, send };
+}
+
+const bobs = (doc: OrderedDocument) => orderedCards(doc).filter((c) => c.author === 'Bob').length;
+
+describe("typing over a prompt with another person's pending format (the host's case)", () => {
+  test("a party's typing on the format or beside it is nested; on a control without it, accepted", () => {
+    const { doc, send } = roomOn(PLAIN);
+    const { place, bold } = promptOf(doc);
+    expect(send(BOB, bold)).toBe('accepted');
+    for (const n of [21, 0, 15])
+      expect([n, send(CY, { kind: 'insert', ...EDIT, place: place(n), text: 'Q ' })]).toEqual([
+        n,
+        'policy-nested/nested',
+      ]);
+    expect(bobs(reopened(saved(packageOf(PLAIN), doc)))).toBe(1);
+    const other = roomOn(PLAIN);
+    const free = promptOf(other.doc);
+    expect(other.send(CY, { kind: 'insert', ...EDIT, place: free.place(0), text: 'Q ' })).toBe(
+      'accepted'
+    );
+  });
+
+  test('the format’s author and the organiser may type over it; the format goes as in Word', () => {
+    for (const who of [BOB, OLGA]) {
+      const { doc, send } = roomOn(PLAIN);
+      const { place, bold } = promptOf(doc);
+      expect(send(BOB, bold)).toBe('accepted');
+      const formatCard = () => orderedCards(doc).some((c) => c.suggestions.includes('S:bob-1:1.1'));
+      expect(formatCard()).toBe(true);
+      expect(send(who, { kind: 'insert', ...EDIT, place: place(0), text: 'Q ' })).toBe('accepted');
+      expect(textOf(doc, 0)).toBe('Prompt: Q ');
+      // No card on a prompt that content replaced: the room, the save and the editor alone agree.
+      // Bob's card is his typing now; the organiser's typing is direct
+      const left = who === BOB ? 1 : 0;
+      expect(formatCard()).toBe(false);
+      expect(bobs(doc)).toBe(left);
+      expect(bobs(reopened(saved(packageOf(PLAIN), doc)))).toBe(left);
+    }
+  });
+
+  test('once content replaced the prompt, a party types in the control freely', () => {
+    const { doc, send } = roomOn(PLAIN);
+    const { place, bold } = promptOf(doc);
+    expect(send(BOB, bold)).toBe('accepted');
+    expect(
+      send(OLGA, { kind: 'insert', part: BODY, mode: 'edit', place: place(0), text: 'Q' })
+    ).toBe('accepted');
+    expect(send(CY, { kind: 'insert', ...EDIT, place: at(doc, 0, 9), text: 'R' })).toBe('accepted');
+    expect(textOf(doc, 0)).toBe('Prompt: QR');
+  });
+});
+
+type Place = { readonly name: string; readonly file: Uint8Array; readonly line: number } & (
+  | { readonly n: number }
+  | { readonly mark: true }
+);
+const PLACES: readonly Place[] = [
+  { name: 'inline, its start', file: INLINE, line: 0, n: 6 },
+  { name: 'inline, inside', file: INLINE, line: 0, n: 9 },
+  { name: "inline, in the other person's words", file: INLINE, line: 0, n: 21 },
+  { name: 'inline, its end', file: INLINE, line: 0, n: 6 + PROMPT.length },
+  { name: 'block, its start', file: BLOCK, line: 1, n: 0 },
+  { name: 'block, inside', file: BLOCK, line: 1, n: 3 },
+  { name: 'block, its mark', file: BLOCK, line: 1, mark: true },
+];
+
+const control = (doc: OrderedDocument) =>
+  addressOf((opens(doc, 'sdt')[0] ?? opens(doc, 'sdtBlock')[0])!);
+const one = (text: string) => ({ e: 'w:p', c: [{ e: 'w:r', c: [{ e: 'w:t', c: [text] }] }] });
+type Make = (doc: OrderedDocument, place: unknown, line: number) => Record<string, unknown>;
+const KINDS: Readonly<Record<string, Make>> = {
+  words: (_, place) => ({ kind: 'insert', ...EDIT, place, text: 'Q' }),
+  tab: (_, place) => ({ kind: 'insert-tab', ...EDIT, place }),
+  'line break': (_, place) => ({ kind: 'insert-break', ...EDIT, place, break: 'line' }),
+  Enter: (_, place) => ({ kind: 'split', ...EDIT, place }),
+  note: (_, place) => ({ kind: 'insert-note', ...EDIT, place, note: 'footnote', text: ' N' }),
+  table: (_, place) => ({
+    kind: 'insert-table',
+    ...EDIT,
+    place,
+    rows: 1,
+    columns: 1,
+    columnWidth: 2400,
+  }),
+  field: (_, place) => ({ kind: 'insert-field', ...EDIT, place, field: 'PAGE' }),
+  move: (doc, place, line) => ({
+    kind: 'move',
+    ...EDIT,
+    from: at(doc, line + 1, 0),
+    to: at(doc, line + 1, 5),
+    place,
+  }),
+  'paste, one paragraph': (_, place) => ({
+    kind: 'insert-fragment',
+    ...EDIT,
+    place,
+    blocks: [one('P')],
+  }),
+  'paste, two paragraphs': (_, place) => ({
+    kind: 'insert-fragment',
+    ...EDIT,
+    place,
+    blocks: [one('P'), one('R')],
+  }),
+  value: (doc) => ({
+    kind: 'control-value',
+    ...EDIT,
+    control: control(doc),
+    value: { kind: 'text', text: 'V' },
+  }),
+  deletion: (doc, _, line) => ({
+    kind: 'delete',
+    ...EDIT,
+    from: at(doc, line, line === 0 ? 8 : 2),
+    to: at(doc, line, line === 0 ? 30 : 25),
+  }),
+};
+
+describe('every kind of edit at every place by a prompt: nested exactly when the save would lose the format', () => {
+  for (const place of PLACES)
+    test(place.name, () => {
+      const rows: string[] = [];
+      for (const [name, make] of Object.entries(KINDS)) {
+        const doc = loadOrderedPackage(packageOf(place.file));
+        apply(doc, 'bob-1:1', promptOf(doc).bold as never, 'Bob');
+        const where = 'mark' in place ? markOf(doc, place.line) : at(doc, place.line, place.n);
+        const change = { v: 1, id: 'cy-1:1', ...make(doc, where, place.line) } as never;
+        const targets = orderedChangeTargets(doc, change);
+        if (!targets.ok) throw new Error(`${name}: ${targets.code}`);
+        const verdict = suggestionsOnlyPolicy().check({
+          actor: CY,
+          change,
+          touched: targets.touched,
+          document: doc,
+        });
+        const nested = !verdict.ok && verdict.code === 'policy-nested';
+        try {
+          apply(doc, 'cy-1:1', make(doc, where, place.line) as never, 'Cy');
+        } catch (error) {
+          if (!(error instanceof OrderedRefusal)) throw error;
+        }
+        const lost = bobs(doc) === 0 || bobs(reopened(saved(packageOf(place.file), doc))) === 0;
+        rows.push(
+          `${name}: ${nested ? 'nested' : 'allowed'}${nested === lost ? '' : ' (differs)'}`
+        );
+      }
+      expect(rows.filter((row) => row.endsWith('(differs)'))).toEqual([]);
+    });
+});

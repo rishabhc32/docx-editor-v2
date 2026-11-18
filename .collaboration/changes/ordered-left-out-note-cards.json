@@ -1,0 +1,10 @@
+{
+  "impact": "compatible",
+  "fields": [],
+  "before": "In an ordered room, after the organiser's direct deletion of a row that held a note's last reference, the room's card list kept another person's pending words in that note as a card until a reopen, while the editors, the saved file and the editor alone had no such card.",
+  "after": "The room's review cards leave out every suggestion in a note that no reference shows, as compose leaves the note out. The organiser's undo brings the reference, the note and the card back.",
+  "reason": "Change messages, the change log and its kinds keep their meaning, and the Yjs document format does not change. The card list is read from the list, so every copy reads the same cards. An ordered room admits only clients of its own code version, so the room and its pages always run the same engine. Ordered rooms are not deployed yet, so no migration is needed.",
+  "tests": ["packages/core/src/collaboration/ordered/__tests__/client/editor-notes.test.ts"],
+  "changeset": "ordered-left-out-note-cards",
+  "migration": null
+}

@@ -1,0 +1,12 @@
+{
+  "impact": "compatible",
+  "fields": [],
+  "before": "In an ordered room, editing API writes that change only package parts were refused as opaque writes (ordered-opaque-write): the document properties, and a bookmark deleted from a header, a footer or a note the script did not write in.",
+  "after": "A package edit can say what it does. The room carries such a write by its meaning: document properties as a setting (the organiser's direct edit, last one wins, replayed at compose), and the bookmark deletion as a bookmark change of its story. Every copy and the saved file hold the same parts as the editor alone. A package edit that says nothing is still refused by name.",
+  "reason": "The change adds a value to the setting change's operation list and no new message; existing changes keep their meaning, and the Yjs document format does not change. Every copy applies the same rule to the same log, so every copy makes the same list. An ordered room admits only clients of its own code version, so the room and its pages always run the same engine. Ordered rooms are not deployed yet, so no room holds a log made under the old rule and no migration is needed.",
+  "tests": [
+    "packages/core/src/collaboration/ordered/__tests__/client/editor-package-writes.test.ts"
+  ],
+  "changeset": "ordered-package-writes",
+  "migration": null
+}

@@ -1,0 +1,13 @@
+{
+  "impact": "no-impact",
+  "fields": [],
+  "before": "A write that the room's gate or the document refused, other than insertText, answered exec with ok: true, changed: false.",
+  "after": "Every exec write that the room's gate or the document refuses answers ok: false with the reason, an undo or redo step that the session refuses included. A write with nothing to change still answers ok: true, changed: false.",
+  "reason": "Only how a local refusal is reported changes. No shared state, update, or room rule changes, and nothing new is sent to the room.",
+  "tests": [
+    "packages/core/src/collaboration/ordered/__tests__/client/editor-exec-write-refusal.test.ts",
+    "packages/core/src/editor/__tests__/exec-write-refusal.test.ts"
+  ],
+  "changeset": "exec-write-refusal",
+  "migration": null
+}

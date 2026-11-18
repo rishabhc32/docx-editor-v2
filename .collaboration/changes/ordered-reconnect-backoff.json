@@ -1,0 +1,13 @@
+{
+  "impact": "compatible",
+  "fields": [],
+  "before": "In an ordered room, the client started its reconnect waits again from 250 ms each time a socket opened, before the room welcomed it. A room that closed the page right after hello (a full room, a login the host's API could not check, a room that could not open) was joined again every 250 ms for as long as the page stayed open.",
+  "after": "The client starts its waits again only after a connection the room welcomed stays up for 10 seconds. Until then each wait grows (250 ms to 15 s) and is spread between half and all of its step. While it waits, the session's disconnected status names the next try and its wait.",
+  "reason": "Change messages, the change log, the protocol frames and the Yjs document format do not change. Only when one client opens its next connection changes; the room and other clients see no difference.",
+  "tests": [
+    "packages/core/src/collaboration/ordered/__tests__/client/editor-reconnect-backoff.test.ts",
+    "packages/core/src/collaboration/ordered/__tests__/client/link-backoff.test.ts"
+  ],
+  "changeset": "ordered-reconnect-backoff",
+  "migration": null
+}

@@ -1,0 +1,14 @@
+{
+  "impact": "compatible",
+  "fields": [],
+  "before": "Ordered rooms checked media only as whole files, and an SVG could be as large as any media (25 MiB).",
+  "after": "Hosts can check media from its first bytes; an SVG in an ordered room is limited to 2 MiB, and a change naming a larger SVG is refused by name.",
+  "reason": "Shared changes, media references and stored media keep their meaning. The new size cap only refuses more changes by name at the validator, the same on client and room, and the media check of a whole file is unchanged for every other type.",
+  "tests": [
+    "packages/core/src/collaboration/ordered/__tests__/media-prefix.test.ts",
+    "packages/core/src/collaboration/ordered/__tests__/resources.test.ts",
+    "packages/core/src/collaboration/ordered/__tests__/media-check.test.ts"
+  ],
+  "changeset": "media-prefix-check",
+  "migration": null
+}

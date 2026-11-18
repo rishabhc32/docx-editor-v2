@@ -1,0 +1,10 @@
+{
+  "impact": "compatible",
+  "fields": [],
+  "before": "In an ordered room, when a room message and the close of its connection reached the client in one task, the client handled the close first and dropped the message. A page that read its socket late lost the room's reload, waited, and joined again.",
+  "after": "The client handles a connection's close after the messages that came before it, so a reload that the room sends right before it closes the socket reaches the session.",
+  "reason": "Change messages, the change log, the protocol frames and the Yjs document format do not change. Only the order in which one client handles the frames and the close of its own connection changes; the room and other clients see no difference.",
+  "tests": ["packages/core/src/collaboration/ordered/__tests__/client/editor-restart.test.ts"],
+  "changeset": "ordered-reload-before-close",
+  "migration": null
+}

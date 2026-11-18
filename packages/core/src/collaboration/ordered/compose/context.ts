@@ -1,0 +1,373 @@
+// What one compose knows and keeps: the document, the story, the options, the ids it placed,
+// and how each item reads in this drawing (gone, struck, inserted).
+
+import type { OoxmlAttribute, OoxmlElement, OoxmlNode } from '../../../store/package/ooxml-tree.ts';
+import { revisionAttributes } from '../../../store/store/tree-op-tracked.ts';
+import { cloneWithNewIds } from '../../../store/store/tree-op-nodes.ts';
+import {
+  insertedPending,
+  isHidden,
+  isSplitEdge,
+  itemAt,
+  pendingDeleters,
+  statusOf,
+} from '../model/document.ts';
+import { textBoxHostOf } from '../model/text-boxes.ts';
+import { revisionIdFor, seededAttributes } from '../model/revision-ids.ts';
+import { withAttributes } from '../ooxml-nodes.ts';
+import type {
+  OrderedAttribution,
+  OrderedDocument,
+  OrderedItem,
+  OrderedItemAddress,
+  OrderedStory,
+  OrderedSuggestionStatus,
+} from '../model/types.ts';
+import type { RemovedColumns } from './table-columns.ts';
+
+/** How to draw. @public */
+export interface OrderedComposeOptions {
+  /** Draw every paragraph and block again from its items, even untouched ones (for checks). */
+  readonly rebuild?: boolean;
+  /** `show` (default): pending suggestions as Word revisions. `reject`: as if all rejected. */
+  readonly pending?: 'show' | 'reject';
+}
+
+/** One shown unit of a paragraph's view. @public */
+export interface OrderedViewChar {
+  readonly address: OrderedItemAddress;
+  readonly ch: string;
+  /** The inline containers around it, outermost first: `h:<space>` links, `c:<space>` others. */
+  readonly containers: string;
+  readonly face: OoxmlElement | null;
+  readonly deleted: boolean;
+  readonly item: OrderedItem;
+}
+
+/** One paragraph of the view. @public */
+export interface OrderedViewParagraph {
+  /** The paragraph node's id in the composed part. */
+  readonly id: string;
+  readonly mark: OrderedItem;
+  readonly chars: readonly OrderedViewChar[];
+  /** The paragraph's inline items in order, shown or not. */
+  readonly items: readonly OrderedItem[];
+  /** The block containers it sits in (open items), outermost first. */
+  readonly blocks: readonly OrderedItem[];
+}
+
+/**
+ * A control's prompt that the composed part no longer shows, to keep in the glossary as the
+ * placeholder block `name`, which the control's `w:placeholder` names. The shape matches the
+ * engine's retained prompt: the caller writes it with the package's glossary.
+ *
+ * @public
+ */
+export interface OrderedRetainedPrompt {
+  /** The `w:docPartPr/w:name` of the block. */
+  readonly name: string;
+  /** Whether the control sits in a paragraph, so the block wraps `nodes` in one. */
+  readonly inline: boolean;
+  /** The control's content as it showed the prompt. */
+  readonly nodes: readonly OoxmlNode[];
+}
+
+/**
+ * A record a suggestion holds by takeover (policy 2), as a drawing draws it under the holder's
+ * change record: the children of the properties before it and with it, without their own change
+ * record (a nested one, such as `w:pPr/w:rPr/w:rPrChange`, stays).
+ */
+export interface DrawnTakeover {
+  /** The suggestion the record was taken from. */
+  readonly replaced: string;
+  readonly before: readonly OoxmlNode[];
+  readonly after: readonly OoxmlNode[];
+}
+
+/** A change record a drawing wrote that holds records by takeover. */
+export interface HeldTakeovers {
+  /** The change record's local name: `rPrChange`, `pPrChange`, `tcPrChange`, ... */
+  readonly record: string;
+  readonly taken: readonly DrawnTakeover[];
+}
+
+/** Bookkeeping of a revision wrapper compose wrote. */
+export interface WrapperInfo {
+  /** The whole chain of wrappers, outer first: a move's range covers one chain. */
+  readonly key: string;
+  /** The outer wrapper's kind and id: neighbours with one outer wrapper share it. */
+  readonly outer: string;
+  readonly suggestion: string;
+  /** A move's name, for its range markers. */
+  readonly move: string | null;
+}
+
+export class ComposeContext {
+  readonly doc: OrderedDocument;
+  readonly story: OrderedStory;
+  readonly options: OrderedComposeOptions;
+  /** Ids of nodes this drawing placed: a second use of one node gets a copy with new ids. */
+  readonly placed = new Set<string>();
+  /** Run node ids this drawing gave (`runId`). */
+  readonly #usedRunIds = new Set<string>();
+  /** Controls a decision emptied: they show their prompt again. */
+  readonly emptied: string[] = [];
+  /**
+   * The controls in `emptied` that a decision on a suggestion emptied, not a direct edit: they
+   * show Word's blank prompt when they name none (`withDecisionPrompt`), as the engine's
+   * decision leaves them.
+   */
+  readonly decisionEmptied = new Set<string>();
+  /** Controls a decision reached: their value record follows the text they show. */
+  readonly reached: string[] = [];
+  /** Prompt units of controls that hold content now. */
+  readonly hiddenPrompts = new Set<OrderedItem>();
+  /** Open item spaces of the controls whose prompt is hidden. */
+  readonly unprompted = new Set<string>();
+  /**
+   * Open item spaces of the block controls whose prompt Enter removed for good (policy 4): no
+   * glossary block keeps it, and the control, once empty, shows a prompt as any control does.
+   */
+  readonly promptRemoved = new Set<string>();
+  /**
+   * Open item spaces of the prompt controls a suggestion ever filled: they name the glossary
+   * block that keeps their prompt, even once it shows again.
+   */
+  readonly filledPrompts = new Set<string>();
+  /** Glossary blocks the caller must write for the prompts this drawing hides. */
+  readonly prompts: OrderedRetainedPrompt[] = [];
+  /** Tables whose removed cells this drawing took out, before and after (`table-columns.ts`). */
+  readonly removedColumns: RemovedColumns[] = [];
+  /** The takeovers each change record this drawing wrote holds, by the record's node id. */
+  readonly takeovers = new Map<string, HeldTakeovers>();
+  readonly wrappers = new WeakMap<OoxmlNode, WrapperInfo>();
+  /**
+   * Insertions whose inline control is being drawn inside its own `w:ins` (as the engine and
+   * Word write a new control): their units in it take no second wrapper.
+   */
+  readonly covered = new Set<string>();
+  /** The mark space of the paragraph being drawn: struck runs take one id per paragraph. */
+  paragraphKey = '';
+  /**
+   * The node id of the paragraph being drawn. A loaded run's nodes (its shell, text forms and
+   * face) keep their ids only in the paragraph they were loaded in: after a split both halves
+   * hold that run, and the editor gets each paragraph composed on its own, so a second copy
+   * under the same ids would give its tree two nodes with one id.
+   */
+  home: string | undefined = undefined;
+
+  /** A new node id, unique across every compose of the document (or from `mint` when given). */
+  readonly mint: () => string;
+
+  /**
+   * A text box's story whose object shows nowhere in this drawing (a rejected or struck text
+   * box, or one in a rejected row): everything in it goes with the object, also what someone
+   * typed there under a suggestion of their own.
+   */
+  readonly #objectGone: boolean;
+
+  constructor(
+    doc: OrderedDocument,
+    story: OrderedStory,
+    options: OrderedComposeOptions,
+    mint?: () => string
+  ) {
+    this.doc = doc;
+    this.story = story;
+    this.options = options;
+    this.mint =
+      mint ??
+      ((): string => {
+        const id = `ordered#${this.doc.composeIds.next}`;
+        this.doc.composeIds.next += 1;
+        return id;
+      });
+    const host = textBoxHostOf(doc, story.name);
+    const hostStory = host ? doc.stories.get(host.host) : undefined;
+    const object = host && hostStory ? itemAt(hostStory, host.atom) : null;
+    this.#objectGone = host !== null && (object === null || this.unshown(object));
+  }
+
+  /** Whether an item shows nowhere in this drawing, by its labels and the drawing's options. */
+  unshown(item: OrderedItem): boolean {
+    if (isHidden(this.doc, item)) return true;
+    return this.options.pending === 'reject' && insertedPending(this.doc, item);
+  }
+
+  /** Whether a suggestion is rejected, or pending and drawn as rejected. */
+  rejectedOrDrawnSo(suggestion: string): boolean {
+    const status = statusOf(this.doc, suggestion);
+    return status === 'rejected' || (status === 'pending' && this.options.pending === 'reject');
+  }
+
+  /**
+   * Whether a container around the item went, by the decisions alone: its insertion rejected or
+   * its deletion accepted.
+   */
+  containerWent(item: OrderedItem): boolean {
+    if (item.within.by.some((id) => statusOf(this.doc, id) === 'rejected')) return true;
+    return item.within.dels.some((id) => statusOf(this.doc, id) === 'accepted');
+  }
+
+  /** A run's node id: `id` when no run of this drawing has it yet, else a new one. */
+  runId(id: string | undefined): string {
+    const out = id !== undefined && !this.#usedRunIds.has(id) ? id : this.mint();
+    this.#usedRunIds.add(out);
+    return out;
+  }
+
+  /** Whether an item's loaded nodes may keep their ids here: it is drawn in its own paragraph. */
+  homed(item: OrderedItem): boolean {
+    return item.home !== undefined && item.home === this.home;
+  }
+
+  /**
+   * `node` itself the first time, or a copy with new ids when one of its ids is placed, or
+   * when it is not `homed` (drawn outside the paragraph it was loaded in).
+   */
+  fresh<T extends OoxmlNode | null>(node: T, homed = true): T {
+    if (node === null || node.kind === 'textValue') return node;
+
+    // Two faces can share children, so every id in the node counts, not only its own
+    const ids: string[] = [];
+    const visit = (n: OoxmlNode): void => {
+      ids.push(n.id);
+      if (n.kind !== 'textValue') for (const child of n.children) visit(child);
+    };
+    visit(node);
+    if (homed && !ids.some((id) => this.placed.has(id))) {
+      for (const id of ids) this.placed.add(id);
+      return node;
+    }
+
+    const copy = cloneWithNewIds(node, this.mint);
+    const originals = this.takeovers.size > 0 ? ids.slice() : [];
+    ids.length = 0;
+    visit(copy);
+    for (const id of ids) this.placed.add(id);
+
+    // A copy's change records hold the takeovers their originals did
+    for (const [k, original] of originals.entries()) {
+      const held = this.takeovers.get(original);
+      const id = ids[k];
+      if (held !== undefined && id !== undefined) {
+        this.takeovers.set(id, held);
+      }
+    }
+
+    // cloneWithNewIds keeps the node's kind, so the copy is a T as the node is
+    return copy as T;
+  }
+
+  /** Whether the item shows nowhere in this drawing. */
+  gone(item: OrderedItem): boolean {
+    if (this.#objectGone || isHidden(this.doc, item)) return true;
+    if (item.prompt === true && this.hiddenPrompts.has(item)) return true;
+
+    // A rejected Enter keeps the link or control it split in two (`isSplitEdge`)
+    if (isSplitEdge(item)) return false;
+    return this.options.pending === 'reject' && insertedPending(this.doc, item);
+  }
+
+  /**
+   * Whether a decision on a suggestion took the unit away: a rejected insertion or an accepted
+   * deletion, not a direct edit (whose suggestion is accepted when made). A drawing as if every
+   * suggestion were rejected rejects the pending insertions.
+   */
+  decidedAway(item: OrderedItem): boolean {
+    if (item.gone || item.retracted || !this.gone(item)) return false;
+    if (this.options.pending === 'reject' && insertedPending(this.doc, item)) return true;
+    const decision = (suggestion: string, status: OrderedSuggestionStatus): boolean => {
+      const found = this.doc.suggestions.get(suggestion);
+      return found?.status === status && found.direct !== true;
+    };
+    if (item.by !== null && decision(item.by, 'rejected')) return true;
+    return item.dels.some((deleter) => decision(deleter, 'accepted'));
+  }
+
+  /**
+   * Whether the decisions so far change whether a unit reads as text, against the view with
+   * every suggestion pending. The engine updates a control's value record when they do.
+   */
+  decided(item: OrderedItem): boolean {
+    if (item.gone || item.retracted) return false;
+
+    // A direct edit taken back (`revert`) decides nothing: the unit is as it was before it
+    if (item.by !== null && this.revertedDirect(item.by)) return false;
+    const before = !item.dels.some((deleter) => !this.revertedDirect(deleter));
+    const now = !this.gone(item) && this.struckBy(item) === null;
+    return before !== now;
+  }
+
+  /** A direct edit's suggestion its author took back. */
+  revertedDirect(suggestion: string): boolean {
+    const found = this.doc.suggestions.get(suggestion);
+    return found?.direct === true && found.status === 'rejected';
+  }
+
+  /** The suggestion that shows as striking the item: the first pending one (policy 1). */
+  struckBy(item: OrderedItem): string | null {
+    if (this.options.pending === 'reject') return null;
+    return pendingDeleters(this.doc, item)[0] ?? null;
+  }
+
+  /** The pending suggestion that shows as inserting the item, if its container does not. */
+  insertedBy(item: OrderedItem): string | null {
+    if (this.options.pending === 'reject' || item.quiet) return null;
+    if (item.by !== null && this.covered.has(item.by)) return null;
+    return insertedPending(this.doc, item) ? item.by : null;
+  }
+
+  attribution(suggestion: string): OrderedAttribution {
+    return this.doc.suggestions.get(suggestion)?.attribution ?? { author: '', person: null };
+  }
+
+  /**
+   * A suggestion's revision mark attributes for a role, its `w:id` first: the file's own mark
+   * for that role when it had one, else the author, date and the file's other attributes.
+   */
+  revisionMark(suggestion: string, role: string): OoxmlAttribute[] {
+    const id = this.revisionId(suggestion, role);
+    const [idAttribute] = revisionAttributes(id, { author: '' });
+    const seeded = seededAttributes(this.doc, suggestion, role);
+    if (idAttribute && seeded) return [idAttribute, ...seeded];
+    const attribution = this.attribution(suggestion);
+    return [...revisionAttributes(id, attribution), ...(attribution.attributes ?? [])];
+  }
+
+  /** Change records the engine wrote (`w:rPrChange`, ...) with the suggestion's mark for `role`. */
+  withRecordAttributes(
+    children: readonly OoxmlNode[],
+    suggestion: string,
+    role: string
+  ): readonly OoxmlNode[] {
+    return children.map((child) =>
+      child.kind !== 'textValue' && child.localName.endsWith('Change')
+        ? withAttributes(child, this.revisionMark(suggestion, role))
+        : child
+    );
+  }
+
+  /**
+   * Keep the takeovers a drawn change record holds: `children` hold the record (a properties
+   * element's children), and `taken` the records it took over, as drawn.
+   */
+  keepTakeovers(children: readonly OoxmlNode[], taken: readonly DrawnTakeover[]): void {
+    if (taken.length === 0) {
+      return;
+    }
+
+    const record = children.find(isChangeRecord);
+    if (record !== undefined) {
+      this.takeovers.set(record.id, { record: record.localName, taken });
+    }
+  }
+
+  revisionId(suggestion: string, role: string): string {
+    return revisionIdFor(this.doc, suggestion, role);
+  }
+}
+
+/** Whether a node is a change record: `w:rPrChange`, `w:pPrChange`, `w:tcPrChange`, ... */
+export const isChangeRecord = (node: OoxmlNode): node is OoxmlElement =>
+  node.kind !== 'textValue' && node.localName.endsWith('Change');

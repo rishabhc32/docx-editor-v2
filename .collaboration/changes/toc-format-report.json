@@ -1,0 +1,13 @@
+{
+  "impact": "no-impact",
+  "fields": [],
+  "before": "Formatting a selection that included a generated table of contents formatted the rest and left the table out with no report.",
+  "after": "The same operations are written, and the editor reports the skipped table through lastRejection with a reason that names the table of contents.",
+  "reason": "Only a local report is added. The written operations, shared data, update, and room rules stay the same.",
+  "tests": [
+    "packages/core/src/collaboration/ordered/__tests__/client/editor-toc-selection-formatting.test.ts",
+    "packages/core/src/editor/__tests__/toc-selection-formatting.test.ts"
+  ],
+  "changeset": "toc-format-report",
+  "migration": null
+}
