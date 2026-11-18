@@ -108,19 +108,22 @@ export type InsertableContentControlKind = (typeof INSERTABLE_CONTENT_CONTROL_TY
 const MAX_METADATA_LENGTH = 4_096;
 
 /**
- * The prompt Word writes back when a control is emptied and has no glossary entry.
+ * The prompt a new control shows, and the one Word writes back when a control is emptied and
+ * has no glossary entry: Word's current defaults, as Word for Mac 16.114 lists them in its own
+ * strings (`strman_917e.strings`). Word 2007 to 2013 wrote "Click here to enter text."; a file's
+ * own prompt, in its glossary or its content, is never replaced by these.
  *
  * The AUTHORED prompt lives in the glossary document, which this change preserves without
  * reading (`w:placeholder/w:docPart`), so a restored prompt is Word's own default for the type
  * rather than a value invented here or a prompt recovered from a part nobody loaded.
  */
 const DEFAULT_PROMPTS: Readonly<Record<string, string>> = {
-  date: 'Click here to enter a date.',
+  date: 'Click or tap to enter a date.',
   dropDownList: 'Choose an item.',
   comboBox: 'Choose an item.',
   docPartList: 'Choose a building block.',
 };
-const DEFAULT_TEXT_PROMPT = 'Click here to enter text.';
+const DEFAULT_TEXT_PROMPT = 'Click or tap here to enter text.';
 
 export function promptFor(type: ContentControlKind): string {
   return DEFAULT_PROMPTS[type] ?? DEFAULT_TEXT_PROMPT;
@@ -1727,6 +1730,13 @@ export function placeholderControlForInsertion(
   return null;
 }
 
+/** Whether a block control showing its prompt holds the paragraph, its mark included. */
+export function promptHoldsParagraph(part: OoxmlPart, paragraphId: string): boolean {
+  return enclosingContentControls(part, paragraphId).some(
+    (control) => contentControlPropertiesOf(control).showingPlaceholder
+  );
+}
+
 /** Whether `[start, end)` lies in a prompt: one control showing its prompt holds all of it. */
 export function promptHoldsRange(
   part: OoxmlPart,
@@ -1734,8 +1744,7 @@ export function promptHoldsRange(
   start: number,
   end: number
 ): boolean {
-  const chain = enclosingContentControls(part, paragraphId);
-  if (chain.some((control) => contentControlPropertiesOf(control).showingPlaceholder)) return true;
+  if (promptHoldsParagraph(part, paragraphId)) return true;
   const paragraph = findNode(part, paragraphId);
   if (!paragraph || paragraph.kind !== 'paragraph') return false;
   const index = paragraphOffsetIndex(paragraph);

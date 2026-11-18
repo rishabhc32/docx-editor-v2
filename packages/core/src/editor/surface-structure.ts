@@ -63,6 +63,7 @@ const PARAGRAPH_FLAG_PROPERTIES = [
   ['pageBreakBefore', 'pageBreakBefore'],
 ] as const satisfies readonly (readonly [keyof SurfaceParagraphFormat, string])[];
 import type { RangeDeletionPlan } from './surface-selection-ops.ts';
+import { UNPLACED_SELECTION_REFUSAL } from './surface-range-edit.ts';
 import {
   LOCKED_CONTENT_BREAK_REFUSAL,
   TABLE_CELL_BREAK_REFUSAL,
@@ -106,16 +107,6 @@ export interface SurfaceStructureDeps {
   numberingLevelExists(numId: string, level: number): boolean;
   /** Paragraph ids in reading order for the active scope. */
   paragraphOrder(): readonly string[];
-  /**
-   * The surface's editing mode, for the one write here that cannot be PROPOSED.
-   *
-   * A section break's type lands on the section that starts at the mark, which hangs on a
-   * different paragraph than the one the break splits. Word records that as `w:sectPrChange`;
-   * this engine refuses `sectPrChange` in accept and reject (`REFUSED_REVISION_NAMES`), so
-   * the write can only go in untracked — and an untracked write bundled into a tracked
-   * gesture survives the reject that removes everything else the gesture did.
-   */
-  editingMode?(): 'edit' | 'suggest' | 'view';
   /**
    * The paragraph a COLLAPSED caret is in, or `null` for a range — read raw, without
    * ordering the selection or flushing pending input.
@@ -332,6 +323,17 @@ export function createSurfaceStructure(deps: SurfaceStructureDeps): StructureMet
     const lastIndex = order.indexOf(to.paragraphId);
     if (firstIndex === -1 || lastIndex === -1) return null;
     return order.slice(firstIndex, lastIndex + 1);
+  }
+
+  /**
+   * {@link targetParagraphs} for a WRITE. A range end the order lacks (after `orderedRange`
+   * finished any pending layout, that is text the page does not show) is refused by name
+   * rather than answered with a silent `false`.
+   */
+  function writeTargets(range?: ReturnType<typeof orderedRange>): readonly string[] | null {
+    const touched = targetParagraphs(range);
+    if (touched === null) deps.publishRefusal?.(UNPLACED_SELECTION_REFUSAL);
+    return touched;
   }
 
   /** `w:ilvl` is 0..8 (ECMA-376 17.9.24). */
@@ -631,7 +633,7 @@ export function createSurfaceStructure(deps: SurfaceStructureDeps): StructureMet
     },
 
     toggleList(kind) {
-      const touched = targetParagraphs();
+      const touched = writeTargets();
       if (touched === null || touched.length === 0) return false;
       // Word toggles OFF only when the whole selection is already that list; a mixed
       // selection becomes one list rather than clearing half of it.
@@ -679,7 +681,7 @@ export function createSurfaceStructure(deps: SurfaceStructureDeps): StructureMet
     },
 
     adjustIndent(direction) {
-      const touched = targetParagraphs();
+      const touched = writeTargets();
       return touched !== null && stepIndent(touched, direction);
     },
 
@@ -689,7 +691,7 @@ export function createSurfaceStructure(deps: SurfaceStructureDeps): StructureMet
       // The SCOPED order and the SCOPED part, like every other write in this lane. Reading
       // the body order meant a header paragraph was never in it, so a ruler drag inside an
       // open header or footer resolved to -1 and returned false — silently doing nothing.
-      const touched = targetParagraphs();
+      const touched = writeTargets();
       return touched !== null && writeIndent(touched, update);
     },
 
@@ -701,8 +703,9 @@ export function createSurfaceStructure(deps: SurfaceStructureDeps): StructureMet
         range.from.paragraphId === range.to.paragraphId && range.from.offset === range.to.offset;
       if (collapsed && rectangleCells() === null) return false;
       if (selectsOnlyPlaceholder(currentLayout.value, range)) return false;
-      const touched = targetParagraphs(range);
-      if (touched === null) return false;
+      // Handled once refused: the keyboard fallback would type a tab over the selection.
+      const touched = writeTargets(range);
+      if (touched === null) return true;
       // Tab moves by the document's default tab stop, the grid its tab characters land on.
       const step = Math.round(defaultTabIntervalFromSettings(session.settingsRoot()) * 20);
       const reads = layoutTabIndentReads(currentLayout.value, storyPart(), orderOf());
@@ -721,7 +724,7 @@ export function createSurfaceStructure(deps: SurfaceStructureDeps): StructureMet
     },
 
     setParagraphFormat(update) {
-      const touched = targetParagraphs();
+      const touched = writeTargets();
       if (touched === null || touched.length === 0) return false;
       // ONE op per paragraph carrying EVERY field the dialog changed, so OK is one undo
       // step and the page repaints once. Firing a command per field would leave the user
@@ -916,7 +919,6 @@ export function createSurfaceStructure(deps: SurfaceStructureDeps): StructureMet
       return sectionBreakGate({
         part: () => session.part(),
         breakType,
-        suggesting: deps.editingMode?.() === 'suggest',
         cellRectangle: (deps.selectedCells?.()?.length ?? 0) > 0,
         caretParagraphId: deps.caretParagraphId?.() ?? null,
         orderedRange,
@@ -934,12 +936,7 @@ export function createSurfaceStructure(deps: SurfaceStructureDeps): StructureMet
       // reason rather than leaving the press to report the store's rejection enum.
       const refusal =
         (isTableNested(session.part(), start.paragraphId) ? TABLE_CELL_BREAK_REFUSAL : null) ??
-        landedBreakRefusal(
-          session.part(),
-          start.paragraphId,
-          breakType,
-          deps.editingMode?.() === 'suggest'
-        );
+        landedBreakRefusal(session.part(), start.paragraphId, breakType);
       if (refusal !== null) {
         deps.publishRefusal?.(refusal);
         return false;

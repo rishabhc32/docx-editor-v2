@@ -296,7 +296,8 @@ describe('replacing a whole story', () => {
     expect(savedMainXml(host)).toContain('<w:sectPr>');
   });
 
-  test('keeps a paragraph inside a block content control, because the control is not a block it removes', () => {
+  test('removes a block content control with its words, as Word replaces a whole story', () => {
+    // Word, setting a story's whole text to nothing, leaves one empty paragraph and no control
     const host = open(docx(sdt(p('inside')) + p('outside')));
     const body = bodyOf(host);
     const response = host.execute({
@@ -304,7 +305,29 @@ describe('replacing a whole story', () => {
     });
     expect(response.ok).toBe(true);
     expect(paragraphTexts(host, body)).toEqual(['']);
-    expect(savedMainXml(host)).toContain('<w:sdt>');
+    expect(savedMainXml(host)).not.toContain('<w:sdt>');
+  });
+
+  test('removes the block content controls when every paragraph is inside one, as Word does', () => {
+    // Word leaves one empty paragraph and no control here too (`~$p5-allblock-out.docx`): the
+    // first control's first paragraph stays, outside it, and holds the text
+    for (const body of [
+      sdt(p('inside')),
+      sdt(p('first') + p('second')),
+      sdt(p('one')) + sdt(p('two')),
+    ]) {
+      const host = open(docx(body));
+      const story = bodyOf(host);
+      const response = host.execute({
+        operations: [{ op: 'replaceSpan', span: { body: story }, text: '' }],
+      });
+      expect(response.ok).toBe(true);
+      expect(paragraphTexts(host, story)).toEqual(['']);
+      expect(savedMainXml(host)).not.toContain('<w:sdt>');
+      host.execute({ operations: [{ op: 'replaceSpan', span: { body: story }, text: 'fresh' }] });
+      const again = reopen(host);
+      expect(paragraphTexts(again.host, again.body)).toEqual(['fresh']);
+    }
   });
 
   test('refuses a story with no paragraph of its own rather than deleting the only one there is', () => {

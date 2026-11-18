@@ -456,46 +456,76 @@ export function authorSlotsOf(layout: SemanticLayout): ReadonlyMap<string, numbe
   const cached = slotCache.get(layout);
   if (cached) return cached;
   const slots = new Map<string, number>();
-  const fold = (blocks: readonly BlockFragmentRecord[]): void => {
-    for (const author of blockAuthors(blocks)) {
-      if (!slots.has(author)) slots.set(author, slots.size);
-    }
-  };
   for (const page of layout.pages) {
-    fold(page.fragments);
-    if (page.header) fold(page.header.fragments);
-    if (page.footer) fold(page.footer.fragments);
-    for (const area of [page.footnotes, page.endnotes]) {
-      if (!area) continue;
-      // The separator is an authored story too, and `paintPageNoteAreas` paints it.
-      if (area.separator) fold(area.separator.fragments);
-      if (area.continuationNotice) fold(area.continuationNotice.fragments);
-      for (const note of area.notes) fold(note.fragments);
-    }
-    // Text boxes: anchored on the page, and on the furniture stories that carry their own.
-    for (const anchored of [
-      page.anchoredDrawings,
-      page.header?.anchoredDrawings,
-      page.footer?.anchoredDrawings,
-    ]) {
-      if (!anchored) continue;
-      for (const drawing of anchored) {
-        // A hidden record (an MC wrap footprint) paints no revision cue, so it names no author.
-        if (drawing.accessibility.hidden) continue;
-        // The anchored drawing's own tracked change, then any story inside it.
-        const revisions = drawing.revisions;
-        if (revisions !== undefined) {
-          for (let i = 0; i < revisions.length; i += 1) {
-            const author = revisions[i]!.author;
-            if (author !== '' && !slots.has(author)) slots.set(author, slots.size);
-          }
-        }
-        if (drawing.textboxStory) fold(drawing.textboxStory.fragments);
-      }
-    }
+    for (const author of pageAuthorsOf(page)) if (!slots.has(author)) slots.set(author, slots.size);
   }
   slotCache.set(layout, slots);
   return slots;
+}
+
+type PageRecord = SemanticLayout['pages'][number];
+
+/** Every author one page paints anything of, in the order {@link authorSlotsOf} meets them. */
+const pageAuthorCache = new WeakMap<PageRecord, readonly string[]>();
+
+/** The authors a page's paint colours, memoised on the page record. */
+export function pageAuthorsOf(page: PageRecord): readonly string[] {
+  const cached = pageAuthorCache.get(page);
+  if (cached) return cached;
+  const seen = new Set<string>();
+  const authors: string[] = [];
+  const see = (author: string): void => {
+    if (author === '' || seen.has(author)) return;
+    seen.add(author);
+    authors.push(author);
+  };
+  const fold = (blocks: readonly BlockFragmentRecord[]): void => {
+    for (const author of blockAuthors(blocks)) see(author);
+  };
+  fold(page.fragments);
+  if (page.header) fold(page.header.fragments);
+  if (page.footer) fold(page.footer.fragments);
+  for (const area of [page.footnotes, page.endnotes]) {
+    if (!area) continue;
+    // The separator is an authored story too, and `paintPageNoteAreas` paints it.
+    if (area.separator) fold(area.separator.fragments);
+    if (area.continuationNotice) fold(area.continuationNotice.fragments);
+    for (const note of area.notes) fold(note.fragments);
+  }
+  // Text boxes: anchored on the page, and on the furniture stories that carry their own.
+  for (const anchored of [
+    page.anchoredDrawings,
+    page.header?.anchoredDrawings,
+    page.footer?.anchoredDrawings,
+  ]) {
+    if (!anchored) continue;
+    for (const drawing of anchored) {
+      // A hidden record (an MC wrap footprint) paints no revision cue, so it names no author.
+      if (drawing.accessibility.hidden) continue;
+      // The anchored drawing's own tracked change, then any story inside it.
+      const revisions = drawing.revisions;
+      if (revisions !== undefined) {
+        for (let i = 0; i < revisions.length; i += 1) see(revisions[i]!.author);
+      }
+      if (drawing.textboxStory) fold(drawing.textboxStory.fragments);
+    }
+  }
+  pageAuthorCache.set(page, authors);
+  return authors;
+}
+
+/**
+ * What one author's revisions paint in under `context`: the slot and the painted style
+ * fields, so two contexts that give the author the same answer give the same string.
+ */
+export function revisionAuthorStyleKey(
+  context: RevisionStyleContext | null,
+  author: string
+): string {
+  if (context === null) return 'kind';
+  const style = context.styles.get(author);
+  const fields = style ? PAINTED_STYLE_KEYS.map((field) => style[field] ?? '').join('\u0000') : '';
+  return `${context.authorSlots.get(author) ?? ''}|${fields}`;
 }
 
 /**

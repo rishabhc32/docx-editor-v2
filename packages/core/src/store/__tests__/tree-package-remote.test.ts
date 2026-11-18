@@ -7,6 +7,7 @@ import {
   flushPendingCanonicalJournals,
 } from '../../collaboration/primitive-journal.ts';
 import { withPart, readOoxmlPackage, type OoxmlPackage } from '../package/ooxml-package.ts';
+import { canonicalOoxmlFingerprint } from '../package/ooxml-serialize.ts';
 import { ORIGIN_IDS } from '../registry/frozen-ids.ts';
 import { paragraphTextOf } from '../store/tree-ops.ts';
 import { TreePackageStore } from '../store/tree-package-store.ts';
@@ -281,6 +282,117 @@ describe('remote canonical package publication', () => {
     expect(paragraphTextOf(store.bodyStore().part, firstParagraphId(store.bodyStore().part))).toBe(
       'XHello'
     );
+  });
+
+  test('a remote package drops the local history that came before it', () => {
+    const store = openStore();
+    const text = () =>
+      paragraphTextOf(store.bodyStore().part, firstParagraphId(store.bodyStore().part));
+    insertAtStart(store, 'A');
+    insertAtStart(store, 'B');
+    expect(store.undo()).not.toBeNull();
+    expect(store.canUndo).toBe(true);
+    expect(store.canRedo).toBe(true);
+    expect(store.publishRemotePackage(editedPackage(documentBytes(), 'X'), REMOTE).ok).toBe(true);
+    // Undo or redo of an earlier entry would put back a package without the remote change
+    expect(store.canUndo).toBe(false);
+    expect(store.canRedo).toBe(false);
+    expect(store.undo()).toBeNull();
+    expect(store.redo()).toBeNull();
+    expect(text()).toBe('XHello');
+    // A local edit after the remote package undoes and redoes as before
+    insertAtStart(store, 'L');
+    expect(store.undo()).not.toBeNull();
+    expect(text()).toBe('XHello');
+    expect(store.redo()).not.toBeNull();
+    expect(text()).toBe('LXHello');
+  });
+
+  test('a remote package drops the history of a header store too', () => {
+    const bytes = headerBytes();
+    const store = openStore(bytes);
+    const scope = { kind: 'headerFooter', rId: 'rId7' } as const;
+    const header = store.partFor(scope);
+    if (!header) throw new Error('no header');
+    const typed = store.transact(scope, (context) => {
+      context.apply({
+        op: 'insertText',
+        paragraphId: firstParagraphId(header),
+        offset: 0,
+        text: 'H',
+      });
+    });
+    expect(typed.ok).toBe(true);
+    expect(store.canUndo).toBe(true);
+    expect(store.publishRemotePackage(editedPackage(bytes, 'X'), REMOTE).ok).toBe(true);
+    expect(store.canUndo).toBe(false);
+    expect(store.undo()).toBeNull();
+    const remoteHeader = store.currentPackage().parts.get('/word/header1.xml');
+    if (!remoteHeader) throw new Error('no remote header');
+    expect(paragraphTextOf(remoteHeader, firstParagraphId(remoteHeader))).toBe('SHARED');
+  });
+
+  test('local history keeps no tree that a remote package replaced', async () => {
+    const store = openStore();
+    const roots: WeakRef<object>[] = [];
+    // In its own frame, so no stack slot keeps a tree for the collector
+    const edit = (round: number): void => {
+      insertAtStart(store, 'L');
+      const remote = editedPackage(documentBytes(), `R${round}`);
+      expect(store.publishRemotePackage(remote, REMOTE).ok).toBe(true);
+      roots.push(new WeakRef(remote.parts.get(remote.mainDocumentPart)!.root));
+    };
+    for (let round = 0; round < 12; round += 1) edit(round);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    Bun.gc(true);
+    // The installed tree stays, and one more that a stale stack slot may hold for the collector:
+    // no entry before the installed tree can be undone again
+    expect(roots.filter((ref) => ref.deref() !== undefined).length).toBeLessThanOrEqual(2);
+  });
+
+  test('undo and redo after many edits give the same documents, before and after a remote package', () => {
+    const bytes = headerBytes();
+    const store = openStore(bytes);
+    const scope = { kind: 'headerFooter', rId: 'rId7' } as const;
+    const documentOf = () =>
+      [...store.currentPackage().parts.values()].map((part) => canonicalOoxmlFingerprint(part));
+    const edit = (index: number): void => {
+      const target = index % 3 === 0 ? scope : ({ kind: 'body' } as const);
+      const part = store.partFor(target);
+      if (!part) throw new Error('no part');
+      const result = store.transact(target, (context) => {
+        context.apply({
+          op: 'insertText',
+          paragraphId: firstParagraphId(part),
+          offset: index % 2,
+          text: String.fromCharCode(97 + (index % 26)),
+        });
+      });
+      if (!result.ok) throw new Error(result.detail ?? result.reason);
+    };
+    /** Make `count` edits, then undo and redo all of them, checking every document on the way. */
+    const roundTrip = (count: number): void => {
+      const documents = [documentOf()];
+      for (let index = 0; index < count; index += 1) {
+        edit(index);
+        documents.push(documentOf());
+      }
+      for (let index = count - 1; index >= 0; index -= 1) {
+        expect(store.undo()).not.toBeNull();
+        expect(documentOf()).toEqual(documents[index]!);
+      }
+      expect(store.canUndo).toBe(false);
+      for (let index = 1; index <= count; index += 1) {
+        expect(store.redo()).not.toBeNull();
+        expect(documentOf()).toEqual(documents[index]!);
+      }
+      expect(store.canRedo).toBe(false);
+    };
+    // Opening the header's store gives its paragraph an id, so open it before the first document
+    expect(store.partFor(scope)).not.toBeNull();
+    roundTrip(60);
+    expect(store.publishRemotePackage(editedPackage(bytes, 'X'), REMOTE).ok).toBe(true);
+    roundTrip(12);
   });
 
   test('publishing a remote package emits no primitive journal', () => {

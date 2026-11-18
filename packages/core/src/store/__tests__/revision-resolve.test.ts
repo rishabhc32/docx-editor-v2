@@ -184,6 +184,25 @@ describe('nested revisions resolve by containment', () => {
       expect(out).not.toContain('<w:del');
     }
   });
+
+  test('a link a decision left with only markers stays around them, as in Word', () => {
+    // Word's Reject All keeps a rejected new link that still holds a comment's start, with its
+    // relationship (two-person session 103). Only a link left with nothing at all goes.
+    const proposed = load(
+      `<w:p>${run('a')}<w:hyperlink w:anchor="t">${wrap('ins', QA, run('Do'))}` +
+        `<w:commentRangeStart w:id="3"/>${wrap('ins', QA, run('cs'))}</w:hyperlink>` +
+        `${run('z')}<w:commentRangeEnd w:id="3"/></w:p>`
+    );
+    const out = xml(apply(proposed, reject(QA)));
+    expect(out).not.toContain('>Do<');
+    expect(out).toMatch(
+      /<w:hyperlink w:anchor="t"><w:commentRangeStart w:id="3"\/><\/w:hyperlink>/
+    );
+    const emptied = load(
+      `<w:p>${run('a')}<w:hyperlink w:anchor="t">${wrap('ins', QA, run('Do'))}</w:hyperlink></w:p>`
+    );
+    expect(xml(apply(emptied, reject(QA)))).not.toContain('<w:hyperlink');
+  });
 });
 
 describe('a move is one decision', () => {

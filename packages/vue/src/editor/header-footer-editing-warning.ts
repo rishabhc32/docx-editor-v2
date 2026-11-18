@@ -1,8 +1,4 @@
 // Development warning for a `headerFooterEditing` prop that changes after the editor exists.
-//
-// The editor reads `headerFooterEditing` once, when it is created: the option decides whether
-// the reader can open headers and footers for the life of the instance. A changed prop is
-// ignored, and this says so once, never in a production build.
 
 import { isDevelopment } from '../lib/is-development';
 
@@ -13,7 +9,11 @@ function normalize(value: unknown): unknown {
   return value === undefined ? true : value;
 }
 
-/** Warn once when `headerFooterEditing` differs from the value the editor was created with. */
+/**
+ * Warn once when `headerFooterEditing` differs from the value the editor was created with. The
+ * editor reads it once, when it is created, so a changed prop is ignored. Never warns in a
+ * production build.
+ */
 export function warnHeaderFooterEditingChanged(created: unknown, current: unknown): void {
   if (normalize(created) === normalize(current) || printed || !isDevelopment()) return;
   printed = true;

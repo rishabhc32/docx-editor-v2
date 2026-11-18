@@ -14,11 +14,13 @@ import {
 import {
   compareRowRecordOwners,
   recordsTableFormatting,
-  ROW_PROPERTY_CONTAINERS,
-  rowPropertyRecords,
   rowRecordOwnerOf,
   type RowRecordOwner,
 } from '../store/table-row-owner.ts';
+import {
+  ROW_PROPERTY_CONTAINERS,
+  rowPropertyRecords,
+} from '../store/tree-op-tracked-table-records.ts';
 
 const owner = (author: string, date: string, id: string): RowRecordOwner => ({ author, date, id });
 

@@ -1,3 +1,4 @@
+import { describedPackageEdit } from '../collaboration/gate-context.ts';
 import { PackageEditRefusal } from '../store/store/package-edit-refusal.ts';
 import { withoutDocumentProperties } from '../store/package/document-property-removal.ts';
 import {
@@ -97,11 +98,11 @@ export function planDocumentProperties(
     story: BODY_STORY,
     ops: [],
     packageEdits: [
-      (pkg) => {
+      describedPackageEdit({ kind: 'document-properties', values }, (pkg) => {
         const next = withDocumentProperties(pkg, values);
         if (!next) throw new PackageEditRefusal('document properties package changed');
         return next;
-      },
+      }),
     ],
     answer: () => ({ kind: 'applied' }),
   };

@@ -178,7 +178,9 @@ test('a proposed row height replicates, undoes, redoes, reconnects and reopens',
   rowHeight(alice, 0, 900);
   converge();
   expect(cards(bob)).toEqual(['format']);
-  expect(xmlOf(bob)).toContain('<w:trPrChange w:author="Alice"');
+  // Word's form for a height on a row with no properties: the table's record, no row record
+  expect(xmlOf(bob)).toContain('<w:tblPrChange w:author="Alice"');
+  expect(xmlOf(bob)).not.toContain('<w:trPrChange');
 
   expect(alice.exec({ type: 'undo' }).ok).toBe(true);
   converge();
@@ -274,6 +276,9 @@ test('deleting the row while its height is proposed leaves no stray record', asy
   expect(bob.exec({ type: 'deleteRow' }).ok).toBe(true);
   flush();
   pair.resume();
+  // The height's table records stay when its row goes; Alice's editor takes the height back
+  // once the update is installed
+  await new Promise<void>((resolve) => queueMicrotask(resolve));
   converge();
   expect(xmlOf(alice)).not.toContain('a1');
   expect(xmlOf(alice)).not.toMatch(RECORDS);

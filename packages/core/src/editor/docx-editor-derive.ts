@@ -418,16 +418,19 @@ export function gateCommand(
       refusal: { ok: false, code: 'notFound', reason: NO_COPIED_FORMATTING },
     };
   }
+  // A collaboration session that cannot write reports no step to take either. Its own reason
+  // is the true one: "nothing to undo" sent a reader to look for an edit that was there.
+  const historyRefusal = () => surface.collaborationSession()?.writeRefusal?.() ?? null;
   if (command.type === 'undo' && !surface.state().canUndo) {
     return {
       ok: false,
-      refusal: { ok: false, code: 'unsupported', reason: 'nothing to undo' },
+      refusal: { ok: false, code: 'unsupported', reason: historyRefusal() ?? 'nothing to undo' },
     };
   }
   if (command.type === 'redo' && !surface.state().canRedo) {
     return {
       ok: false,
-      refusal: { ok: false, code: 'unsupported', reason: 'nothing to redo' },
+      refusal: { ok: false, code: 'unsupported', reason: historyRefusal() ?? 'nothing to redo' },
     };
   }
   if (command.type === 'insertTable' && !surface.canInsertTable(command.rows, command.cols)) {
@@ -512,16 +515,11 @@ export function gateCommand(
         },
       };
     }
-    // Suggesting mode: a break that RETYPES the following section cannot be proposed. `w:type`
-    // lands on the section that starts at the mark, which hangs on a paragraph the break does
-    // not touch, and Word's record for that — `w:sectPrChange` — is one this engine refuses in
-    // accept and reject. Written untracked it would survive the reject that removes the split.
-    //
-    // Asked of the SURFACE rather than answered here. The two inputs are both ones only it
-    // holds: the LIVE editing mode — `mode` is the constructed one, and a file that declares
-    // `w:trackRevisions` opens suggesting with nobody passing it — and the paragraph the break
-    // lands in, which for a range in suggesting mode is past the struck words rather than the
-    // selection's head. Deriving either of them here made the control and the write disagree.
+    // A cell or content a control holds refuses the break, at the paragraph it lands in, which
+    // for a range in suggesting mode is past the struck words rather than the selection's head.
+    // Asked of the SURFACE rather than answered here: only it knows that landing, and deriving
+    // it here made the control and the write disagree. A break that retypes the following
+    // section is suggested like any other (`w:sectPrChange`, as Word records "Section start").
     const refusal = surface.sectionBreakRefusal(
       command.kind === 'section' ? 'nextPage' : 'continuous'
     );

@@ -20,6 +20,12 @@
 
 import { MC_NAMESPACE_URI, W14_NAMESPACE_URI, WML_NAMESPACE_URI } from './ooxml-shared.ts';
 import { carryIndexToRebuiltRoot, parentNodeOf } from './ooxml-edit.ts';
+import {
+  isElement,
+  isMcAlternateContent,
+  isMcChoice,
+  isMcFallback,
+} from './drawing-projection-walk.ts';
 import type { OoxmlAttribute, OoxmlElement, OoxmlNode, OoxmlPart } from './ooxml-tree.ts';
 import { validateOoxmlPart } from './ooxml-validate.ts';
 import { createSubtreeAggregateMemo, keepsSubtreeMemo } from './subtree-memo-policy.ts';
@@ -276,6 +282,48 @@ function collectWmlParagraphs(root: OoxmlElement): OoxmlElement[] {
   return paragraphs;
 }
 
+/** A paragraph's valid paraId, upper-case, or null. */
+function canonicalParaId(paragraph: OoxmlElement): string | null {
+  const value = paraIdOf(paragraph);
+  return value !== null && isValidParaId(value) ? value.toUpperCase() : null;
+}
+
+/**
+ * The paragraphs of an `mc:Fallback` that copy a paragraph of the same `mc:AlternateContent`'s
+ * `mc:Choice`, each with the live paragraph it copies: the next one with the same id. Word
+ * writes a text box's story in both copies with the same paragraph ids (a Word 2016 file: the
+ * repository's `e2e/fixtures/list-pagination-break.docx`, `word/header3.xml`), so these are the
+ * copy Word writes, not duplicates to mint anew: minting would give the copy new ids at every
+ * open of a saved file.
+ */
+function fallbackCopies(root: OoxmlElement): ReadonlyMap<OoxmlElement, OoxmlElement> {
+  const copies = new Map<OoxmlElement, OoxmlElement>();
+  const visit = (node: OoxmlNode): void => {
+    if (node.kind === 'textValue') return;
+    if (isMcAlternateContent(node)) {
+      const live = new Map<string, OoxmlElement[]>();
+      for (const child of node.children) {
+        if (!isElement(child) || !isMcChoice(child)) continue;
+        for (const paragraph of collectWmlParagraphs(child)) {
+          const id = canonicalParaId(paragraph);
+          if (id !== null) live.set(id, [...(live.get(id) ?? []), paragraph]);
+        }
+      }
+      for (const child of node.children) {
+        if (!isElement(child) || !isMcFallback(child)) continue;
+        for (const paragraph of collectWmlParagraphs(child)) {
+          const id = canonicalParaId(paragraph);
+          const original = id === null ? undefined : live.get(id)?.shift();
+          if (original) copies.set(paragraph, original);
+        }
+      }
+    }
+    for (const child of node.children) visit(child);
+  };
+  visit(root);
+  return copies;
+}
+
 function isIdentityAttribute(attribute: OoxmlAttribute): boolean {
   return (
     attribute.namespaceUri === W14_NAMESPACE_URI &&
@@ -341,10 +389,15 @@ export function normalizeParagraphIdentity(part: OoxmlPart): OoxmlPart {
   // therefore strictly wider; both guarantee paragraph-level uniqueness.
   const seen = new Set<string>();
   const toMint: OoxmlElement[] = [];
+  const copies = fallbackCopies(part.root);
   let keptAny = false;
   for (const paragraph of paragraphs) {
-    const value = paraIdOf(paragraph);
-    const canonical = value !== null && isValidParaId(value) ? value.toUpperCase() : null;
+    // A text box's fallback copy keeps the ids of its live copy, as Word writes them
+    if (copies.has(paragraph)) {
+      keptAny = true;
+      continue;
+    }
+    const canonical = canonicalParaId(paragraph);
     if (canonical !== null && !seen.has(canonical)) {
       seen.add(canonical);
       keptAny = true;
@@ -371,11 +424,22 @@ export function normalizeParagraphIdentity(part: OoxmlPart): OoxmlPart {
     (binding) => binding.prefix === prefix && binding.namespaceUri === W14_NAMESPACE_URI
   );
   const attributesByNodeId = new Map<string, readonly OoxmlAttribute[]>();
+  const minted = new Map<string, string>();
   for (const paragraph of toMint) {
-    const minted = mintParaId(paragraph.id, seen);
-    seen.add(minted);
+    const value = mintParaId(paragraph.id, seen);
+    seen.add(value);
+    minted.set(paragraph.id, value);
+  }
+  // A text box's fallback copy takes the id its live copy ends with
+  for (const [copy, original] of copies) {
+    const value = minted.get(original.id);
+    if (value !== undefined) minted.set(copy.id, value);
+  }
+  for (const paragraph of paragraphs) {
+    const value = minted.get(paragraph.id);
+    if (value === undefined) continue;
     attributesByNodeId.set(paragraph.id, [
-      ...mintedParagraphIdentityAttributes(prefix, minted),
+      ...mintedParagraphIdentityAttributes(prefix, value),
       ...paragraph.attributes.filter((attribute) => !isIdentityAttribute(attribute)),
     ]);
   }

@@ -39,6 +39,7 @@ import type {
 import { paragraphsInCells } from '@docx-editor.dev/core/layout';
 import type { PaginatedSurface } from './paginated-surface-contract.ts';
 import { directionalParagraphEntry } from './paragraph-direction-writes.ts';
+import { UNPLACED_SELECTION_REFUSAL } from './surface-range-edit.ts';
 
 /** What the composition root lends this lane. */
 export interface SurfaceFormatDeps {
@@ -145,6 +146,14 @@ export function createSurfaceFormat(deps: SurfaceFormatDeps): FormatMethods {
     deps.commit(() => ({ committed: false, rejected: true, opCount: 0, reason }));
     return true;
   };
+  /** A range end the laid-out pages do not hold (hidden text): refused, never a silent no-op. */
+  const refuseUnplaced = (): void =>
+    deps.commit(() => ({
+      committed: false,
+      rejected: true,
+      opCount: 0,
+      reason: UNPLACED_SELECTION_REFUSAL,
+    }));
   const currentLayout = {
     get value(): SemanticLayout {
       return deps.layout();
@@ -216,9 +225,10 @@ export function createSurfaceFormat(deps: SurfaceFormatDeps): FormatMethods {
     const order = deps.paragraphOrder();
     const firstIndex = order.indexOf(from.paragraphId);
     const lastIndex = order.indexOf(to.paragraphId);
-    // An endpoint the published order does not know is a layout that has not caught up;
-    // writing a partial range would be worse than writing none.
-    if (firstIndex === -1 || lastIndex === -1) return;
+    // `orderedRange` has already finished any pending layout, so an endpoint the order still
+    // lacks is text the page does not show. Writing a partial range would be worse than
+    // writing none, and writing none without a word loses the edit, so it is refused by name.
+    if (firstIndex === -1 || lastIndex === -1) return refuseUnplaced();
     const ops: TreeDocOp[] = [];
     for (let index = firstIndex; index <= lastIndex; index += 1) {
       const paragraphId = order[index]!;
@@ -363,7 +373,7 @@ export function createSurfaceFormat(deps: SurfaceFormatDeps): FormatMethods {
     const order = rectangle ?? deps.paragraphOrder();
     const firstIndex = rectangle ? 0 : order.indexOf(from.paragraphId);
     const lastIndex = rectangle ? order.length - 1 : order.indexOf(to.paragraphId);
-    if (firstIndex === -1 || lastIndex === -1) return;
+    if (firstIndex === -1 || lastIndex === -1) return refuseUnplaced();
     // EVERY paragraph the selection touches, not just the one the caret is in: selecting
     // three paragraphs and pressing centre must centre three paragraphs.
     //
@@ -506,15 +516,12 @@ export function createSurfaceFormat(deps: SurfaceFormatDeps): FormatMethods {
       // Over a pending format suggestion, a value the styles alone give is removed instead,
       // so pressing twice takes the suggestion back rather than leaving an empty one.
       const settle = (ops: readonly TreeDocOp[]) =>
-        withoutInheritedToggles(
-          storyPart(),
-          ops,
-          localName,
-          session.stylesRoot(),
-          session.settingsRoot(),
-          displayMode(),
-          authorFilter()
-        );
+        withoutInheritedToggles(storyPart(), ops, localName, {
+          styles: session.stylesRoot(),
+          settings: session.settingsRoot(),
+          displayMode: displayMode(),
+          authorFilter: authorFilter(),
+        });
       if (cells && cells.length > 0) {
         writeRunPropertyOverCells(cells, incoming, settle);
         return;
@@ -567,15 +574,16 @@ export function createSurfaceFormat(deps: SurfaceFormatDeps): FormatMethods {
       // the armed format standing, and the next characters typed came out in exactly the
       // formatting the user had just asked to be rid of.
       deps.setPendingFormats(null);
+      // The range FIRST: it finishes any pending layout the order and text below are read from.
+      const { from, to } = orderedRange();
       const layout = currentLayout.value;
       const order = deps.paragraphOrder();
       const cells = deps.selectedCells?.();
       const paragraphIds =
         cells && cells.length > 0
           ? [...paragraphsInCells(layout, cells)]
-          : paragraphsInRange(order, orderedRange());
-      if (paragraphIds.length === 0) return;
-      const { from, to } = orderedRange();
+          : paragraphsInRange(order, { from, to });
+      if (paragraphIds.length === 0) return refuseUnplaced();
       const rectangular = cells !== undefined && cells.length > 0;
       const part = storyPart();
       const ops: TreeDocOp[] = [];

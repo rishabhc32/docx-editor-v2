@@ -1,5 +1,8 @@
 import { documentProtectionRefusal } from '../store/store/forms-protection.ts';
-import { formsProtectionRefusal } from '../store/store/tree-op-content-controls.ts';
+import {
+  enclosingContentControls,
+  formsProtectionRefusal,
+} from '../store/store/tree-op-content-controls.ts';
 import { trackedValueRefusal } from '../store/store/tracked-content-control-value.ts';
 import { settingsPartOf } from '../store/package/note-properties.ts';
 // Content-control query derivation for the Editor facade.
@@ -56,6 +59,7 @@ import {
 } from './content-control-insert.ts';
 import type { PaginatedSurface } from './paginated-surface-contract.ts';
 import { partOfNodeId, storyScopeOfNodeId } from './surface-scope.ts';
+import { isRepeatingSection } from '../store/store/repeating-section-items.ts';
 import { selectionMarkOf } from './surface-selection-ops.ts';
 
 const W14_NAMESPACE_URI = 'http://schemas.microsoft.com/office/word/2010/wordml';
@@ -415,7 +419,9 @@ export function inlineContentControlsAt(
 export type ContentControlEditorCommand =
   | InsertContentControlCommand
   | { type: 'setContentControlValue'; target?: DocTarget; value: string }
-  | { type: 'removeContentControl'; target?: DocTarget };
+  | { type: 'removeContentControl'; target?: DocTarget }
+  | { type: 'addRepeatingSectionItem'; target?: DocTarget; index?: number }
+  | { type: 'removeRepeatingSectionItem'; target?: DocTarget; index: number };
 
 export function isContentControlEditorCommand(command: {
   type: string;
@@ -423,8 +429,40 @@ export function isContentControlEditorCommand(command: {
   return (
     command.type === 'insertContentControl' ||
     command.type === 'setContentControlValue' ||
-    command.type === 'removeContentControl'
+    command.type === 'removeContentControl' ||
+    command.type === 'addRepeatingSectionItem' ||
+    command.type === 'removeRepeatingSectionItem'
   );
+}
+
+/**
+ * The op a command on an existing control commits. A repeating section command names the
+ * section, or any control in it (the caret's, by default): the nearest section around it.
+ */
+function opOfControlCommand(
+  surface: PaginatedSurface,
+  command: Exclude<ContentControlEditorCommand, InsertContentControlCommand>,
+  controlId: string
+): TreeDocOp {
+  switch (command.type) {
+    case 'setContentControlValue':
+      return { op: 'setContentControlValue', controlId, value: command.value };
+    case 'removeContentControl':
+      return { op: 'removeContentControl', controlId };
+    case 'addRepeatingSectionItem':
+    case 'removeRepeatingSectionItem': {
+      const part = partOfNodeId(surface.session, controlId) ?? surface.session.part();
+      const chain = enclosingContentControls(part, controlId);
+      const section = [...chain].reverse().find(isRepeatingSection)?.id ?? controlId;
+      return command.type === 'addRepeatingSectionItem'
+        ? {
+            op: 'addRepeatingSectionItem',
+            controlId: section,
+            ...(command.index === undefined ? {} : { index: command.index }),
+          }
+        : { op: 'removeRepeatingSectionItem', controlId: section, index: command.index };
+    }
+  }
 }
 
 type CommandGate = { ok: true } | { ok: false; refusal: Extract<ExecResult, { ok: false }> };
@@ -754,10 +792,7 @@ export function canContentControlCommand(
   if (!resolved.ok) {
     return { ok: false, code: resolved.code, reason: resolved.reason };
   }
-  const op: TreeDocOp =
-    command.type === 'setContentControlValue'
-      ? { op: 'setContentControlValue', controlId: resolved.controlId, value: command.value }
-      : { op: 'removeContentControl', controlId: resolved.controlId };
+  const op = opOfControlCommand(surface!, command, resolved.controlId);
   return storeVerdict(surface!, op, resolved.controlId);
 }
 
@@ -858,10 +893,7 @@ export function execContentControlCommand(
   // control edit that shrinks the caret paragraph makes the later flush refuse.
   surface.flushPendingInput();
   const mark = selectionMarkOf(surface.state().selection);
-  const op: TreeDocOp =
-    command.type === 'setContentControlValue'
-      ? { op: 'setContentControlValue', controlId: resolved.controlId, value: command.value }
-      : { op: 'removeContentControl', controlId: resolved.controlId };
+  const op = opOfControlCommand(surface, command, resolved.controlId);
 
   // The STORY the control is in, from its own id. Left to default, this wrote against the body
   // store, which has never heard of a control in a header — so the facade refused a verb the

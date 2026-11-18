@@ -70,6 +70,35 @@ test('generated result remains read-only and a refused insert reports failure', 
   });
   expect(serializeOoxmlPart(surface.session.part())).toBe(before);
 });
+test("a link in the table of contents refuses Edit Hyperlink and Remove Hyperlink with the TOC's reason", () => {
+  const { editor, surface } = mount(
+    `<w:p>${begin}<w:hyperlink w:anchor="_Toc1">${run('Clause one')}</w:hyperlink></w:p>` +
+      `<w:p>${end}</w:p><w:p><w:bookmarkStart w:id="1" w:name="_Toc1"/>${run('Clause one')}` +
+      '<w:bookmarkEnd w:id="1"/></w:p>'
+  );
+  const before = serializeOoxmlPart(surface.session.part());
+  const relationships = () =>
+    [...surface.session.currentPackage().relationships.values()].flat().length;
+  const relationshipsBefore = relationships();
+  const refused = {
+    ok: false,
+    code: 'invalidArgs',
+    reason: 'the table of contents is generated and read-only',
+  };
+  // Over the link's text, and with the caret in it
+  select(surface, 0, 0, 'Clause one'.length);
+  expect(editor.exec({ type: 'insertHyperlink', href: 'https://example.com/x' })).toEqual(refused);
+  select(surface, 0, 2);
+  expect(editor.exec({ type: 'insertHyperlink', href: 'https://example.com/y' })).toEqual(refused);
+  expect(editor.exec({ type: 'insertHyperlink', href: '#_Toc1' })).toEqual(refused);
+  // `can` says the same before anything is tried
+  expect(editor.can({ type: 'insertHyperlink', href: 'https://example.com/y' })).toEqual(refused);
+  expect(editor.can({ type: 'removeHyperlink' })).toEqual(refused);
+  expect(editor.exec({ type: 'removeHyperlink' })).toEqual(refused);
+  expect(serializeOoxmlPart(surface.session.part())).toBe(before);
+  // No relationship minted for a refused link
+  expect(relationships()).toBe(relationshipsBefore);
+});
 test('normal text on both field boundaries can change while cached rows remain unchanged', () => {
   const { editor, surface } = mount(
     `<w:p>${run('Before')}${begin}${run('Entry')}</w:p><w:p>${run('Page 1')}${end}${run('After')}</w:p>`
@@ -225,3 +254,40 @@ for (const wrapped of [false, true]) {
     expect(texts).toEqual(['Entry', '', '', 'Hea', 'ding']);
   });
 }
+
+/**
+ * A table of contents control with no TOC field, as a pasted copy of one holds it (the s25
+ * acceptance contract has two): `TOCnPasted` rows of plain text, each a link to its heading.
+ */
+const pastedRow = (text: string, anchor: string, page: string) =>
+  '<w:p><w:pPr><w:pStyle w:val="TOC3Pasted"/><w:tabs><w:tab w:val="right" w:leader="dot" w:pos="9734"/></w:tabs></w:pPr>' +
+  `<w:hyperlink w:anchor="${anchor}" w:history="1">${run(text)}<w:r><w:tab/></w:r>${run(page)}</w:hyperlink></w:p>`;
+const pastedToc =
+  '<w:sdt><w:sdtPr><w:id w:val="1808430988"/><w:docPartObj><w:docPartGallery w:val="Table of Contents"/>' +
+  '<w:docPartUnique/></w:docPartObj></w:sdtPr><w:sdtContent>' +
+  pastedRow('Fees', '_bookmark0', '4') +
+  pastedRow('Payment shall not', '_bookmark1', '5') +
+  '</w:sdtContent></w:sdt>';
+test('a table of contents control with no field refuses edits of its rows, as a field result', async () => {
+  const { editor, surface } = mount(`${pastedToc}<w:p>${run('The fee is 1.200,00.')}</w:p>`);
+  const before = serializeOoxmlPart(surface.session.part());
+  const refused = { ok: false, reason: 'the table of contents is generated and read-only' };
+  select(surface, 0, 2);
+  expect(editor.exec({ type: 'insertText', text: 'X' })).toMatchObject(refused);
+  select(surface, 1, 5);
+  surface.insertPlainText('Y');
+  expect(surface.state().lastRejection).toBe(refused.reason);
+  surface.splitParagraph();
+  expect(surface.state().lastRejection).toBe(refused.reason);
+  select(surface, 1, 0);
+  surface.deleteBackward();
+  expect(surface.state().lastRejection).toBe(refused.reason);
+  expect(serializeOoxmlPart(surface.session.part())).toBe(before);
+  // The paragraph after the control is ordinary text
+  select(surface, 2, 0);
+  expect(editor.exec({ type: 'insertText', text: 'Z' })).toEqual({ ok: true, changed: true });
+  editor.load(await editor.save());
+  select(editor.surface!, 0, 2);
+  expect(editor.exec({ type: 'insertText', text: 'X' })).toMatchObject(refused);
+  expect(editor.surface!.session.bodyText()).toContain('ZThe fee');
+});

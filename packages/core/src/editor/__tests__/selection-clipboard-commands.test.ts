@@ -293,13 +293,16 @@ describe('paste', () => {
   });
 });
 
-describe('embedded object clipboard refusal', () => {
+// An ActiveX control is a program: no copy carries it. An embedded object travels with its
+// parts, as Word copies it (`clipboard-fragment-objects.ts`).
+describe('ActiveX control clipboard refusal', () => {
   const object =
-    '<w:object xmlns:v="urn:schemas-microsoft-com:vml" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><v:shape type="#_x0000_t75" style="width:10pt;height:12pt"><v:imagedata r:id="preview"/></v:shape></w:object>';
+    '<w:object xmlns:v="urn:schemas-microsoft-com:vml" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><v:shape type="#_x0000_t75" style="width:10pt;height:12pt"><v:imagedata r:id="preview"/></v:shape><w:control r:id="ax" w:name="CheckBox1"/></w:object>';
   test('copy and cut refuse object-only and mixed selections without changing text', () => {
+    // The control paints no character: it sits between "A" and "Z"
     for (const [start, end] of [
       [1, 2],
-      [0, 3],
+      [0, 2],
     ]) {
       const { editor } = mount(`<w:p><w:r><w:t>A</w:t>${object}<w:t>Z</w:t></w:r></w:p>`);
       try {
@@ -310,7 +313,7 @@ describe('embedded object clipboard refusal', () => {
             code: 'unsupported',
             reason: 'unsupported-content',
           });
-          expect(texts(editor)).toEqual(['A\uFFFCZ']);
+          expect(texts(editor)).toEqual(['AZ']);
         }
         expect(written).toEqual([]);
       } finally {
@@ -318,7 +321,7 @@ describe('embedded object clipboard refusal', () => {
       }
     }
   });
-  test('rich paste refuses objects and preserves the selected target text', async () => {
+  test('rich paste refuses an ActiveX control and preserves the selected target text', async () => {
     const { wrapInteropHtml } = await import('../clipboard-fragment-codec.ts');
     const bytes = docx(`<w:p><w:r><w:t>A</w:t>${object}<w:t>Z</w:t></w:r></w:p>`);
     const html = wrapInteropHtml('<p>AZ</p>', { bytes, lastMarkCovered: true });

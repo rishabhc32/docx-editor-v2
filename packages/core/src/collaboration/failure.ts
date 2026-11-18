@@ -43,6 +43,13 @@ export type CollaborationFailureCode =
   | 'collaboration-session-not-ready'
   | 'collaboration-text-limit'
   | 'experimental-collaboration-body-text-only'
+  /**
+   * Edit refused by an ordered room's gate (`@docx-editor.dev/core/collaboration/ordered`).
+   * The status does not change. The session's refusal report names the op or the reason.
+   */
+  | 'ordered-unsupported-op'
+  | 'ordered-opaque-write'
+  | 'ordered-refused'
   /** Factory input rejected before joining. Fix the value the host passed. */
   | 'invalid-document-id'
   | 'invalid-identity'
@@ -158,6 +165,9 @@ const COLLABORATION_FAILURE_CODE_PRESENT: { readonly [K in CollaborationFailureC
   'missing-root': true,
   'no-main-document-part': true,
   'not-initialized': true,
+  'ordered-opaque-write': true,
+  'ordered-refused': true,
+  'ordered-unsupported-op': true,
   'paragraph-set-mismatch': true,
   'port-already-attached': true,
   'protocol-version-mismatch': true,

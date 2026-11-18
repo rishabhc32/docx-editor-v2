@@ -25,6 +25,8 @@ export interface CopyFlavourInput {
   /** The coverage description for a body-story range selection, or null. */
   readonly coverage: FragmentCoverage | null;
   readonly pkg: OoxmlPackage | null;
+  /** The source tracks changes: the fragment is the accepted final view, as Word copies it. */
+  readonly acceptChanges?: boolean;
   /** Test hook: overrides {@link MAX_COPY_FRAGMENT_BYTES}. */
   readonly maxFragmentBytes?: number;
 }
@@ -64,7 +66,8 @@ export function buildCopyFlavours(input: CopyFlavourInput): CopyFlavours {
   if (input.cellRectangle) return { text: input.text, html: gridHtmlOf(input.text) };
   if (!input.coverage || !input.pkg) return { text: input.text, html: null };
 
-  const full = extractFragmentPackage(input.pkg, input.coverage);
+  const accept = input.acceptChanges === true ? { acceptChanges: true } : {};
+  const full = extractFragmentPackage(input.pkg, input.coverage, accept);
   if (!full.ok)
     return {
       text: input.text,
@@ -76,7 +79,7 @@ export function buildCopyFlavours(input: CopyFlavourInput): CopyFlavours {
   let fragmentBytes: Uint8Array | null = full.bytes;
   if (full.bytes.byteLength > budget) {
     // Tier 1: media stays home. Tier 2: no fragment at all; the interop HTML still ships.
-    const lean = extractFragmentPackage(input.pkg, input.coverage, { omitMedia: true });
+    const lean = extractFragmentPackage(input.pkg, input.coverage, { ...accept, omitMedia: true });
     fragmentBytes = lean.ok && lean.bytes.byteLength <= budget ? lean.bytes : null;
   }
 

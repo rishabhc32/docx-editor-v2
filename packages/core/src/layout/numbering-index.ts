@@ -419,6 +419,32 @@ function parseNum(node: OoxmlElement): NumDefinition | null {
   return { numId, abstractNumId, overrides };
 }
 
+let builtIndexes: WeakRef<NumberingIndex>[] | null = null;
+
+/**
+ * @internal Holds a weak reference to each index built while it records, for tests that must
+ * see an index released once no revision uses it. `live` counts the ones not collected yet.
+ */
+export function numberingIndexTestRecorder(): {
+  readonly built: number;
+  readonly live: number;
+  dispose(): void;
+} {
+  const refs: WeakRef<NumberingIndex>[] = [];
+  builtIndexes = refs;
+  return {
+    get built() {
+      return refs.length;
+    },
+    get live() {
+      return refs.filter((ref) => ref.deref() !== undefined).length;
+    },
+    dispose() {
+      if (builtIndexes === refs) builtIndexes = null;
+    },
+  };
+}
+
 /**
  * Build a numbering index from the root of a numbering part (`w:numbering`).
  *
@@ -432,6 +458,12 @@ function parseNum(node: OoxmlElement): NumDefinition | null {
  * becomes a loop bound or an allocation size.
  */
 export function buildNumberingIndex(root: OoxmlElement | null | undefined): NumberingIndex {
+  const index = readNumberingIndex(root);
+  builtIndexes?.push(new WeakRef(index));
+  return index;
+}
+
+function readNumberingIndex(root: OoxmlElement | null | undefined): NumberingIndex {
   const abstractNums = new Map<string, AbstractNumDefinition>();
   const nums = new Map<string, NumDefinition>();
   if (!root) {

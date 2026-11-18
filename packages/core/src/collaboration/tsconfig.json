@@ -1,10 +1,10 @@
 {
-  "//": "Environment boundary for the provider-neutral collaboration lane. It exposes canonical document capabilities and imports no DOM, CRDT, or network provider.",
+  "//": "Environment boundary for the provider-neutral collaboration lane. It exposes canonical document capabilities and imports no DOM, CRDT, or network provider. Tests in any folder are left out: the ordered model's matrix drives the browser editor as its oracle.",
   "extends": "../../tsconfig.json",
   "compilerOptions": {
     "lib": ["ES2022"],
     "noEmit": true
   },
   "include": ["."],
-  "exclude": ["__tests__"]
+  "exclude": ["__tests__", "**/__tests__"]
 }

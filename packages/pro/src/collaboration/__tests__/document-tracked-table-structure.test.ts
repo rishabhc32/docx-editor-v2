@@ -245,7 +245,8 @@ test("rejecting a proposed table takes its author's typing with it for both part
   caret(alice, 0);
   alice.surface!.type('hi');
   converge();
-  expect(cards(bob)).toEqual(['structural', 'insert']);
+  // Word's form of a new table: its rows and the typing in them are one card
+  expect(cards(bob)).toEqual(['structural']);
   expect(bob.rejectReviewItem(cardOf(bob, 'structural').key)).toEqual({ ok: true, changed: true });
   converge();
   expect(cards(alice)).toEqual([]);

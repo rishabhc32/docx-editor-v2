@@ -299,7 +299,7 @@ export class List extends ModelObject implements PromisedItem {
  * @public
  */
 export class ListCollection extends HandleCollection<List> {
-  /** Read when a batch is planned, because a header, footer or note story may still be a promise. */
+  /** Read at batch planning, because a header, footer or note story may still be a promise. */
   readonly #body: () => AutomationHandle;
 
   /** @internal The lists of one story, in the order their numbers first appear. */

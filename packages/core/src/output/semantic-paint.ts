@@ -48,8 +48,12 @@ import { fallbackStackForFamily } from '../layout/canvas-measurer.ts';
 import { isolatePageFromHost } from './page-host-isolation.ts';
 import { styleForFontSlot } from '../layout/script-itemization.ts';
 import {
+  pageColoursKept,
+  paintColoursKey,
+  type PaintColours,
+} from './semantic-paint-page-colours.ts';
+import {
   reviewAuthorSlotColor,
-  revisionStyleContextKey,
   revisionStyleContextOf,
   type RevisionStyleContext,
   type RevisionStyles,
@@ -71,14 +75,24 @@ import type {
   TableFragmentRecord,
 } from '@docx-editor.dev/core/layout';
 import { paintPageNoteAreas } from './semantic-paint-notes.ts';
-import { paintContentControlChrome } from './semantic-paint-content-controls.ts';
+import {
+  applyContentControlCaretChrome,
+  contentControlChromeKey,
+  paintContentControlChrome,
+} from './semantic-paint-content-controls.ts';
 import {
   paintPageChangeBars,
   reconcilePageChangeBars,
   type ChangeBarsMode,
 } from './semantic-paint-change-bars.ts';
 import { applyHeaderFooterPaintChrome } from './semantic-paint-hf-chrome.ts';
-import { paintHeaderFooterLayer } from './semantic-paint-hf-layer.ts';
+import {
+  paintHeaderFooterLayer,
+  repaintHeaderFooterLayer,
+  type HeaderFooterLayer,
+  type HeaderFooterLayerPainter,
+} from './semantic-paint-hf-layer.ts';
+import { adoptablePageChange, type AdoptablePageChange } from './semantic-paint-page-change.ts';
 import { anchoredDrawingsOf } from '../layout/semantic-records.ts';
 import { lineSegments } from '../layout/line-segments.ts';
 import { pictureIsRtl } from '../layout/inline-picture-caret.ts';
@@ -296,12 +310,12 @@ export interface PaintOptions {
    * On-demand content-control boundary chrome (show-all and/or caret-entry).
    *
    * Furniture only — never contributes layout records or changes page geometry. Omitted or
-   * empty means no control chrome is painted. Folded into the paint-reuse key so a toggle
-   * rebuilds furniture without a layout pass.
+   * empty means no control chrome is painted. Folded into the paint-reuse key, all but the
+   * caret and hover sets, so a toggle rebuilds furniture without a layout pass.
    */
   readonly contentControlChrome?: {
     readonly showAll?: boolean;
-    /** Control ids whose boundaries are visible because the caret is inside them. */
+    /** Controls the caret is in. Outside the reuse key: see `applyContentControlCaretChrome`. */
     readonly activeIds?: ReadonlySet<string>;
     /**
      * Control ids whose boundaries are visible because the pointer is over them.
@@ -1703,7 +1717,6 @@ import { applyParagraphBorderStyle, isCompoundParagraphBorder } from './border-s
 import { paintPageBorderFrame } from './page-border-paint.ts';
 import { applyCellBorders } from './semantic-paint-table-borders.ts';
 import { markTrackedRow } from './table-row-revision-paint.ts';
-import { sameDataWithin } from './semantic-paint-record-equality.ts';
 import { tableCellContentHost } from './table-cell-text-direction-paint.ts';
 
 function paintTableCell(
@@ -1836,6 +1849,50 @@ function paintTableFragment(
   return element;
 }
 
+/** The parts of a painted sheet the next pass can repaint in place. */
+interface PaintedPageParts {
+  content?: HTMLElement;
+  blocks?: Map<BlockFragmentRecord, HTMLElement>;
+  furniture?: HeaderFooterLayer;
+}
+
+/** The header and footer layer's painter for one page's paint context. */
+function headerFooterLayerPainter(
+  document: Document,
+  options: ResolvedPaintContext & {
+    readonly activeHeaderFooterRId?: string;
+    readonly activeHeaderFooterPageIndex?: number;
+  }
+): HeaderFooterLayerPainter {
+  // One furniture context per tab-leader origin: a story's fragments all share one.
+  const furnitureCtxs = new Map<number, ResolvedPaintContext>();
+  return {
+    chrome: options,
+    // Furniture links paint styled but inert: see `paintHyperlinkAnchor`.
+    paintFragment: (fragment, tabLeaderOriginXPt) => {
+      let furnitureCtx = furnitureCtxs.get(tabLeaderOriginXPt);
+      if (!furnitureCtx) {
+        furnitureCtx = { ...options, inertLinks: true, tabLeaderOriginXPt };
+        furnitureCtxs.set(tabLeaderOriginXPt, furnitureCtx);
+      }
+      return fragment.kind === 'table'
+        ? paintTableFragment(document, fragment, furnitureCtx)
+        : paintFragment(document, fragment, furnitureCtx);
+    },
+    appendDrawings: (parent, drawings, origin, layer, interactive, hfFrontKind) =>
+      appendAnchoredDrawingsForRecords(
+        document,
+        parent,
+        drawings,
+        options,
+        origin,
+        layer,
+        interactive,
+        hfFrontKind
+      ),
+  };
+}
+
 function paintPage(
   document: Document,
   page: PageRecord,
@@ -1846,8 +1903,11 @@ function paintPage(
     readonly contentControlChrome?: PaintOptions['contentControlChrome'];
   },
   materialize: boolean,
-  /** Filled with the body block elements, so the next pass can repaint one block in place. */
-  painted?: { content?: HTMLElement; blocks?: Map<BlockFragmentRecord, HTMLElement> }
+  /**
+   * Filled with the body block elements and the header and footer layer, so the next pass
+   * can repaint one block, or the layer, in place.
+   */
+  painted?: PaintedPageParts
 ): HTMLElement {
   // Every drawing painted below carries this page's instance key, so a repaint of the
   // page reuses its own already-decoded <img> elements (no per-keystroke flash) without
@@ -1896,33 +1956,12 @@ function paintPage(
     : null;
   if (borderLayer && page.pageBorders) borderLayer.dataset.docxZOrder = page.pageBorders.zOrder;
   if (borderLayer && page.pageBorders?.zOrder === 'back') element.append(borderLayer);
-  // One furniture context per tab-leader origin: a story's fragments all share one.
-  const furnitureCtxs = new Map<number, ResolvedPaintContext>();
-  const hfHints = paintHeaderFooterLayer(document, element, page, {
-    chrome: options,
-    // Furniture links paint styled but inert — see `paintHyperlinkAnchor`.
-    paintFragment: (fragment, tabLeaderOriginXPt) => {
-      let furnitureCtx = furnitureCtxs.get(tabLeaderOriginXPt);
-      if (!furnitureCtx) {
-        furnitureCtx = { ...options, inertLinks: true, tabLeaderOriginXPt };
-        furnitureCtxs.set(tabLeaderOriginXPt, furnitureCtx);
-      }
-      return fragment.kind === 'table'
-        ? paintTableFragment(document, fragment, furnitureCtx)
-        : paintFragment(document, fragment, furnitureCtx);
-    },
-    appendDrawings: (parent, drawings, origin, layer, interactive, hfFrontKind) =>
-      appendAnchoredDrawingsForRecords(
-        document,
-        parent,
-        drawings,
-        options,
-        origin,
-        layer,
-        interactive,
-        hfFrontKind
-      ),
-  });
+  const furniture = paintHeaderFooterLayer(
+    document,
+    element,
+    page,
+    headerFooterLayerPainter(document, options)
+  );
   appendAnchoredDrawingLayer(document, element, page, options, bodyAnchorOrigin, 'behind');
 
   const content = document.createElement('div');
@@ -1960,6 +1999,7 @@ function paintPage(
   if (painted && blocks) {
     painted.content = content;
     painted.blocks = blocks;
+    painted.furniture = furniture;
   }
   element.append(content);
   appendAnchoredDrawingLayer(document, element, page, options, bodyAnchorOrigin, 'inFront');
@@ -2006,7 +2046,7 @@ function paintPage(
   }
 
   // Edit pills over the body text: the bands they invite into paint under the body.
-  for (const hint of hfHints) element.append(hint);
+  for (const hint of furniture.hints) element.append(hint);
 
   paintContentControlChrome(document, element, page, options);
   // CHANGE BARS. Word draws a rule in the margin beside every line a revision touches, in
@@ -2053,12 +2093,16 @@ interface RetainedPage {
    */
   readonly content?: HTMLElement;
   readonly blocks?: ReadonlyMap<BlockFragmentRecord, HTMLElement>;
+  /** The header and footer layer, kept so a story edit repaints it instead of the sheet. */
+  readonly furniture?: HeaderFooterLayer;
 }
 
 interface RetainedPaint {
   /** Paint parameters folded into reuse: a zoom or a11y change rebuilds every page. */
   readonly parameters: string;
   readonly pages: readonly RetainedPage[];
+  /** The author colours it painted with: a page whose authors keep theirs is kept. */
+  readonly colours: PaintColours;
 }
 
 const retainedPaints = new WeakMap<HTMLElement, RetainedPaint>();
@@ -2086,72 +2130,7 @@ function sameBox(left: PageRecord['box'], right: PageRecord['box']): boolean {
   );
 }
 
-/** Every own key equal by identity, with no nested object on either side. */
-function samePlainValues(left: object, right: object): boolean {
-  const keys = Object.keys(left);
-  if (keys.length !== Object.keys(right).length) return false;
-  for (const key of keys) {
-    const a = (left as Record<string, unknown>)[key];
-    const b = (right as Record<string, unknown>)[key];
-    if (a !== b) return false;
-    // A nested object that happens to be the SAME object is fine; a different one is not
-    // comparable here, and `a !== b` has already refused it.
-  }
-  return true;
-}
-
-function sameItems(left: readonly unknown[], right: readonly unknown[]): boolean {
-  if (left.length !== right.length) return false;
-  for (let index = 0; index < left.length; index += 1) {
-    if (left[index] !== right[index]) return false;
-  }
-  return true;
-}
-
-/**
- * True when two page records differ ONLY in their body blocks.
- *
- * The test is written against the record's own keys rather than a hand-listed set, so a
- * field added to `PageRecord` later disables adoption — a slower repaint — instead of
- * silently painting the page without it. Everything else must be the same object, the same
- * flat values (a box, the page-field source), or the same array members: layout hands
- * untouched sub-records back by identity, so anything that really changed fails this and
- * takes the full path.
- */
-function onlyBlocksChanged(previous: PageRecord, next: PageRecord): boolean {
-  if (previous === next) return false;
-  const keys = new Set([...Object.keys(previous), ...Object.keys(next)]);
-  for (const key of keys) {
-    // Paint never reads the page-field source: the header, footer and body field records that
-    // show a page number carry its effect, and they are compared like everything else.
-    if (key === 'fragments' || key === 'pageFieldSource') continue;
-    const a = (previous as unknown as Record<string, unknown>)[key];
-    const b = (next as unknown as Record<string, unknown>)[key];
-    if (a === b) continue;
-    if (Array.isArray(a) && Array.isArray(b) && sameItems(a, b)) continue;
-    if (
-      typeof a === 'object' &&
-      typeof b === 'object' &&
-      a !== null &&
-      b !== null &&
-      !Array.isArray(a) &&
-      !Array.isArray(b) &&
-      samePlainValues(a, b)
-    ) {
-      continue;
-    }
-    // A record layout rebuilt with the same data paints the same: a footer re-projected for an
-    // unchanged page number, after a table edit replaced the page. Bounded, so a large or
-    // changed story refuses and repaints.
-    if (sameDataWithin(a, b, PAGE_RECORD_COMPARE_BUDGET)) continue;
-    return false;
-  }
-  return true;
-}
-
 const COLUMN_SEPARATOR_CLASS = 'docx-column-separator';
-/** Objects one page-field comparison may visit before adoption gives up on it. */
-const PAGE_RECORD_COMPARE_BUDGET = 20_000;
 
 /**
  * Repaint one page's changed blocks IN PLACE, keeping the sheet and every block that did
@@ -2161,12 +2140,14 @@ const PAGE_RECORD_COMPARE_BUDGET = 20_000;
  * nodes and built them again, which the browser then had to restyle, lay out and repaint in
  * full — and it dropped the text node the caret was in, so the selection had to be mapped
  * and re-applied afterwards. Adopting the sheet keeps all of that: only the edited block's
- * element is built, and on a page the caret is not on, nothing is touched at all.
+ * element is built, and on a page the caret is not on, nothing is touched at all. A header or
+ * footer edit changes every page that shows the story; only the layer that paints it is built.
  */
 function adoptPageBlocks(
   document: Document,
   retained: RetainedPage,
   page: PageRecord,
+  change: AdoptablePageChange,
   options: ResolvedPaintContext & {
     readonly ariaHidden: boolean;
     readonly activeHeaderFooterRId?: string;
@@ -2182,6 +2163,16 @@ function adoptPageBlocks(
     paintInstance: `p${page.index}`,
     tabLeaderOriginXPt: page.contentBox.x - page.box.x,
   };
+  // A header or footer edit: its layer is painted again where it was, before any block moves,
+  // so a layer that cannot take its old place still leaves the sheet to a full paint.
+  let furniture = retained.furniture;
+  if (change.furniture) {
+    if (!furniture) return null;
+    const painter = headerFooterLayerPainter(document, blockOptions);
+    furniture =
+      repaintHeaderFooterLayer(document, retained.element, page, painter, furniture) ?? undefined;
+    if (!furniture) return null;
+  }
   const blocks = new Map<BlockFragmentRecord, HTMLElement>();
   const elements: HTMLElement[] = [];
   for (const fragment of page.fragments) {
@@ -2236,7 +2227,14 @@ function adoptPageBlocks(
     options.facingPages,
     options.revisionStyles
   );
-  return { record: page, materialized: true, element: retained.element, content, blocks };
+  return {
+    record: page,
+    materialized: true,
+    element: retained.element,
+    content,
+    blocks,
+    ...(furniture ? { furniture } : {}),
+  };
 }
 
 function virtualPageShellMatches(
@@ -2287,11 +2285,7 @@ export function paintSemanticLayoutWithAuthorSlots(
 ): void {
   container.classList.toggle('docx-show-paragraph-marks', options.showParagraphMarks ?? false);
   const chrome = options.contentControlChrome;
-  // `hoverIds` is absent ON PURPOSE — see its doc comment. Including it made a pointer
-  // entering a TOC rebuild every page, which detached the node the gesture started on.
-  const chromeKey = chrome
-    ? `${chrome.showAll === true ? '1' : '0'}:${chrome.activeIds ? [...chrome.activeIds].sort().join(',') : ''}:${chrome.checkedIds ? [...chrome.checkedIds].sort().join(',') : ''}:${chrome.tocControlIds ? [...chrome.tocControlIds].sort().join(',') : ''}:${chrome.suppressedIds ? [...chrome.suppressedIds].sort().join(',') : ''}:${chrome.readOnly === true ? 'ro' : ''}`
-    : '';
+  const chromeKey = contentControlChromeKey(chrome);
   const drawingStrings = options.drawingStrings ?? DEFAULT_DRAWING_PAINT_STRINGS;
   const breakStrings = options.breakMarkStrings ?? DEFAULT_BREAK_MARK_STRINGS;
   const urlRegistry =
@@ -2327,6 +2321,7 @@ export function paintSemanticLayoutWithAuthorSlots(
     options.revisionMarkup && Object.values(options.revisionMarkup.cells).includes('byAuthor')
       ? (revisionStyles ?? revisionStyleContextOf('author', layout, authorSlots))
       : null;
+  const colours: PaintColours = { text: revisionStyles, cells: revisionCellStyles };
   const resolved = {
     scale: options.scale ?? 96 / 72,
     ariaHidden: options.ariaHidden ?? true,
@@ -2367,9 +2362,9 @@ export function paintSemanticLayoutWithAuthorSlots(
   // registered must not be reused verbatim afterwards. Header/footer occurrence is
   // applied in place (see applyHeaderFooterPaintChrome) so entering a header, or
   // moving the caret across shared furniture copies, does not rebuild body sheets.
-  // Content-control chrome is furniture only, but toggling it must rebuild painted pages
-  // so show-all / caret chrome appear. Hover is the one other exception: it is applied
-  // to the painted nodes in place, because a pointer crossing a region may not move it.
+  // Content-control chrome is furniture only, but a show-all toggle must rebuild painted
+  // pages. The caret's control and hover are applied to the painted nodes in place, because
+  // a caret or a pointer crossing a region may not move it (see contentControlChromeKey).
   const parameters =
     `${resolved.scale}|${resolved.ariaHidden}|` +
     `${resolved.fontAlias ? aliasIdentity(resolved.fontAlias) : ''}|` +
@@ -2378,14 +2373,14 @@ export function paintSemanticLayoutWithAuthorSlots(
     `ro:${readOnlyKey}|tocEmpty:${emptyTocKey}|` +
     `${options.imageUrlPort ? 'url' : ''}|` +
     `${drawingPaintStringsCacheToken(drawingStrings)}|` +
-    // The slot map belongs to this paint. A standalone paint derives it from the layout; an
-    // attached surface supplies its stable session map. The key must move when that map moves.
-    `markup:${JSON.stringify(options.revisionMarkup)}|facing:${options.facingPages}|rev:${revisionStyleContextKey(revisionStyles)}|cells:${revisionStyleContextKey(revisionCellStyles)}|marks:${options.showParagraphMarks ?? false}|` +
+    // The colour scheme only: an author's slot and style key the pages that paint that author.
+    `markup:${JSON.stringify(options.revisionMarkup)}|facing:${options.facingPages}|${paintColoursKey(colours)}|marks:${options.showParagraphMarks ?? false}|` +
     // A reused page keeps its painted labels, so the labels and the section kinds key reuse.
     `${resolved.breakMarks ? `breaks:${breakMarkStringsCacheToken(breakStrings)}:${resolved.breakMarks.token}|` : ''}` +
     `bars:${resolved.changeBars}:${resolved.changeBarsToggle}`;
   const previous = retainedPaints.get(container);
   const parametersUnchanged = previous?.parameters === parameters;
+  const keepsColours = pageColoursKept(previous?.colours, colours);
   const reusable = parametersUnchanged
     ? new Map(previous.pages.map((entry) => [entry.record, entry]))
     : null;
@@ -2396,7 +2391,8 @@ export function paintSemanticLayoutWithAuthorSlots(
   const pages: RetainedPage[] = layout.pages.map((page) => {
     const materialized = options.materialize?.has(page.index) ?? true;
     const kept = reusable?.get(page);
-    if (kept && kept.materialized === materialized) return kept;
+    // A kept page is the same record before and after, so it is passed for both sides.
+    if (kept && kept.materialized === materialized && keepsColours(page, page)) return kept;
     const prior = previousByIndex?.get(page.index);
     if (
       !materialized &&
@@ -2405,19 +2401,18 @@ export function paintSemanticLayoutWithAuthorSlots(
     ) {
       return { record: page, materialized: false, element: prior.element };
     }
-    // Same sheet, different text: keep the page and repaint only the blocks that moved.
-    // Only ever from an unchanged parameter set, so an adopted block is one this pass
-    // would have built identically.
-    if (
-      parametersUnchanged &&
-      materialized &&
-      prior?.materialized &&
-      onlyBlocksChanged(prior.record, page)
-    ) {
-      const adopted = adoptPageBlocks(document, prior, page, resolved);
+    // Same sheet, different text: keep the page and repaint only the blocks that moved, and
+    // the header and footer layer when a story changed. Only ever from an unchanged parameter
+    // set, so an adopted block is one this pass would have built identically.
+    const change =
+      parametersUnchanged && materialized && prior?.materialized && keepsColours(prior.record, page)
+        ? adoptablePageChange(prior.record, page)
+        : null;
+    if (prior && change) {
+      const adopted = adoptPageBlocks(document, prior, page, change, resolved);
       if (adopted) return adopted;
     }
-    const painted: { content?: HTMLElement; blocks?: Map<BlockFragmentRecord, HTMLElement> } = {};
+    const painted: PaintedPageParts = {};
     const element = paintPage(document, page, resolved, materialized, painted);
     return {
       record: page,
@@ -2425,9 +2420,10 @@ export function paintSemanticLayoutWithAuthorSlots(
       element,
       ...(painted.content ? { content: painted.content } : {}),
       ...(painted.blocks ? { blocks: painted.blocks } : {}),
+      ...(painted.furniture ? { furniture: painted.furniture } : {}),
     };
   });
-  retainedPaints.set(container, { parameters, pages });
+  retainedPaints.set(container, { parameters, pages, colours });
   container.dataset.revision = String(layout.revision);
 
   if (urlRegistry) {
@@ -2463,6 +2459,7 @@ export function paintSemanticLayoutWithAuthorSlots(
     container.insertBefore(entry.element, cursor);
   }
   applyHeaderFooterPaintChrome(pages, resolved);
+  applyContentControlCaretChrome(pages, chrome);
 }
 import { tabLeaderPattern } from '../layout/tab-leader-pattern.ts';
 import { equalBlockElement } from './semantic-paint-block-reuse.ts';

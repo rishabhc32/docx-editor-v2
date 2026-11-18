@@ -1,4 +1,9 @@
 import { implicitTableRowAlignments } from './revision-table-implicit-alignment.ts';
+import {
+  anchorsOwnHeight,
+  wordHeightRows,
+  type WordHeightRow,
+} from './revision-table-implicit-height.ts';
 import { withTableRecordsJoined } from './review-table-property-groups.ts';
 import { ooxmlTreesEqual } from '../package/ooxml-serialize.ts';
 import { WML_NAMESPACE_URI, type OoxmlNode, type OoxmlPart } from '../package/ooxml-tree.ts';
@@ -86,15 +91,21 @@ export function groupTableFormatting(
         for (const site of grid) last.ids.add(site.node.id);
         // Word writes unchanged table snapshots alongside a cell-width edit.
         // With one unambiguous row group, those snapshots belong to its entry.
-        // Keep meaningful table changes and multi-group lifetimes independent.
-        if (tableGroups.length === 1 && grid.length > 0)
+        // With more, the table's record anchors its own author's row heights
+        // (`wordHeightRows`), so it joins that author's first entry. Keep meaningful
+        // table changes and other multi-group lifetimes independent.
+        if (grid.length > 0) {
+          const heightRows = tableGroups.length === 1 ? [] : wordHeightRows(node);
           for (const site of tableProperties) {
             const previous = site.node.children.find((child) => isW(child, 'tblPr'));
+            const target =
+              tableGroups.length === 1 ? last : heightAnchorGroup(heightRows, tableGroups, site);
             if (
+              target &&
               !site.refused &&
               site.parent?.kind === 'tableProperties' &&
               previous &&
-              authorOf(site) === last.author &&
+              authorOf(site) === target.author &&
               (alignmentHistories.has(site.node.id) ||
                 ooxmlTreesEqual(
                   {
@@ -104,8 +115,9 @@ export function groupTableFormatting(
                   previous
                 ))
             )
-              last.ids.add(site.node.id);
+              target.ids.add(site.node.id);
           }
+        }
       }
     }
     for (const child of node.children) visit(child);
@@ -194,4 +206,18 @@ export function groupTableFormatting(
     items.filter((item) => !consumed.has(item)).map((item) => replaced.get(item) ?? item),
     formatting
   );
+}
+/**
+ * The row group a table record joins when the table has several: the first group of the author
+ * whose own row heights the record anchors (`wordHeightRows`).
+ */
+function heightAnchorGroup(
+  heightRows: readonly WordHeightRow[],
+  groups: readonly FormatGroup[],
+  site: RevisionSite
+): FormatGroup | undefined {
+  const own = heightRows.filter(
+    (row) => !row.rowAnchor && row.anchor.id === site.node.id && anchorsOwnHeight(row)
+  );
+  return groups.find((group) => own.some((row) => group.ids.has(row.cells[0]!.id)));
 }

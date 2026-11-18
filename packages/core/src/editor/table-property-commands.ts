@@ -1,17 +1,4 @@
-// Repeat Header Rows and table placement — the table PROPERTY commands of the planner.
-//
-// `toggleHeaderRow` follows Word's rule that header rows are the table's LEADING rows: a row
-// repeats atop each page the table continues onto only while every row above it does, which is
-// how layout collects them (`table-flow-pagination.ts`). So turning it on marks every row from
-// the first through the last selected one, and turning it off clears it from the first selected
-// row down — a flag left on a row below a plain row would repeat nothing. Both write the store's
-// `headerRowCount`, which keeps the leading block exactly that many rows long.
-//
-// `setTableProperties` takes left and right as the reader sees them, as the planner's border
-// and column commands do, and writes them in document order: the leading edge of a
-// right-to-left table (`w:bidiVisual`) is on the right. A table that text wraps around is
-// placed by its position (`w:tblpPr`) and ignores `w:jc`, so its alignment is refused rather
-// than written where it would not move the table.
+// Repeat Header Rows and table placement: the table property commands of the planner.
 
 import type { EditorCommand } from '../contracts/editor.ts';
 import type { SemanticLayout } from '../layout/semantic-records.ts';
@@ -29,6 +16,7 @@ type Refusal = Extract<TableCommandPlan, { ok: false }>;
 
 /** The refusal for turning off a header row that the table style, not the row, makes one. */
 export const HEADER_ROW_FROM_STYLE_REASON = 'the table style makes this row a header row';
+
 /** The refusal for aligning a table that text wraps around. */
 export const FLOATING_TABLE_ALIGNMENT_REASON =
   'text wraps around this table, so alignment does not move it';
@@ -39,6 +27,9 @@ const SET_TABLE_PROPERTIES_KEYS: readonly string[] = [
   'widthType',
   'justification',
 ];
+
+/** A justification as a right-to-left table writes it in document order. */
+const MIRRORED = { left: 'right', right: 'left' } as const;
 
 const invalid = (reason: string): Refusal => ({ ok: false, code: 'invalidArgs', reason });
 
@@ -67,12 +58,14 @@ function headerRowState(
   const selected = new Set(rowIds);
   const indexes = rows.flatMap((row, index) => (selected.has(row.id) ? [index] : []));
   if (indexes.length === 0) return null;
-  // Layout resolves the table style's `w:tblHeader` as well. A row it placed nowhere — one the
-  // review view hides — answers with its own flag.
+
+  // Layout resolves the table style's `w:tblHeader` as well. A row it placed nowhere (one the
+  // review view hides) answers with its own flag.
   const resolved = new Map<string, boolean>();
   for (const { table, row } of tableInteractionIndex(layout).occurrences) {
     if (table.tableId === tableId && !row.isHeaderRepeat) resolved.set(row.id, row.isHeaderRow);
   }
+
   const plain = rows.findIndex((row) => !(resolved.get(row.id) ?? ownHeaderFlag(row)));
   return {
     rows,
@@ -93,7 +86,15 @@ export function headerRowsActive(
   return state !== null && state.last < state.leading;
 }
 
-/** `toggleHeaderRow` over the selected rows, not yet validated against the store. */
+/**
+ * `toggleHeaderRow` over the selected rows, not yet validated against the store.
+ *
+ * Header rows are the table's leading rows, as in Word: a row repeats atop each page only
+ * while every row above it does (`table-flow-pagination.ts`). So turning it on marks every row
+ * from the first through the last selected one, and turning it off clears it from the first
+ * selected row down. Both write the store's `headerRowCount`, which keeps the leading block
+ * exactly that many rows long.
+ */
 export function planHeaderRowToggle(
   part: OoxmlPart,
   layout: SemanticLayout,
@@ -103,11 +104,13 @@ export function planHeaderRowToggle(
   const state = headerRowState(part, layout, tableId, rowIds);
   if (!state) return invalid('the table target is no longer valid');
   const on = state.last >= state.leading;
+
   // A row the table style makes a header has no flag of its own to clear, so turning it off
   // here would change nothing. Say so rather than report a change that did not happen.
   if (!on && state.rows.slice(state.first, state.leading).some((row) => !ownHeaderFlag(row))) {
     return { ok: false, code: 'unsupported', reason: HEADER_ROW_FROM_STYLE_REASON };
   }
+
   const headerRowCount = on ? state.last + 1 : state.first;
   return {
     ok: true,
@@ -135,7 +138,15 @@ function preferredWidthOf({ width, widthType }: SetTableProperties): PreferredWi
   return widthType === null && value === 0 ? null : ({ type: widthType, value } as PreferredWidth);
 }
 
-/** `setTableProperties` on the selected table, not yet validated against the store. */
+/**
+ * `setTableProperties` on the selected table, not yet validated against the store.
+ *
+ * Left and right are as the reader sees them, as the planner's border and column commands
+ * take them, and are written in document order: the leading edge of a right-to-left table
+ * (`w:bidiVisual`) is on the right. A table that text wraps around is placed by its position
+ * (`w:tblpPr`) and ignores `w:jc`, so its alignment is refused rather than written where it
+ * would not move the table.
+ */
 export function planTablePlacement(
   command: SetTableProperties,
   layout: SemanticLayout,
@@ -150,8 +161,9 @@ export function planTablePlacement(
   if (justification !== undefined && floating) {
     return { ok: false, code: 'unsupported', reason: FLOATING_TABLE_ALIGNMENT_REASON };
   }
+
   const mirror = visualRtl && (justification === 'left' || justification === 'right');
-  const jc = mirror ? (justification === 'left' ? 'right' : 'left') : justification;
+  const jc = mirror ? MIRRORED[justification] : justification;
   const op: TreeDocOp = {
     op: 'setTableProperties',
     tableId,

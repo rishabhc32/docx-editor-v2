@@ -1,0 +1,14 @@
+{
+  "impact": "compatible",
+  "fields": [],
+  "before": "A tracked insertion placed beside a tracked deletion, with no unstruck run on the caret's side (inside the deletion, right after one that ends the paragraph, or before one that starts it), was written as a run with no w:rPr, so it lost bold, size, and font.",
+  "after": "The tracked insertion copies the w:rPr of the struck run before the caret, or after it at a paragraph's start, without any w:rPrChange record. The same placement as before; only the inserted run's properties differ.",
+  "reason": "The local store writes an ordinary w:ins holding a w:r with w:rPr, a shape released participants already store, synchronize, and read. Remote peers materialize the shared state rather than replaying the insertion, so they receive the corrected properties as data. No stored field, operation, or journal primitive changes.",
+  "tests": [
+    "packages/core/src/store/__tests__/tracked-insert-struck-face.test.ts",
+    "packages/core/src/editor/__tests__/suggesting-typed-face-near-deletion.test.ts",
+    "packages/pro/src/collaboration/__tests__/document-tracked-typing-face.test.ts"
+  ],
+  "changeset": "tracked-typing-struck-face",
+  "migration": null
+}

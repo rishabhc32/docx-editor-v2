@@ -253,6 +253,7 @@ export {
   type ContentLockPolicy,
   type EditOptions,
   type OoxmlEditResult,
+  type RetainedPrompt,
   type TransactionRevisionIds,
 } from './ooxml-edit.ts';
 export {

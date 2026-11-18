@@ -6,6 +6,7 @@
 
 import { actorScopedSeed } from '../package/actor-scoped-ids.ts';
 import {
+  createMarkContainerIdAllocator,
   createNodeIdAllocator,
   insertChildren,
   removeNode,
@@ -57,6 +58,13 @@ import { fromEdit, TEXT_DEPS } from './tree-op-nodes.ts';
 import { isWmlElement, wmlAttributeValue, wmlChildNamed } from './tree-op-table-shared.ts';
 import { readEditableTableTopology, type EditableTableTopology } from './tree-op-table-topology.ts';
 import {
+  applyMergedColumnDeletion,
+  applyMergedColumnInsertion,
+  tableHasColumnMergeMarkers,
+  validateMergedColumnOp,
+  validateRegularColumnTable,
+} from './tree-op-table-merged-columns.ts';
+import {
   rowHasVerticalMerge,
   rowHidesCellInWrapper,
   tableHidesRowBetween,
@@ -71,6 +79,7 @@ import { nextRevisionId } from './tree-op-revision-ids.ts';
 import {
   insertedCellParagraphContent,
   insertedCellParagraphNodeCount,
+  withInsertedCellMarks,
 } from './tree-op-table-row-paragraph.ts';
 import {
   invalidRevisionAttribution,
@@ -298,12 +307,18 @@ export function trackedRevisionAttributes(
   ];
 }
 
+/**
+ * A row's tracked marker (`w:trPr/w:ins` or `w:del`). A new row's cells carry no `w:cellIns`:
+ * Word marks each cell's paragraph mark inserted instead (`withInsertedCellMarks`, its
+ * containers from `markId`). A struck row's cells carry `w:cellDel`.
+ */
 export function withTrackedRowMarker(
   row: OoxmlTableRowNode,
   markerKind: 'ins' | 'del',
   revisionId: string,
   revision: RevisionAttributionInput,
   nextId: () => string,
+  markId: () => string,
   wml: WmlFreshNamespaceContext
 ): OoxmlTableRowNode {
   const rowMarker = freshWmlElement(
@@ -317,17 +332,20 @@ export function withTrackedRowMarker(
   const patchedTrPr = patchTrPrChild(trPr, rowMarker);
   if (!patchedTrPr.ok) return row;
 
-  const cellMarkerKind = markerKind === 'ins' ? 'cellIns' : 'cellDel';
+  const attributes = () => trackedRevisionAttributes(revisionId, revision, wml);
   const children = row.children.map((child): OoxmlNode => {
     if (child.kind !== 'tableCell') {
       return child === existingTrPr ? patchedTrPr.container : child;
     }
-    const marker = freshWmlElement(
-      cellMarkerKind,
-      nextId,
-      wml,
-      trackedRevisionAttributes(revisionId, revision, wml)
-    );
+    if (markerKind === 'ins') {
+      return withInsertedCellMarks(
+        child,
+        () => freshWmlElement('ins', nextId, wml, attributes()),
+        markId,
+        wml
+      );
+    }
+    const marker = freshWmlElement('cellDel', nextId, wml, attributes());
     const existingTcPr = wmlChildNamed(child, 'tcPr');
     const tcPr = existingTcPr ?? freshWmlElement('tcPr', nextId, wml, []);
     const patchedTcPr = patchTcPrChild(tcPr, marker);
@@ -790,6 +808,7 @@ export function applyInsertTableRow(
         nextRevisionId(part)(),
         op.revision,
         nextId,
+        createMarkContainerIdAllocator(part),
         wmlFreshNamespaceContextAt(part, topology.table)
       )
     : built.row;
@@ -861,6 +880,7 @@ export function applyDeleteTableRow(
       nextRevisionId(part)(),
       op.revision,
       nextId,
+      createMarkContainerIdAllocator(part),
       wmlFreshNamespaceContextAt(part, topologyResult.topology.table)
     );
     const effect: TreeOpEffect = {
@@ -954,35 +974,6 @@ function resolveReferenceCellColumnIndex(
   if (!firstRow) return null;
   const index = firstRow.cells.findIndex((cell) => cell.id === referenceCellId);
   return index === -1 ? null : index;
-}
-
-function tableHasColumnMergeMarkers(topology: EditableTableTopology): boolean {
-  for (const { cells } of topology.rows) {
-    for (const cell of cells) {
-      const tcPr = wmlChildNamed(cell, 'tcPr');
-      if (!tcPr) continue;
-      if (wmlChildNamed(tcPr, 'gridSpan')) return true;
-      if (wmlChildNamed(tcPr, 'hMerge')) return true;
-      if (wmlChildNamed(tcPr, 'vMerge')) return true;
-    }
-  }
-  return false;
-}
-
-function validateRegularColumnTable(topology: EditableTableTopology): TreeOpRejection | null {
-  if (tableHasColumnMergeMarkers(topology)) return 'table-has-merge';
-  if (topology.rows.length === 0) return 'tree-invariant';
-  const cellCount = topology.rows[0]!.cells.length;
-  if (cellCount === 0) return 'tree-invariant';
-  for (const { row, cells } of topology.rows) {
-    if (cells.length !== cellCount) return 'tree-invariant';
-    const trPr = wmlChildNamed(row, 'trPr');
-    if (trPr && (wmlChildNamed(trPr, 'gridBefore') || wmlChildNamed(trPr, 'gridAfter'))) {
-      return 'tree-invariant';
-    }
-  }
-  if (topology.grid && topology.gridColumns.length !== cellCount) return 'tree-invariant';
-  return null;
 }
 
 function referenceGridWidthTwips(
@@ -1139,7 +1130,7 @@ function planColumnInsertion(
   };
 }
 
-function buildFreshColumnCell(
+export function buildFreshColumnCell(
   sourceCell: OoxmlTableCellNode,
   part: OoxmlPart,
   targetTable: OoxmlElement,
@@ -1190,6 +1181,7 @@ export function validateTableColumnOp(
   if (!topologyResult.ok) return mapTopologyRejection(topologyResult.reason);
 
   const { topology } = topologyResult;
+  if (tableHasColumnMergeMarkers(topology)) return validateMergedColumnOp(topology, op);
   const regular = validateRegularColumnTable(topology);
   if (regular) return regular;
 
@@ -1238,6 +1230,8 @@ export function applyInsertTableColumn(
   if (!topologyResult.ok) return { ok: false, reason: mapTopologyRejection(topologyResult.reason) };
 
   const { topology } = topologyResult;
+  if (tableHasColumnMergeMarkers(topology))
+    return applyMergedColumnInsertion(part, op, topology, options);
   const target = parseInsertColumnTarget(op);
   if (!target) return { ok: false, reason: 'invalidArgs' };
 
@@ -1357,6 +1351,8 @@ export function applyDeleteTableColumn(
   if (!topologyResult.ok) return { ok: false, reason: mapTopologyRejection(topologyResult.reason) };
 
   const { topology } = topologyResult;
+  if (tableHasColumnMergeMarkers(topology))
+    return applyMergedColumnDeletion(part, op, topology, options);
   const columnIndex = resolveGridColumnIndex(topology, op.gridColumnId);
   if (columnIndex === null || !topology.grid) return { ok: false, reason: 'unknown-grid-column' };
 

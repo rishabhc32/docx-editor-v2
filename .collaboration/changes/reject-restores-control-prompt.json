@@ -1,0 +1,13 @@
+{
+  "impact": "compatible",
+  "fields": [],
+  "before": "A tracked edit that replaced a content control's prompt removed the prompt without keeping it anywhere. Rejecting the edit restored the glossary block's text when w:placeholder named one, and otherwise the type's default prompt in one run, or no prompt at all for an untyped or block-level control.",
+  "after": "Before a tracked edit removes a prompt that no glossary block holds, the same transaction writes the prompt's own runs as a w:docPart in the placeholder gallery of word/glossary/document.xml, creating that part with its relationship and content type when the package has none, and adds w:placeholder/w:docPart to the control's w:sdtPr. A decision that empties the control restores that block's runs under w:showingPlcHdr.",
+  "reason": "The results are an ordinary XML part, a relationship, a content type override, and existing w:sdtPr and w:sdtContent structures, which the journal already carries as package edits, the same way image and custom XML writes travel. No stored field, operation kind, or identity rule changes. A released participant ignores the new glossary block when it rejects, so it shows the default prompt, and its result still replicates to every participant.",
+  "tests": [
+    "packages/core/src/editor/__tests__/suggesting-control-prompt-reject.test.ts",
+    "packages/pro/src/collaboration/__tests__/document-suggested-control-values.test.ts"
+  ],
+  "changeset": "reject-restores-control-prompt",
+  "migration": null
+}

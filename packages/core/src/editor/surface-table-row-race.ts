@@ -1,16 +1,4 @@
 // Take back a table formatting suggestion that another author's change to the same row beat.
-//
-// Suggesting refuses a table formatting change to a row that holds another author's pending
-// change, because Word answers a row's records as one decision. In a shared room two people
-// can still each change one row before either sees the other's record. Every replica gives the
-// row the same owner (`compareRowRecordOwners`): the record with the earlier `w:date`, then the
-// lesser author, then the lesser revision id.
-//
-// After a remote update, the editor whose latest table formatting gesture lost takes it back
-// with collaborative undo, which reverts this author's changes only. It does so while the
-// gesture is still the last step of the local history, so it never undoes a later edit; after
-// one, the room keeps showing the row as its owner's one decision. The undone step leaves the
-// redo history too, so Redo cannot bring the losing change back, and the user reads why it went.
 
 import type { TreeDocxSessionView } from '@docx-editor.dev/core/binding';
 import {
@@ -24,10 +12,10 @@ import { tableChildren } from '../store/store/revision-table-children.ts';
 import {
   compareRowRecordOwners,
   recordsTableFormatting,
-  rowPropertyRecords,
   rowRecordOwnerOf,
   type RowRecordOwner,
 } from '../store/store/table-row-owner.ts';
+import { rowPropertyRecords } from '../store/store/tree-op-tracked-table-records.ts';
 import type { TreeDocOp } from '../store/store/tree-op-types.ts';
 import { undoHistoryPosition } from '../store/store/undo-history-position.ts';
 import { partOfNodeId } from './surface-scope.ts';
@@ -64,25 +52,44 @@ function ownRecord(row: OoxmlElement, author: string): RowRecordOwner | undefine
     if (owner.author !== author) continue;
     if (!earliest || compareRowRecordOwners(owner, earliest) < 0) earliest = owner;
   }
+
   return earliest;
 }
 
-/** Whether a row of the gesture now shows a record of another author that owns the row. */
-function lostRow(session: Session, gesture: Gesture): boolean {
+/**
+ * Whether a row of the gesture now shows a record of another author that owns the row
+ * (`taken`), or every row of it went (`gone`): a row height leaves its table's anchor records
+ * (Word's form, `tree-op-tracked-table-row-height.ts`), which decide nothing once its rows go.
+ * Null while the gesture still holds its rows.
+ *
+ * In a shared room two people can each change one row before either sees the other's record.
+ * Every editor gives the row the same owner (`compareRowRecordOwners`): the record with the
+ * earlier `w:date`, then the lesser author, then the lesser revision id.
+ */
+function rowLoss(session: Session, gesture: Gesture): 'taken' | 'gone' | null {
+  let shown = false;
   for (const [rowId, own] of gesture.rows) {
     const row = rowAt(session, rowId);
     if (!row) continue;
+    shown = true;
     for (const record of rowPropertyRecords(row)) {
       const owner = rowRecordOwnerOf(record.attributes);
-      if (owner.author !== gesture.author && compareRowRecordOwners(owner, own) < 0) return true;
+      if (owner.author !== gesture.author && compareRowRecordOwners(owner, own) < 0) return 'taken';
     }
   }
-  return false;
+
+  return shown ? null : 'gone';
 }
 
 /**
  * Watch the local table formatting gestures of an editor in a shared room. `watch` is called
  * with a gesture's ops before it commits, and its result after the gesture landed.
+ *
+ * After a remote update, the editor whose latest table formatting gesture lost takes it back
+ * with collaborative undo, which reverts this author's changes only. It does so only while the
+ * gesture is the last step of the local history, so it never undoes a later edit; after one,
+ * the room keeps showing the row as its owner's one decision. The undone step leaves the redo
+ * history too, so Redo cannot bring the losing change back, and the user reads why it went.
  */
 export function createTableRowRace(
   session: Session,
@@ -104,11 +111,13 @@ export function createTableRowRace(
       gesture = null;
       return;
     }
-    if (!lostRow(session, current)) return;
+
+    const lost = rowLoss(session, current);
+    if (lost === null) return;
     gesture = null;
     if (!collaboration.undo()) return;
     position.split();
-    publishRefusal(ROW_TAKEN_REASON);
+    if (lost === 'taken') publishRefusal(ROW_TAKEN_REASON);
   }
 
   // A remote update can change who owns a row of the gesture; any local commit, undo or redo
@@ -118,8 +127,9 @@ export function createTableRowRace(
   const unsubscribe = position
     ? session.subscribe((change) => {
         if (gesture === null) return;
-        if (change.origin !== ORIGIN_IDS.mutationRemote) gesture = null;
-        else if (!checking) {
+        if (change.origin !== ORIGIN_IDS.mutationRemote) {
+          gesture = null;
+        } else if (!checking) {
           checking = true;
           queueMicrotask(check);
         }
@@ -145,6 +155,7 @@ export function createTableRowRace(
             if (own) rows.set(row.id, own);
           }
         }
+
         const anchor = position.current();
         if (rows.size > 0 && anchor) gesture = { author, anchor, rows };
       };

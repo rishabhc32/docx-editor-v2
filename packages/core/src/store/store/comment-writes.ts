@@ -36,7 +36,7 @@ import {
   type OoxmlNode,
   type OoxmlPart,
 } from '../package/ooxml-tree.ts';
-import { W14_NAMESPACE_URI, XML_NAMESPACE_URI } from '../package/ooxml-shared.ts';
+import { W14_NAMESPACE_URI } from '../package/ooxml-shared.ts';
 import { isValidParaId, mintParaId, usedParaIds, w14RootPrefix } from '../package/para-id.ts';
 import {
   collectUsedParaIds,
@@ -52,6 +52,7 @@ import {
   validateCommentAuthor,
   validateCommentText,
 } from './comment-input-validate.ts';
+import { commentElementOf, element } from './comment-element.ts';
 import { nextCommentId } from './comment-id-mint.ts';
 import { rewriteExtendedRoot, stampThreadParaIds } from './comment-resolution-rewrites.ts';
 import type { TreeDocumentStore, TreeModelChange } from './tree-store.ts';
@@ -60,14 +61,15 @@ import type { TreeOpRejection } from './tree-op-types.ts';
 const COMMENTS_PART = '/word/comments.xml';
 const COMMENTS_EXTENDED_PART = '/word/commentsExtended.xml';
 const COMMENTS_TYPE = 'application/vnd.openxmlformats-officedocument.wordprocessingml.comments+xml';
-const COMMENTS_EXTENDED_TYPE =
+export const COMMENTS_EXTENDED_TYPE =
   'application/vnd.openxmlformats-officedocument.wordprocessingml.commentsExtended+xml';
 const COMMENTS_EXTENDED_TYPES = [
   COMMENTS_EXTENDED_TYPE,
   'application/vnd.ms-word.commentsExtended+xml',
 ] as const;
-const COMMENTS_REL = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/comments';
-const COMMENTS_EXTENDED_REL =
+export const COMMENTS_REL =
+  'http://schemas.openxmlformats.org/officeDocument/2006/relationships/comments';
+export const COMMENTS_EXTENDED_REL =
   'http://schemas.microsoft.com/office/2011/relationships/commentsExtended';
 const W15_NAMESPACE_URI = 'http://schemas.microsoft.com/office/word/2012/wordml';
 
@@ -133,45 +135,6 @@ function attribute(
   return undefined;
 }
 
-function wmlAttr(localName: string, value: string): OoxmlElement['attributes'][number] {
-  return {
-    kind: 'genericExtension' as const,
-    namespaceUri: WML_NAMESPACE_URI,
-    localName,
-    prefix: 'w',
-    value,
-  };
-}
-
-/**
- * Build an element with an explicit KIND.
- *
- * Typed rather than generic on purpose: everything that reads comments matches on kind, so a
- * body written as generic nodes would serialize correctly and be invisible to the reader in the
- * same session — the comment would appear only after a save and reopen.
- */
-function element(
-  id: string,
-  kind: OoxmlElement['kind'],
-  namespaceUri: string,
-  prefix: string,
-  localName: string,
-  attributes: OoxmlElement['attributes'],
-  children: readonly OoxmlNode[],
-  bindings: readonly { prefix: string; namespaceUri: string }[] = []
-): OoxmlElement {
-  return {
-    id,
-    kind,
-    namespaceUri,
-    localName,
-    prefix,
-    namespaceBindings: bindings,
-    attributes,
-    children,
-  } as OoxmlElement;
-}
-
 /**
  * The part a relationship of `type` names, when the package agrees it is that kind of part.
  *
@@ -227,7 +190,7 @@ function relatedPartName(
  * through `withRelationshipsPartFor` so a package that loaded without a modeled `.rels` tree
  * still records `putRelationship` instead of publishing `comments.xml` that nothing points at.
  */
-function withMainDocumentRelationship(
+export function withMainDocumentRelationship(
   pkg: OoxmlPackage,
   relationshipType: string,
   targetPartName: string
@@ -368,7 +331,11 @@ function withW14Binding(part: OoxmlPart): { part: OoxmlPart; prefix: string } {
  * Both write paths — a reply keying its parent, a resolve keying a thread — go through this, so
  * neither can be repaired while the other is not.
  */
-function stampedParagraph(target: OoxmlElement, paraId: string, prefix: string): OoxmlElement {
+export function stampedParagraph(
+  target: OoxmlElement,
+  paraId: string,
+  prefix: string
+): OoxmlElement {
   return element(
     target.id,
     'paragraph',
@@ -414,103 +381,7 @@ function commentElement(
   request: AddCommentRequest,
   paraIdPrefix: string
 ): OoxmlElement {
-  const base = `${COMMENTS_PART}#comment-${commentId}`;
-  // `xml:space="preserve"` when the body has an edge space, which is what a conformant
-  // reader is entitled to drop — Word writes the attribute for exactly this case. Omitted
-  // otherwise, so an ordinary reply adds no attribute the file did not need.
-  const preservesSpace = request.text !== request.text.trim();
-  const text = element(
-    `${base}.t`,
-    'text',
-    WML_NAMESPACE_URI,
-    'w',
-    't',
-    preservesSpace
-      ? [
-          {
-            kind: 'xmlSpace' as const,
-            namespaceUri: XML_NAMESPACE_URI,
-            localName: 'space' as const,
-            prefix: 'xml' as const,
-            value: 'preserve' as const,
-          },
-        ]
-      : [],
-    [{ id: `${base}.tv`, kind: 'textValue', value: request.text }]
-  );
-  // Word's own shape: the body carries `CommentText`, and the run carries
-  // `CommentReference`. Without them a comment renders in body formatting and the pane loses
-  // the styling every other editor gives it.
-  const runProperties = element(
-    `${base}.rPr`,
-    'runProperties',
-    WML_NAMESPACE_URI,
-    'w',
-    'rPr',
-    [],
-    [
-      element(
-        `${base}.rStyle`,
-        'generic',
-        WML_NAMESPACE_URI,
-        'w',
-        'rStyle',
-        [wmlAttr('val', 'CommentReference')],
-        []
-      ),
-    ]
-  );
-  const run = element(`${base}.r`, 'run', WML_NAMESPACE_URI, 'w', 'r', [], [runProperties, text]);
-  const paragraphProperties = element(
-    `${base}.pPr`,
-    'paragraphProperties',
-    WML_NAMESPACE_URI,
-    'w',
-    'pPr',
-    [],
-    [
-      element(
-        `${base}.pStyle`,
-        'generic',
-        WML_NAMESPACE_URI,
-        'w',
-        'pStyle',
-        [wmlAttr('val', 'CommentText')],
-        []
-      ),
-    ]
-  );
-  const paragraph = element(
-    `${base}.p`,
-    'paragraph',
-    WML_NAMESPACE_URI,
-    'w',
-    'p',
-    [
-      {
-        kind: 'genericExtension' as const,
-        namespaceUri: W14_NAMESPACE_URI,
-        localName: 'paraId',
-        prefix: paraIdPrefix,
-        value: paraId,
-      },
-    ],
-    [paragraphProperties, run]
-  );
-  return element(
-    base,
-    'comment',
-    WML_NAMESPACE_URI,
-    'w',
-    'comment',
-    [
-      wmlAttr('id', commentId),
-      wmlAttr('author', request.author),
-      ...(request.initials === undefined ? [] : [wmlAttr('initials', request.initials)]),
-      ...(request.date === undefined ? [] : [wmlAttr('date', request.date)]),
-    ],
-    [paragraph]
-  );
+  return commentElementOf(commentId, request, [{ paraId, text: request.text }], paraIdPrefix);
 }
 
 function emptyPart(name: string, xml: string): OoxmlElement | null {
@@ -779,7 +650,7 @@ function genericCommentEx(
  * dropping it while writing `@w15:done` would resolve a reply and promote it to a top-level
  * comment in the same edit. Extra attributes and unknown children stay on the generic node.
  */
-function withResolvedDone(
+export function withResolvedDone(
   existing: OoxmlElement,
   parentParaId: string | undefined,
   done: boolean
@@ -816,7 +687,7 @@ export {
   commentResolutionExtendedRootRewrites,
 } from './comment-resolution-rewrites.ts';
 
-function resolvedEntry(
+export function resolvedEntry(
   id: string,
   paraId: string,
   parentParaId: string | undefined,

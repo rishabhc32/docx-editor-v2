@@ -103,11 +103,41 @@ export interface EditOptions {
    */
   readonly fieldResults?: FieldResultsMode;
   /**
-   * The text of the glossary block a control's `w:placeholder` names, for a prompt an edit
+   * The blocks of the glossary entry a control's `w:placeholder` names, for a prompt an edit
    * brings back (`content-control-prompt-restore.ts`): a part alone cannot see the glossary.
-   * Absent, or undefined for a name, means the type's own prompt.
+   * The prompt comes back with the block's own runs and run properties.
+   *
+   * Wins over {@link EditOptions.placeholderText} when both are given: `placeholderText` is
+   * asked only when this option is absent, answers undefined for the name, or the block has no
+   * paragraph to restore. With neither, the control shows the type's own prompt.
+   */
+  readonly placeholderBlocks?: (docPart: string) => readonly OoxmlNode[] | undefined;
+  /**
+   * The text of the glossary block a control's `w:placeholder` names, for a prompt an edit
+   * brings back. The prompt comes back as that text in one run, in the emptied content's face
+   * under the `PlaceholderText` style. Absent, or undefined for a name, means the type's own
+   * prompt.
+   *
+   * @deprecated Pass {@link EditOptions.placeholderBlocks}, which keeps the block's runs and
+   * run properties, and {@link EditOptions.retainPrompt}, which keeps a prompt that no block
+   * holds. Still honoured when `placeholderBlocks` gives no block for the name.
    */
   readonly placeholderText?: (docPart: string) => string | undefined;
+  /**
+   * Keep a prompt that a suggestion removes as a glossary block, written by the transaction that
+   * runs the op (`content-control-prompt-glossary.ts`). Absent, the prompt is not kept.
+   */
+  readonly retainPrompt?: (prompt: RetainedPrompt) => void;
+}
+
+/** A content control's prompt, to keep as the glossary block named `name`. */
+export interface RetainedPrompt {
+  /** The `w:docPartPr/w:name` of the block, which the control's `w:placeholder` names. */
+  readonly name: string;
+  /** Whether the control sits in a paragraph, so the block wraps `nodes` in one. */
+  readonly inline: boolean;
+  /** The control's `w:sdtContent` children as the prompt showed them. */
+  readonly nodes: readonly OoxmlNode[];
 }
 
 /**

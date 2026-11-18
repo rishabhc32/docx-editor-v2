@@ -5,9 +5,13 @@ if (!GlobalRegistrator.isRegistered) GlobalRegistrator.register();
 
 import { afterAll, describe, expect, test } from 'bun:test';
 import type { OoxmlPackage, TreeModelChange } from '@docx-editor.dev/core/store';
+import { strToU8, unzipSync, zipSync } from 'fflate';
+import { readOoxmlPackage } from '../../store/package/ooxml-package.ts';
 import { ORIGIN_IDS } from '../../store/registry/frozen-ids.ts';
 import { TypingHistory } from '../typing-history.ts';
-import { mount, paragraph } from './paginated-surface-fixtures.ts';
+import { docx, mount, paragraph } from './paginated-surface-fixtures.ts';
+
+const W = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main';
 
 // A real package and paragraph id, so node lookups resolve the way they do in a session.
 const fixture = mount(paragraph('one') + paragraph('two'));
@@ -92,6 +96,40 @@ describe('TypingHistory', () => {
     swap(rebuilt());
     history.noteForeignChange(change({}));
     expect(history.groupAt(caret(p1, 2))).toBe(group);
+  });
+
+  test("an unchanged line holding a shape keeps the run: the choice's prefixes are the root's", () => {
+    // Word declares `wps` on `w:document` and names it in the choice's `Requires`
+    const MC = 'http://schemas.openxmlformats.org/markup-compatibility/2006';
+    const WPS = 'http://schemas.microsoft.com/office/word/2010/wordprocessingShape';
+    const shapes = readOoxmlPackage(
+      zipSync({
+        '[Content_Types].xml': unzipSync(docx(''))['[Content_Types].xml']!,
+        '_rels/.rels': unzipSync(docx(''))['_rels/.rels']!,
+        'word/document.xml': strToU8(
+          `<w:document xmlns:w="${W}" xmlns:mc="${MC}" xmlns:wps="${WPS}"><w:body>` +
+            '<w:p><w:r><w:t>one</w:t></w:r><w:r><mc:AlternateContent>' +
+            '<mc:Choice Requires="wps"><w:t>a</w:t></mc:Choice><mc:Fallback><w:t>b</w:t></mc:Fallback>' +
+            '</mc:AlternateContent></w:r></w:p></w:body></w:document>'
+        ),
+      })
+    );
+    if (!shapes.ok) throw new Error(shapes.reason);
+    const pkg = shapes.package;
+    const main = pkg.parts.get(pkg.mainDocumentPart)!;
+    const body = main.root.children[0]!;
+    const line = body.kind === 'textValue' ? undefined : body.children[0];
+    if (!line) throw new Error('no line');
+    let current = pkg;
+    const history = new TypingHistory(() => current);
+    const group = history.groupAt(caret(line.id, 1));
+    history.landed(caret(line.id, 2));
+    // A wholesale install rebuilds the line as new objects with the same content
+    const parts = new Map(pkg.parts);
+    parts.set(pkg.mainDocumentPart, { ...main, root: structuredClone(main.root) });
+    current = { ...pkg, parts };
+    history.noteForeignChange(change({}));
+    expect(history.groupAt(caret(line.id, 2))).toBe(group);
   });
 
   test("a change that names no paragraphs ends the run when the run's paragraph changed", () => {

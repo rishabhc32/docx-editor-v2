@@ -25,6 +25,11 @@ export {
 } from './font-configuration.ts';
 export { LOADING_SNAPSHOT } from './loading-snapshot.ts';
 export {
+  commitCustomNodeInsert,
+  commitCustomNodeRemoval,
+  type CustomNodeCommitResult,
+} from './custom-node-commit.ts';
+export {
   MAX_RESOLVER_FAMILIES,
   DEFAULT_FONT,
   WORD_DEFAULT_FONT,
@@ -223,6 +228,7 @@ export {
   type RemoteCaretLabelAnchor,
   type RemoteCaretLabelHost,
   type SectionBreakInsertType,
+  type ReviewWrite,
   type ReviewWriteIntent,
   type SurfaceFormatting,
 } from './paginated-surface.ts';

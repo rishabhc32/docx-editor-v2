@@ -327,3 +327,57 @@ export function localReviewPatchParagraphId(
   }
   return paragraphId;
 }
+
+/** Most commits a trail follows between two reads of the queue; past that it derives again. */
+const MAX_TRAIL = 16;
+
+const IMPACT_ORDER = ['text-local', 'paragraph-local', 'flow-structural', 'global'] as const;
+
+/**
+ * The commits since the queue was last read, appended as they land. A read that finds more
+ * than one (the screen was not drawn between them: a room's version of a key landing before
+ * the key's layout, a paint deferred under input pressure) still patches when they are one
+ * paragraph's edits.
+ */
+export function followReviewTrail(
+  trail: readonly TreeModelChange[],
+  change: TreeModelChange
+): readonly TreeModelChange[] {
+  if (trail.length >= MAX_TRAIL) {
+    return [change];
+  }
+  return [...trail, change];
+}
+
+/**
+ * The trail as one commit when every commit in it rewrote the same single body paragraph, one
+ * after another: from the first one's revision to the last one's, at the widest impact among
+ * them. Otherwise the last commit alone, which the queue's revision check then refuses, so
+ * the queue is derived again.
+ */
+export function reviewTrailChange(trail: readonly TreeModelChange[]): TreeModelChange | null {
+  const last = trail[trail.length - 1];
+  const first = trail[0];
+  if (!last || !first || trail.length === 1) {
+    return last ?? null;
+  }
+  const paragraphId = first.dirty[0];
+  // An edit of that one body paragraph alone, made right after the commit before it.
+  const continuesEdit = (change: TreeModelChange, index: number): boolean =>
+    change.dirty.length === 1 &&
+    change.dirty[0] === paragraphId &&
+    change.created.length === 0 &&
+    change.deleted.length === 0 &&
+    change.splitJoin.length === 0 &&
+    change.impact !== 'global' &&
+    (change.story === undefined || change.story.kind === 'body') &&
+    (index === 0 || change.fromRevision === trail[index - 1]!.toRevision);
+  let impact = 0;
+  for (const [index, change] of trail.entries()) {
+    if (!continuesEdit(change, index)) {
+      return last;
+    }
+    impact = Math.max(impact, IMPACT_ORDER.indexOf(change.impact));
+  }
+  return { ...last, fromRevision: first.fromRevision, impact: IMPACT_ORDER[impact]! };
+}

@@ -82,14 +82,14 @@ describe('insertContentControl at a caret', () => {
   test('authors an empty control holding its type prompt', () => {
     const next = insertAt(8);
     const control = insertedControl(next, 'party');
-    expect(contentControlTextOf(control)).toBe('Click here to enter text.');
+    expect(contentControlTextOf(control)).toBe('Click or tap here to enter text.');
     expect(isShowingPlaceholder(control)).toBe(true);
     expect(contentControlPropertiesOf(control).alias).toBe('Party');
   });
 
   test('the prompt is the type own, so a date reads as a date field', () => {
     expect(contentControlTextOf(insertedControl(insertAt(8, 'date'), 'party'))).toBe(
-      'Click here to enter a date.'
+      'Click or tap to enter a date.'
     );
     expect(contentControlTextOf(insertedControl(insertAt(8, 'dropDownList'), 'party'))).toBe(
       'Choose an item.'
@@ -100,17 +100,17 @@ describe('insertContentControl at a caret', () => {
     const next = insertAt(8);
     // The paragraph reads the prompt WHERE the caret was, and nothing else moved.
     expect(paragraphTextOf(next, paragraphs(next)[0]!.id)).toBe(
-      'Between Click here to enter text.and BUYER LTD'
+      'Between Click or tap here to enter text.and BUYER LTD'
     );
   });
 
   test('inserts at either edge of the paragraph', () => {
     expect(paragraphTextOf(insertAt(0), paragraphs(SENTENCE)[0]!.id)).toBe(
-      'Click here to enter text.Between and BUYER LTD'
+      'Click or tap here to enter text.Between and BUYER LTD'
     );
     const end = 'Between and BUYER LTD'.length;
     expect(paragraphTextOf(insertAt(end), paragraphs(SENTENCE)[0]!.id)).toBe(
-      'Between and BUYER LTDClick here to enter text.'
+      'Between and BUYER LTDClick or tap here to enter text.'
     );
   });
 
@@ -255,7 +255,7 @@ describe('insertContentControl refuses a position nothing can divide', () => {
           tag: 'edge',
         });
         const text = paragraphTextOf(next, paragraphs(next)[0]!.id) ?? '';
-        expect(text.indexOf('Click here to enter text.')).toBe(offset);
+        expect(text.indexOf('Click or tap here to enter text.')).toBe(offset);
       }
     });
   }

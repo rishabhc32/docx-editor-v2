@@ -33,15 +33,39 @@ import {
   indivisibleAt,
   isParagraph,
   paragraphLength,
+  paragraphOffsetIndex,
   splitsSurrogate,
 } from './tree-op-segments.ts';
 import { rejectContentEdit } from './tree-op-validate-controls.ts';
 import { applyTreeOp } from './tree-op-apply.ts';
+import { clearPlaceholder, placeholderControlForInsertion } from './tree-op-content-controls.ts';
+import { promptInsertionOffset } from './content-control-prompt-restore.ts';
+import { withParagraphDiff } from './content-control-value-content.ts';
+import { keepingPrompt } from './tracked-content-control-value.ts';
+import { insideOwnInsertion } from './tree-op-tracked-properties.ts';
 import { equationsOfAtom, isOmmlDisplay } from '../package/omml-display.ts';
-import type { TreeDocOp, TreeOpEffect, TreeOpRejection, TreeOpResult } from './tree-op-types.ts';
+import {
+  acrossMarks,
+  insideContainersAt,
+  insideLandingRefusal,
+  inlinePromptBlocks,
+  landInside,
+  landIntoControl,
+} from './fragment-landing-inside.ts';
+import type { TreeOpEffect, TreeOpRejection, TreeOpResult } from './tree-op-types.ts';
+import type { InsertFragmentOp } from './fragment-op-types.ts';
 import { recordSetNamespaceBinding } from '../package/canonical-primitive-capture.ts';
+import { invalidRevisionAttribution } from './tree-op-revision-attribution.ts';
+import { nextRevisionId } from './tree-op-revision-ids.ts';
+import {
+  fragmentWriter,
+  trackedFragmentBlocks,
+  trackedFragmentRefusal,
+  withInsertedMark,
+  type FragmentWriter,
+} from './tracked-fragment.ts';
 
-export type InsertFragmentOp = Extract<TreeDocOp, { readonly op: 'insertFragment' }>;
+export type { InsertFragmentOp } from './fragment-op-types.ts';
 
 /** Fragment budgets: a hostile payload cannot force unbounded tree work. */
 export const MAX_FRAGMENT_INSERT_BLOCKS = 50_000;
@@ -85,7 +109,12 @@ export function validateInsertFragment(
     return 'offset-out-of-range';
   }
   if (splitsSurrogate(paragraph, op.offset)) return 'splits-surrogate-pair';
-  if (indivisibleAt(paragraph, op.offset)) return 'indivisible-content';
+  // Inside a link, a control or an insertion, the paste lands as Word lands it there
+  if (indivisibleAt(paragraph, op.offset)) {
+    const inside = insideContainersAt(paragraph, op.offset);
+    const refused = insideLandingRefusal(inside, op.blocks, op.lastMarkCovered === true);
+    if (refused) return refused;
+  }
   if (!Array.isArray(op.blocks) || op.blocks.length === 0) return 'fragment-invalid-block';
   if (op.blocks.length > MAX_FRAGMENT_INSERT_BLOCKS) return 'fragment-resource-budget';
   const budget = { nodes: 0 };
@@ -95,6 +124,11 @@ export function validateInsertFragment(
     }
     const refused = fragmentShape(block, 1, budget);
     if (refused) return refused;
+  }
+  if (op.revision !== undefined) {
+    if (invalidRevisionAttribution(op.revision)) return 'invalidArgs';
+    const untrackable = trackedFragmentRefusal(op.blocks);
+    if (untrackable) return untrackable;
   }
   return rejectContentEdit(part, paragraph as OoxmlParagraphNode, op.offset, op.offset);
 }
@@ -203,6 +237,25 @@ function besideText(
   );
 }
 
+/** The head paragraph with its mark stamped as the paste's insertion. */
+function withHeadMarkInserted(
+  part: OoxmlPart,
+  headId: string,
+  writer: FragmentWriter,
+  options?: EditOptions
+): OoxmlPart | null {
+  const head = findNode(part, headId);
+  if (!head || head.kind !== 'paragraph') return null;
+  const pPr = paragraphPropertiesNodeOf(head);
+  const replaced = replaceChildren(
+    part,
+    head.id,
+    [withInsertedMark(pPr, writer), ...head.children.filter((child) => child !== pPr)],
+    { ...options, deferValidation: true }
+  );
+  return replaced.ok ? replaced.part : null;
+}
+
 function rebuiltParagraph(
   pPr: OoxmlElement | undefined,
   inline: readonly OoxmlNode[]
@@ -214,6 +267,84 @@ export function applyInsertFragment(
   hostPart: OoxmlPart,
   op: InsertFragmentOp,
   options?: EditOptions
+): TreeOpResult {
+  const prompt = placeholderControlForInsertion(hostPart, op.paragraphId, op.offset);
+  return prompt
+    ? landOverPrompt(hostPart, op, prompt, options)
+    : landFragment(hostPart, op, options);
+}
+
+/**
+ * A paste at a control's prompt REPLACES the prompt, as typed text does (`tree-op-apply.ts`)
+ * and as Word pastes: landed inside it, the pasted blocks became prompt text, still marked
+ * `w:showingPlcHdr`. The prompt goes without a revision and stays in the glossary, so a reject
+ * or a deletion that empties the control shows it again.
+ */
+function landOverPrompt(
+  part: OoxmlPart,
+  op: InsertFragmentOp,
+  prompt: { readonly control: OoxmlNode; readonly offset: number },
+  options?: EditOptions
+): TreeOpResult {
+  const cleared = clearPlaceholder(part, prompt.control.id, options, op.paragraphId);
+  if (!cleared) return { ok: false, reason: 'unsupported' };
+  const emptied = withoutEmptyRuns(part, cleared, op.paragraphId, options);
+  const offset = promptInsertionOffset(emptied, op.paragraphId, prompt.offset);
+  // At an inline control's prompt the paste lands in the control, as one line: Word turns
+  // each pasted mark into a space there
+  const line = inlinePromptBlocks(
+    findNode(part, op.paragraphId),
+    prompt.control,
+    op.blocks,
+    op.lastMarkCovered === true,
+    createNodeIdAllocator(part, 'paste')
+  );
+  const result = line
+    ? landFragment(
+        emptied,
+        { ...op, blocks: line, lastMarkCovered: false, offset },
+        options,
+        prompt.control.id
+      )
+    : landFragment(emptied, { ...op, offset }, options);
+  const control = findNode(emptied, prompt.control.id);
+  if (!result.ok || !control) return result;
+  const replaced = { ...result, effect: withParagraphDiff(result.effect, prompt.control, control) };
+  // The prompt stays the control's, in the glossary, as typing over it keeps it; not under a
+  // tracked paste inside the author's own new control, whose reject takes the control too
+  return op.revision && insideOwnInsertion(part, prompt.control.id, op.revision.author)
+    ? replaced
+    : keepingPrompt(part, prompt.control, replaced, options);
+}
+
+/**
+ * The emptied prompt's paragraph without the empty run `clearPlaceholder` leaves for typing.
+ * Only a run that `before` did not hold goes: a field's runs after its begin, or a comment
+ * reference, have no offset length either and stay.
+ */
+export function withoutEmptyRuns(
+  before: OoxmlPart,
+  cleared: OoxmlPart,
+  paragraphId: string,
+  options?: EditOptions
+): OoxmlPart {
+  const paragraph = findNode(cleared, paragraphId);
+  if (!paragraph || paragraph.kind !== 'paragraph') return cleared;
+  const index = paragraphOffsetIndex(paragraph);
+  const kept = paragraph.children.filter(
+    (child) => child.kind !== 'run' || index.lengthOf(child) > 0 || findNode(before, child.id)
+  );
+  if (kept.length === paragraph.children.length) return cleared;
+  const replaced = replaceChildren(cleared, paragraph.id, kept, options);
+  return replaced.ok ? replaced.part : cleared;
+}
+
+/** `into`: the control whose prompt the paste cleared, which takes the paste as its content. */
+function landFragment(
+  hostPart: OoxmlPart,
+  op: InsertFragmentOp,
+  options?: EditOptions,
+  into?: string
 ): TreeOpResult {
   const host = findNode(hostPart, op.paragraphId);
   if (!host || host.kind !== 'paragraph') return { ok: false, reason: 'unknown-paragraph' };
@@ -233,7 +364,7 @@ export function applyInsertFragment(
   const counter = { value: 0 };
   // The clones land beside the host paragraph (or inside it), so its scope decides the prefix.
   const hostPrefix = w14PrefixInScopeAt(hostPart, host);
-  const blocks = op.blocks.map((block, index) =>
+  const cloned = op.blocks.map((block, index) =>
     withFreshParaIds(
       cloneWithNewIds(block, nextId),
       paraIds,
@@ -242,12 +373,29 @@ export function applyInsertFragment(
       hostPrefix
     )
   );
+  // Tracked: the whole paste is one insertion, so it takes ONE id from the part as it stands
+  // after whatever this transaction already wrote (a replaced selection's struck words).
+  const writer = op.revision
+    ? fragmentWriter(hostPart, nextRevisionId(hostPart)(), op.revision, nextId)
+    : null;
+  // Inside a link or a control the paste goes into it, its paragraph marks spaces in a control
+  const inside = indivisibleAt(host, op.offset) ? insideContainersAt(host, op.offset) : null;
+  const intoContainer = inside !== null && (inside.link || inside.control);
+  const shaped = intoContainer ? acrossMarks(cloned, op.lastMarkCovered === true, nextId) : cloned;
+  const blocks = writer ? trackedFragmentBlocks(shaped, writer) : shaped;
+  if (!blocks) return { ok: false, reason: 'fragment-untrackable-content' };
 
   // Prefixes the fragment uses must be bound at the target root before commit validation.
   const part = withRequiredNamespaceBindings(hostPart, blocks);
 
   const first = blocks[0]!;
   const last = blocks[blocks.length - 1]!;
+  if (intoContainer || into !== undefined) {
+    const inline = besideText(inlineChildrenOf(first as OoxmlElement), inlineChildrenOf(host));
+    return into === undefined
+      ? landInside(part, host, op.offset, inline, options)
+      : landIntoControl(part, host.id, into, inline, options);
+  }
   const inlineOnly =
     blocks.length === 1 && first.kind === 'paragraph' && op.lastMarkCovered !== true;
 
@@ -300,6 +448,13 @@ export function applyInsertFragment(
   const tailId = split.effect.split?.tail;
   if (!tailId) return { ok: false, reason: 'tree-invariant' };
   let current = split.part;
+  // A fragment that opens with a table keeps the host's properties on the head, but the head
+  // now ends on the mark the split wrote, which the paste inserts.
+  if (writer && first.kind !== 'paragraph') {
+    const stamped = withHeadMarkInserted(current, host.id, writer, options);
+    if (!stamped) return { ok: false, reason: 'tree-invariant' };
+    current = stamped;
+  }
 
   const middle: OoxmlNode[] = [...blocks];
   const created: string[] = [tailId];

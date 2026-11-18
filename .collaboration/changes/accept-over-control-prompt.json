@@ -1,0 +1,17 @@
+{
+  "impact": "compatible",
+  "fields": [],
+  "before": "Accepting a w:ins of words next to a w:del of a content control's prompt runs, the shape earlier versions saved for typing over a prompt in suggesting mode, left w:showingPlcHdr on the control and the PlaceholderText style on the accepted words. An untyped control that an edit or a decision emptied, or that a file left empty, showed no prompt unless a glossary block that the control names restored it.",
+  "after": "The accept transaction also removes w:showingPlcHdr from that control and the PlaceholderText run style from its words. An edit or a decision that empties an untyped control that is not a repeating section or item restores the type's prompt under w:showingPlcHdr when no glossary block applies, as for a rich text control, and such a control opens showing its prompt outside collaboration.",
+  "reason": "Both results are existing w:sdtPr, run property, and w:sdtContent structures written inside the accept, decision, or content-edit transaction, which the journal carries as ordinary story edits. No stored field, operation kind, or identity rule changes. A released participant that makes the same decision or edit keeps its old result, and that result still replicates to every participant. Collaboration rooms install shared state without the open-time prompt fill, so that change does not reach shared state.",
+  "tests": [
+    "packages/core/src/store/__tests__/content-control-prompt-accept.test.ts",
+    "packages/core/src/store/__tests__/content-control-untyped-prompt.test.ts",
+    "packages/core/src/store/__tests__/prompt-restore-placeholder-text.test.ts",
+    "packages/core/src/editor/__tests__/suggesting-control-prompt-accept.test.ts",
+    "packages/core/src/editor/__tests__/untyped-control-prompt.test.ts",
+    "packages/pro/src/collaboration/__tests__/document-control-prompts.test.ts"
+  ],
+  "changeset": "accept-over-control-prompt",
+  "migration": null
+}

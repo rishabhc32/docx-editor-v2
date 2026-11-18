@@ -25,6 +25,7 @@ import {
   type OoxmlPart,
 } from '../package/index.ts';
 import { diffSemanticDigests, semanticDigest } from '../package/ooxml-digest.ts';
+import { paraIdOf } from '../package/para-id.ts';
 import { TreePackageStore } from '../store/tree-package-store.ts';
 import { paragraphTextOf } from '../store/tree-ops.ts';
 import {
@@ -216,6 +217,45 @@ describe('insertNote', () => {
     expect(result.ok).toBe(false);
     if (result.ok) throw new Error('expected failure');
     expect(result.reason).toBe('invalidArgs');
+  });
+
+  test('refuses a paragraph inside a text box, where Word ignores a note reference', () => {
+    // [MS-OI29500] 17.11.14(a) and 17.11.7(b): Word ignores a footnote or endnote reference
+    // in a text box, so a note is not inserted there
+    const body =
+      '<w:p><w:r><w:t>Host</w:t></w:r><w:r><w:pict><v:shape xmlns:v="urn:schemas-microsoft-com:vml">' +
+      '<v:textbox><w:txbxContent><w:p><w:r><w:t>Box</w:t></w:r></w:p></w:txbxContent></v:textbox>' +
+      '</v:shape></w:pict></w:r></w:p>';
+    const pkg = load(build({ body }));
+    const inBox = (node: OoxmlNode, inside = false): string | null => {
+      if (node.kind === 'textValue') return null;
+      if (inside && node.kind === 'paragraph') return node.id;
+      const deeper = inside || node.localName === 'txbxContent';
+      for (const child of node.children) {
+        const found = inBox(child, deeper);
+        if (found) return found;
+      }
+      return null;
+    };
+    const paragraphId = inBox(mainPartOf(pkg).root);
+    if (!paragraphId) throw new Error('no text box paragraph');
+    const result = applyNoteLifecycleOp(pkg, {
+      op: 'insertNote',
+      noteKind: 'footnote',
+      paragraphId,
+      offset: 0,
+    });
+    expect(result.ok).toBe(false);
+    if (result.ok) throw new Error('expected failure');
+    expect([result.reason, result.detail]).toEqual(['invalidArgs', 'paragraph-not-in-body']);
+    // The paragraph that holds the text box still takes one
+    const host = applyNoteLifecycleOp(pkg, {
+      op: 'insertNote',
+      noteKind: 'footnote',
+      paragraphId: firstParagraphId(pkg),
+      offset: 2,
+    });
+    expect(host.ok).toBe(true);
   });
 });
 
@@ -728,6 +768,54 @@ describe('TreePackageStore notes coexistence', () => {
     const reopened = load(saved);
     expect(resolveNotesPart(reopened, 'footnote')).not.toBeNull();
     expect(diagnoseNoteReferences(reopened)).toEqual([]);
+  });
+});
+
+describe('a notes part made again', () => {
+  test('takes paragraph ids after its first part went, as an opened story does', () => {
+    // An undo parks the notes store with its part gone; a second note makes the part anew, and
+    // its paragraphs get `w14:paraId` as when the store first opened: a collaboration caret and
+    // an anchor name a paragraph by it
+    const store = openStore(build({}));
+    const paragraphId = firstParagraphId(store.currentPackage());
+    const insert = () =>
+      store.applyLifecycleOp({ op: 'insertNote', noteKind: 'footnote', paragraphId, offset: 1 });
+    expect(insert().ok).toBe(true);
+    expect(store.resolveStory({ kind: 'notesPart', noteKind: 'footnote' }).ok).toBe(true);
+    store.undo();
+    expect(resolveNotesPart(store.currentPackage(), 'footnote')).toBeNull();
+    expect(insert().ok).toBe(true);
+    const notes = resolveNotesPart(store.currentPackage(), 'footnote');
+    const paragraphs: OoxmlNode[] = [];
+    const visit = (node: OoxmlNode): void => {
+      if (node.kind === 'paragraph') paragraphs.push(node);
+      else if (node.kind !== 'textValue') node.children.forEach(visit);
+    };
+    if (notes) visit(notes.root);
+    expect(paragraphs.length).toBeGreaterThan(0);
+    expect(paragraphs.every((paragraph) => paraIdOf(paragraph) !== null)).toBe(true);
+  });
+});
+
+describe('a new note in a notes part the file has', () => {
+  test('takes a paragraph id of its own', () => {
+    // As Word writes every paragraph: a collaboration session carries the caret into the new
+    // note by it, and found none in a notes part the file already had
+    const store = openStore(build({ footnotes: seededNotes }));
+    // Open, as the editor opens it: its paragraphs take ids
+    expect(store.resolveStory({ kind: 'notesPart', noteKind: 'footnote' }).ok).toBe(true);
+    const paragraphId = firstParagraphId(store.currentPackage());
+    const insert = { op: 'insertNote', noteKind: 'footnote', paragraphId, offset: 0 } as const;
+    expect(store.applyLifecycleOp(insert).ok).toBe(true);
+    const root = resolveNotesPart(store.currentPackage(), 'footnote')!.root;
+    const ids = (root.kind === 'textValue' ? [] : root.children).map((note) =>
+      note.kind === 'textValue'
+        ? null
+        : paraIdOf(note.children.find((c) => c.kind === 'paragraph')!)
+    );
+    expect(ids).toHaveLength(5);
+    expect(ids.every((id) => id !== null)).toBe(true);
+    expect(new Set(ids).size).toBe(ids.length);
   });
 });
 

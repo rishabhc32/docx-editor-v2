@@ -3,6 +3,7 @@ export {
   tableNodes,
   tableRead,
   tableCellRead,
+  isOwnTableInsertion,
   planTableMutation,
   planInsertTable,
   type AutomationTableMutation,

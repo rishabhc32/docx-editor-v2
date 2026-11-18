@@ -1,17 +1,12 @@
 // The opt-in strict half of suggesting mode: refuse a local edit it cannot record.
-//
-// Suggesting attributes every op it has a tracked form for (`attributeTrackedOps`) and lets the
-// rest through as they are — a page-setup change, a list toggle, a table property — so the
-// document changes with no card for a reviewer to accept or reject. A review module created with
-// `untrackedEdits: 'refuse'` turns that lane off: the surface refuses the WHOLE batch instead.
-//
-// Kept off the composition root so `paginated-surface.ts` stays under its line cap.
 
+import { governingSectionAt, sectionBreakTypeOf } from '../store/store/tree-op-section-address.ts';
 import { applyTreeOp, type TreeDocOp } from '../store/store/tree-ops.ts';
 import { paragraphMarkRevisionOf } from '../store/store/tree-op-tracked-marks.ts';
 import { PROPERTY_CHANGE_WRAPPER_OF_OP } from '../store/store/tree-op-tracked-properties.ts';
 import { insertionAuthor } from '../store/store/tree-op-retraction.ts';
 import { nextRevisionId } from '../store/store/tree-op-revision-ids.ts';
+import { attributeValueOf } from '../store/store/tree-op-nodes.ts';
 import { paragraphOffsetIndex, type OffsetSpan } from '../store/store/tree-op-segments.ts';
 import { hyperlinkAnchorOf, hyperlinkRelationshipIdOf } from '../store/package/hyperlink.ts';
 import {
@@ -20,9 +15,9 @@ import {
   type TransactionRevisionIds,
 } from '../store/package/ooxml-edit.ts';
 import { WML_NAMESPACE_URI } from '../store/package/ooxml-shared.ts';
-import type { OoxmlNode, OoxmlPart } from '../store/package/ooxml-tree.ts';
+import type { OoxmlNode, OoxmlParagraphNode, OoxmlPart } from '../store/package/ooxml-tree.ts';
 import { isDocumentProtectionBatch } from './surface-hf-editing.ts';
-import { isTrackedEdit } from './surface-tracked-ops.ts';
+import { isSectionFurnitureFormat, isTrackedEdit } from './surface-tracked-ops.ts';
 
 /** Why suggesting refused an edit that would have changed the document with no suggestion. */
 export const UNTRACKED_EDIT_REFUSAL = 'suggesting cannot record this change as a suggestion';
@@ -51,6 +46,19 @@ function proposesMark(batch: readonly TreeDocOp[], paragraphId: string): boolean
   );
 }
 
+/** Whether a section break changes how the section after it starts. */
+function retypesNextSection(
+  op: Extract<TreeDocOp, { op: 'setSectionMark' }>,
+  partOf: PartOfNode
+): boolean {
+  if (op.breakType === undefined) return false;
+  const part = partOf(op.paragraphId);
+  return (
+    part !== null &&
+    sectionBreakTypeOf(governingSectionAt(part, op.paragraphId).section) !== op.breakType
+  );
+}
+
 /** What the rule reads beside each op: the whole batch, the document, and its author. */
 interface Judging {
   readonly batch: readonly TreeDocOp[];
@@ -60,18 +68,18 @@ interface Judging {
   readonly author: string | undefined;
 }
 
-/**
- * The ops a link lane writes around a copy of its words, the only ones replayed to find it.
- * True for the two the store hands its transaction's revision bookkeeping, as it does.
- */
-const LINK_COPY_OPS: ReadonlyMap<TreeDocOp['op'], boolean> = new Map([
-  ['deleteText', true],
-  ['insertText', true],
-  ['setRunProperties', false],
-  ['removeHyperlink', false],
-  ['insertHyperlink', false],
-  ['setHyperlinkTarget', false],
+/** The ops a link lane writes around a copy of its words, the only ones replayed to find it. */
+const LINK_COPY_OPS: ReadonlySet<TreeDocOp['op']> = new Set([
+  'deleteText',
+  'insertText',
+  'setRunProperties',
+  'removeHyperlink',
+  'insertHyperlink',
+  'setHyperlinkTarget',
 ]);
+
+/** The replayed ops that mint revision ids, so the replay gives them the transaction's ids. */
+const REVISION_ID_OPS: ReadonlySet<TreeDocOp['op']> = new Set(['deleteText', 'insertText']);
 
 /**
  * The part holding `nodeId` as the batch's ops before `index` leave it, with the revision ids
@@ -102,24 +110,69 @@ function replayBefore(
   };
   let part = start;
   for (const op of context.batch.slice(0, index)) {
-    const tracked = LINK_COPY_OPS.get(op.op);
-    if (tracked === undefined) return null;
+    if (!LINK_COPY_OPS.has(op.op)) return null;
     const result = applyTreeOp(part, op, {
       deferValidation: true,
-      ...(tracked ? { trackedRevisionIds } : {}),
+      ...(REVISION_ID_OPS.has(op.op) ? { trackedRevisionIds } : {}),
     });
     if (!result.ok) return null;
     part = result.part;
   }
+
   return { part, minted };
 }
 
-/** A revision wrapper's `@w:id`, or undefined. */
-function revisionIdOf(node: OoxmlNode): string | undefined {
-  if (node.kind === 'textValue') return undefined;
-  return node.attributes.find(
-    (attribute) => attribute.namespaceUri === WML_NAMESPACE_URI && attribute.localName === 'id'
-  )?.value;
+/**
+ * The spans of `paragraph` that `author`'s insertions with a `minted` id hold, and whether
+ * anything in `[start, end)` is struck.
+ */
+function batchInsertionSpans(
+  paragraph: OoxmlParagraphNode,
+  minted: ReadonlySet<string>,
+  author: string | undefined,
+  start: number,
+  end: number
+): { readonly inserted: OffsetSpan[]; readonly struck: boolean } {
+  const offsets = paragraphOffsetIndex(paragraph);
+  const inserted: OffsetSpan[] = [];
+  let struck = false;
+  const visit = (node: OoxmlNode): void => {
+    if (node.kind === 'textValue') return;
+    if (node.kind === 'revisionDelete' || node.kind === 'revisionMoveFrom') {
+      const span = offsets.spanOf(node);
+
+      // A strike the offset walk cannot place might be anywhere.
+      if (!span || (span.start < end && start < span.end)) struck = true;
+      return;
+    }
+
+    const id = attributeValueOf(node, 'id', WML_NAMESPACE_URI);
+    if (
+      node.kind === 'revisionInsert' &&
+      id !== undefined &&
+      minted.has(id) &&
+      insertionAuthor([node]) === author
+    ) {
+      const span = offsets.spanOf(node);
+      if (span) inserted.push(span);
+    }
+
+    for (const child of node.children) visit(child);
+  };
+  for (const child of paragraph.children) visit(child);
+  return { inserted, struck };
+}
+
+/** Whether `spans` together cover `[start, end)` with no gap. Sorts `spans`. */
+function spansCover(spans: OffsetSpan[], start: number, end: number): boolean {
+  spans.sort((a, b) => a.start - b.start);
+  let covered = start;
+  for (const span of spans) {
+    if (span.start > covered) break;
+    covered = Math.max(covered, span.end);
+  }
+
+  return covered >= end;
 }
 
 /**
@@ -138,37 +191,14 @@ function holdsBatchInsertion(
   const replay = context.author === undefined ? null : replayBefore(context, index, nodeId);
   const paragraph = replay ? paragraphOf(replay.part) : null;
   if (!replay || paragraph?.kind !== 'paragraph' || start >= end) return false;
-  const offsets = paragraphOffsetIndex(paragraph);
-  const inserted: OffsetSpan[] = [];
-  let struck = false;
-  const visit = (node: OoxmlNode): void => {
-    if (node.kind === 'textValue') return;
-    if (node.kind === 'revisionDelete' || node.kind === 'revisionMoveFrom') {
-      const span = offsets.spanOf(node);
-      // A strike the offset walk cannot place might be anywhere.
-      if (!span || (span.start < end && start < span.end)) struck = true;
-      return;
-    }
-    const id = revisionIdOf(node);
-    if (
-      node.kind === 'revisionInsert' &&
-      id !== undefined &&
-      replay.minted.has(id) &&
-      insertionAuthor([node]) === context.author
-    ) {
-      const span = offsets.spanOf(node);
-      if (span) inserted.push(span);
-    }
-    for (const child of node.children) visit(child);
-  };
-  for (const child of paragraph.children) visit(child);
-  inserted.sort((a, b) => a.start - b.start);
-  let covered = start;
-  for (const span of inserted) {
-    if (span.start > covered) break;
-    covered = Math.max(covered, span.end);
-  }
-  return !struck && covered >= end;
+  const { inserted, struck } = batchInsertionSpans(
+    paragraph,
+    replay.minted,
+    context.author,
+    start,
+    end
+  );
+  return !struck && spansCover(inserted, start, end);
 }
 
 /**
@@ -186,9 +216,7 @@ function reaimRecorded(
   const link = part ? findNode(part, op.linkId) : null;
   if (link?.kind !== 'hyperlink') return false;
   if (heldByOwnInsertion(link, author)) return true;
-  const tooltip = link.attributes.find(
-    (attribute) => attribute.namespaceUri === WML_NAMESPACE_URI && attribute.localName === 'tooltip'
-  )?.value;
+  const tooltip = attributeValueOf(link, 'tooltip', WML_NAMESPACE_URI);
   return (
     hyperlinkRelationshipIdOf(link) === op.relationshipId &&
     hyperlinkAnchorOf(link) === op.anchor &&
@@ -212,7 +240,7 @@ function heldByOwnInsertion(link: OoxmlNode, author: string | undefined): boolea
 }
 
 /**
- * Whether `op`, as it will be WRITTEN, shows up as a suggestion — or changes nothing a reviewer
+ * Whether `op`, as it will be WRITTEN, shows up as a suggestion, or changes nothing a reviewer
  * decides on.
  *
  * Read after attribution, so it judges exactly what the store receives. Beyond the ops that carry
@@ -227,9 +255,16 @@ function heldByOwnInsertion(link: OoxmlNode, author: string | undefined): boolea
 function recorded(op: TreeDocOp, index: number, context: Judging): boolean {
   const { batch } = context;
   if (isTrackedEdit(op) || !isDocumentEdit(op)) return true;
+
   // `trackFormatting: false` or `w:doNotTrackFormatting`: the reader or the document chose to
   // apply formatting untracked, and that choice outranks this one.
-  if (!context.formattingTracked && PROPERTY_CHANGE_WRAPPER_OF_OP.has(op.op)) return true;
+  if (
+    !context.formattingTracked &&
+    (PROPERTY_CHANGE_WRAPPER_OF_OP.has(op.op) || isSectionFurnitureFormat(op))
+  ) {
+    return true;
+  }
+
   switch (op.op) {
     case 'insertCommentMarker':
     // Bookmarks are not revisions: their markers carry no author, and the editing API writes
@@ -238,8 +273,11 @@ function recorded(op: TreeDocOp, index: number, context: Judging): boolean {
     case 'deleteBookmark':
       return true;
     case 'splitParagraph':
-    case 'setSectionMark':
       return proposesMark(batch, op.paragraphId);
+    case 'setSectionMark':
+      // The break rides on the mark the batch proposes; a type it gives the section after it is
+      // written untracked, as Word writes it (`w:type`, no `w:sectPrChange`)
+      return proposesMark(batch, op.paragraphId) && !retypesNextSection(op, context.partOf);
     case 'insertFragment':
       // Empty paragraphs only. The first merges into the paragraph the fragment lands in, whose
       // mark the batch proposes; each later one carries its own inserted mark.
@@ -271,6 +309,7 @@ function recorded(op: TreeDocOp, index: number, context: Judging): boolean {
           op.range.end
         );
       }
+
       // A link lane unwraps the author's own pending link in place: rejecting the insertion
       // still takes its words.
       const replay = replayBefore(context, index, op.linkId);
@@ -309,6 +348,11 @@ export function untrackedEditOf(
 /**
  * The surface's gate for the policy: asked with every batch a local lane commits.
  *
+ * Suggesting attributes every op it has a tracked form for (`attributeTrackedOps`) and lets
+ * the rest through as they are (a page-setup change, a list toggle, a table property), with no
+ * card for a reviewer. A review module created with `untrackedEdits: 'refuse'` turns that lane
+ * off: the surface refuses the WHOLE batch instead.
+ *
  * The automation lane runs `exempt`: it keeps its own tracked-change policy, which already
  * refuses every operation with no tracked form while the surface is suggesting, and which
  * knows about an author's own pending table and control insertions that this op-level rule
@@ -330,8 +374,8 @@ export function createUntrackedEditGate(deps: {
   readonly inForce: () => boolean;
   readonly exempt: <T>(run: () => T) => T;
 } {
-  let exempt = 0;
-  const inForce = () => deps.policy === 'refuse' && exempt === 0 && deps.suggesting();
+  let exemptDepth = 0;
+  const inForce = () => deps.policy === 'refuse' && exemptDepth === 0 && deps.suggesting();
   return {
     refusal: (ops) =>
       inForce() && untrackedEditOf(ops, deps.formattingTracked(), deps.partOf, deps.author())
@@ -339,11 +383,11 @@ export function createUntrackedEditGate(deps: {
         : null,
     inForce,
     exempt(run) {
-      exempt += 1;
+      exemptDepth += 1;
       try {
         return run();
       } finally {
-        exempt -= 1;
+        exemptDepth -= 1;
       }
     },
   };

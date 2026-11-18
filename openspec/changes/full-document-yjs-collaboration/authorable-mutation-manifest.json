@@ -8,10 +8,10 @@
   "inventoryNote": "Kinds, reach, properties, chrome slots, and lifecycle sets are taken from the implementation after rebase onto origin/main. Main added replaceStoryBlocks, setMathEquation, removeMathEquation, and insertFragment (rich-clipboard-fidelity).",
   "counts": {
     "treeDocOpKinds": 87,
-    "singlePartApply": 73,
+    "singlePartApply": 75,
     "headerFooterLifecycle": 7,
     "noteLifecycle": 5,
-    "treeDocOpUnsupported": 2,
+    "treeDocOpUnsupported": 0,
     "chromeSlots": 79,
     "chromeCommandWired": 46,
     "chromeProbe": 7,
@@ -21,8 +21,8 @@
     "imageWrapTargets": 9,
     "storyScopeKinds": 3,
     "namedPackageIntents": 16,
-    "unsupportedRows": 16,
-    "activeOpenSpecChanges": 27
+    "unsupportedRows": 15,
+    "activeOpenSpecChanges": 28
   },
   "storyScopes": [
     {
@@ -121,7 +121,9 @@
       "setLegacyDropdown",
       "insertBuildingBlock",
       "insertBookmark",
-      "deleteBookmark"
+      "deleteBookmark",
+      "addRepeatingSectionItem",
+      "removeRepeatingSectionItem"
     ],
     "headerFooterLifecycle": [
       "createHeaderFooter",
@@ -139,7 +141,7 @@
       "convertAllNotes",
       "setNoteProperties"
     ],
-    "unsupported": ["addRepeatingSectionItem", "removeRepeatingSectionItem"]
+    "unsupported": []
   },
   "treeDocOpKinds": [
     "replaceStoryBlocks",
@@ -688,18 +690,18 @@
     },
     {
       "kind": "addRepeatingSectionItem",
-      "commitPath": "unsupported",
-      "storyScopes": [],
-      "storyParity": "n/a",
+      "commitPath": "applyTreeOp",
+      "storyScopes": ["body", "headerFooter", "notesPart"],
+      "storyParity": "same",
       "commandExposure": ["addRepeatingSectionItem"],
       "packageIntents": [],
       "openSpec": ["typed-content-controls"]
     },
     {
       "kind": "removeRepeatingSectionItem",
-      "commitPath": "unsupported",
-      "storyScopes": [],
-      "storyParity": "n/a",
+      "commitPath": "applyTreeOp",
+      "storyScopes": ["body", "headerFooter", "notesPart"],
+      "storyParity": "same",
       "commandExposure": ["removeRepeatingSectionItem"],
       "packageIntents": [],
       "openSpec": ["typed-content-controls"]
@@ -1453,13 +1455,6 @@
     ]
   },
   "unsupportedRows": [
-    {
-      "id": "repeating-section-item",
-      "kinds": ["addRepeatingSectionItem", "removeRepeatingSectionItem"],
-      "layer": "TreeDocOp",
-      "evidence": "validateTreeOp and applyTreeOp return unsupported.",
-      "openSpec": ["typed-content-controls"]
-    },
     {
       "id": "table-merge-split",
       "commands": ["mergeCells", "splitCell"],

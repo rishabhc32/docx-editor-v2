@@ -141,6 +141,28 @@ describe('insertTable', () => {
     ).toEqual(['tbl', 'p', 'tbl', 'p']);
   });
 
+  test('a tracked table, once accepted, leaves its paragraphs with no empty properties', () => {
+    // The mark stamp's `w:pPr`/`w:rPr` go with the stamp, in the cells and in the separator
+    const part = load(
+      '<w:tbl><w:tblGrid><w:gridCol w:w="5000"/></w:tblGrid>' +
+        '<w:tr><w:tc><w:p/></w:tc></w:tr></w:tbl><w:p/>'
+    );
+    const anchor = collectByKind(part.root, 'paragraph')[1]!;
+    const tracked = applied(
+      part,
+      insertOp(part, {
+        beforeParagraphId: anchor.id,
+        rows: 1,
+        cols: 2,
+        revision: { author: 'Ada' },
+      })
+    );
+    expect(serializeOoxmlPart(tracked)).toContain('<w:pPr><w:rPr><w:ins ');
+    const accepted = serializeOoxmlPart(applied(tracked, { op: 'acceptAllRevisions' }));
+    expect(accepted).not.toContain('<w:ins ');
+    expect(accepted).not.toContain('<w:pPr');
+  });
+
   test('refuses sizes, widths and anchors the engine will not author', () => {
     const part = load('<w:p/>');
     const anchor = firstParagraphId(part);

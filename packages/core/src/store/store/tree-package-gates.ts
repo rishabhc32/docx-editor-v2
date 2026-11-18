@@ -7,6 +7,7 @@ import { resolveNotesPart } from '../package/note-references.ts';
 import type { OoxmlNode, OoxmlPart } from '../package/ooxml-tree.ts';
 import { segmentsOf } from './tree-op-segments.ts';
 import type { TreeDocOp } from './tree-ops.ts';
+import { hasAnyComment } from './comment-reads.ts';
 
 /** Cap on nodes visited while probing one `deleteBlock` subtree for note refs. */
 export const MAX_DELETE_BLOCK_NOTE_GATE_NODES = 4_000;
@@ -210,3 +211,82 @@ export const CONTENT_REMOVING_OPS: ReadonlySet<string> = new Set([
   'removeContentControl',
   'removeRepeatingSectionItem',
 ]);
+
+/**
+ * What one story transaction's ops say about the cascades its commit may need.
+ *
+ * `deleteText` / `deleteBlock` can remove noteReference atoms; every other op skips the
+ * package-wide note cascade. The gates stay local to the op target (paragraph range or block
+ * subtree), so ordinary structural deletion never scans the whole package. The comment gate asks
+ * the same kind of question: whether the transaction can leave a comment covering no characters.
+ * Word deletes a comment whose words are deleted, and the reap that does it is a before/after
+ * diff, so it needs the same "was it even possible" gate.
+ */
+export class StoryDeletionGates {
+  mayDeleteNoteAtoms = false;
+  mayEmptyComments = false;
+  private anyComment: boolean | undefined;
+  private readonly deleteTargets = new Set<string>();
+  private readonly commentTargets = new Set<string>();
+  /** The package as the transaction found it: one walk answers every op. */
+  private readonly pkg: OoxmlPackage;
+
+  constructor(pkg: OoxmlPackage) {
+    this.pkg = pkg;
+  }
+
+  observe(op: TreeDocOp, part: OoxmlPart): void {
+    if (!this.mayDeleteNoteAtoms) {
+      if (op.op === 'deleteText' && deleteMayStrandNote(this.pkg, part, op, this.deleteTargets)) {
+        this.mayDeleteNoteAtoms = true;
+      } else if (
+        op.op === 'deleteBlock' &&
+        deleteBlockMayStrandNote(this.pkg, part, op, this.deleteTargets)
+      ) {
+        this.mayDeleteNoteAtoms = true;
+      } else if (RESOLUTION_OPS.has(op.op) || CONTENT_REMOVING_OPS.has(op.op)) {
+        // Resolving a revision removes the content it covers, and a note reference is one
+        // model unit, so a struck-through selection carries it away. Not narrowable to a
+        // paragraph range: a revision's sites are wherever the file put them. The cascade
+        // is a diff, so it is free.
+        this.mayDeleteNoteAtoms = true;
+      }
+    }
+    if (this.mayEmptyComments) return;
+    if (op.op === 'deleteText' || op.op === 'deleteBlock') {
+      this.mayEmptyComments = deleteMayEmptyCommentRange(
+        () => (this.anyComment ??= hasAnyComment(this.pkg)),
+        part,
+        op,
+        this.commentTargets
+      );
+    } else if (RESOLUTION_OPS.has(op.op) || CONTENT_REMOVING_OPS.has(op.op)) {
+      // Rejecting an insertion removes the words it inserted, which a comment can be
+      // anchored over. A row or column deletion removes whole cell PARAGRAPHS, markers
+      // and all, and names a table rather than a paragraph, so there is no cheap
+      // subtree to probe. Opens the gate outright; the reap is a diff, so it is free.
+      this.mayEmptyComments = true;
+    }
+  }
+}
+
+/** Ops that can replace a content control's prompt with what they insert, in either mode. */
+const PROMPT_REPLACING_OPS: ReadonlySet<string> = new Set([
+  'insertText',
+  'insertFragment',
+  'insertTab',
+  'insertHardBreak',
+  'insertPageBreak',
+  'insertPageField',
+]);
+
+/**
+ * Whether an op can keep a content control's prompt in the glossary part: an insertion over the
+ * prompt, direct or suggested, or a suggested value (`content-control-prompt-glossary.ts`).
+ */
+export function mayRetainPrompt(op: TreeDocOp): boolean {
+  return (
+    PROMPT_REPLACING_OPS.has(op.op) ||
+    (op.op === 'setContentControlValue' && op.revision !== undefined)
+  );
+}

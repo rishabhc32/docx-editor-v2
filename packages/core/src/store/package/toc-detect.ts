@@ -1,6 +1,7 @@
 // Bounded, inert detection of cross-paragraph TOC complex fields.
 
 import { isContentControl, isContentControlContent } from './content-control-walk.ts';
+import { tableCellsOf } from './story-blocks.ts';
 import { fldCharType, instrTextValue, isInstrTextNode } from './field-nodes.ts';
 import type { OoxmlElement, OoxmlNode, OoxmlPart } from './ooxml-tree.ts';
 import { MAX_INLINE_CONTAINER_DEPTH, nextInlineContainerDepth } from './ooxml-shared.ts';
@@ -210,6 +211,14 @@ function detectTocsInContainer(
   for (const child of container.children) {
     if (child.kind === 'paragraph') {
       processParagraph(child);
+      continue;
+    }
+    // A table of contents in a table cell is a table of contents too. Each cell is its own
+    // container: a field that began outside the table does not run into it.
+    if (child.kind === 'table' && depth < TOC_MAX_FIELD_NESTING) {
+      for (const cell of tableCellsOf(child)) {
+        completed.push(...detectTocsInContainer(cell, contentControlId, depth + 1));
+      }
       continue;
     }
     if (!isContentControl(child) || depth >= TOC_MAX_FIELD_NESTING) continue;

@@ -61,6 +61,32 @@ export function customNodeBinding(
   return { prefixMappings, xpath, storeItemId: part.itemId };
 }
 
+/** The node a binding of the authored shape names: its store's namespace and root, and its id. */
+export interface CustomNodeBindingTarget {
+  readonly namespaceUri: string;
+  readonly rootLocalName: string;
+  readonly nodeId: string;
+}
+
+/**
+ * The node a binding names, when the binding is exactly what {@link customNodeBinding} writes
+ * for it; null for any other binding. Its inverse, for a reader that carries the node with the
+ * control (a collaboration room).
+ */
+export function customNodeBindingTarget(
+  binding: Pick<CustomNodeBinding, 'prefixMappings' | 'xpath'>
+): CustomNodeBindingTarget | null {
+  const path = AUTHORED_XPATH.exec(binding.xpath);
+  const mapped = /^xmlns:([A-Za-z_][\w.-]*)='([^']*)'$/.exec(binding.prefixMappings);
+  if (!path || !mapped) return null;
+  const [, prefix = '', rootLocalName = '', nodeId = ''] = path;
+  const namespaceUri = mapped[2] ?? '';
+  if (prefix !== CUSTOM_NODE_XPATH_PREFIX || mapped[1] !== prefix) return null;
+  if (customXmlPrefixMappings(prefix, namespaceUri) !== binding.prefixMappings) return null;
+  if (customXmlLabelXPath(prefix, rootLocalName, nodeId) !== binding.xpath) return null;
+  return { namespaceUri, rootLocalName, nodeId };
+}
+
 /**
  * Longest `w:prefixMappings`, `w:xpath` or `w:storeItemID` an op may write.
  *

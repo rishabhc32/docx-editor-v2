@@ -54,6 +54,7 @@ import {
 } from './editor-history-group-registry.ts';
 import type { AutomationHistoryFrames } from './editor-history-groups.ts';
 import { editorPreviewActive, PREVIEW_WRITE_REFUSAL } from './editor-preview.ts';
+import { commitCustomNodeInsert } from './custom-node-commit.ts';
 
 /**
  * One automation run inside a history group: every batch it executes is a frame of the
@@ -281,7 +282,11 @@ function sessionPort(
         : DEFAULT_FORMATTING_DISPLAY_MODE,
     collaborative: () => !!editor.surface?.collaborationSession(),
     allocationActor: () => editor.surface?.collaborationSession()?.identity.actorId,
-    trackedRangeReplacement: () => !editor.surface?.collaborationSession(),
+    // Outside collaboration, or in a session that takes such a write as one edit
+    trackedRangeReplacement: () => {
+      const session = editor.surface?.collaborationSession();
+      return !session || session.trackedRangeReplacement === true;
+    },
     replacementLanding: (paragraphId, start, end) =>
       editor.surface?.replacementLanding(paragraphId, start, end) ?? null,
     apply(
@@ -404,31 +409,23 @@ function sessionPort(
     },
     applyCustomNodeWrite(write, scope): AutomationPortApplyResult {
       const surface = editor.surface;
-      const live = sync();
-      if (!surface || !live) return { ok: false, reason: 'no-document' };
+      if (!surface || !sync()) return { ok: false, reason: 'no-document' };
       if (editorPreviewActive(editor)) return { ok: false, reason: PREVIEW_WRITE_REFUSAL };
       // THE BODY's store, for as long as the session's payload lane is the body store's: the
       // scope is carried so this refuses a story it cannot write rather than quietly authoring
       // the node somewhere else.
       if (scope.kind !== 'body') return { ok: false, reason: 'unsupported-story' };
-      let outcome: AutomationPortApplyResult | null = null;
-      // Through `commitReviewOps`, the gate a package-scoped write goes through in the editor:
-      // viewing refuses, and the pages repaint from the commit. Reaching past it would let a
-      // script author a chip in a document open for reading.
-      const refused = grouped(surface, () =>
-        surface.commitReviewOps((historyToken) => {
-          const result = live.insertCustomNode(write, undefined, { historyToken });
-          outcome = result.ok
-            ? { ok: true, changed: result.change !== null }
-            : {
-                ok: false,
-                reason: result.detail ? `${result.reason}: ${result.detail}` : result.reason,
-              };
-          return { committed: result.ok };
-        }, 'package-scoped')
-      );
-      // Null only when a gate or the refresh guard stopped the write before `run`.
-      return outcome ?? { ok: false, reason: publicRefusal(refused ?? 'refused') };
+      // Through the editor's gated lane: viewing refuses, a collaboration session sees the
+      // control's ops with the store they bind, and the pages repaint from the commit.
+      const result = grouped(surface, () => commitCustomNodeInsert(surface, write, scope));
+      return result.ok
+        ? { ok: true, changed: result.changed }
+        : {
+            ok: false,
+            reason: result.detail
+              ? `${result.reason}: ${result.detail}`
+              : publicRefusal(result.reason),
+          };
     },
     save: () => (sync() ? (editor.surface?.save() ?? null) : null),
     // The one genuinely browser-only operation, and the reason the port declares it optional:

@@ -32,6 +32,8 @@ const PINNED_CALL_SITES: Readonly<Record<string, number>> = {
   // resolving each extra group's part BEFORE its transaction writes it — the slot is spent
   // by the write either way.
   'core/src/binding/tree-session-apply.ts': 2,
+  // The gated custom node write: plans on the open story, then reads the control it made
+  'core/src/editor/custom-node-commit.ts': 4,
   'core/src/editor/doc-target-resolution.ts': 2,
   'core/src/editor/docx-editor-derive.ts': 1,
   'core/src/editor/docx-editor-images.ts': 1,

@@ -31,6 +31,8 @@ import { createRecentRootCache } from './recent-root-cache.ts';
 import { withStableCards } from './review-item-identity.ts';
 import { rememberRevisionRoot, unchangedRevisionItems } from './review-items-reuse.ts';
 import { deepParagraphOrderOfPart } from './review-paragraph-order.ts';
+import { withoutNoteBodyMarks } from './review-note-bodies.ts';
+import { mathRunGroup, mathRunKind } from './revision-math-runs.ts';
 // The vocabulary this derivation speaks — the item shapes and their pure helpers — lives in
 // `review-items.ts`, where the binding and layout lanes can reach it too.
 import {
@@ -168,6 +170,8 @@ function computeRevisionItemsOf(
     string,
     {
       address: RevisionAddress;
+      /** Every address the group's sites carry: one equation's math run marks have several. */
+      addresses: RevisionAddress[];
       revisionKind: ReviewRevisionKind;
       localName: string;
       identitySuffix?: string;
@@ -212,7 +216,7 @@ function computeRevisionItemsOf(
         ? 'format'
         : site.paragraphMark
           ? 'paragraphMark'
-          : (CONTENT_KINDS[site.node.kind] ?? 'structural');
+          : (CONTENT_KINDS[site.node.kind] ?? mathRunKind(site.node, site.parent) ?? 'structural');
     // The element name IS the decision for a mark, and it is the only place the direction
     // survives: `w:pPr/w:rPr` holds the revision as a bare element, not as a wrapper kind.
     const markDirection = site.paragraphMark ? MARK_DIRECTIONS[site.node.localName] : undefined;
@@ -245,10 +249,15 @@ function computeRevisionItemsOf(
     // date per editing burst, so an insertion and a deletion can legally share the triple —
     // and grouping on it alone showed them as one `insert` card with both texts run together,
     // whose Accept deleted the half the card claimed to be inserting.
+    // One equation's math run marks of one direction, author and date are one card, whatever
+    // `w:id` each mark has (`revision-math-runs.ts`)
+    const equation = mathRunGroup(part, site.node, site.parent);
     const sourceKey =
       kind === 'structural'
         ? `structural\u0000${addressKey(address)}`
-        : `${kind}\u0000${site.node.localName}\u0000${addressKey(address)}`;
+        : equation !== null
+          ? `${equation}\u0000${author}\u0000${date ?? ''}`
+          : `${kind}\u0000${site.node.localName}\u0000${addressKey(address)}`;
     // Same attributes do not join text across an unchanged character.
     let key = currentInlineGroup.get(sourceKey) ?? sourceKey;
     const previous = byAddress.get(key);
@@ -266,6 +275,9 @@ function computeRevisionItemsOf(
     const existing = byAddress.get(key);
     if (existing) {
       existing.siteNodeIds.push(site.node.id);
+      if (!existing.addresses.some((known) => addressKey(known) === addressKey(address))) {
+        existing.addresses.push(address);
+      }
       if (structuralChange && !existing.structuralChanges?.includes(structuralChange)) {
         (existing.structuralChanges ??= []).push(structuralChange);
       }
@@ -310,6 +322,7 @@ function computeRevisionItemsOf(
     }
     byAddress.set(key, {
       address,
+      addresses: [address],
       localName: site.node.localName,
       ...(kind === 'insert' || kind === 'delete'
         ? { identitySuffix: `\u0000site-${site.node.id}` }
@@ -346,7 +359,7 @@ function computeRevisionItemsOf(
           // Include the part: body/header revisions can share id, author, and date.
           id: `${entry.revisionKind}${entry.revisionKind === 'format' || entry.revisionKind === 'paragraphMark' ? `-${entry.localName}` : ''}-${part.name}\u0000${addressKey(entry.address)}${entry.identitySuffix ?? ''}`,
           address: entry.address,
-          addresses: [entry.address],
+          addresses: entry.addresses,
           revisionKind: entry.revisionKind,
           ...(entry.revisionKind === 'format' ? { formattingKind: entry.localName } : {}),
           ...(entry.structuralChanges?.length
@@ -556,8 +569,9 @@ export function collectReviewItemsWith(
     }
   }
 
+  // A deleted note's body is part of its reference's card
   const items: ReviewItem[] = linkRevisionReplies([
-    ...revisions,
+    ...withoutNoteBodyMarks(revisions, parts),
     ...commentItemsOf(comments, anchors, threadState),
   ]);
   return items.sort((a, b) => reviewItemPositionRank(a, order) - reviewItemPositionRank(b, order));

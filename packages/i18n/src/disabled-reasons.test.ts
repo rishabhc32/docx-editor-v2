@@ -40,7 +40,6 @@ describe('every refusal the section-break lane publishes is translatable', () =>
 
   test.each([
     'a section break can only be inserted in the editable document body',
-    'a section break that changes where the next section starts cannot be suggested; turn off suggesting to insert it',
     'a section break cannot be inserted inside a table cell',
     'a section break cannot change a section that a locked or linked content control holds',
     'a section break cannot be inserted in locked or linked content',

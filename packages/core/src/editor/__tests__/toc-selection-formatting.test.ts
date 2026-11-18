@@ -1,7 +1,10 @@
 // Formatting a selection that covers a generated table of contents (issue #1223).
 //
 // The table stays read-only: its generated rows are not formatted. The rest of the selection
-// is, so Select All followed by a highlight changes the ordinary text.
+// is, so Select All followed by a highlight changes the ordinary text. Word formats the
+// table's text too, so the part this editor leaves out is reported through `lastRejection`
+// (and the surface's `onRejection`) with a reason that names the table. The write itself
+// still answers `{ ok: true, changed: true }`: the rest of the selection was formatted.
 
 import { afterEach, expect, test } from 'bun:test';
 import { createDocxEditor, type DocxEditorInstance } from '../docx-editor.ts';
@@ -20,6 +23,9 @@ const editors: DocxEditorInstance[] = [];
 afterEach(() => {
   for (const editor of editors.splice(0)) editor.destroy();
 });
+const SKIPPED =
+  'the table of contents is generated and read-only; the rest of the selection was formatted';
+
 function mount() {
   const container = document.createElement('div');
   const editor = createDocxEditor({ container, document: docx(BODY) });
@@ -38,7 +44,10 @@ test('a highlight over a selection with a table of contents formats only the oth
   surface.selectAll();
   expect(
     editor.exec({ type: 'setMarkAttr', mark: 'highlight', attr: 'val', value: 'yellow' })
-  ).toMatchObject({ ok: true });
+  ).toEqual({ ok: true, changed: true });
+  // The part left out is reported, never dropped in silence.
+  expect(surface.state().lastRejection).toBe(SKIPPED);
+  expect(editor.snapshot().lastRejection).toBe(SKIPPED);
   const after = paragraphXml(editor);
   // The generated rows are unchanged; the ordinary paragraphs carry the highlight.
   expect(after.slice(0, 3)).toEqual(before.slice(0, 3));
@@ -58,4 +67,22 @@ test('a selection inside the table of contents still refuses formatting', () => 
   editor.exec({ type: 'setMarkAttr', mark: 'highlight', attr: 'val', value: 'yellow' });
   expect(surface.state().lastRejection).toBe('the table of contents is generated and read-only');
   expect(serializeOoxmlPart(surface.session.part())).toBe(before);
+});
+
+test('Select All and bold formats the body, reports the table, and leaves its text alone', () => {
+  const { editor, surface } = mount();
+  const before = paragraphXml(editor);
+  surface.selectAll();
+  expect(editor.exec({ type: 'toggleMark', mark: 'bold' })).toEqual({ ok: true, changed: true });
+  expect(surface.state().lastRejection).toBe(SKIPPED);
+  expect(editor.snapshot().lastRejection).toBe(SKIPPED);
+  const after = paragraphXml(editor);
+  expect(after.slice(0, 3)).toEqual(before.slice(0, 3));
+  expect(after[3]).toContain('<w:b/>');
+  expect(after[4]).toContain('<w:b/>');
+  // The next write that touches no table clears the report.
+  const paragraphId = surface.session.paragraphIds()[3]!;
+  surface.setSelection({ anchor: { paragraphId, offset: 0 }, head: { paragraphId, offset: 4 } });
+  expect(editor.exec({ type: 'toggleMark', mark: 'italic' })).toEqual({ ok: true, changed: true });
+  expect(surface.state().lastRejection).toBeNull();
 });

@@ -103,6 +103,25 @@ describe('content controls are typed canonical nodes at every level', () => {
     expect(contentControlLevelOf(paragraph.children[1] as OoxmlElement)).toBe('inline');
   });
 
+  test("a tracked move's range markers inside an inline control keep its content typed", () => {
+    // `CT_SdtContentRun` is `EG_PContent`, and the move range markers are in its
+    // `EG_RangeMarkupElements` group, as the bookmark and comment markers are
+    const mark = 'w:author="A" w:date="2026-10-28T00:00:00Z"';
+    const part = parseDoc(
+      `<w:p><w:sdt><w:sdtPr><w:text/></w:sdtPr><w:sdtContent>` +
+        `<w:moveFromRangeStart w:id="1" ${mark} w:name="m1"/>` +
+        `<w:moveFrom w:id="2" ${mark}><w:r><w:t>a</w:t></w:r></w:moveFrom>` +
+        `<w:moveFromRangeEnd w:id="1"/>` +
+        `<w:moveToRangeStart w:id="3" ${mark} w:name="m2"/>` +
+        `<w:moveTo w:id="4" ${mark}><w:r><w:t>b</w:t></w:r></w:moveTo>` +
+        `<w:moveToRangeEnd w:id="3"/>` +
+        `</w:sdtContent></w:sdt></w:p>`
+    );
+    const control = controlsOf(part)[0]!;
+    expect(contentControlContentNodeOf(control)?.kind).toBe('contentControlContent');
+    expect(canonicalOoxmlFingerprint(reparse(part))).toBe(canonicalOoxmlFingerprint(part));
+  });
+
   test('customXml content distinguishes block and inline controls', () => {
     const block = controlsOf(
       parseDoc(

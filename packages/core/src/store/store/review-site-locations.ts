@@ -5,7 +5,12 @@
 // per-row memos, and the tracked-row anchors; the queue asks it for ranges.
 
 import { currentFieldResultsMode, FieldResultsModeMemo } from '../package/field-result-mode.ts';
-import type { OoxmlNode, OoxmlParagraphNode, OoxmlPart } from '../package/ooxml-tree.ts';
+import {
+  WML_NAMESPACE_URI,
+  type OoxmlNode,
+  type OoxmlParagraphNode,
+  type OoxmlPart,
+} from '../package/ooxml-tree.ts';
 import { paragraphOffsetIndex, transientParagraphOffsetIndex } from './tree-op-segments.ts';
 import { createRecentRootCache } from './recent-root-cache.ts';
 import { setLatestPerPart } from './latest-per-part.ts';
@@ -62,6 +67,7 @@ function locateSitesWithPolicy(
       previous &&
       patchedLocations(previousRoot, previous, part.root, retainAcrossReads)) ||
     fullLocations(part.root, retainAcrossReads);
+  anchorBodySection(part.root, located, retainAcrossReads);
   if (retainAcrossReads) {
     locatedSitesCaches[mode].set(part.root, located);
     setLatestPerPart(lastLocatedRoots, lastKey, new WeakRef(part.root));
@@ -87,6 +93,56 @@ const lastLocatedRoots = new Map<string, RootWeakRef>();
 
 /** Blocks changed past this many are indexed from scratch. */
 const MAX_PATCHED_BLOCKS = 256;
+
+/**
+ * The body's own section (`w:body/w:sectPr`) at the document's last paragraph mark.
+ *
+ * No paragraph holds it, so the walk gives its change record (`w:sectPrChange`) no place: its
+ * card had no range, sorted to the end of the rail, and a reader that names a card's story by
+ * its range named none. Word keeps the last section's properties with the document's last
+ * paragraph mark, as a section a paragraph ends is kept on that mark (ECMA-376 Part 1,
+ * §17.6.17 and §17.6.18), and lists the change there. Placed for every index, never per block:
+ * typing in the last paragraph moves its mark and leaves the section as it was.
+ */
+function anchorBodySection(
+  root: OoxmlNode,
+  located: Map<string, SiteLocation>,
+  retainAcrossReads: boolean
+): void {
+  if (root.kind === 'textValue') return;
+  const body = root.children.find((child) => child.kind === 'body');
+  if (body === undefined || body.kind === 'textValue') return;
+  const section = body.children.find(
+    (child) =>
+      child.kind !== 'textValue' &&
+      child.namespaceUri === WML_NAMESPACE_URI &&
+      child.localName === 'sectPr'
+  );
+  const paragraph = section === undefined ? null : lastParagraphOf(body, 0);
+  if (section === undefined || paragraph === null) return;
+  const mark = (
+    retainAcrossReads ? paragraphOffsetIndex(paragraph) : transientParagraphOffsetIndex(paragraph)
+  ).length;
+  const place = (node: OoxmlNode, depth: number): void => {
+    if (node.kind === 'textValue' || depth > 64) return;
+    located.set(node.id, { paragraphId: paragraph.id, start: mark, end: mark });
+    for (const child of node.children) place(child, depth + 1);
+  };
+  place(section, 0);
+}
+
+/** The last paragraph of a body, in a block container too; a table's paragraphs are not. */
+function lastParagraphOf(node: OoxmlNode, depth: number): OoxmlParagraphNode | null {
+  if (node.kind === 'textValue' || depth > 64) return null;
+  for (let index = node.children.length - 1; index >= 0; index -= 1) {
+    const child = node.children[index]!;
+    if (child.kind === 'paragraph') return child;
+    if (child.kind === 'table' || child.kind === 'textValue') continue;
+    const inside = lastParagraphOf(child, depth + 1);
+    if (inside !== null) return inside;
+  }
+  return null;
+}
 
 function fullLocations(root: OoxmlNode, retainAcrossReads: boolean): Map<string, SiteLocation> {
   const located = new Map<string, SiteLocation>();

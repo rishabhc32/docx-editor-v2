@@ -1,0 +1,13 @@
+{
+  "impact": "no-impact",
+  "fields": [],
+  "before": "With the caret in a content control, entering or leaving a header or footer rebuilt every painted page.",
+  "after": "The caret's content control is marked on the pages already painted, and no page is rebuilt for it.",
+  "reason": "Only local paint reuse changes. Shared nodes, text offsets, operations, presence, and package serialization remain unchanged.",
+  "tests": [
+    "packages/core/src/editor/__tests__/hf-page-reuse.test.ts",
+    "packages/pro/src/collaboration/__tests__/document-header-footer-editing.test.ts"
+  ],
+  "changeset": "control-caret-keeps-pages",
+  "migration": null
+}

@@ -69,7 +69,7 @@ describe('insertContentControl over the protocol', () => {
     expect(xml).toContain('<w:showingPlcHdr/>');
     expect(xml).toContain('w:val="effective"');
     // The prompt belongs to the TYPE, so a date field reads as one before anybody fills it.
-    expect(bodyText(host)).toBe('Between Click here to enter a date.ACME CORP and BUYER LTD');
+    expect(bodyText(host)).toBe('Between Click or tap to enter a date.ACME CORP and BUYER LTD');
   });
 
   test('returnHandle answers each control of a batch with its own handle', () => {

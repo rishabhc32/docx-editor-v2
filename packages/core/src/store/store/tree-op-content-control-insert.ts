@@ -246,7 +246,7 @@ function atomSpanLookup(index: ParagraphOffsetIndex): (child: OoxmlNode) => Offs
 /**
  * Insert an EMPTY control at a caret, holding its type's prompt.
  *
- * Word's own gesture: the control arrives showing "Click here to enter text." with
+ * Word's own gesture: the control arrives showing "Click or tap here to enter text." with
  * `w:showingPlcHdr` set, so the first character typed replaces the prompt whole. That
  * transition already exists in the applier for `insertText`; this is the other end of it.
  */

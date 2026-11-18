@@ -1,0 +1,14 @@
+{
+  "impact": "compatible",
+  "fields": [],
+  "before": "A suggested deletion over a range that held an equation (m:oMath or m:oMathPara) struck the text around it and left the equation unmarked, with no refusal, so accepting the deletion removed the text and kept the equation.",
+  "after": "The suggested deletion puts the whole equation in the same w:del as the struck text, so accepting it removes the equation and rejecting it keeps the equation.",
+  "reason": "Peers receive the resulting tree through the canonical journal, not the operation. The new shape is an existing typed w:del around an existing m:oMath or m:oMathPara node, which released participants already read, lay out as a deleted equation, and resolve: accept removes the wrapper with its content and reject unwraps it. The collaboration schema, operation encoding, and identities do not change. A released writer still leaves the equation unmarked, which is its original defect and not a different meaning for shared state.",
+  "tests": [
+    "packages/pro/src/collaboration/__tests__/document-tracked-equation-deletion.test.ts",
+    "packages/core/src/editor/__tests__/suggesting-equation-delete.test.ts",
+    "packages/core/src/store/__tests__/math-equation-atom.test.ts"
+  ],
+  "changeset": "tracked-delete-strikes-equation",
+  "migration": null
+}

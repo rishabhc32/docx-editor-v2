@@ -89,7 +89,7 @@ Use `DatePicker` for calendar dates such as an effective date. Creation preserve
 
 ## Suggest a control
 
-`TrackMineOnly` can wrap nonempty ordinary text in `PlainText`, `RichText`, or `DatePicker` controls outside collaboration. Accept keeps the control. Reject restores the original formatted text. The author can set the pending control's `tag` and `title`. Empty ranges, existing review markup, and other control structure changes refuse.
+`TrackMineOnly` can wrap nonempty ordinary text in `PlainText`, `RichText`, or `DatePicker` controls outside collaboration and in an ordered collaboration room. Accept keeps the control. Reject restores the original formatted text. The author can set the pending control's `tag` and `title`. Empty ranges, existing review markup, and other control structure changes refuse.
 
 Set `context.document.changeTrackingMode = 'TrackMineOnly'` before `insertContentControl()` in the creation sample. Keep the same `insertContentControl()` call and sync boundaries. Creation saves a native deletion and insertion pair. One review decision resolves both halves.
 

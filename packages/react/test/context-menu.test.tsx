@@ -97,10 +97,12 @@ const TOC_DOCUMENT = docxWithStyles(
     '<w:p><w:pPr><w:pStyle w:val="Heading1"/></w:pPr><w:r><w:t>Introduction</w:t></w:r></w:p>'
 );
 
+// Column edits take `w:gridSpan` merges; a legacy `w:hMerge` merge is still refused
 const MERGED_TABLE = docx(
-  '<w:tbl><w:tblGrid><w:gridCol w:w="2400"/><w:gridCol w:w="3600"/></w:tblGrid>' +
+  '<w:tbl><w:tblGrid><w:gridCol w:w="2400"/><w:gridCol w:w="1800"/><w:gridCol w:w="1800"/></w:tblGrid>' +
     '<w:tr><w:tc><w:p><w:r><w:t>A1</w:t></w:r></w:p></w:tc>' +
-    '<w:tc><w:tcPr><w:gridSpan w:val="2"/></w:tcPr><w:p><w:r><w:t>span</w:t></w:r></w:p></w:tc></w:tr></w:tbl>'
+    '<w:tc><w:tcPr><w:hMerge w:val="restart"/></w:tcPr><w:p><w:r><w:t>span</w:t></w:r></w:p></w:tc>' +
+    '<w:tc><w:tcPr><w:hMerge/></w:tcPr><w:p/></w:tc></w:tr></w:tbl>'
 );
 
 /** Resolve the packaged keys to themselves, so a row's label is its key in assertions. */

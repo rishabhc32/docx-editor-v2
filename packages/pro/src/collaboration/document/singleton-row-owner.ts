@@ -3,25 +3,7 @@ Copyright (c) 2026 EigenPal, Inc. All rights reserved.
 Licensed under the EigenPal Pro Evaluation License 1.0 — see packages/pro/LICENSE.md.
 Production use requires a commercial agreement: licensing@eigenpal.com
 */
-/**
- * One owner for a table row that two authors' pending formatting changes both reached.
- *
- * Word reads every property record of a row as one formatting decision, and rejecting it resets
- * each cell of the row that has no record. Suggesting refuses a change to a row that holds
- * another author's pending change, but two people can each change one row before either sees
- * the other's record, and each change records every cell of its row. Merged, each container
- * showed the first record in shared order, so one row mixed both authors: one card named one of
- * them, and rejecting the two changes in either order lost the widths of the cells the second
- * rejection found without a record.
- *
- * Every replica now gives such a row one owner, from shared state alone: the author of its
- * record with the earliest `w:date`, then the lesser author, then the lesser revision id
- * (`compareRowRecordOwners`, the rule by which the editor takes a losing change back). Each
- * record of the row shows its owner's attribution, so the row is one decision with one card:
- * accepting it keeps every merged property, and rejecting it restores every container from
- * the record it holds. The records stay as written in shared state, so undo still finds them,
- * and a row whose records only the source file wrote stays as loaded.
- */
+// One owner for a table row that two authors' pending formatting changes both reached.
 
 import {
   compareRowRecordOwners,
@@ -34,16 +16,17 @@ import { replicaOfLogicalId, type LogicalId } from './identity.ts';
 import type { DocumentRegistry } from './registry.ts';
 import { isElementRecord, type ElementRecord, type SharedRecord } from './schema.ts';
 import { sharedChildShell, type ChildShell } from './singleton-children.ts';
+import { genericWmlName } from './singleton-table-rules.ts';
 
 const CONTAINERS: ReadonlySet<string> = new Set(Object.keys(ROW_PROPERTY_CONTAINERS));
 const RECORDS: ReadonlySet<string> = new Set(
   Object.values(ROW_PROPERTY_CONTAINERS).map(({ record }) => record)
 );
 
-const isWml = (shell: ChildShell, names: ReadonlySet<string>): boolean =>
-  shell.kind === 'generic' &&
-  shell.namespaceUri === WML_NAMESPACE_URI &&
-  names.has(shell.localName);
+const isWml = (shell: ChildShell, names: ReadonlySet<string>): boolean => {
+  const name = genericWmlName(shell);
+  return name !== null && names.has(name);
+};
 
 /** A node whose change can move a row's owner: the row, a cell, a container, a record. */
 function touchesOwner(shell: ChildShell): boolean {
@@ -64,6 +47,7 @@ function rowOf(registry: DocumentRegistry, id: LogicalId): LogicalId | null {
     if (kind === 'table' || kind === 'paragraph') return null;
     at = registry.parentOf(at);
   }
+
   return null;
 }
 
@@ -93,12 +77,18 @@ function rowRecords(registry: DocumentRegistry, rowId: LogicalId): ElementRecord
       if (record && isElementRecord(record)) records.push(record);
     }
   }
+
   return records;
 }
 
 /**
  * The attribution every record of a row shows, or null when the row needs none: its records
  * have one author, or no peer wrote any of them.
+ *
+ * Word reads every property record of a row as one formatting decision. Every editor gives
+ * the row the same owner, from shared state alone: the author of its record with the earliest
+ * `w:date`, then the lesser author, then the lesser revision id (`compareRowRecordOwners`, the
+ * rule by which the editor takes a losing change back).
  */
 function rowOwner(records: readonly ElementRecord[]): RowRecordOwner | null {
   if (records.every((record) => replicaOfLogicalId(record.logicalId) === null)) return null;
@@ -108,7 +98,8 @@ function rowOwner(records: readonly ElementRecord[]): RowRecordOwner | null {
 }
 
 /** The attributes a row owner's attribution takes the place of. */
-const ATTRIBUTION: ReadonlySet<string> = new Set(['author', 'date', 'id']);
+const ATTRIBUTION = ['author', 'date', 'id'] as const;
+const ATTRIBUTION_NAMES: ReadonlySet<string> = new Set(ATTRIBUTION);
 
 /** `attributes` with the row owner's `w:author`, `w:date` and `w:id` in place of their own. */
 function attributedTo(
@@ -118,24 +109,25 @@ function attributedTo(
   const wml = (attribute: ElementRecord['attributes'][number]): boolean =>
     attribute.namespaceUri === WML_NAMESPACE_URI;
   const prefix = attributes.find(wml)?.prefix;
-  const named = (['author', 'date', 'id'] as const)
-    .filter((localName) => owner[localName] !== '')
-    .map((localName) => ({
-      namespaceUri: WML_NAMESPACE_URI,
-      localName,
-      ...(prefix === undefined ? {} : { prefix }),
-      value: owner[localName],
-    }));
+  const named = ATTRIBUTION.filter((localName) => owner[localName] !== '').map((localName) => ({
+    namespaceUri: WML_NAMESPACE_URI,
+    localName,
+    ...(prefix === undefined ? {} : { prefix }),
+    value: owner[localName],
+  }));
   return [
-    ...attributes.filter((attribute) => !wml(attribute) || !ATTRIBUTION.has(attribute.localName)),
+    ...attributes.filter(
+      (attribute) => !wml(attribute) || !ATTRIBUTION_NAMES.has(attribute.localName)
+    ),
     ...named,
   ];
 }
 
 /**
- * `record` as a replica shows it. A pending property record of a row that another author's
+ * `record` as a peer shows it. A pending property record of a row that another author's
  * record also reached carries the attribution of the row's owner; the owner's own records and
- * every other node show as written.
+ * every other node show as written. The records stay as written in shared state, so undo
+ * still finds them, and a row whose records only the source file wrote stays as loaded.
  */
 export function rowOwnedRecord<T extends SharedRecord | null>(
   registry: DocumentRegistry,
@@ -164,6 +156,7 @@ export function rowRecordsToRebuild(
     const rowId = rowOf(registry, id);
     if (rowId !== null) rows.add(rowId);
   }
+
   return [...rows].flatMap((rowId) =>
     rowRecords(registry, rowId).map((record) => record.logicalId)
   );

@@ -4,6 +4,7 @@
 import type { EditorCommand, ExecResult } from '../contracts/editor.ts';
 import { isValidXmlText } from '../store/package/sinks.ts';
 import { MAX_HYPERLINK_ATTRIBUTE_LENGTH } from '../store/store/tree-op-validate.ts';
+import type { HyperlinkInput } from './hyperlink-suggestion.ts';
 import type { PaginatedSurface } from './paginated-surface-contract.ts';
 
 type Refusal = Exclude<ExecResult, { ok: true }>;
@@ -22,9 +23,11 @@ export function hyperlinkTooltipRefusal(tooltip: unknown): string | null {
       tooltip.length > 0 &&
       tooltip.length <= MAX_HYPERLINK_ATTRIBUTE_LENGTH &&
       isValidXmlText(tooltip))
-  )
+  ) {
     return null;
-  return 'insertHyperlink requires a tooltip of 1-512 characters that XML can hold';
+  }
+
+  return `insertHyperlink requires a tooltip of 1-${MAX_HYPERLINK_ATTRIBUTE_LENGTH} characters that XML can hold`;
 }
 
 /**
@@ -48,12 +51,9 @@ export const NO_HYPERLINK_AT_SELECTION = 'there is no hyperlink at the selection
  * The link `insertHyperlink` asks the surface for. `#name` is a bookmark in this document;
  * anything else is an external target.
  */
-export function hyperlinkInputOf(command: Extract<EditorCommand, { type: 'insertHyperlink' }>): {
-  readonly url?: string;
-  readonly anchor?: string;
-  readonly text?: string;
-  readonly tooltip?: string;
-} {
+export function hyperlinkInputOf(
+  command: Extract<EditorCommand, { type: 'insertHyperlink' }>
+): HyperlinkInput {
   const internal = command.href.startsWith('#');
   return {
     ...(internal ? { anchor: command.href.slice(1) } : { url: command.href }),
@@ -78,7 +78,9 @@ export function hyperlinkCommandRefusal(
     if (!mounted.hyperlinks.linkAtCaret()) {
       return { ok: false, code: 'notFound', reason: NO_HYPERLINK_AT_SELECTION };
     }
+
     reason = mounted.hyperlinks.removeRefusal();
   }
+
   return reason === null ? null : { ok: false, code: 'invalidArgs', reason };
 }

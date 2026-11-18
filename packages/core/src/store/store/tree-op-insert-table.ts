@@ -11,6 +11,7 @@
 
 import { actorScopedSeed } from '../package/actor-scoped-ids.ts';
 import {
+  createMarkContainerIdAllocator,
   createNodeIdAllocator,
   findNode,
   insertChildren,
@@ -32,7 +33,6 @@ import {
   type OoxmlElement,
   type OoxmlNode,
   type OoxmlParagraphNode,
-  type OoxmlParagraphPropertiesNode,
   type OoxmlPart,
   type OoxmlTableCellNode,
   type OoxmlTableNode,
@@ -56,7 +56,12 @@ import {
 import type { TreeDocOp, TreeOpEffect, TreeOpRejection, TreeOpResult } from './tree-op-types.ts';
 import { invalidRevisionAttribution } from './tree-op-revision-attribution.ts';
 import { nextRevisionId } from './tree-op-revision-ids.ts';
-import { withTrackedRowMarker } from './tree-op-tables.ts';
+import {
+  freshWmlElement,
+  trackedRevisionAttributes,
+  withTrackedRowMarker,
+} from './tree-op-tables.ts';
+import { paragraphWithInsertedMark } from './tree-op-table-row-paragraph.ts';
 
 export type InsertTableOp = Extract<TreeDocOp, { op: 'insertTable' }>;
 
@@ -213,6 +218,7 @@ function buildTable(
   w14Prefix: string | null,
   usedParagraphIds: Set<string>,
   nextId: () => string,
+  markId: () => string,
   wml: WmlFreshNamespaceContext,
   revisionId?: string
 ): BuiltTable {
@@ -227,6 +233,7 @@ function buildTable(
         attribute('type', 'dxa', wml),
       ]);
       const cellProperties = fresh('tcPr', nextId, wml, [], [cellWidth]);
+      // A tracked table is Word's form: `withTrackedRowMarker` marks each cell's paragraph mark
       const paragraph = emptyParagraph(
         w14Prefix,
         `${op.beforeParagraphId}:r${rowIndex}c${colIndex}`,
@@ -259,7 +266,9 @@ function buildTable(
       children: cells,
     } as OoxmlTableRowNode;
     rows.push(
-      op.revision ? withTrackedRowMarker(row, 'ins', revisionId!, op.revision, nextId, wml) : row
+      op.revision
+        ? withTrackedRowMarker(row, 'ins', revisionId!, op.revision, nextId, markId, wml)
+        : row
     );
   }
   const table = {
@@ -327,11 +336,12 @@ export function applyInsertTable(
   if (index < 0) return { ok: false, reason: 'tree-invariant' };
 
   const nextId = createNodeIdAllocator(part);
+  const markId = createMarkContainerIdAllocator(part);
   const wml = wmlFreshNamespaceContextAt(part, parent);
   const w14Prefix = w14PrefixInScopeAt(part, parent);
   const usedParagraphIds = new Set(usedParaIds(part.root));
   const revisionId = op.revision ? (options?.revisionIds?.() ?? nextRevisionId(part)()) : undefined;
-  const built = buildTable(op, w14Prefix, usedParagraphIds, nextId, wml, revisionId);
+  const built = buildTable(op, w14Prefix, usedParagraphIds, nextId, markId, wml, revisionId);
 
   // Two `w:tbl` siblings are ONE table when Word reopens the file. An empty paragraph
   // between them is the separator Word itself authors, and it has to be minted here
@@ -343,20 +353,12 @@ export function applyInsertTable(
       : null;
 
   if (separator && op.revision) {
-    const marker = fresh('ins', nextId, wml, [
-      attribute('id', revisionId!, wml),
-      attribute('author', op.revision.author, wml),
-      ...(op.revision.date ? [attribute('date', op.revision.date, wml)] : []),
-    ]);
-    const rPr = {
-      ...fresh('rPr', nextId, wml, [], [marker]),
-      kind: 'runProperties',
-    } as OoxmlElement;
-    const pPr = {
-      ...fresh('pPr', nextId, wml, [], [rPr]),
-      kind: 'paragraphProperties',
-    } as OoxmlParagraphPropertiesNode;
-    separator = { ...separator, children: [pPr] };
+    separator = paragraphWithInsertedMark(
+      separator,
+      freshWmlElement('ins', nextId, wml, trackedRevisionAttributes(revisionId!, op.revision, wml)),
+      markId,
+      wml
+    );
   }
 
   const inserted: OoxmlNode[] = separator ? [separator, built.table] : [built.table];

@@ -1,13 +1,5 @@
-// TRACKED table edits — the table ops that carry a `revision`, validated and applied in one
+// TRACKED table edits: the table ops that carry a `revision`, validated and applied in one
 // place, so suggesting mode proposes a table edit rather than applying it outright.
-//
-// A property op — cell fill, vertical alignment and borders, row height, column and right-edge
-// resize, table properties — writes exactly as it does untracked, then records what it replaced
-// (`withTablePropertyChanges`). A column insertion or deletion marks the column's cells
-// (`tree-op-tracked-table-columns.ts`), and a table's `deleteBlock` marks every row deleted
-// (`tree-op-tracked-table-deletion.ts`).
-//
-// A tracked op meets every rule of its untracked form first, so the two cannot drift.
 
 import type { EditOptions } from '../package/ooxml-edit.ts';
 import type { OoxmlPart } from '../package/ooxml-tree.ts';
@@ -72,7 +64,8 @@ function untrackedFormOf<T extends TrackedTableOp>(op: T): Untracked<T> {
 
 /**
  * Why a table op that names a revision is refused, or null when it may proceed; undefined for
- * any other op. `validateUntracked` validates the op's untracked form.
+ * any other op. `validateUntracked` validates the op's untracked form: a tracked op meets every
+ * rule of its untracked form first, so the two cannot drift.
  */
 export function validateTrackedTableEdit(
   part: OoxmlPart,
@@ -87,13 +80,20 @@ export function validateTrackedTableEdit(
   if (op.op === 'insertTableColumn' || op.op === 'deleteTableColumn') {
     return validateTrackedColumnEdit(part, op, op.revision);
   }
+
   return null;
 }
 
 /**
  * Apply a table op that names a revision, after `validateTrackedTableEdit` admitted it. Null
  * for any other op, and for one the store applies as it is: a `deleteBlock` that withdraws a
- * table the author proposed, or a column op that names no author.
+ * table the author proposed, or a column op whose `revision` is undefined.
+ *
+ * A property op (cell fill, vertical alignment and borders, row height, column and right-edge
+ * resize, table properties) writes exactly as it does untracked, then records what it replaced
+ * (`withTablePropertyChanges`). A column insertion or deletion marks the column's cells
+ * (`tree-op-tracked-table-columns.ts`), and a table's `deleteBlock` marks every row deleted
+ * (`tree-op-tracked-table-deletion.ts`).
  */
 export function applyTrackedTableEdit(
   part: OoxmlPart,

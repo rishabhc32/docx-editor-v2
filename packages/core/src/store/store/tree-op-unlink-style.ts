@@ -18,6 +18,7 @@ export function withoutCharacterStyle(node: OoxmlNode, styleId: string, depth = 
       children: node.children.map((child) => withoutCharacterStyle(child, styleId, depth + 1)),
     } as OoxmlNode;
   }
+
   if (node.kind !== 'run') return node;
   const rPr = runPropertiesNodeOf(node);
   if (!rPr) return node;

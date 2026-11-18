@@ -17,7 +17,7 @@ import {
   runObservedStoreTransaction,
 } from '../package/canonical-primitive-capture.ts';
 import { findNode, replaceNode } from '../package/ooxml-edit.ts';
-import { withPart } from '../package/ooxml-package.ts';
+import { withPart, type OoxmlPackage } from '../package/ooxml-package.ts';
 import {
   projectDrawing,
   DEFAULT_DRAWING_PROJECTION_LIMITS,
@@ -48,9 +48,18 @@ import type {
 } from '../package/ooxml-tree.ts';
 import { docPrHyperlinkRelationshipId, setDocPrHyperlinkRelationship } from './tree-op-drawings.ts';
 import { paragraphOffsetIndex } from './tree-op-segments.ts';
-import type { DrawingTreeDocOp, RevisionAttributionInput } from './tree-op-types.ts';
+import type { DrawingTreeDocOp, RevisionAttributionInput, TreeDocOp } from './tree-op-types.ts';
 import type { PackageTransactResult, StoryScope, TreePackageStore } from './tree-package-store.ts';
 import type { TransactionContext, TreeDocumentStore, TreeStoryRef } from './tree-store.ts';
+
+/**
+ * Asked right before an image write applies its ops, inside its transaction: the ops as the
+ * write means them, and the package they apply to, which holds what the write adds beside them
+ * (a new picture's media part, its relationship, a link's relationship). `null` admits the
+ * write; a string refuses it, and the result carries the string as its detail. A collaboration
+ * session's gate.
+ */
+export type ImageWriteGate = (ops: readonly TreeDocOp[], pkg: OoxmlPackage) => string | null;
 
 export interface InsertImageInput {
   readonly paragraphId: string;
@@ -77,6 +86,8 @@ export interface InsertImageInput {
    * by the time the id is taken. Omitted (solo) keeps Word's dense `highest + 1` sequence.
    */
   readonly actorId?: string;
+  /** Asked before the write applies. See {@link ImageWriteGate}. */
+  readonly gate?: ImageWriteGate;
 }
 
 export interface ReplaceImageOptions {
@@ -84,6 +95,8 @@ export interface ReplaceImageOptions {
   readonly commitGuard?: () => boolean;
   /** Collaboration actor for the replacement's minted ids. See {@link InsertImageInput.actorId}. */
   readonly actorId?: string;
+  /** Asked before the write applies. See {@link ImageWriteGate}. */
+  readonly gate?: ImageWriteGate;
 }
 
 export type ImageIntentResult =
@@ -151,12 +164,20 @@ interface ImageTransactOptions {
    * mint all read the same actor without an argument of their own.
    */
   readonly actorId?: string;
+  /** Asked before the write applies; a refusal aborts the transaction with its code. */
+  readonly gate?: ImageWriteGate;
 }
+
+/**
+ * A build asks the write's gate with the ops it is about to apply, and the package they apply
+ * to when the build adds parts first; false aborts the build.
+ */
+type GateAsk = (ops: readonly TreeDocOp[], pkg?: OoxmlPackage) => boolean;
 
 function transactPackageImage(
   store: TreePackageStore,
   scope: StoryScope,
-  build: (ctx: TransactionContext, ownerPartName: string) => string | null,
+  build: (ctx: TransactionContext, ownerPartName: string, ask: GateAsk) => string | null,
   options?: ImageTransactOptions
 ): ImageIntentResult {
   const resolved = store.resolveStory(scope);
@@ -183,10 +204,15 @@ function commitPackageImage(
   store: TreePackageStore,
   storyStore: TreeDocumentStore,
   story: TreeStoryRef,
-  build: (ctx: TransactionContext, ownerPartName: string) => string | null,
+  build: (ctx: TransactionContext, ownerPartName: string, ask: GateAsk) => string | null,
   options?: ImageTransactOptions
 ): ImageIntentResult {
   const ownerPartName = story.partName;
+  let gateRefusal: string | null = null;
+  const ask: GateAsk = (ops, pkg) => {
+    gateRefusal = options?.gate?.(ops, pkg ?? store.currentPackage()) ?? null;
+    return gateRefusal === null;
+  };
   const beforePackage = store.currentPackage();
   const checkpoint = storyStore.checkpoint();
   // Start from the coordinator's truth; the promotion below installs the result as it stands.
@@ -208,7 +234,7 @@ function commitPackageImage(
         staleEpoch = true;
         return;
       }
-      const id = build(ctx, ownerPartName);
+      const id = build(ctx, ownerPartName, ask);
       if (id === null) {
         ctx.apply({ op: 'insertText', paragraphId: '\0task12-abort', offset: 0, text: 'x' });
         return;
@@ -230,6 +256,7 @@ function commitPackageImage(
   if (commitBlocked) {
     return { ok: false, reason: 'invalidArgs', detail: 'stale drawing selection' };
   }
+  if (gateRefusal !== null) return { ok: false, reason: 'invalidArgs', detail: gateRefusal };
   if (staleEpoch) {
     return { ok: false, reason: 'invalidArgs', detail: 'stale-package-epoch' };
   }
@@ -357,7 +384,7 @@ export async function insertImage(
   const outcome = transactPackageImage(
     store,
     scope,
-    (ctx, owner) => {
+    (ctx, owner, ask) => {
       let pkg = store.currentPackage();
       const embedded = withEmbeddedImage(pkg, owner, { bytes: committedBytes, mime: input.mime });
       if (!embedded.ok) return null;
@@ -372,8 +399,6 @@ export async function insertImage(
         hyperlinkRelationshipId = ensured.relationshipId;
       }
 
-      if (!ctx.applyPackage(() => pkg)) return null;
-
       const drawing = buildInlinePictureDrawing({
         docPrId: embedded.docPrId,
         relationshipId: embedded.relationshipId,
@@ -382,24 +407,24 @@ export async function insertImage(
         ...(input.description !== undefined ? { description: input.description } : {}),
         ...(hyperlinkRelationshipId ? { hyperlinkRelationshipId } : {}),
       });
+      const op: DrawingTreeDocOp = {
+        op: 'insertDrawing',
+        paragraphId: input.paragraphId,
+        offset: input.offset,
+        drawing: drawing as OoxmlDrawingNode,
+        ...(input.revision ? { revision: input.revision } : {}),
+      };
+      if (!ask([op], pkg)) return null;
 
-      if (
-        !ctx.apply({
-          op: 'insertDrawing',
-          paragraphId: input.paragraphId,
-          offset: input.offset,
-          drawing: drawing as OoxmlDrawingNode,
-          ...(input.revision ? { revision: input.revision } : {}),
-        })
-      ) {
-        return null;
-      }
+      if (!ctx.applyPackage(() => pkg)) return null;
+      if (!ctx.apply(op)) return null;
       return drawing.id;
     },
     {
       expectedPackageRevision: input.expectedPackageRevision,
       ...(input.commitGuard ? { commitGuard: input.commitGuard } : {}),
       ...(input.actorId ? { actorId: input.actorId } : {}),
+      ...(input.gate ? { gate: input.gate } : {}),
     }
   );
 
@@ -459,7 +484,7 @@ export async function replaceImage(
   return transactPackageImage(
     store,
     scope,
-    (ctx, owner) => {
+    (ctx, owner, ask) => {
       const pkg = store.currentPackage();
       const projection = drawingProjection(pkg, ownerPartName, drawingNodeId);
       const embedRel = projection?.picture?.embeddedRelationshipId ?? null;
@@ -473,16 +498,14 @@ export async function replaceImage(
       const embedded = withEmbeddedImage(next, owner, { bytes: committedBytes, mime });
       if (!embedded.ok) return null;
       next = embedded.pkg;
+      const op: DrawingTreeDocOp = {
+        op: 'replaceDrawingResource',
+        drawingNodeId,
+        relationshipId: embedded.relationshipId,
+      };
+      if (!ask([op], next)) return null;
       if (!ctx.applyPackage(() => next)) return null;
-      if (
-        !ctx.apply({
-          op: 'replaceDrawingResource',
-          drawingNodeId,
-          relationshipId: embedded.relationshipId,
-        })
-      ) {
-        return null;
-      }
+      if (!ctx.apply(op)) return null;
       ctx.applyPackage((current) =>
         cleanupOrphanImageMedia(current, owner, previousPart, previousRel)
       );
@@ -492,6 +515,7 @@ export async function replaceImage(
       expectedPackageRevision: options.expectedPackageRevision,
       ...(options.commitGuard ? { commitGuard: options.commitGuard } : {}),
       ...(options.actorId ? { actorId: options.actorId } : {}),
+      ...(options.gate ? { gate: options.gate } : {}),
     }
   );
 }
@@ -499,7 +523,8 @@ export async function replaceImage(
 export function deleteImage(
   store: TreePackageStore,
   scope: StoryScope,
-  drawingNodeId: string
+  drawingNodeId: string,
+  gate?: ImageWriteGate
 ): ImageIntentResult {
   const resolved = store.resolveStory(scope);
   if (!resolved.ok) {
@@ -525,13 +550,20 @@ export function deleteImage(
   const previousPart =
     embedRel !== null ? resolveEmbedMediaPart(pkg, ownerPartName, embedRel) : null;
 
-  return transactPackageImage(store, scope, (ctx, owner) => {
-    if (!ctx.apply({ op: 'deleteDrawing', drawingNodeId })) return null;
-    ctx.applyPackage((current) =>
-      cleanupOrphanImageMedia(current, owner, previousPart, previousRel)
-    );
-    return drawingNodeId;
-  });
+  return transactPackageImage(
+    store,
+    scope,
+    (ctx, owner, ask) => {
+      const op: DrawingTreeDocOp = { op: 'deleteDrawing', drawingNodeId };
+      if (!ask([op])) return null;
+      if (!ctx.apply(op)) return null;
+      ctx.applyPackage((current) =>
+        cleanupOrphanImageMedia(current, owner, previousPart, previousRel)
+      );
+      return drawingNodeId;
+    },
+    gate ? { gate } : undefined
+  );
 }
 
 /**
@@ -613,7 +645,8 @@ export function deleteImageTracked(
   store: TreePackageStore,
   scope: StoryScope,
   drawingNodeId: string,
-  revision: RevisionAttributionInput
+  revision: RevisionAttributionInput,
+  gate?: ImageWriteGate
 ): ImageIntentResult {
   const resolved = store.resolveStory(scope);
   if (!resolved.ok) {
@@ -634,20 +667,23 @@ export function deleteImageTracked(
   // committed a unit — so the dimmed (still selectable) picture took one Delete per press
   // into the undo stack, and the first Ctrl+Z visibly did nothing.
   if (located.alreadyDeleted) return { ok: true, change: null };
-  return transactPackageImage(store, scope, (ctx) => {
-    if (
-      !ctx.apply({
+  return transactPackageImage(
+    store,
+    scope,
+    (ctx, _owner, ask) => {
+      const op: TreeDocOp = {
         op: 'deleteText',
         paragraphId: located.paragraphId,
         start: located.start,
         end: located.end,
         revision,
-      })
-    ) {
-      return null;
-    }
-    return drawingNodeId;
-  });
+      };
+      if (!ask([op])) return null;
+      if (!ctx.apply(op)) return null;
+      return drawingNodeId;
+    },
+    gate ? { gate } : undefined
+  );
 }
 
 export async function embedExternalImage(
@@ -658,7 +694,8 @@ export async function embedExternalImage(
   port: ExternalImageFetchPort,
   signal: AbortSignal,
   decodePort: ImageDecodePort,
-  actorId?: string
+  actorId?: string,
+  gate?: ImageWriteGate
 ): Promise<ImageIntentResult> {
   const fetched = await fetchExternalImageBytes(port, url, signal, undefined, decodePort);
   if (!fetched.ok) {
@@ -674,6 +711,7 @@ export async function embedExternalImage(
   return replaceImage(store, scope, drawingNodeId, fetched.bytes, fetched.mime, decodePort, {
     expectedPackageRevision: store.packageRevision,
     ...(actorId ? { actorId } : {}),
+    ...(gate ? { gate } : {}),
   });
 }
 
@@ -683,7 +721,8 @@ export function setDrawingMetadataWithHyperlink(
   drawingNodeId: string,
   title: string,
   description: string,
-  hyperlink: string | null
+  hyperlink: string | null,
+  gate?: ImageWriteGate
 ): ImageIntentResult {
   const resolved = store.resolveStory(scope);
   if (!resolved.ok) {
@@ -696,62 +735,101 @@ export function setDrawingMetadataWithHyperlink(
   const blocked = imageIntentBlockedDuringComposition(store, resolved.store);
   if (blocked) return blocked;
 
-  return transactPackageImage(store, scope, (ctx, owner) => {
-    const previousHyperlinkRelId = drawingHyperlinkRelationshipId(
-      store.currentPackage(),
-      owner,
-      drawingNodeId
-    );
-    let hyperlinkRelationshipId: string | null = null;
-    if (hyperlink !== null) {
-      const ensured = ensureHyperlinkRelationship(store.currentPackage(), hyperlink, owner);
-      if (!ensured) return null;
-      if (!ctx.applyPackage(() => ensured.pkg)) return null;
-      hyperlinkRelationshipId = ensured.relationshipId;
-    }
-
-    if (
-      !ctx.apply({
-        op: 'setDrawingMetadata',
-        drawingNodeId,
-        title,
-        description,
-        ...(hyperlink === null ? { hyperlink: null } : {}),
-      })
-    ) {
-      return null;
-    }
-
-    if (hyperlink !== null && hyperlinkRelationshipId !== null) {
-      if (!applyDrawingHyperlinkRel(ctx, owner, drawingNodeId, hyperlinkRelationshipId))
+  return transactPackageImage(
+    store,
+    scope,
+    (ctx, owner, ask) => {
+      // The write as it means it: the metadata, with the link it sets or removes
+      if (!ask([{ op: 'setDrawingMetadata', drawingNodeId, title, description, hyperlink }]))
         return null;
-    } else if (hyperlink === null) {
-      if (!applyDrawingHyperlinkRel(ctx, owner, drawingNodeId, null)) return null;
-    }
-
-    let cleanupFailed = false;
-    ctx.applyPackage((current) => {
-      const cleaned = cleanupOrphanDrawingHyperlinkRelationship(
-        current,
+      const previousHyperlinkRelId = drawingHyperlinkRelationshipId(
+        store.currentPackage(),
         owner,
-        previousHyperlinkRelId
+        drawingNodeId
       );
-      if (cleaned === null) {
-        cleanupFailed = true;
-        return current;
+      let hyperlinkRelationshipId: string | null = null;
+      if (hyperlink !== null) {
+        const ensured = ensureHyperlinkRelationship(store.currentPackage(), hyperlink, owner);
+        if (!ensured) return null;
+        if (!ctx.applyPackage(() => ensured.pkg)) return null;
+        hyperlinkRelationshipId = ensured.relationshipId;
       }
-      return cleaned;
-    });
-    if (cleanupFailed) return null;
 
-    return drawingNodeId;
-  });
+      if (
+        !ctx.apply({
+          op: 'setDrawingMetadata',
+          drawingNodeId,
+          title,
+          description,
+          ...(hyperlink === null ? { hyperlink: null } : {}),
+        })
+      ) {
+        return null;
+      }
+
+      if (hyperlink !== null && hyperlinkRelationshipId !== null) {
+        if (!applyDrawingHyperlinkRel(ctx, owner, drawingNodeId, hyperlinkRelationshipId))
+          return null;
+      } else if (hyperlink === null) {
+        if (!applyDrawingHyperlinkRel(ctx, owner, drawingNodeId, null)) return null;
+      }
+
+      let cleanupFailed = false;
+      ctx.applyPackage((current) => {
+        const cleaned = cleanupOrphanDrawingHyperlinkRelationship(
+          current,
+          owner,
+          previousHyperlinkRelId
+        );
+        if (cleaned === null) {
+          cleanupFailed = true;
+          return current;
+        }
+        return cleaned;
+      });
+      if (cleanupFailed) return null;
+
+      return drawingNodeId;
+    },
+    gate ? { gate } : undefined
+  );
 }
 
 export interface ApplyImagePropertiesInput {
   readonly drawingNodeId: string;
   readonly ops: readonly DrawingTreeDocOp[];
   readonly hyperlink: string | null;
+  /** Asked before the write applies. See {@link ImageWriteGate}. */
+  readonly gate?: ImageWriteGate;
+}
+
+/**
+ * The ops a properties write means, for its gate: its ops, with the link it sets (or removes,
+ * `null`) on its metadata op, which a URL alone cannot carry into the store.
+ */
+function withLinkIntent(
+  pkg: OoxmlPackage,
+  owner: string,
+  input: ApplyImagePropertiesInput
+): DrawingTreeDocOp[] {
+  const { drawingNodeId, hyperlink } = input;
+  const own = (
+    op: DrawingTreeDocOp
+  ): op is Extract<DrawingTreeDocOp, { op: 'setDrawingMetadata' }> =>
+    op.op === 'setDrawingMetadata' && op.drawingNodeId === drawingNodeId;
+  const ops = input.ops.map((op) => (own(op) ? { ...op, hyperlink } : op));
+  if (ops.some(own)) return ops;
+  const projection = drawingProjection(pkg, owner, drawingNodeId);
+  return [
+    ...ops,
+    {
+      op: 'setDrawingMetadata',
+      drawingNodeId,
+      title: projection?.title ?? '',
+      description: projection?.description ?? '',
+      hyperlink,
+    },
+  ];
 }
 
 /** Atomic image properties including owner hyperlink relationship wiring. */
@@ -771,52 +849,58 @@ export function applyImagePropertiesIntent(
   const blocked = imageIntentBlockedDuringComposition(store, resolved.store);
   if (blocked) return blocked;
 
-  return transactPackageImage(store, scope, (ctx, owner) => {
-    const previousHyperlinkRelId = drawingHyperlinkRelationshipId(
-      store.currentPackage(),
-      owner,
-      input.drawingNodeId
-    );
-    let hyperlinkRelationshipId: string | null = null;
-    if (input.hyperlink !== null) {
-      const ensured = ensureHyperlinkRelationship(store.currentPackage(), input.hyperlink, owner);
-      if (!ensured) return null;
-      if (!ctx.applyPackage(() => ensured.pkg)) return null;
-      hyperlinkRelationshipId = ensured.relationshipId;
-    }
-
-    for (const op of input.ops) {
-      if (!ctx.apply(op)) return null;
-    }
-
-    if (
-      !applyDrawingHyperlinkRel(
-        ctx,
+  return transactPackageImage(
+    store,
+    scope,
+    (ctx, owner, ask) => {
+      if (!ask(withLinkIntent(store.currentPackage(), owner, input))) return null;
+      const previousHyperlinkRelId = drawingHyperlinkRelationshipId(
+        store.currentPackage(),
         owner,
-        input.drawingNodeId,
-        input.hyperlink === null ? null : hyperlinkRelationshipId
-      )
-    ) {
-      return null;
-    }
-
-    let cleanupFailed = false;
-    ctx.applyPackage((current) => {
-      const cleaned = cleanupOrphanDrawingHyperlinkRelationship(
-        current,
-        owner,
-        previousHyperlinkRelId
+        input.drawingNodeId
       );
-      if (cleaned === null) {
-        cleanupFailed = true;
-        return current;
+      let hyperlinkRelationshipId: string | null = null;
+      if (input.hyperlink !== null) {
+        const ensured = ensureHyperlinkRelationship(store.currentPackage(), input.hyperlink, owner);
+        if (!ensured) return null;
+        if (!ctx.applyPackage(() => ensured.pkg)) return null;
+        hyperlinkRelationshipId = ensured.relationshipId;
       }
-      return cleaned;
-    });
-    if (cleanupFailed) return null;
 
-    return input.drawingNodeId;
-  });
+      for (const op of input.ops) {
+        if (!ctx.apply(op)) return null;
+      }
+
+      if (
+        !applyDrawingHyperlinkRel(
+          ctx,
+          owner,
+          input.drawingNodeId,
+          input.hyperlink === null ? null : hyperlinkRelationshipId
+        )
+      ) {
+        return null;
+      }
+
+      let cleanupFailed = false;
+      ctx.applyPackage((current) => {
+        const cleaned = cleanupOrphanDrawingHyperlinkRelationship(
+          current,
+          owner,
+          previousHyperlinkRelId
+        );
+        if (cleaned === null) {
+          cleanupFailed = true;
+          return current;
+        }
+        return cleaned;
+      });
+      if (cleanupFailed) return null;
+
+      return input.drawingNodeId;
+    },
+    input.gate ? { gate: input.gate } : undefined
+  );
 }
 
 export type { ExternalImageFetchPort };

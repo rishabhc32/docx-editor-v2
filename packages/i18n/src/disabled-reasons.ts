@@ -57,11 +57,6 @@ export const DISABLED_REASON_KEYS: Readonly<Record<string, TranslationKey>> = Ob
     'disabledReason.furnitureOnlyPageField',
   // Keyed on `HEADER_FOOTER_READ_ONLY_REASON` in the engine's header and footer lane.
   'headers and footers are read-only in this editor': 'disabledReason.headerFooterReadOnly',
-  // Not a scope refusal: the story is right and the MODE is not. A section break's type
-  // lands on the section that follows it, and Word's record for that change is one this
-  // engine refuses to accept or reject — so it cannot be proposed.
-  'a section break that changes where the next section starts cannot be suggested; turn off suggesting to insert it':
-    'disabledReason.suggestingSectionBreak',
   'a section break cannot be inserted inside a table cell': 'disabledReason.tableCellSectionBreak',
   // Deliberately NOT the store's `locked` / `bound` enums. Those are shared by every op —
   // `locked` covers a locked CONTROL whose content is editable as well as locked content —

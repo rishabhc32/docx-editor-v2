@@ -46,6 +46,27 @@ describe('createReviewItemsMemo', () => {
     ).toBeUndefined();
   });
 
+  test('a state whose tree nothing else holds is let go', () => {
+    // In a room every remote change drops the undo history, so the memo was the only holder
+    // of its older trees, and it kept each one's whole queue until eight more states passed.
+    const memo = createReviewItemsMemo();
+    const held = inputs();
+    memo.set(held, items('held'));
+    const released = (() => {
+      const refs: WeakRef<object>[] = [];
+      for (let index = 0; index < 6; index += 1) {
+        const queue = items(String(index));
+        refs.push(new WeakRef(queue));
+        memo.set(inputs(), queue);
+      }
+      return refs;
+    })();
+    Bun.gc(true);
+    // The older states only: the collector's stack scan may still reach the last one or two.
+    expect(released.slice(0, 4).filter((ref) => ref.deref() !== undefined)).toHaveLength(0);
+    expect(memo.get(held)).toBeDefined();
+  });
+
   test('only the most recent states are kept', () => {
     const memo = createReviewItemsMemo();
     const states = Array.from({ length: 9 }, () => inputs());

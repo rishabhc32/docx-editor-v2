@@ -360,15 +360,20 @@ export function execEditorCommand(
       break;
     case 'insertTextBox':
       return insertTextbox(mounted);
-    case 'insertText':
+    case 'insertText': {
+      // `type` commits at once and sets `lastRejection` either way, so a reason here is this
+      // call's. Every refusal is reported: a collaboration gate's too, which used to answer
+      // `ok: true, changed: false` for text that never landed.
       mounted.type(command.text);
-      if (
-        mounted.state().lastRejection === 'the table of contents is generated and read-only' ||
-        mounted.state().lastRejection === FIELD_CODE_INPUT_REFUSAL
-      ) {
-        return { ok: false, code: 'invalidArgs', reason: mounted.state().lastRejection! };
+      const rejection = mounted.state().lastRejection;
+      if (rejection !== null) {
+        const known =
+          rejection === 'the table of contents is generated and read-only' ||
+          rejection === FIELD_CODE_INPUT_REFUSAL;
+        return { ok: false, code: known ? 'invalidArgs' : 'unsupported', reason: rejection };
       }
       break;
+    }
     case 'deleteText':
       if (resolveSelectedDrawingRecord(mounted)) {
         return execImageCommand(mounted, { type: 'deleteImage' }, options?.editor);

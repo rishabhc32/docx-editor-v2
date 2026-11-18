@@ -10,6 +10,7 @@ import {
   type OoxmlNode,
   type OoxmlPart,
 } from '../package/ooxml-tree.ts';
+import { isRelationshipReference } from '../package/canonical-media-references.ts';
 import type { OoxmlPackage } from '../package/ooxml-package.ts';
 import { relationshipsOf } from '../package/package-edit.ts';
 import { resolveInternalTarget } from '../package/opc-names.ts';
@@ -86,6 +87,23 @@ export function collectNumIds(nodes: readonly OoxmlNode[], out: Set<string>): vo
   }
 }
 
+/**
+ * Records re-homed onto the fragment part that will own its rels part: the source part may
+ * live in another folder, and a relative target would then resolve against the wrong base.
+ * Internal targets become absolute (the media ships under its ORIGINAL canonical name), so
+ * both flavours resolve alike.
+ */
+export function rehomedRecords(
+  records: readonly RelationshipRecord[],
+  ownerPart: string
+): RelationshipRecord[] {
+  return records.map((record) => {
+    if (record.targetMode === 'External') return { ...record, ownerPart };
+    const resolved = resolveInternalTarget(record.ownerPart, record.rawTarget);
+    return { ...record, ownerPart, rawTarget: resolved.ok ? resolved.partName : record.rawTarget };
+  });
+}
+
 /** Every `r:*` relationship id referenced anywhere under the nodes. */
 export function relationshipIdsIn(nodes: readonly OoxmlNode[]): Set<string> {
   const ids = new Set<string>();
@@ -98,7 +116,7 @@ export function collectRelationshipIds(nodes: readonly OoxmlNode[], out: Set<str
     walkNodes(node, (current) => {
       if (current.kind === 'textValue') return;
       for (const attribute of current.attributes) {
-        if (attribute.namespaceUri === R_NS && attribute.value.length > 0) {
+        if (isRelationshipReference(attribute) && attribute.value.length > 0) {
           out.add(attribute.value);
         }
       }

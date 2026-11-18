@@ -58,6 +58,8 @@ function pageLabel(editor: Editor): string {
 }
 ```
 
+`exec` returns an `ExecResult`. A write that the editor applies returns `{ ok: true, changed }`. If `changed` is `false`, the write had nothing to change, for example an alignment that the paragraph already has. If the document refuses the write, `exec` returns `{ ok: false, code, reason }` and changes nothing. A locked content control, a table of contents, and a collaboration room's rules are examples of refusals. A selection that ends in hidden text is also refused, because the editor cannot place the end of the range on the page. If part of the document is still being laid out, the write waits for that layout and then applies to the whole selection.
+
 `snapshot()` is version-cached: it returns the same reference until editor state changes, and its sub-objects are reference-stable. That is what makes `useSyncExternalStore` (and therefore [`useEditorState`](/docs/2.x/react/hooks)) correct without a deep compare on every store notification.
 
 ### Navigate the document

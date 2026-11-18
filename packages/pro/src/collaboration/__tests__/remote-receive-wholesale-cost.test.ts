@@ -5,7 +5,8 @@ Production use requires a commercial agreement: licensing@eigenpal.com
 */
 // What the WHOLESALE remote path costs, in work rather than in milliseconds.
 //
-// `remotePackageDelta` narrows only a main-part text change. Anything that touches the
+// `remotePackageDelta` narrows only a main-part change that paragraphs own (their text and
+// content, or a split or a join between blocks that keep their ids). Anything that touches the
 // package shell — a media part, a relationship, a content type — installs as `global`,
 // which is the worst case a receiving replica has. This file measures that case on the
 // 200-page fixture with the realistic trigger, an image insert, and pins two facts the

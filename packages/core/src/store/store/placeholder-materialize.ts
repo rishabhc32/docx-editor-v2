@@ -21,6 +21,7 @@ import { WML_NAMESPACE_URI } from '../package/ooxml-shared.ts';
 import type { OoxmlElement, OoxmlNode, OoxmlPart } from '../package/ooxml-tree.ts';
 import { usedParaIds, w14PrefixInScopeAt, withFreshParaIds } from '../package/para-id.ts';
 import { actorScopedSeed } from '../package/actor-scoped-ids.ts';
+import { showsPromptWhenEmpty } from './content-control-prompt-kinds.ts';
 import { editedProperties, promptFor, textRun, wmlElement } from './tree-op-content-controls.ts';
 import {
   cloneWithNewIds,
@@ -28,16 +29,6 @@ import {
   contentControlPropertiesOf,
   isContentControlNode,
 } from './tree-op-nodes.ts';
-
-/** The kinds whose empty content Word fills with a prompt. A checkbox or a picture has none. */
-const PROMPT_KINDS: ReadonlySet<ContentControlKind> = new Set<ContentControlKind>([
-  'plainText',
-  'richText',
-  'date',
-  'dropDownList',
-  'comboBox',
-  'docPartList',
-]);
 
 /** Bounded: a hostile document cannot make the open pass walk deeper than the tree reader allows. */
 const MAX_DEPTH = 96;
@@ -70,7 +61,12 @@ function collectEmptyControls(root: OoxmlNode): EmptyControl[] {
     if (isContentControlNode(node)) {
       const content = contentControlContentOf(node);
       const summary = contentControlSummaryOf(node);
-      if (content && summary && content.children.every(isBlank) && PROMPT_KINDS.has(summary.type)) {
+      if (
+        content &&
+        summary &&
+        content.children.every(isBlank) &&
+        showsPromptWhenEmpty(node, summary.type)
+      ) {
         found.push({
           control: node,
           content,
@@ -170,35 +166,4 @@ export function materializeGlossaryPlaceholders(pkg: OoxmlPackage, part: OoxmlPa
     if (edited.ok) current = edited.part;
   }
   return current;
-}
-
-/**
- * The text of the glossary block named `docPart`: its first paragraph's characters, for a prompt
- * shown again after an edit empties its control. Undefined when the package holds no such block,
- * or the block no text.
- */
-export function placeholderTextOf(pkg: OoxmlPackage, docPart: string): string | undefined {
-  const block = buildingBlocksOf(pkg).find((entry) => entry.name === docPart);
-  const paragraph = block?.blocks.find((entry) => entry.kind === 'paragraph' || isWml(entry, 'p'));
-  if (!paragraph) return undefined;
-  let text = '';
-  const visit = (node: OoxmlNode, depth: number): void => {
-    if (depth > MAX_DEPTH) return;
-    if (node.kind === 'textValue') {
-      text += node.value;
-      return;
-    }
-    if (
-      node.kind === 'revisionDelete' ||
-      node.kind === 'deletedText' ||
-      node.kind === 'instrText' ||
-      isWml(node, 'rPr') ||
-      isWml(node, 'pPr')
-    ) {
-      return;
-    }
-    for (const child of node.children) visit(child, depth + 1);
-  };
-  visit(paragraph, 0);
-  return text.length > 0 ? text : undefined;
 }

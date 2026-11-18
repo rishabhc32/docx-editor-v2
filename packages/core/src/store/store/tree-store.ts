@@ -27,10 +27,12 @@ import { validateOoxmlPartDelta, type OoxmlPart } from '../package/ooxml-tree.ts
 import { singlePartPackage, withPart, type OoxmlPackage } from '../package/ooxml-package.ts';
 import { validatePackageInvariants } from '../package/package-edit.ts';
 import { settingsPartOf } from '../package/note-properties.ts';
-import { placeholderTextOf } from './placeholder-materialize.ts';
+import type { RetainedPrompt } from '../package/ooxml-edit.ts';
+import { placeholderBlocksIn, withRetainedPrompts } from './content-control-prompt-glossary.ts';
 import { documentProtectionRefusal, lifecycleProtectionRefusal } from './forms-protection.ts';
 import { isCommentPackageEdit } from './comment-package-edit.ts';
 import { isPackageEditRefusal } from './package-edit-refusal.ts';
+import { packageEditTouchesShell } from './package-shell-delta.ts';
 import { ORIGIN_IDS } from '../registry/frozen-ids.ts';
 import {
   formsProtectionRefusal,
@@ -167,6 +169,8 @@ export interface TransactionContext {
    * by default, and nothing is applied. Any other throw escapes `transact` as a crash.
    */
   applyPackage(edit: (pkg: OoxmlPackage) => OoxmlPackage): boolean;
+  /** Whether the transaction has written beyond the story part so far: a part or the shell. */
+  shellTouched(): boolean;
   /** The selection to restore when this entry is undone. */
   selectionBefore(selection: SelectionMark | null): void;
   /** The selection to restore when this entry is redone. */
@@ -387,9 +391,9 @@ export class TreeDocumentStore {
   /**
    * Restore undo/redo stacks only, keeping the current part and revision.
    * Used when a story mutation is promoted to a package history pointer so the local
-   * orphan entry does not steal a later undo.
+   * orphan entry does not steal a later undo, and with empty stacks to drop the history.
    */
-  restoreHistoryStacks(checkpoint: TreeDocumentCheckpoint): void {
+  restoreHistoryStacks(checkpoint: Pick<TreeDocumentCheckpoint, 'undoStack' | 'redoStack'>): void {
     this.undoStack.length = 0;
     this.undoStack.push(...checkpoint.undoStack);
     this.redoStack.length = 0;
@@ -608,9 +612,11 @@ export class TreeDocumentStore {
         formField && 'paragraphId' in op
           ? { partName, paragraphId: op.paragraphId, fieldNodeId: formField.fieldNodeId }
           : null;
+      const retained: RetainedPrompt[] = [];
       const editOptions = {
         deferValidation: true,
-        placeholderText: (docPart: string) => placeholderTextOf(working, docPart),
+        placeholderBlocks: (docPart: string) => placeholderBlocksIn(working, docPart),
+        retainPrompt: (prompt: RetainedPrompt) => retained.push(prompt),
         ...(this.contentLockPolicy ? { contentLockPolicy: this.contentLockPolicy } : {}),
         ...(revisionIds ? { revisionIds } : {}),
         ...(trackedRevisionIds ? { trackedRevisionIds } : {}),
@@ -628,6 +634,8 @@ export class TreeDocumentStore {
       // the ids that came in with it.
       if (IMPORTS_REVISION_IDS.has(op.op)) resetRevisionCounters();
       working = withPart(working, result.part);
+      // A prompt the op removed goes into the glossary in the same transaction, and undo step.
+      if (retained.length > 0) working = withRetainedPrompts(working, retained, touched);
       const identityNoOp =
         result.part === target &&
         result.effect.dirty.length === 0 &&
@@ -657,6 +665,7 @@ export class TreeDocumentStore {
     build({
       apply: (op) => applyToPart(this.storyPartName, op),
       applyTo: (partName, op) => applyToPart(partName, op),
+      shellTouched: () => packageEditTouchesShell(before, working, this.storyPartName),
       applyPackage: (edit) => {
         if (failure) return false;
         // The package channel imports and rewrites whole parts, so it needs the document-wide

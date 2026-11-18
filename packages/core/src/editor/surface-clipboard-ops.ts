@@ -20,7 +20,12 @@ import { partOfNodeId } from './surface-scope.ts';
 // The VIEW, not the concrete binding session: `paginated-surface.ts` is the only file in
 // this lane allowed to name that one (`store/__tests__/prosemirror-isolation.test.ts`).
 import type { TreeApplyResult, TreeDocxSessionView } from '@docx-editor.dev/core/binding';
+import type { CollaborationGateContext } from '../collaboration/index.ts';
 import type { StoryScope, TreeDocOp } from '@docx-editor.dev/core/store';
+import type { RevisionAttributionInput } from '../store/store/tree-op-types.ts';
+import { findNode } from '../store/package/ooxml-edit.ts';
+import { smartSpacedText, spacingNeighbours } from '../store/store/fragment-smart-spacing.ts';
+import { placeholderControlForInsertion } from '../store/store/tree-op-content-controls.ts';
 import {
   cellSelectionText,
   paragraphsInCells,
@@ -38,6 +43,7 @@ import {
 } from '../layout/optional-hyphen-copy-text.ts';
 import { fieldResultSpeller } from '../layout/field-copy-text.ts';
 import { clampTextFormPaste } from './text-form-field-paste.ts';
+import { promptInsertionLanding } from './content-control-prompt-landing.ts';
 import {
   collapsedAt,
   fragmentCoverageOf,
@@ -61,6 +67,11 @@ const plainCopyText = withoutOptionalHyphens;
 export interface SurfaceClipboardDeps {
   session: TreeDocxSessionView;
   textFormFieldId?(): string | null;
+  /**
+   * False shuts the rich lane: a text box is in edit, or the surface refuses a write here (a
+   * table of contents, a blocked or read-only document). The plain lane then reports why, as
+   * every other write lane does.
+   */
   richPasteAllowed?(): boolean;
   paragraphIds?(): readonly string[];
   layout(): SemanticLayout;
@@ -75,7 +86,17 @@ export interface SurfaceClipboardDeps {
    * gate admits — always null with no session attached, so the non-collaborative paste
    * path stays exactly as it was.
    */
-  collaborationGate(ops: readonly TreeDocOp[], scope: StoryScope): string | null;
+  collaborationGate(
+    ops: readonly TreeDocOp[],
+    scope: StoryScope,
+    context?: CollaborationGateContext
+  ): string | null;
+  /** The suggesting author, or undefined when an edit lands untracked: edit mode, no author. */
+  trackedAuthor(): string | undefined;
+  /** The date a tracked edit records, the one typing writes. */
+  trackedDate(): string;
+  /** Told after a paste commits as a tracked change, as typing tells it. */
+  onTrackedChange(): void;
   /** Monotonic clock for the force-plain deadline. */
   now(): number;
   flushPendingInputAndLayout(): void;
@@ -119,6 +140,12 @@ export interface SurfaceClipboardOps {
 
 const FORCE_PLAIN_PASTE_WINDOW_MS = 2000;
 
+/**
+ * Store refusals of a rich paste that Word does not refuse and that plain text would only
+ * approximate: reported by name, with no plain-text fallback.
+ */
+const NAMED_PASTE_REFUSALS: ReadonlySet<string> = new Set(['fragment-paragraphs-in-link']);
+
 export function createSurfaceClipboardOps(deps: SurfaceClipboardDeps): SurfaceClipboardOps {
   const { session } = deps;
 
@@ -129,13 +156,36 @@ export function createSurfaceClipboardOps(deps: SurfaceClipboardDeps): SurfaceCl
    */
   let forcePlainPasteArmedAt: number | null = null;
 
-  /** Insert text, turning newlines into real paragraph splits rather than literal characters. */
-  function insertPlainText(text: string): void {
+  /**
+   * The visible characters around a place, for Word's paste spacing; null at a control's
+   * prompt, whose text a paste replaces.
+   */
+  function neighboursAt(at: SemanticPosition) {
+    const part = partOfNodeId(session, at.paragraphId) ?? session.part();
+    const paragraph = findNode(part, at.paragraphId);
+    if (!paragraph || paragraph.kind !== 'paragraph') return null;
+    if (placeholderControlForInsertion(part, at.paragraphId, at.offset)) return null;
+    return spacingNeighbours(paragraph, at.offset);
+  }
+
+  /**
+   * Insert text, turning newlines into real paragraph splits rather than literal characters.
+   * `smartSpacing`: a paste, which gets Word's space on each side between two words (Smart cut
+   * and paste), except in a text form field.
+   */
+  function insertPlainText(text: string, options?: { readonly smartSpacing?: boolean }): void {
     // Normalized first: a Windows clipboard carries CRLF, a page break arrives as a form
     // feed, and either one left in run text is a control character the store refuses —
     // which vetoes the whole transaction and makes the paste do nothing at all.
-    const normalized = insertableText(text);
     const range = deps.orderedRange();
+    const spaced = options?.smartSpacing === true && !deps.textFormFieldId?.();
+    const normalized = spaced
+      ? smartSpacedText(
+          insertableText(text),
+          neighboursAt(range.from)?.before ?? null,
+          neighboursAt(range.to)?.after ?? null
+        )
+      : insertableText(text);
     const lines = clampTextFormPaste(
       session,
       range.from,
@@ -179,11 +229,23 @@ export function createSurfaceClipboardOps(deps: SurfaceClipboardDeps): SurfaceCl
       });
       ops.push(...pendingOps);
     }
+    // Text pasted at a prompt's edge replaces the prompt, as typing does: it lands where the
+    // prompt began, so the cuts and the caret count from there. Counted from the pressed
+    // offset, every cut fell inside the next line.
+    const start =
+      joined.length > 0
+        ? promptInsertionLanding(
+            partOfNodeId(session, target.paragraphId) ?? session.part(),
+            target.paragraphId,
+            target.offset,
+            0
+          )
+        : target.offset;
     const boundaries: number[] = [];
     let consumed = 0;
     for (let index = 0; index < lines.length - 1; index += 1) {
       consumed += lines[index]!.length;
-      boundaries.push(target.offset + consumed);
+      boundaries.push(start + consumed);
     }
     if (boundaries.length > 0) {
       ops.push({ op: 'splitParagraphMany', paragraphId: target.paragraphId, offsets: boundaries });
@@ -198,20 +260,14 @@ export function createSurfaceClipboardOps(deps: SurfaceClipboardDeps): SurfaceCl
     // the clamp, which is where this lane started.
     const redoMark =
       boundaries.length === 0
-        ? deps.caretMark({
-            paragraphId: target.paragraphId,
-            offset: target.offset + lastLine.length,
-          })
+        ? deps.caretMark({ paragraphId: target.paragraphId, offset: start + lastLine.length })
         : undefined;
     const withoutFormat = ops.filter((op) => !pendingOps.includes(op));
     deps.commit(
       () => deps.withoutPendingOnRejection(ops, withoutFormat, deps.selectionMark(), redoMark),
       () => {
         if (boundaries.length === 0) {
-          return collapsedAt({
-            paragraphId: target.paragraphId,
-            offset: target.offset + lastLine.length,
-          });
+          return collapsedAt({ paragraphId: target.paragraphId, offset: start + lastLine.length });
         }
         // The caret lands at the end of the pasted text: in the LAST minted paragraph, right
         // after the final line. Scoped story ids are in document order, so the last unfamiliar
@@ -298,19 +354,36 @@ export function createSurfaceClipboardOps(deps: SurfaceClipboardDeps): SurfaceCl
       cellRectangle: false,
       coverage,
       pkg: session.currentPackage(),
+      // Word copies the accepted final view from a document that tracks changes
+      acceptChanges: deps.editingMode() === 'suggest',
     });
+  }
+
+  /**
+   * The attribution a rich paste writes, or null when the rich lane is shut: edit mode lands
+   * the fragment plainly, and suggesting mode with an author lands it as one tracked insertion,
+   * as Word pastes with Track Changes on. Suggesting without an author keeps to the plain lane,
+   * whose refusal names the missing author.
+   */
+  function richPasteRevision(): { readonly revision?: RevisionAttributionInput } | null {
+    const mode = deps.editingMode();
+    if (mode === 'edit') return {};
+    const author = mode === 'suggest' ? deps.trackedAuthor() : undefined;
+    return author === undefined ? null : { revision: { author, date: deps.trackedDate() } };
   }
 
   /**
    * Land a fragment package at the selection, ONE commit: the selection-clearing ops plus
    * the resource merge plus `insertFragment`, promoted to a package undo unit in the
-   * session. Unsupported content stops routing; other refusals permit the next flavour.
+   * session. Unsupported content and a collaboration refusal stop routing; other refusals
+   * permit the next flavour.
    */
   function pasteFragmentBytes(
     bytes: Uint8Array,
     lastMarkCovered: boolean
-  ): boolean | 'unsupported-content' {
-    if (deps.editingMode() !== 'edit') return false;
+  ): boolean | 'unsupported-content' | 'refused' {
+    const attribution = richPasteRevision();
+    if (attribution === null) return false;
     if (deps.storyScope().kind !== 'body') return false;
     if (deps.cellSelection()) return false;
     deps.flushPendingInputAndLayout();
@@ -318,21 +391,10 @@ export function createSurfaceClipboardOps(deps: SurfaceClipboardDeps): SurfaceCl
     const target = plan.replaceAt ?? plan.collapseTo;
     let landed = false;
     let unsupported = false;
+    let refusedByName = false;
+    let collaborationRefusal: string | null = null;
     deps.commit(
       () => {
-        // The readiness gate the typing lane asks. A fragment paste reaches the store
-        // through `applyFragmentPaste`, past `applyOps`, so without this a disconnected
-        // replica landed a rich paste locally and never replicated it. The selection-
-        // clearing plan is the op-shaped half of the write, so it is what the gate sees.
-        const collaborationRefusal = deps.collaborationGate(plan.ops, { kind: 'body' });
-        if (collaborationRefusal) {
-          return {
-            committed: false,
-            rejected: true,
-            opCount: 0,
-            reason: collaborationRefusal,
-          } as TreeApplyResult;
-        }
         const actorId = deps.actorId();
         const result = session.applyFragmentPaste(
           { kind: 'body' },
@@ -341,22 +403,43 @@ export function createSurfaceClipboardOps(deps: SurfaceClipboardDeps): SurfaceCl
             offset: target.offset,
             fragmentBytes: bytes,
             lastMarkCovered,
+            // Word's Smart cut and paste: a space on each side between two words
+            smartSpacing: true,
             priorOps: plan.ops as unknown as TreeDocOp[],
             ...(actorId !== undefined ? { actorId } : {}),
+            ...attribution,
+            // The gate the typing lane asks, asked INSIDE the store transaction: only there
+            // does the write exist whole: the selection-clearing ops, the exact
+            // `insertFragment`, and the package with the styles, numbering, media and
+            // relationships the merge brought in. Asked before the commit instead, a session
+            // saw only the cleared selection and the paste landed past it.
+            gate: (ops, pkg) =>
+              (collaborationRefusal = deps.collaborationGate(
+                ops,
+                { kind: 'body' },
+                { package: pkg }
+              )),
           }
         );
         landed = result.ok;
         unsupported = !result.ok && result.detail === 'fragment-merge:unsupported-content';
+        refusedByName = !result.ok && NAMED_PASTE_REFUSALS.has(result.reason);
         return {
           committed: result.ok,
           rejected: !result.ok,
           opCount: result.ok ? 1 : 0,
-          ...(result.ok ? {} : { reason: result.detail ?? result.reason }),
+          ...(result.ok ? {} : { reason: collaborationRefusal || result.detail || result.reason }),
         } as unknown as TreeApplyResult;
       },
       () => collapsedAt(target)
     );
-    return unsupported ? 'unsupported-content' : landed;
+    if (landed && attribution.revision) deps.onTrackedChange();
+    if (unsupported) return 'unsupported-content';
+    // A session that refused the write refuses it in every flavour: a plain-text fallback
+    // would put the same words past the same gate, or past a gate that never saw them. So
+    // does a paste Word lands in a form the engine cannot write yet: plain text would
+    // approximate it.
+    return collaborationRefusal || refusedByName ? 'refused' : landed;
   }
 
   /** The paste router entry — fidelity order with continuous degrade to plain. */
@@ -369,15 +452,17 @@ export function createSurfaceClipboardOps(deps: SurfaceClipboardDeps): SurfaceCl
       {
         richLaneOpen:
           (deps.richPasteAllowed?.() ?? true) &&
-          deps.editingMode() === 'edit' &&
+          richPasteRevision() !== null &&
           deps.storyScope().kind === 'body' &&
           deps.cellSelection() === null,
         pasteFragment: (fragmentBytes, lastMarkCovered) =>
           pasteFragmentBytes(fragmentBytes, lastMarkCovered),
-        insertPlainText,
+        insertPlainText: (pasted) => insertPlainText(pasted, { smartSpacing: true }),
       },
       { html, text, forcePlain }
     );
+    // The commit that refused already reported its reason.
+    if (lane === 'refused') return false;
     if (lane === 'unsupported-content') {
       deps.commit(
         () =>

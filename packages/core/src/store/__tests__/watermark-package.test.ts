@@ -21,6 +21,13 @@ function fixture(sharedImage: boolean) {
   const sibling = sharedImage
     ? '<v:shape id="Logo" style="width:20pt;height:20pt"><v:imagedata r:id="rIdImage"/></v:shape>'
     : '<v:shape id="OrdinaryShape" style="width:20pt;height:20pt"/>';
+  return withHeader(
+    `<w:p><w:r><w:rPr><w:b/></w:rPr><w:t>Header text</w:t><w:pict><v:shape id="WordPictureWatermark1" style="width:200pt;height:100pt"><v:imagedata r:id="rIdImage"/></v:shape>${sibling}</w:pict><w:fldChar w:fldCharType="begin"/><w:instrText>PAGE</w:instrText><w:fldChar w:fldCharType="end"/></w:r></w:p>`
+  );
+}
+
+/** A package whose one section shows `/word/header1.xml` with `body`, and its shared picture. */
+function withHeader(body: string) {
   return load(
     zipSync({
       '[Content_Types].xml': strToU8(
@@ -40,7 +47,7 @@ function fixture(sharedImage: boolean) {
         `<Relationships xmlns="${REL}"><Relationship Id="hdr" Type="${R}/header" Target="header1.xml"/></Relationships>`
       ),
       'word/header1.xml': strToU8(
-        `<w:hdr xmlns:w="${W}" xmlns:r="${R}" xmlns:v="urn:schemas-microsoft-com:vml"><w:p><w:r><w:rPr><w:b/></w:rPr><w:t>Header text</w:t><w:pict><v:shape id="WordPictureWatermark1" style="width:200pt;height:100pt"><v:imagedata r:id="rIdImage"/></v:shape>${sibling}</w:pict><w:fldChar w:fldCharType="begin"/><w:instrText>PAGE</w:instrText><w:fldChar w:fldCharType="end"/></w:r></w:p></w:hdr>`
+        `<w:hdr xmlns:w="${W}" xmlns:r="${R}" xmlns:v="urn:schemas-microsoft-com:vml">${body}</w:hdr>`
       ),
       'word/_rels/header1.xml.rels': strToU8(
         `<Relationships xmlns="${REL}"><Relationship Id="rIdImage" Type="${R}/image" Target="media/shared.png"/></Relationships>`
@@ -89,5 +96,25 @@ describe('watermark removal preserves shared runs', () => {
         expect(serializeOoxmlPart(original.parts.get(HEADER)!)).toContain('WordPictureWatermark');
       });
     }
+  }
+});
+
+describe("a watermark's own run", () => {
+  const own =
+    '<w:p><w:r><w:rPr><w:noProof/></w:rPr><w:pict><v:shapetype id="_x0000_t136"/>' +
+    '<v:shape id="PowerPlusWaterMarkObject9" style="width:200pt;height:100pt"/></w:pict></w:r>' +
+    '<w:r><w:t>Header text</w:t></w:r></w:p>';
+
+  for (const watermark of [null, replacement]) {
+    test(`${watermark ? 'replace' : 'remove'} takes the old run whole, as Word does`, () => {
+      const result = applyPackageWatermark(withHeader(own), watermark, () => null);
+      if (!result.ok) throw new Error(result.detail);
+      const xml = serializeOoxmlPart(result.package.parts.get(HEADER)!);
+      expect(xml).toContain('Header text');
+      expect(xml).not.toContain('PowerPlusWaterMarkObject9');
+      // Only the new watermark's run and picture are left, none of the old one's
+      expect(xml.match(/<w:pict>/g)?.length ?? 0).toBe(watermark ? 1 : 0);
+      expect(xml.match(/<w:noProof\/>/g)?.length ?? 0).toBe(watermark ? 1 : 0);
+    });
   }
 });

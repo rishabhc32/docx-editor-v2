@@ -1,0 +1,13 @@
+{
+  "impact": "compatible",
+  "fields": [],
+  "before": "When one edit deleted text and created a paragraph that held the same letters, the journal wrote those letters as moved into the new paragraph, whatever story the new paragraph was in. Typing over a content control's prompt writes the prompt into a new glossary paragraph in the same edit, so the prompt's letters, and the paragraph text after the control, showed in the glossary and disappeared from the body on every participant.",
+  "after": "A paragraph the edit creates is in the story of the parent the edit places it under. Text moves only within one story, so letters written into another part, such as the glossary that keeps a replaced prompt, are new text there, and the body keeps its text.",
+  "reason": "Only the writer's choice between a move and new text changes, for an edit that writes a paragraph into another story. Shared state keeps its fields and meanings, and every participant reads a written move or new text as before.",
+  "tests": [
+    "packages/pro/src/collaboration/__tests__/document-tracked-placeholder.test.ts",
+    "packages/pro/src/collaboration/__tests__/document-prompt-caret.test.ts"
+  ],
+  "changeset": null,
+  "migration": null
+}

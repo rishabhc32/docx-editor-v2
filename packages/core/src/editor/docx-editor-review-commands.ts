@@ -370,10 +370,14 @@ export function createReviewCommands(deps: ReviewCommandDependencies) {
       .placements({ placement: false, pairReplacements: false })
       .find((placement) => placement.isActive)?.key;
     let applied: { committed: boolean; reason?: unknown } | undefined;
-    const refused = surface.commitReviewOps((historyToken) => {
-      applied = surface.session.applyTreeOpsAtomic(groups, { partOps, historyToken });
-      return applied;
-    }, 'revision-attribution');
+    const ops = [...groups, ...partOps].flatMap((group) => group.ops);
+    const refused = surface.commitReviewOps(
+      (historyToken) => {
+        applied = surface.session.applyTreeOpsAtomic(groups, { partOps, historyToken });
+        return applied;
+      },
+      { intent: 'revision-attribution', ops }
+    );
     if (!applied?.committed) return reviewWriteRefusal(refused, 'the changes were refused');
     const result = plan!.finish();
     // Keys include the author, so an active card keeps its place under its new key.
@@ -456,35 +460,35 @@ export function createReviewCommands(deps: ReviewCommandDependencies) {
         reason: READ_ONLY_REVISION_REASON,
       };
     let applied: { committed: boolean; reason?: unknown } | undefined;
-    // The story the decision read, so a refusal can say what holds it without opening another.
-    let decided: Parameters<typeof heldChangeRefusal>[0] = null;
-    const refused = deps.surface()!.commitReviewOps((historyToken) => {
-      const session = deps.surface()!.session;
-      const part = partOfReviewItem(session, item);
-      if (part && part.name === stylesPartOf(session.currentPackage())?.name) {
-        applied = session.applyTreeOpsAtomic([], {
-          partOps: [{ partName: part.name, ops: resolutionOps(item, action, part) }],
+    // Planned before the commit, so a collaboration gate judges the ops that commit
+    const session = deps.surface()!.session;
+    const part = partOfReviewItem(session, item);
+    const inStyles = part !== null && part.name === stylesPartOf(session.currentPackage())?.name;
+    const story = inStyles ? null : session.partFor(deps.scope(item));
+    const ops = resolutionOps(item, action, inStyles ? part : story);
+    const refused = deps.surface()!.commitReviewOps(
+      (historyToken) => {
+        if (inStyles && part) {
+          applied = session.applyTreeOpsAtomic([], {
+            partOps: [{ partName: part.name, ops }],
+            historyToken,
+          });
+          return applied;
+        }
+        applied = session.applyTreeOps(ops, undefined, undefined, deps.scope(item), {
           historyToken,
         });
         return applied;
-      }
-      decided = deps.surface()!.session.partFor(deps.scope(item));
-      applied = deps
-        .surface()!
-        .session.applyTreeOps(
-          resolutionOps(item, action, decided),
-          undefined,
-          undefined,
-          deps.scope(item),
-          { historyToken }
-        );
-      return applied;
-    }, 'revision-resolve');
-    if (!applied?.committed)
+      },
+      { intent: 'revision-resolve', ops }
+    );
+    // A refusal says which pending change holds the decision, read from the story it decided.
+    if (!applied?.committed) {
       return reviewWriteRefusal(
         refused,
-        heldChangeRefusal(decided, item, action) ?? 'the revision was refused'
+        heldChangeRefusal(story, item, action) ?? 'the revision was refused'
       );
+    }
     return { ok: true, changed: true };
   };
   const exec = (command: EditorCommand): ExecResult | null => {
@@ -547,10 +551,14 @@ export function createReviewCommands(deps: ReviewCommandDependencies) {
     if (command.type !== 'resolveAllReviewChanges') return null;
     const { groups, partOps, result } = bulkPlan(command);
     let applied: { committed: boolean; reason?: unknown } | undefined;
-    const refused = surface.commitReviewOps((historyToken) => {
-      applied = surface.session.applyTreeOpsAtomic(groups, { partOps, historyToken });
-      return applied;
-    }, 'revision-resolve');
+    const ops = [...groups, ...partOps].flatMap((group) => group.ops);
+    const refused = surface.commitReviewOps(
+      (historyToken) => {
+        applied = surface.session.applyTreeOpsAtomic(groups, { partOps, historyToken });
+        return applied;
+      },
+      { intent: 'revision-resolve', ops }
+    );
     if (!applied?.committed) return reviewWriteRefusal(refused, 'the revisions were refused');
     deps.activate(null);
     return { ok: true, changed: true, revisions: { ...result, remaining: all().length } };

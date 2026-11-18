@@ -803,6 +803,27 @@ describe('typing beside and clearing a prompt', () => {
     expect(surface.layout().contentControls?.some((entry) => entry.alias === 'Name')).toBe(true);
     expect(surface.session.bodyText()).toBe(`Name:${PROMPT}`);
   });
+
+  test('a selected prompt stays on a delete and goes whole under typing, kept for later', () => {
+    // Word edits a prompt only in Design Mode: the control keeps its own prompt, not the type's
+    const { surface } = mount(body.replace(PROMPT, 'Type the name.'));
+    const paragraphId = surface.session.paragraphIds()[0]!;
+    const select = () =>
+      surface.setSelection({
+        anchor: { paragraphId, offset: 6 },
+        head: { paragraphId, offset: 20 },
+      });
+    select();
+    surface.deleteBackward();
+    expect(surface.session.bodyText()).toBe('Name: Type the name.');
+    select();
+    surface.type('Bob');
+    expect(surface.session.bodyText()).toBe('Name: Bob');
+    expect(serializeOoxmlPart(surface.session.part())).not.toContain('<w:showingPlcHdr/>');
+    for (let index = 0; index < 3; index += 1) surface.deleteBackward();
+    expect(surface.session.bodyText()).toBe('Name: Type the name.');
+    expect(surface.state().lastRejection ?? null).toBeNull();
+  });
 });
 
 describe('a press on a list prompt', () => {

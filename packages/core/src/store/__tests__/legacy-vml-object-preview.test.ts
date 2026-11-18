@@ -78,6 +78,9 @@ function embeddedObject(options: ObjectOptions = {}): string {
   );
 }
 
+/** An ActiveX control in an object: a program, which no copy carries (an embedded object does). */
+const ACTIVEX = { after: '<w:control r:id="rAx" w:name="CheckBox1"/>' };
+
 function documentXml(content: string): string {
   return `<w:document xmlns:w="${W}" xmlns:v="${V}" xmlns:o="${O}" xmlns:r="${R}" xmlns:w14="${W14}" xmlns:w10="${W10}"><w:body><w:p><w:r><w:t>A</w:t>${content}<w:t>Z</w:t></w:r></w:p></w:body></w:document>`;
 }
@@ -326,10 +329,10 @@ describe('embedded object cached previews', () => {
     expect(canonicalOoxmlFingerprint(objectIn(store.part.root)!)).toBe(object);
   });
 
-  test('copy and paste refuse embedded objects without changing either package', () => {
-    // The embedded part is not media, so it cannot travel with a fragment. The preview alone
-    // is not the object: the whole w:object degrades away and the text survives.
-    const bytes = writeOoxmlPackage(packageOf(embeddedObject()));
+  test('copy and paste refuse an ActiveX control without changing either package', () => {
+    // An ActiveX control is a program: no copy carries it (an embedded object travels with its
+    // parts, `clipboard-fragment-embedded-objects.test.ts`).
+    const bytes = writeOoxmlPackage(packageOf(embeddedObject(ACTIVEX)));
     const source = readOoxmlPackage(bytes);
     if (!source.ok) throw new Error(source.reason);
     const main = source.package.parts.get(source.package.mainDocumentPart)!;
@@ -383,14 +386,14 @@ describe('embedded object cached previews', () => {
   });
 });
 
-test('object-only and mixed cuts refuse before writing or deleting the source', async () => {
+test('ActiveX-only and mixed cuts refuse before writing or deleting the source', async () => {
   const { buildCopyFlavours } = await import('../../editor/clipboard-copy-payload.ts');
   const { createClipboardHandlers } = await import('../../editor/surface-input.ts');
   for (const [startOffset, endOffset] of [
     [1, 2],
     [0, 3],
   ]) {
-    const pkg = packageOf(embeddedObject());
+    const pkg = packageOf(embeddedObject(ACTIVEX));
     const part = pkg.parts.get(pkg.mainDocumentPart)!;
     const paragraph = firstParagraph(part);
     const before = canonicalOoxmlFingerprint(part.root);
@@ -459,8 +462,8 @@ test('object templates reject over-budget children before signature traversal', 
   ).toBeNull();
 });
 
-test('a same-document object move refuses and rolls back its preceding deletion', () => {
-  const pkg = packageOf(embeddedObject());
+test('a same-document ActiveX move refuses and rolls back its preceding deletion', () => {
+  const pkg = packageOf(embeddedObject(ACTIVEX));
   const part = pkg.parts.get(pkg.mainDocumentPart)!;
   const store = new TreePackageStore(pkg, part);
   const before = serializeOoxmlPart(store.currentPackage().parts.get(part.name)!);
@@ -510,11 +513,11 @@ test('object templates reject oversized attributes before normalizing their stri
   ).toBeNull();
 });
 
-test('a closed rich-paste lane refuses object fragments without a plain fallback', async () => {
+test('a closed rich-paste lane refuses ActiveX fragments without a plain fallback', async () => {
   const { routePaste } = await import('../../editor/clipboard-paste-router.ts');
   const { wrapInteropHtml } = await import('../../editor/clipboard-fragment-codec.ts');
   const html = wrapInteropHtml('<p>AZ</p>', {
-    bytes: writeOoxmlPackage(packageOf(embeddedObject())),
+    bytes: writeOoxmlPackage(packageOf(embeddedObject(ACTIVEX))),
     lastMarkCovered: true,
   });
   expect(

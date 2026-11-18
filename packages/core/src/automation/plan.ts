@@ -42,6 +42,7 @@ import { planBreakOperation, planLineBreak } from './plan-breaks.ts';
 import { insertTextOps, lineBreakRefusal, PARAGRAPH_MARK_IN_TEXT } from './line-break-text.ts';
 import { automationListLevelExists } from './list-authoring.ts';
 import { planListAuthoring } from './plan-list-authoring.ts';
+import { storyControlPlan } from './plan-story-controls.ts';
 // What each operation MEANS, as reads off a snapshot and `TreeDocOp`s for one transaction.
 // The planner is pure with respect to the document: it reads a snapshot and produces ops. Every
 // question ("what does inserting a paragraph before another one do to identity", "what does
@@ -682,7 +683,7 @@ export function createBatchPlanner(host: BatchPlannerHost): BatchPlanner {
 
   /**
    * Whole-body replacement removes blocks rather than joining text across table cells.
-   * Preserve section-owning paragraphs and paragraphs within block content controls.
+   * Preserve section-owning paragraphs; block content controls go as Word removes them.
    */
   const planReplaceStory = (plan: StoryPlan, text: string): PlannedOperation => {
     const reads = plan.reads;
@@ -698,9 +699,14 @@ export function createBatchPlanner(host: BatchPlannerHost): BatchPlanner {
 
     const blocks = reads.blocks;
     const removed = blocks.filter((block) => block.removable);
-    const survivors = blocks
-      .filter((block) => !block.removable)
-      .flatMap((block) => block.paragraphIds);
+    // Block content controls go, as Word's replacement of a whole story removes them
+    const controls = storyControlPlan(reads.part, blocks);
+    const survivors = [
+      ...(controls.kept === null ? [] : [controls.kept]),
+      ...blocks
+        .filter((block) => !block.removable && !controls.handled.includes(block))
+        .flatMap((block) => block.paragraphIds),
+    ];
 
     // One paragraph has to remain to hold the text. When something already has to stay — a section
     // mark, a content control's contents — that IS the remainder and nothing is kept on its
@@ -729,7 +735,7 @@ export function createBatchPlanner(host: BatchPlannerHost): BatchPlanner {
       if (conflict) return conflict;
     }
 
-    const ops: TreeDocOp[] = [];
+    const ops: TreeDocOp[] = [...controls.first];
     // Reading order, so the text lands in the first paragraph the story still has.
     const kept: string[] = (keeper ? [keeper.id] : [...survivors]).sort(
       (a, b) => reads.indexOf(a) - reads.indexOf(b)
@@ -747,6 +753,7 @@ export function createBatchPlanner(host: BatchPlannerHost): BatchPlanner {
       if (block.id === keeper?.id) continue;
       ops.push({ op: 'deleteBlock', blockId: block.id });
     }
+    ops.push(...controls.then);
     // The same landing rule `planReplaceSpan` reads, for the same reason: in suggesting mode
     // the struck words keep their offsets and the new text belongs after them. Aimed at
     // offset 0 the store relocates it anyway, and the span answered here then named the
@@ -756,12 +763,10 @@ export function createBatchPlanner(host: BatchPlannerHost): BatchPlanner {
     if (lineBreak) return lineBreak;
     ops.push(...insertTextOps(target, at, text));
 
-    for (const block of removed) {
-      if (block.id === keeper?.id) continue;
-      for (const paragraphId of block.paragraphIds) {
-        const slot = plan.slotById.get(paragraphId);
-        if (slot) plan.order.splice(positionOf(plan, slot), 1);
-      }
+    const gone = removed.filter((block) => block.id !== keeper?.id).flatMap((b) => b.paragraphIds);
+    for (const paragraphId of [...gone, ...controls.gone]) {
+      const slot = plan.slotById.get(paragraphId);
+      if (slot) plan.order.splice(positionOf(plan, slot), 1);
     }
 
     const start: ResolvedPoint = {

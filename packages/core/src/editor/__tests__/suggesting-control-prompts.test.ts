@@ -129,6 +129,33 @@ describe('typing over a prompt in suggesting mode', () => {
     expect(serializeOoxmlPart(surface.session.part())).toBe(before);
   });
 
+  test('Backspace, Delete or a deletion between a block prompt’s paragraphs changes nothing', () => {
+    // The mark between them is the prompt's, as its text is: Word changes a prompt only in
+    // Design Mode. Striking it proposed a join that Accept made in the prompt itself.
+    const twoLines =
+      '<w:sdt><w:sdtPr><w:showingPlcHdr/></w:sdtPr><w:sdtContent>' +
+      `<w:p>${PROMPT_RUN}</w:p><w:p>${PROMPT_RUN}</w:p></w:sdtContent></w:sdt>` +
+      '<w:p><w:r><w:t>end.</w:t></w:r></w:p>';
+    for (const press of ['backspace', 'delete', 'across'] as const) {
+      const surface = suggesting(twoLines);
+      const before = serializeOoxmlPart(surface.session.part());
+      const [first = '', second = ''] = surface.session.paragraphIds();
+      const anchor =
+        press === 'backspace'
+          ? { paragraphId: second, offset: 0 }
+          : { paragraphId: first, offset: press === 'delete' ? PROMPT.length : 4 };
+      const head = press === 'across' ? { paragraphId: second, offset: 4 } : anchor;
+      surface.setSelection({ anchor, head });
+      if (press === 'delete') surface.deleteForward();
+      else surface.deleteBackward();
+      expect({ press, rejection: surface.state().lastRejection ?? null }).toEqual({
+        press,
+        rejection: null,
+      });
+      expect(serializeOoxmlPart(surface.session.part())).toBe(before);
+    }
+  });
+
   test('rejecting shows the glossary’s prompt again, and accepting keeps a plain value', () => {
     for (const op of ['rejectAllRevisions', 'acceptAllRevisions'] as const) {
       const surface = suggesting();
@@ -151,6 +178,31 @@ describe('typing over a prompt in suggesting mode', () => {
   });
 });
 
+describe('typing over a prompt in editing mode', () => {
+  // Word keeps a filled control's placeholder: emptied again, the control shows the prompt it had.
+  // A prompt that lived only in the control's content goes to the glossary, as in suggesting mode.
+  const ownPrompt =
+    '<w:p><w:r><w:t xml:space="preserve">Name: </w:t></w:r><w:sdt><w:sdtPr><w:showingPlcHdr/>' +
+    `<w:text/></w:sdtPr><w:sdtContent>${PROMPT_RUN}</w:sdtContent></w:sdt>` +
+    '<w:r><w:t xml:space="preserve"> end.</w:t></w:r></w:p>';
+
+  test('keeps the prompt in the glossary; the emptied control shows it again', () => {
+    const surface = suggesting(ownPrompt);
+    surface.setEditingMode('edit');
+    // A caret at the prompt replaces it whole, as in suggesting mode
+    select(surface, PROMPT_START);
+    surface.type('Ana');
+    expect(showsPrompt(surface)).toBe(false);
+    expect(serializeOoxmlPart(surface.session.part())).toMatch(
+      /<w:placeholder><w:docPart w:val="[^"]+"\/><\/w:placeholder>/
+    );
+    select(surface, PROMPT_START, PROMPT_START + 'Ana'.length);
+    surface.deleteBackward();
+    expect(showsPrompt(surface)).toBe(true);
+    expect(surface.session.bodyText()).toBe(`Name: ${PROMPT} end.`);
+  });
+});
+
 describe('typing at the end of a control’s value in suggesting mode', () => {
   test('stays inside the control, as in Word', () => {
     const surface = suggesting(
@@ -163,5 +215,66 @@ describe('typing at the end of a control’s value in suggesting mode', () => {
     expect(content(surface)).toBe(
       '<w:r><w:t>Acme</w:t></w:r><w:ins w:author="Bea"><w:r><w:t>s</w:t></w:r></w:ins>'
     );
+  });
+
+  test('stays inside when the value ends in a revision this keystroke cannot extend', () => {
+    // Another author's words, Bea's own from an earlier session, and struck words all end in a
+    // wrapper the new words leave. The control still holds them, as in Word: they used to land
+    // after the control, outside the value they continue. Each value reads "Acme" in all markup.
+    const OLD = 'w:id="1" w:date="2026-01-01T00:00:00Z"';
+    for (const value of [
+      `<w:ins ${OLD} w:author="Ann"><w:r><w:t>Acme</w:t></w:r></w:ins>`,
+      `<w:ins ${OLD} w:author="Bea"><w:r><w:t>Acme</w:t></w:r></w:ins>`,
+      `<w:r><w:t>Ac</w:t></w:r><w:del ${OLD} w:author="Ann"><w:r><w:delText>me</w:delText></w:r></w:del>`,
+    ]) {
+      const surface = suggesting(
+        '<w:p><w:r><w:t xml:space="preserve">Name: </w:t></w:r><w:sdt><w:sdtPr><w:text/></w:sdtPr>' +
+          `<w:sdtContent>${value}</w:sdtContent></w:sdt>` +
+          '<w:r><w:t xml:space="preserve"> end.</w:t></w:r></w:p>'
+      );
+      select(surface, 'Name: Acme'.length);
+      surface.type('s');
+      surface.type('t');
+      expect(content(surface)).toBe(
+        `${value.replaceAll(` ${OLD}`, '')}<w:ins w:author="Bea"><w:r><w:t>st</w:t></w:r></w:ins>`
+      );
+      expect(surface.state().selection.head.offset).toBe('Name: Acmest'.length);
+    }
+  });
+});
+
+describe('typing in a block control in suggesting mode', () => {
+  // The block control holds the caret's whole paragraph, so it names no place inside it.
+  // Asking for one put every keystroke in a `w:ins` of its own, beside the last.
+  const block = (properties: string, paragraph: string) =>
+    `<w:sdt><w:sdtPr>${properties}</w:sdtPr><w:sdtContent><w:p>${paragraph}</w:p></w:sdtContent></w:sdt>`;
+  const paragraphContent = (surface: PaginatedSurface) =>
+    content(surface).replace(/<\/?w:p\b[^>]*>/g, '');
+  const ins = (text: string) => `<w:ins w:author="Bea"><w:r><w:t>${text}</w:t></w:r></w:ins>`;
+
+  test('extends one suggestion key after key, at the end and in the middle', () => {
+    for (const [offset, expected] of [
+      [4, `<w:r><w:t>Acme</w:t></w:r>${ins('xyz')}`],
+      [2, `<w:r><w:t>Ac</w:t></w:r>${ins('xyz')}<w:r><w:t>me</w:t></w:r>`],
+    ] as const) {
+      const surface = suggesting(block('<w:richText/>', '<w:r><w:t>Acme</w:t></w:r>'));
+      select(surface, offset);
+      for (const character of 'xyz') surface.type(character);
+      expect(paragraphContent(surface)).toBe(expected);
+      expect(surface.state().selection.head.offset).toBe(offset + 3);
+    }
+  });
+
+  test('typed over its prompt key after key, proposes the words as one suggestion', () => {
+    const surface = suggesting(
+      block(
+        '<w:placeholder><w:docPart w:val="PartyName"/></w:placeholder><w:showingPlcHdr/>',
+        PROMPT_RUN
+      )
+    );
+    select(surface, 0, PROMPT.length);
+    for (const character of 'Ana') surface.type(character);
+    expect(paragraphContent(surface)).toBe(ins('Ana'));
+    expect(surface.state().selection.head.offset).toBe(3);
   });
 });

@@ -4,18 +4,25 @@ import { fragmentContainsClipboardObject } from './clipboard-object-selection.ts
 // Fidelity order: internal fragment, then external `text/html`, then `text/plain` — and
 // the degrade is CONTINUOUS: a payload that fails decoding, fails the bounded package
 // read, or has a recoverable apply refusal falls to the next flavour. Unsupported object
-// content refuses without fallback. Other failures do not leave a no-op
-// paste. Suggesting mode and non-body stories force the plain lane, whose tracked-write
-// behaviour already exists; the drop lane never routes through here.
+// content refuses without fallback, and so does a refusal from the collaboration gate, which
+// would refuse the plain text too. Other failures do not leave a no-op paste. Suggesting
+// mode lands a fragment as one tracked insertion; without an author, and in non-body
+// stories, the plain lane runs; the drop lane never routes through here.
 
 import { fragmentFromHtml } from './clipboard-fragment-codec.ts';
 import { projectExternalHtml } from './clipboard-html-read.ts';
 
 export interface PasteRouteTarget {
-  /** True when a fragment landing is even possible: body story, edit mode. */
+  /** True when a fragment landing is even possible: body story, edit or suggesting mode. */
   readonly richLaneOpen: boolean;
-  /** False permits fallback; unsupported-content refuses the complete paste. */
-  pasteFragment(bytes: Uint8Array, lastMarkCovered: boolean): boolean | 'unsupported-content';
+  /**
+   * False permits fallback; unsupported-content refuses the complete paste, and so does
+   * refused, the answer when the write gate refused a paste that already reported why.
+   */
+  pasteFragment(
+    bytes: Uint8Array,
+    lastMarkCovered: boolean
+  ): boolean | 'unsupported-content' | 'refused';
   insertPlainText(text: string): void;
 }
 
@@ -31,7 +38,8 @@ export type PasteRouteLane =
   | 'external-html'
   | 'plain'
   | 'none'
-  | 'unsupported-content';
+  | 'unsupported-content'
+  | 'refused';
 
 /** Route one paste payload; reports the lane that actually landed. */
 export function routePaste(target: PasteRouteTarget, input: PasteRouteInput): PasteRouteLane {
@@ -52,7 +60,7 @@ export function routePaste(target: PasteRouteTarget, input: PasteRouteInput): Pa
   }
   if (embedded) {
     const result = target.pasteFragment(embedded.bytes, embedded.lastMarkCovered);
-    if (result === 'unsupported-content') return 'unsupported-content';
+    if (result === 'unsupported-content' || result === 'refused') return result;
     if (result) return 'fragment';
   }
 
@@ -60,7 +68,7 @@ export function routePaste(target: PasteRouteTarget, input: PasteRouteInput): Pa
   if (projected.ok && projected.truncated && input.text.length > 0) return plain();
   if (projected.ok) {
     const result = target.pasteFragment(projected.fragmentBytes, projected.lastMarkCovered);
-    if (result === 'unsupported-content') return 'unsupported-content';
+    if (result === 'unsupported-content' || result === 'refused') return result;
     if (result) return 'external-html';
   }
 

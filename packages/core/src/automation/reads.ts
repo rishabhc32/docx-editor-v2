@@ -84,7 +84,10 @@ export interface AutomationParagraphRead {
  */
 export interface AutomationBlockRead {
   readonly id: string;
-  readonly kind: 'paragraph' | 'table' | 'other';
+  /**
+   * A `control` is a block content control: `removeContentControl` removes it, not `deleteBlock`.
+   */
+  readonly kind: 'paragraph' | 'table' | 'control' | 'other';
   /** Paragraphs this block holds, in reading order — itself, when it is one. */
   readonly paragraphIds: readonly string[];
   /** Whether `deleteBlock` may name it. */
@@ -229,7 +232,13 @@ function storyBlockReads(root: OoxmlNode): readonly AutomationBlockRead[] {
         const paragraphIds: OoxmlNode[] = [];
         collectStoryParagraphs([child], paragraphIds, 0);
         const kind =
-          child.kind === 'paragraph' ? 'paragraph' : child.kind === 'table' ? 'table' : 'other';
+          child.kind === 'paragraph'
+            ? 'paragraph'
+            : child.kind === 'table'
+              ? 'table'
+              : child.kind === 'contentControl'
+                ? 'control'
+                : 'other';
         const endsASection =
           child.kind === 'paragraph' &&
           namedChild(paragraphPropertiesNodeOf(child), 'sectPr') !== undefined;
@@ -237,7 +246,7 @@ function storyBlockReads(root: OoxmlNode): readonly AutomationBlockRead[] {
           id: child.id,
           kind,
           paragraphIds: Object.freeze(paragraphIds.map((node) => node.id)),
-          removable: kind !== 'other' && !endsASection,
+          removable: (kind === 'paragraph' || kind === 'table') && !endsASection,
         }) as AutomationBlockRead;
       })
   );

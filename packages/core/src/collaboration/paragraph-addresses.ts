@@ -165,16 +165,9 @@ export interface ParagraphAddress {
 
 interface ParagraphAddressHint {
   readonly partName: string;
-  readonly root: OoxmlNode;
+  /** The number of the tree the hint was checked in. */
+  readonly tree: number;
   readonly nodeId: string;
-}
-
-function sameRoots(left: readonly OoxmlPart[], right: readonly OoxmlNode[]): boolean {
-  if (left.length !== right.length) return false;
-  for (let index = 0; index < left.length; index += 1) {
-    if (left[index]!.root !== right[index]) return false;
-  }
-  return true;
 }
 
 /**
@@ -187,12 +180,29 @@ export function createParagraphAddressResolver(
   storyParts: () => readonly OoxmlPart[]
 ): (paragraphId: string) => ParagraphAddress | null {
   const hints = new Map<string, ParagraphAddressHint>();
-  let absent: { readonly roots: readonly OoxmlNode[]; readonly ids: Set<string> } | null = null;
+  let absent: { readonly trees: readonly number[]; readonly ids: Set<string> } | null = null;
+  // A number for each tree a read saw, held weakly: a hint keeps the number, never the tree,
+  // because a root it held would keep that old revision and its caches alive.
+  const treeNumbers = new WeakMap<OoxmlNode, number>();
+  let treeCount = 0;
+
+  const treeOf = (part: OoxmlPart): number => {
+    let tree = treeNumbers.get(part.root);
+    if (tree === undefined) {
+      treeCount += 1;
+      tree = treeCount;
+      treeNumbers.set(part.root, tree);
+    }
+    return tree;
+  };
+
+  const sameTrees = (parts: readonly OoxmlPart[], trees: readonly number[]): boolean =>
+    parts.length === trees.length && parts.every((part, index) => treeOf(part) === trees[index]);
 
   const remember = (paragraphId: string, part: OoxmlPart, nodeId: string): void => {
     // Delete first so the re-insert moves the entry to the back of the eviction order.
     hints.delete(paragraphId);
-    hints.set(paragraphId, { partName: part.name, root: part.root, nodeId });
+    hints.set(paragraphId, { partName: part.name, tree: treeOf(part), nodeId });
     while (hints.size > MAX_ADDRESS_HINTS) {
       const oldest = hints.keys().next();
       if (oldest.done) break;
@@ -206,7 +216,7 @@ export function createParagraphAddressResolver(
     const part = parts.find((candidate) => candidate.name === hint.partName);
     if (!part) return null;
     // Same tree, so nothing in it moved and the hint is exact.
-    if (part.root === hint.root) return { part, nodeId: hint.nodeId };
+    if (treeOf(part) === hint.tree) return { part, nodeId: hint.nodeId };
     // A rebuilt tree. Re-check through the store's node index instead of re-scanning: a
     // text edit rebuilds the root and leaves every paragraph's node id and paraId alone.
     const node = findNode(part, hint.nodeId);
@@ -223,15 +233,15 @@ export function createParagraphAddressResolver(
     if (hinted) return hinted;
     // An id no part held stays unheld while every part is the same tree. Without this a
     // caret in a paragraph this replica has not received re-scans on every read.
-    if (absent && absent.ids.has(paragraphId) && sameRoots(parts, absent.roots)) return null;
+    if (absent && absent.ids.has(paragraphId) && sameTrees(parts, absent.trees)) return null;
     for (const part of parts) {
       const nodeId = paragraphAddressesOf(part).get(paragraphId);
       if (nodeId === undefined) continue;
       remember(paragraphId, part, nodeId);
       return { part, nodeId };
     }
-    if (!absent || !sameRoots(parts, absent.roots)) {
-      absent = { roots: parts.map((part) => part.root), ids: new Set() };
+    if (!absent || !sameTrees(parts, absent.trees)) {
+      absent = { trees: parts.map(treeOf), ids: new Set() };
     }
     if (absent.ids.size < MAX_ADDRESS_HINTS) absent.ids.add(paragraphId);
     return null;

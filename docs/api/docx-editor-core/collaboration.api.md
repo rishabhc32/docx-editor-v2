@@ -26,6 +26,11 @@ export interface CollaborationFailure {
 export type CollaborationFailureCode =
 /** Edit refused by the session gate. The status does not change. Wait for `ready`. */
 'collaboration-session-destroyed' | 'collaboration-session-not-attached' | 'collaboration-session-not-ready' | 'collaboration-text-limit' | 'experimental-collaboration-body-text-only'
+/**
+* Edit refused by an ordered room's gate (`@docx-editor.dev/core/collaboration/ordered`).
+* The status does not change. The session's refusal report names the op or the reason.
+*/
+| 'ordered-unsupported-op' | 'ordered-opaque-write' | 'ordered-refused'
 /** Factory input rejected before joining. Fix the value the host passed. */
 | 'invalid-document-id' | 'invalid-identity' | 'invalid-identity-color' | 'invalid-session-id'
 /** Join or seed did not complete. Connect the provider, check the room id, and retry. */
@@ -48,6 +53,13 @@ export type CollaborationFailureCode =
 | 'baseline-digest-mismatch' | 'experimental-collaboration-existing-paragraphs-only' | 'experimental-collaboration-text-only' | 'experimental-collaboration-untracked-text-only' | 'immutable-baseline-changed' | 'immutable-metadata-changed' | 'invalid-shared-metadata' | 'local-mirror-failed' | 'paragraph-set-mismatch' | 'shared-schema-invalid' | 'unsupported-root-key';
 
 // @public
+export interface CollaborationGateContext {
+    readonly historyGroup?: HistoryGroup;
+    readonly package?: OoxmlPackage;
+    readonly packageWrites?: readonly CollaborationPackageWrite[];
+}
+
+// @public
 export interface CollaborationIdentity {
     readonly actorId: string;
     readonly color?: string;
@@ -66,6 +78,16 @@ export interface CollaborationLocalSelection {
 export interface CollaborationModuleContribution {
     readonly session: EditorCollaborationSession;
 }
+
+// @public
+export type CollaborationPackageWrite = {
+    readonly kind: 'document-properties';
+    readonly values: Readonly<Record<string, string>>;
+} | {
+    readonly kind: 'bookmark-removal';
+    readonly name: string;
+    readonly partName: string;
+};
 
 // @public
 export interface CollaborationParticipant extends CollaborationIdentity {
@@ -88,6 +110,22 @@ export interface CollaborationRemoteSelectionAddress {
     readonly offset: number;
     readonly paragraphId: string;
 }
+
+// @public
+export interface CollaborationReviewWrite {
+    readonly comment?: {
+        readonly end: number;
+        readonly endParagraphId?: string;
+        readonly paragraphId: string;
+        readonly start: number;
+        readonly text: string;
+    };
+    readonly intent: CollaborationReviewWriteIntent;
+    readonly ops?: readonly TreeDocOp[];
+}
+
+// @public
+export type CollaborationReviewWriteIntent = 'revision-resolve' | 'revision-attribution' | 'comment-add' | 'comment-reply' | 'comment-resolve' | 'comment-delete' | 'package-scoped';
 
 // @public
 export interface CollaborationSelectionAddress {
@@ -129,7 +167,8 @@ export interface EditorCollaborationSession {
     destroy(): void;
     readonly documentId: string;
     flushPendingJournals(): void;
-    gateOperations(ops: readonly TreeDocOp[], scope: StoryScope): CollaborationFailureCode | null;
+    gateOperations(ops: readonly TreeDocOp[], scope: StoryScope, context?: CollaborationGateContext): CollaborationFailureCode | null;
+    gateReviewWrite?(write: CollaborationReviewWrite, scope: StoryScope): CollaborationFailureCode | null;
     historySelection?(): CollaborationLocalSelection | null;
     readonly identity: CollaborationIdentity;
     participants(): readonly CollaborationParticipant[];
@@ -138,12 +177,15 @@ export interface EditorCollaborationSession {
     remoteSelections(): readonly CollaborationRemoteSelection[];
     readonly sessionId: string;
     setLocalSelection(selection: CollaborationLocalSelection | null): void;
+    settleLocalCommit?(): void;
     status(): CollaborationStatus;
     statusSnapshot(): CollaborationStatusSnapshot;
     subscribeParticipants(listener: (participants: readonly CollaborationParticipant[]) => void): () => void;
     subscribeRemoteSelections(listener: (selections: readonly CollaborationRemoteSelection[]) => void): () => void;
     subscribeStatus(listener: (status: CollaborationStatus, reason?: CollaborationFailureCode, detail?: string) => void): () => void;
+    readonly trackedRangeReplacement?: boolean;
     undo(): boolean;
+    writeRefusal?(): CollaborationFailureCode | null;
 }
 
 // @public

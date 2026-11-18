@@ -118,6 +118,7 @@ import {
 } from './docx-editor-support.ts';
 import { createDocumentOpenFailureState } from './document-open-failure.ts';
 import { execEditorCommand } from './docx-editor-exec.ts';
+import { createExecRefusalWatch } from './exec-refusal-watch.ts';
 import { replaceMatchStoryRefusal } from './docx-editor-replace-match.ts';
 import { hyperlinkCommandRefusal } from './docx-editor-hyperlinks.ts';
 import { createMountHistoryGroups } from './editor-history-groups.ts';
@@ -534,6 +535,8 @@ export function createDocxEditor(config: DocxEditorConfig): DocxEditorInstance {
 
   const events = createEditorEvents(snapshotNow, () => container?.ownerDocument ?? null);
   const { emitError, emitDocumentChange, emitSelectionChange } = events;
+  // Counts the surface's refusals, so `exec` tells a refused write from an unchanged one.
+  const refusalWatch = createExecRefusalWatch();
   const diagnostics = createEditorDiagnostics({
     modules,
     events,
@@ -688,7 +691,7 @@ export function createDocxEditor(config: DocxEditorConfig): DocxEditorInstance {
       // review-module display mode; with one registered the surface keeps the layout
       // default (`all-markup`), which is what the review rail annotates.
       revisionDisplayMode: reviewEnabled ? reviewDisplayMode : 'proposed',
-      ...diagnostics.surfaceHooks(suggesting, () => surface),
+      ...refusalWatch.hooks(diagnostics.surfaceHooks(suggesting, () => surface)),
       ...preparedOpen.takePreparedOpen(bytes),
       ...(modules.collaboration ? { collaborationModel: modules.collaboration } : {}),
       onHostMoved: followHost,
@@ -1958,18 +1961,26 @@ export function createDocxEditor(config: DocxEditorConfig): DocxEditorInstance {
       const before = mounted.session.packageRevision();
 
       return historyGroups.run(mounted, command, options, () => {
+        const mark = refusalWatch.mark();
         const result = execEditorCommand(mounted, command, {
           ...(gated.tablePlan ? { admittedTablePlan: gated.tablePlan } : {}),
           editor,
         });
-        if (result) return result;
         // `changed` is read from the model, not assumed: reporting `changed: true` where the
         // document did not move would be a lie. It answers for the DOCUMENT, not for
         // observable state — a mark toggled at a collapsed caret ARMS the typing format
         // (`toggleRunProperty`), which moves the snapshot and fires a tick while committing
         // nothing, so it correctly reports `changed: false`. Package revision covers body,
-        // furniture stories, and lifecycle ops; body-only revision would miss HF edits.
-        return { ok: true, changed: mounted.session.packageRevision() !== before };
+        // furniture stories, and lifecycle ops; body-only revision would miss HF edits. A write
+        // the surface REFUSED moved nothing either, and is reported as the refusal it was.
+        const mutating = viewingGate.supported && viewingGate.mutating;
+        return refusalWatch.settle({
+          surface: mounted,
+          mutating,
+          revisionBefore: before,
+          mark,
+          result,
+        });
       });
     },
 

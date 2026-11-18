@@ -270,6 +270,12 @@ export function validContentControlContentChildren(children: readonly OoxmlNode[
       // content control — legal markup the schema has always allowed.
       child.kind === 'commentRangeStart' ||
       child.kind === 'commentRangeEnd' ||
+      // Move range markers are members of the same group. A tracked move of a control's
+      // text has its range markers beside its wrapper, inside the control's content.
+      child.kind === 'moveFromRangeStart' ||
+      child.kind === 'moveFromRangeEnd' ||
+      child.kind === 'moveToRangeStart' ||
+      child.kind === 'moveToRangeEnd' ||
       // Revision wrappers belong to `EG_RunLevelElts`, another member of the same content
       // groups. Refusing them made a tracked strike of a control's text — markup Word
       // writes with tracking on — invalidate the whole part.

@@ -147,7 +147,6 @@ export function adoptLooseMembers(
   seen: Set<LogicalId>,
   isMember: (record: ElementRecord) => boolean,
   placed: Set<LogicalId>,
-  incremental: boolean,
   candidates: Iterable<LogicalId>,
   loose: Set<LogicalId>
 ): number {
@@ -156,13 +155,15 @@ export function adoptLooseMembers(
     if (placed.has(id) || seen.has(id) || registry.isTombstoned(id)) continue;
     // An undo took it out of its part; only a concurrent loss gets an edge back.
     if (nodeRecordUndone(registry.schema.nodes.get(id))) continue;
+    const record = registry.record(id);
+    if (!record || !isElementRecord(record) || !isMember(record)) continue;
     // `placed` is complete only on a full pass. On an incremental one a surviving parent may
     // sit inside a subtree claimed by its root alone, so reachability has to be established
     // another way — otherwise a child that merely MOVED would be adopted into the part as a
-    // second copy.
-    if (incremental && stillListed(registry, id)) continue;
-    const record = registry.record(id);
-    if (!record || !isElementRecord(record) || !isMember(record)) continue;
+    // second copy. A full pass asks too: a copy a concurrent singleton hides is placed but
+    // not shown, so nothing places its children. The settings' second `w:footnotePr` still
+    // holds its `w:footnote` separator references, which are not notes.
+    if (stillListed(registry, id)) continue;
     const node = materialize(id);
     if (!node || node.kind === 'textValue') continue;
     members.push(node);

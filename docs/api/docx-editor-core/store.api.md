@@ -1327,7 +1327,10 @@ export interface EditOptions {
     // (undocumented)
     readonly deferValidation?: boolean;
     readonly fieldResults?: FieldResultsMode;
+    readonly placeholderBlocks?: (docPart: string) => readonly OoxmlNode[] | undefined;
+    // @deprecated
     readonly placeholderText?: (docPart: string) => string | undefined;
+    readonly retainPrompt?: (prompt: RetainedPrompt) => void;
     readonly revisionIds?: () => string;
     readonly trackedRevisionIds?: TransactionRevisionIds;
 }
@@ -1456,6 +1459,7 @@ export interface ExternalResourceConsentPort {
 
 // @public
 export function extractFragmentPackage(pkg: OoxmlPackage, coverage: FragmentCoverage, options?: {
+    readonly acceptChanges?: boolean;
     readonly omitMedia?: boolean;
 }): FragmentExtractResult;
 
@@ -1656,6 +1660,7 @@ export type FragmentMergeResult = {
 export interface FragmentPasteInput {
     readonly actorId?: string;
     readonly fragmentBytes: Uint8Array;
+    readonly gate?: (ops: readonly TreeDocOp[], pkg: OoxmlPackage) => string | null;
     // (undocumented)
     readonly lastMarkCovered: boolean;
     // (undocumented)
@@ -1663,6 +1668,8 @@ export interface FragmentPasteInput {
     // (undocumented)
     readonly paragraphId: string;
     readonly priorOps?: readonly TreeDocOp[];
+    readonly revision?: RevisionAttributionInput;
+    readonly smartSpacing?: boolean;
 }
 
 // @public (undocumented)
@@ -1744,6 +1751,7 @@ export type HeaderFooterLifecycleOp = {
     readonly footerDistanceTwips?: number;
     readonly headerDistanceTwips?: number;
     readonly op: 'setSectionFurnitureOptions';
+    readonly revision?: RevisionAttributionInput;
     readonly sectionIndex?: number;
     readonly titlePage?: boolean;
 } | {
@@ -2111,6 +2119,16 @@ export interface InsertCustomNodeWrite {
 // @public
 export function insertCustomNodeWrite(store: TreeDocumentStore, write: InsertCustomNodeWrite,
 dataOwnerPartName?: string): CustomNodeWriteResult;
+
+// @public
+export type InsertFragmentOp = {
+    readonly blocks: readonly OoxmlNode[];
+    readonly lastMarkCovered?: boolean;
+    readonly offset: number;
+    readonly op: 'insertFragment';
+    readonly paragraphId: string;
+    readonly revision?: RevisionAttributionInput;
+};
 
 // @public
 export function insertPackageCustomNode(packageStore: TreePackageStore, write: InsertCustomNodeWrite, scope?: StoryScope, historyGroup?: HistoryGroup): CustomNodeWriteResult;
@@ -3916,6 +3934,13 @@ export const RESULT_IDS: {
 };
 
 // @public
+export interface RetainedPrompt {
+    readonly inline: boolean;
+    readonly name: string;
+    readonly nodes: readonly OoxmlNode[];
+}
+
+// @public
 export interface ReviewCommentItem {
     // (undocumented)
     readonly comment: CommentRecord;
@@ -4710,6 +4735,7 @@ export type TreeDocOp = SetFieldCodeOp | {
     readonly orientation?: 'portrait' | 'landscape';
     readonly pageHeightTwips?: number;
     readonly pageWidthTwips?: number;
+    readonly revision?: RevisionAttributionInput;
 } | {
     readonly breakType?: 'nextPage' | 'continuous';
     readonly op: 'setSectionMark';
@@ -4910,6 +4936,7 @@ export type TreeDocOp = SetFieldCodeOp | {
     readonly footerDistanceTwips?: number;
     readonly headerDistanceTwips?: number;
     readonly op: 'setSectionFurnitureOptions';
+    readonly revision?: RevisionAttributionInput;
     readonly sectionIndex?: number;
     readonly titlePage?: boolean;
 } | {
@@ -4976,13 +5003,7 @@ export type TreeDocOp = SetFieldCodeOp | {
     readonly op: 'setNoteProperties';
     readonly scope: 'document' | 'section';
     readonly sectionIndex?: number;
-} | {
-    readonly blocks: readonly OoxmlNode[];
-    readonly lastMarkCovered?: boolean;
-    readonly offset: number;
-    readonly op: 'insertFragment';
-    readonly paragraphId: string;
-} | {
+} | InsertFragmentOp | {
     readonly drawing: OoxmlDrawingNode;
     readonly offset: number;
     readonly op: 'insertDrawing';
@@ -5088,7 +5109,7 @@ export class TreeDocumentStore {
     redo(): TreeModelChange | null;
     replacePart(part: OoxmlPart): void;
     restoreCheckpoint(checkpoint: TreeDocumentCheckpoint): void;
-    restoreHistoryStacks(checkpoint: TreeDocumentCheckpoint): void;
+    restoreHistoryStacks(checkpoint: Pick<TreeDocumentCheckpoint, 'undoStack' | 'redoStack'>): void;
     // (undocumented)
     get revision(): number;
     selectionForRedo(): SelectionMark | null;
@@ -5188,7 +5209,7 @@ export type TreeOpRejection = 'unknown-op' | 'unknown-paragraph' | 'not-a-paragr
 * a real offset that is not a PLACE — refused rather than resolved to the nearest one, so a
 * caller learns the node would not have landed where they asked.
 */
-| 'indivisible-content'
+| 'indivisible-content' | 'single-line-control'
 /**
 * The range has one end inside a field's editable saved result and the other outside it.
 * Deleting it would leave the field's begin, separate, and end markers unbalanced, so it is
@@ -5283,7 +5304,17 @@ export type TreeOpRejection = 'unknown-op' | 'unknown-paragraph' | 'not-a-paragr
 /** A clipboard fragment block is not a paragraph, table, or content control subtree. */
 | 'fragment-invalid-block'
 /** A clipboard fragment exceeds its block or node budget. */
-| 'fragment-resource-budget';
+| 'fragment-resource-budget'
+/** A tracked fragment holds a custom XML tracked range, which no tracked paste can place. */
+| 'fragment-holds-revisions'
+/** Paragraphs pasted in a link, which Word turns into a `HYPERLINK` field (not written yet). */
+| 'fragment-paragraphs-in-link'
+/**
+* A tracked fragment holds content no revision markup can carry: a block-level content
+* control, an equation, a subdocument, or an element this engine does not model. Written
+* untracked, it would be a silent edit inside a proposal, so the fragment is refused instead.
+*/
+| 'fragment-untrackable-content';
 
 // @public
 export type TreeOpResult = {
@@ -5319,8 +5350,8 @@ export class TreePackageStore {
     get canUndo(): boolean;
     compositionSessionOpen(): boolean;
     currentPackage(): OoxmlPackage;
-    deleteImage(scope: StoryScope, drawingNodeId: string): ImageIntentResult;
-    deleteImageTracked(scope: StoryScope, drawingNodeId: string, revision: RevisionAttributionInput): ImageIntentResult;
+    deleteImage(scope: StoryScope, drawingNodeId: string, gate?: ImageWriteGate): ImageIntentResult;
+    deleteImageTracked(scope: StoryScope, drawingNodeId: string, revision: RevisionAttributionInput, gate?: ImageWriteGate): ImageIntentResult;
     embedExternalImage(scope: StoryScope, drawingNodeId: string, url: string, port: ExternalImageFetchPort, signal: AbortSignal, decodePort: ImageDecodePort, actorId?: string): Promise<ImageIntentResult>;
     // (undocumented)
     endComposition(): void;
@@ -5387,6 +5418,7 @@ export interface TreeTransactionContext {
     applyTo(partName: string, op: TreeDocOp): boolean;
     selectionAfter(selection: SelectionMark | null): void;
     selectionBefore(selection: SelectionMark | null): void;
+    shellTouched(): boolean;
 }
 
 // @public

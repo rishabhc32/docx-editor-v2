@@ -400,6 +400,8 @@ describe('codes and hints', () => {
     expect(diagnosticCodeOfRefusal('collaboration-text-limit')).toBe(
       'edit.collaboration-text-limit'
     );
+    // An ordered room's gate refusal; the session's refusal report names the rule.
+    expect(diagnosticCodeOfRefusal('ordered-refused')).toBe('edit.collaboration-refused');
     expect(fontDiagnosticCode('wasmUnavailable')).toBe('font.shaper-unavailable');
     expect(fontDiagnosticCode(undefined)).toBe('font.load-failed');
   });

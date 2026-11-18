@@ -1,4 +1,4 @@
-import { orphanFieldEndAt, segmentsOf } from './tree-op-segments.ts';
+import { fieldInsertionEndAt, segmentsOf } from './tree-op-segments.ts';
 import { MAX_INLINE_CONTAINER_DEPTH, nextInlineContainerDepth } from '../package/ooxml-shared.ts';
 // Property preservation for paragraph splits through lossless inline wrappers.
 
@@ -38,7 +38,9 @@ export function fieldSplitChildren(
   segments: ReturnType<typeof segmentsOf>;
 } {
   const endIds = new Set(
-    offsets.map((offset) => orphanFieldEndAt(paragraph, offset)).filter((id): id is string => !!id)
+    offsets
+      .map((offset) => fieldInsertionEndAt(paragraph, offset))
+      .filter((id): id is string => !!id)
   );
   let children = paragraph.children;
   for (const id of endIds) {

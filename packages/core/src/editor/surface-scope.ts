@@ -744,3 +744,53 @@ export function noteScopeIdInLayout(layout: SemanticLayout, paragraphId: string)
   }
   return null;
 }
+
+/** Why the surface refuses a host selection outside the open story. */
+export const OUTSIDE_STORY_REFUSAL = 'the selection is not in the open story';
+
+/**
+ * Whether a selection stays in the open story: no end of it names a paragraph of another part.
+ *
+ * A host can name any paragraph id. An id from another part (a header no section shows, the
+ * body while a header is open) put the caret where the next keystroke edited a story nobody had
+ * open: in edit mode it changed a part no page paints, and in suggesting mode a room refused it
+ * with a less exact reason. Word cannot put the caret there, so the surface refuses it by name.
+ * An id that names no part at all is left to the soft handling a caret the layout cannot place
+ * already gets; the store refuses an edit there as `unknown-paragraph`.
+ *
+ * A pure read: it matches each end's part to the open story without `partFor`, which opens and
+ * keeps a story store (see `partOfNodeId`).
+ */
+export function selectionInStory(
+  session: Pick<TreeDocxSessionView, 'currentPackage' | 'part' | 'headerFooterResolutionBySection'>,
+  openStory: StoryScope,
+  selection: SemanticSelection
+): boolean {
+  return [selection.anchor.paragraphId, selection.head.paragraphId].every((paragraphId) => {
+    const part = partOfNodeId(session, paragraphId);
+    return part === null || partHoldsStory(session, part, openStory);
+  });
+}
+
+/**
+ * Whether `part` is the part a story opens, read from the live package. A notes story is
+ * matched by its part's root element, as the store's own `storyRefForPart` does.
+ */
+function partHoldsStory(
+  session: Pick<TreeDocxSessionView, 'part' | 'headerFooterResolutionBySection'>,
+  part: OoxmlPart,
+  story: StoryScope
+): boolean {
+  if (story.kind === 'body') return part.name === session.part().name;
+  if (story.kind === 'notesPart') {
+    return part.root.localName === (story.noteKind === 'footnote' ? 'footnotes' : 'endnotes');
+  }
+  for (const section of session.headerFooterResolutionBySection()) {
+    for (const slots of [section.headers, section.footers]) {
+      for (const slot of slots.values()) {
+        if (slot.rId === story.rId) return slot.partName === part.name;
+      }
+    }
+  }
+  return false;
+}

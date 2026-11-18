@@ -79,7 +79,7 @@ describe('word-features — images lane honesty', () => {
     expect(row.editing).toBe('partial');
     expect(row.rendering).toBe('full');
     expect(row.roundTrip).toBe('full');
-    expect(row.notes).toMatch(/insertion and deletion/);
+    expect(row.notes).toMatch(/insertion of an image or a text box, and the deletion of an image/);
     expect(row.notes).toMatch(/property edits are unavailable/);
   });
 

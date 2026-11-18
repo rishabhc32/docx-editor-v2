@@ -214,6 +214,10 @@ Read-only batches omit `expectedRevision`. For resource failures, `limit` identi
 
 After `StaleDocument`, obtain fresh ranges and reconsider the edit. Never disable change tracking to bypass a refusal.
 
+In a collaboration room, the room's rules can refuse an edit, for example typing in a table of contents. The sync then fails with `GeneralException`, and `debugInfo.innerError.code` is `edit.collaboration-refused`. Nothing is applied. The collaboration session's refusal report (`onRefused`) names the rule. Read the document again before you choose another edit.
+
+In a browser runtime, the editor keeps the generated text of a table of contents read-only. A formatting write whose range includes that text fails the sync with `GeneralException`, and nothing is applied. Word formats that text. A server runtime formats it, as Word does. To format the rest of the document in a browser runtime, use ranges outside the table of contents. The editor's own commands differ: `editor.exec()` formats the rest of the selection and reports the skipped table through `snapshot().lastRejection`.
+
 ## Read why the engine refused
 
 `error.debugInfo` has the shape of Office.js `OfficeExtension.DebugInfo`: `code`, `message`, and `errorLocation`, the path of the refused call. When the engine knows a specific reason, `debugInfo.innerError` holds a stable diagnostic code and a fixed hint. Branch on `error.code`, and give `innerError.message` to the person or model that chose the edit. The hint never contains document content.

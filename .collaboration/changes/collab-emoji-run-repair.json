@@ -1,0 +1,10 @@
+{
+  "impact": "migration-required",
+  "fields": ["repairVersion"],
+  "before": "When concurrent edits left characters of a paragraph's shared text with no run, each UTF-16 code unit took the run of its own nearest neighbor. A surrogate pair, such as an emoji, between two runs could put its high half in the run before and its low half in the run after. Each run's text was not valid XML 1.0, so every replica refused the package with remote-apply-failed and the room could not save.",
+  "after": "The low half of a surrogate pair takes the run and text element that its high half took, so the emoji stays in one run and the package stays valid on every replica.",
+  "reason": "The rule that gives a character with no run its run is repair semantics, computed from shared state alone. No stored field or update meaning changes, and the run that a later local edit writes back is ordinary shared formatting. A replica of format 1.4.3.1 reads the same shared state into a package with a split surrogate pair and refuses it, while this format shows a valid document, so the two show and save different documents. The change shares the repairVersion 4 increment of format 1.4.4.2, which is not yet published, and saved rooms are exported and reseeded.",
+  "tests": ["packages/pro/src/collaboration/__tests__/document-surrogate-pairs.test.ts"],
+  "changeset": "collab-emoji-run-repair",
+  "migration": "upgrade-rooms-to-format-1442"
+}

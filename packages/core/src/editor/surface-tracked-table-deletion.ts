@@ -5,10 +5,10 @@ import type { TreeDocOp } from '../store/store/tree-op-types.ts';
  * A table command's ops as the surface applies them, with a whole-table removal proposed.
  *
  * `deleteTable`, and Delete Rows or Delete Columns over the whole table, plan the table's
- * `deleteBlock`. That op is not revision-capable — the range-deletion lane removes covered
- * tables with it too, and its joins rely on the table being gone — so `attributeTrackedOps`
- * passed it through, and suggesting mode removed the table with no card to reject. This lane
- * alone attributes it, and the store proposes the deletion in the form Word writes.
+ * `deleteBlock`. `attributeTrackedOps` passes that op through untracked, because the
+ * range-deletion lane removes covered tables with it too and its joins rely on the table being
+ * gone. This lane alone attributes it, and the store proposes the deletion in the form Word
+ * writes.
  */
 export function createTrackedTableDeletion(deps: {
   readonly trackedAuthorOrNone: () => string | undefined;

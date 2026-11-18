@@ -24,6 +24,7 @@ import {
 } from './hyperlink-style.ts';
 import {
   linkSuggestionRefusal,
+  refuseLinkEdit,
   suggestLink,
   suggestUnlink,
   unlinkSuggestionRefusal,
@@ -286,13 +287,15 @@ export interface HyperlinkOpsDeps {
   /** Resolve a field-link id minted by the field-link registry back to its record. */
   readonly fieldLinkById: (linkId: string) => SurfaceHyperlink | null;
   /**
-   * Whether a write would be refused right now — viewing, or suggesting with no author.
+   * Why a write would be refused right now (viewing, suggesting with no author, a caret in a
+   * table of contents), or null.
    *
    * The session this lane holds is already gated, so the OPS cannot slip through. The relationship
    * can: it is minted on the package before the transaction, outside the undo stack, and a refused
    * commit does not take it back. Asking first is what keeps a read-only document byte-identical.
+   * The reason is the refusal's, so the caller says why rather than blaming the link.
    */
-  readonly refusesWrite: () => boolean;
+  readonly writeRefusal: () => string | null;
   /**
    * Bind the collaboration actor around the relationship mint below.
    *
@@ -371,9 +374,9 @@ export interface HyperlinkOps {
   /** Take the link off the one at the caret (or a named one). Returns whether it committed. */
   removeHyperlink(linkId?: string): boolean;
   /**
-   * Why {@link HyperlinkOps.applyHyperlink} would refuse `input` as a suggestion, or null.
-   * Writes nothing and settles no queued typing, so a dry run can ask. The target is checked
-   * only when the link is written.
+   * Why {@link HyperlinkOps.applyHyperlink} would refuse `input`: the write itself (a table of
+   * contents, viewing), or the suggestion, or null. Writes nothing and settles no queued
+   * typing, so a dry run can ask. The target is checked only when the link is written.
    */
   applyRefusal(input: {
     readonly url?: string;
@@ -383,7 +386,8 @@ export interface HyperlinkOps {
   }): string | null;
   /**
    * Why {@link HyperlinkOps.removeHyperlink} would refuse to take off the link at the caret (or
-   * a named one) as a suggestion, or null. Null too when there is no such link. Writes nothing.
+   * a named one): the write itself, or the suggestion, or null. Null too when there is no such
+   * link. Writes nothing.
    */
   removeRefusal(linkId?: string): string | null;
 }
@@ -446,7 +450,7 @@ export function createHyperlinkOps(deps: HyperlinkOpsDeps): HyperlinkOps {
     return null;
   };
 
-  const lane = { linkAtCaret, storyPart, applyOps, withinLink };
+  const linkAccess = { linkAtCaret, storyPart, applyOps, withinLink };
 
   return {
     linksInCaretParagraph: () => linksIn(deps.selection().head.paragraphId),
@@ -467,8 +471,10 @@ export function createHyperlinkOps(deps: HyperlinkOpsDeps): HyperlinkOps {
       // before minting when the MODE would refuse the edit, for the same reason: the relationship
       // outlives the refusal that the ops do not survive.
       const active = scope();
-      if (!storyPart() || deps.refusesWrite()) return false;
-      const suggested = suggestLink(deps, lane, input);
+      if (!storyPart()) return false;
+      const refused = deps.writeRefusal();
+      if (refused !== null) return refuseLinkEdit(deps, refused);
+      const suggested = suggestLink(deps, linkAccess, input);
       if (suggested !== null) return suggested;
 
       // The relationship is minted BEFORE the transaction: it lives on the package, outside
@@ -682,7 +688,7 @@ export function createHyperlinkOps(deps: HyperlinkOpsDeps): HyperlinkOps {
       if (!storyPart()) return false;
       const link = linkId ? linkById(linkId) : linkAtCaret();
       if (!link) return false;
-      const suggested = suggestUnlink(deps, lane, link);
+      const suggested = suggestUnlink(deps, linkAccess, link);
       if (suggested !== null) return suggested;
       let committed = false;
       // The caret stays where the text is: unlinking must not move it, because the user's
@@ -706,15 +712,20 @@ export function createHyperlinkOps(deps: HyperlinkOpsDeps): HyperlinkOps {
 
     applyRefusal(requested) {
       if (!storyPart()) return null;
+      // What `applyHyperlink` refuses first, so `can` and `exec` agree
+      const refused = deps.writeRefusal();
+      if (refused !== null) return refused;
       // The selection as it stands: settling queued typing would commit it.
       const range = orderedRangeOf(deps.layout(), deps.selection());
-      return linkSuggestionRefusal(deps, lane, withHyphenElements(requested), range);
+      return linkSuggestionRefusal(deps, linkAccess, withHyphenElements(requested), range);
     },
 
     removeRefusal(linkId) {
       if (!storyPart()) return null;
       const link = linkId ? linkById(linkId) : linkAtCaret();
-      return link ? unlinkSuggestionRefusal(deps, lane, link) : null;
+      if (!link) return null;
+      // The gate `removeHyperlink`'s commit meets, so `can` and `exec` agree
+      return deps.writeRefusal() ?? unlinkSuggestionRefusal(deps, linkAccess, link);
     },
   };
 }

@@ -10,7 +10,11 @@ Production use requires a commercial agreement: licensing@eigenpal.com
 // a second write path beside `insertInlineContentControl`.
 
 import type { Editor } from '@docx-editor.dev/core/contracts/editor';
-import type { PaginatedSurface } from '@docx-editor.dev/core/editor';
+import {
+  commitCustomNodeInsert,
+  commitCustomNodeRemoval,
+  type PaginatedSurface,
+} from '@docx-editor.dev/core/editor';
 import {
   contentControlPropertiesOf,
   contentControlTextOf,
@@ -124,7 +128,7 @@ export function removeCustomNode(editor: Editor, nodeId: string): CustomNodeWrit
   // Below the surface's typing buffer: land queued keystrokes before the
   // removal shifts offsets in the caret paragraph.
   surface.flushPendingInput();
-  const removed = surface.session.removeCustomNode(nodeId, storyScopeOfId(editor, nodeId));
+  const removed = commitCustomNodeRemoval(surface, nodeId, storyScopeOfId(editor, nodeId));
   if (!removed.ok) return refusalOf(removed);
   return { ok: true, changed: true };
 }
@@ -241,7 +245,8 @@ export function updateCustomNode<Schema extends StandardSchemaV1 | undefined = u
 
   const alias = update.alias ?? existing.alias;
   const lock = update.lock ?? existing.lock;
-  const written = surface.session.insertCustomNode(
+  const written = commitCustomNodeInsert(
+    surface,
     {
       replaceControlId: nodeId,
       paragraphId: paragraph.id,

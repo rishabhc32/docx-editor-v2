@@ -406,9 +406,12 @@ describe('table command toolbar state (Task 7)', () => {
   });
 
   test('merged-cell refusal matches can and exec verbatim', () => {
+    // Column edits take `w:gridSpan` merges; a legacy `w:hMerge` merge is still refused
     const merged =
-      '<w:tbl><w:tblGrid><w:gridCol w:w="2400"/><w:gridCol w:w="3600"/></w:tblGrid>' +
-      '<w:tr><w:tc><w:p><w:r><w:t>A1</w:t></w:r></w:p></w:tc><w:tc><w:tcPr><w:gridSpan w:val="2"/></w:tcPr><w:p><w:r><w:t>span</w:t></w:r></w:p></w:tc></w:tr></w:tbl>';
+      '<w:tbl><w:tblGrid><w:gridCol w:w="2400"/><w:gridCol w:w="1800"/><w:gridCol w:w="1800"/></w:tblGrid>' +
+      '<w:tr><w:tc><w:p><w:r><w:t>A1</w:t></w:r></w:p></w:tc>' +
+      '<w:tc><w:tcPr><w:hMerge w:val="restart"/></w:tcPr><w:p><w:r><w:t>span</w:t></w:r></w:p></w:tc>' +
+      '<w:tc><w:tcPr><w:hMerge/></w:tcPr><w:p/></w:tc></w:tr></w:tbl>';
     const editor = mountTable(merged);
     caret(editor, paragraphByText(editor, 'A1'));
     const cmd = { type: 'insertColumn' as const, where: 'right' as const };

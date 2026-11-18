@@ -231,6 +231,29 @@ function hasForeignRevision(root: OoxmlNode, author: string): boolean {
   return false;
 }
 
+/**
+ * Whether a table is `author`'s complete pending insertion. Its properties and structure belong
+ * to that insertion, so changing them records no revision of its own: rejecting the insertion
+ * removes them with the table.
+ */
+export function isOwnTableInsertion(
+  reads: AutomationStoryReads,
+  tableId: string,
+  author: string
+): boolean {
+  const topology = readEditableTableTopology(reads.root as OoxmlElement, tableId);
+  return (
+    topology.ok &&
+    topology.topology.rows.length > 0 &&
+    !hasForeignRevision(topology.topology.table, author) &&
+    topology.topology.rows.every(({ row }) => {
+      const trPr = wmlChildNamed(row, 'trPr');
+      const ins = trPr && wmlChildNamed(trPr, 'ins');
+      return ins && wmlAttributeValue(ins, 'author') === author;
+    })
+  );
+}
+
 /** Simulate ordered canonical operations privately so newly allocated cells can receive values atomically. */
 export function planTableMutation(
   reads: AutomationStoryReads,
@@ -240,33 +263,15 @@ export function planTableMutation(
 ): TableMutationPlan {
   if (!validMutation(mutation)) return { ok: false, reason: 'invalid-table-mutation' };
   const topology = readEditableTableTopology(reads.root as OoxmlElement, tableId);
-  // Properties and structure belong to an author's complete pending table insertion.
-  // Rejecting that insertion removes them with the table; existing tables still refuse.
-  const ownInsertion =
-    revision &&
-    topology.ok &&
-    topology.topology.rows.length > 0 &&
-    !hasForeignRevision(topology.topology.table, revision.author) &&
-    topology.topology.rows.every(({ row }) => {
-      const trPr = wmlChildNamed(row, 'trPr');
-      const ins = trPr && wmlChildNamed(trPr, 'ins');
-      return ins && wmlAttributeValue(ins, 'author') === revision!.author;
-    });
+  const ownInsertion = revision && isOwnTableInsertion(reads, tableId, revision.author);
   if (ownInsertion && !['addRows', 'insertRows', 'deleteRows', 'values'].includes(mutation.kind))
     revision = undefined;
-  if (
-    revision &&
-    !['addRows', 'insertRows', 'deleteRows', 'values', 'cell'].includes(mutation.kind)
-  )
-    return { ok: false, reason: 'unsupported-tracked-table-operation' };
-  if (
-    revision &&
-    mutation.kind === 'cell' &&
-    (mutation.columnWidth !== undefined ||
-      mutation.shadingColor !== undefined ||
-      mutation.verticalAlignment !== undefined)
-  )
-    return { ok: false, reason: 'unsupported-tracked-table-operation' };
+  // Word tracks table and cell properties and columns as the editor's commands do: each op
+  // below records them (`w:tblPrChange`, `w:tblGridChange`, `w:tcPrChange`, `w:cellIns`,
+  // `w:cellDel`). Deleting a whole table stays the editor's block deletion.
+  if (revision && mutation.kind === 'delete')
+    return { ok: false, reason: 'tracked-table-deletion-unsupported' };
+  const tracked = revision ? { revision } : {};
   const initial = topology;
   if (!initial.ok) return { ok: false, reason: initial.reason };
   // Row deletion hands a vertical merge that starts in a removed row to the row below.
@@ -351,6 +356,7 @@ export function planTableMutation(
       tableId,
       ...(mutation.styleId === undefined ? {} : { styleId: mutation.styleId }),
       ...(mutation.headerRowCount === undefined ? {} : { headerRowCount: mutation.headerRowCount }),
+      ...tracked,
     });
   else if (mutation.kind === 'values') {
     if (!matrix(mutation.values, current.rows.length, cols))
@@ -376,6 +382,7 @@ export function planTableMutation(
         tableId,
         cellIds: [cell.id],
         color: color === 'auto' ? null : { kind: 'hex', value: color },
+        ...tracked,
       });
     }
     if (!error && mutation.verticalAlignment !== undefined)
@@ -384,13 +391,14 @@ export function planTableMutation(
         tableId,
         cellIds: [cell.id],
         alignment: mutation.verticalAlignment.toLowerCase() as 'top' | 'center' | 'bottom',
+        ...tracked,
       });
     if (!error && mutation.columnWidth !== undefined) {
       const widths = current.gridColumns.map(
         (c) => readTwipsMeasure(wmlAttributeValue(c, 'w')) ?? 0
       );
       widths[index] = Math.round(mutation.columnWidth * 20);
-      error = apply({ op: 'setTableProperties', tableId, columnWidthsTwips: widths });
+      error = apply({ op: 'setTableProperties', tableId, columnWidthsTwips: widths, ...tracked });
     }
   } else if (mutation.kind === 'deleteRows' || mutation.kind === 'deleteColumns') {
     const size = mutation.kind === 'deleteRows' ? current.rows.length : cols;
@@ -426,7 +434,12 @@ export function planTableMutation(
                 rowId: current.rows[i]!.row.id,
                 ...(revision ? { revision } : {}),
               })
-            : apply({ op: 'deleteTableColumn', tableId, gridColumnId: current.gridColumns[i]!.id });
+            : apply({
+                op: 'deleteTableColumn',
+                tableId,
+                gridColumnId: current.gridColumns[i]!.id,
+                ...tracked,
+              });
   } else if (
     mutation.kind === 'addRows' ||
     mutation.kind === 'insertRows' ||
@@ -477,6 +490,7 @@ export function planTableMutation(
             tableId,
             gridColumnId: t.gridColumns[first ? 0 : t.gridColumns.length - 1]!.id,
             where: first ? 'left' : 'right',
+            ...tracked,
           });
     }
     if (!error) {
@@ -577,10 +591,14 @@ export function planInsertTable(
   const table = tableNodes(part.root).find((n) => !existing.has(n.id));
   if (!table) return { ok: false, reason: 'missing-inserted-table' };
   if (values) {
-    const seeded = planTableMutation({ ...reads, part, root: part.root }, table.id, {
-      kind: 'values',
-      values,
-    });
+    // Tracked, the values are the author's inserted text, as Word writes text in its own new
+    // rows: `w:ins` inside the row's `w:trPr/w:ins`
+    const seeded = planTableMutation(
+      { ...reads, part, root: part.root },
+      table.id,
+      { kind: 'values', values },
+      revision
+    );
     if (!seeded.ok) return seeded;
     ops.push(...seeded.ops);
     part = seeded.resultPart;

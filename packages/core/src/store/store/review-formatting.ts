@@ -37,7 +37,7 @@ export function changedLanguages(site: RevisionSite): string[] {
 /** Direct formatting values that changed; null means return to inherited formatting. */
 export type ReviewFormattingChange = NonNullable<ReviewRevisionItem['formattingChanges']>[number];
 
-const FORMATTING_PROPERTIES: readonly {
+export const FORMATTING_PROPERTIES: readonly {
   property: ReviewFormattingChange['property'];
   element: string;
   attribute: string;

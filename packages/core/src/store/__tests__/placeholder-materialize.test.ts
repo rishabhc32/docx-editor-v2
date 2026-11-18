@@ -78,7 +78,7 @@ describe('materializeGlossaryPlaceholders', () => {
   test('an empty control whose glossary block is missing takes the type default prompt', () => {
     const { pkg, main } = open(EMPTY_DATE, null);
     const xml = serializeOoxmlPart(materializeGlossaryPlaceholders(pkg, main));
-    expect(xml).toContain('<w:t>Click here to enter a date.</w:t>');
+    expect(xml).toContain('<w:t>Click or tap to enter a date.</w:t>');
     expect(xml).toContain('<w:showingPlcHdr/>');
   });
 

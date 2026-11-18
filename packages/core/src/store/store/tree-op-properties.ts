@@ -12,6 +12,7 @@ import {
   ACCEPTED_PARAGRAPH_PROPERTIES,
   ACCEPTED_RUN_PROPERTIES,
   type OoxmlProperty,
+  type TreeOpEffect,
 } from './tree-op-types.ts';
 
 /**
@@ -240,6 +241,40 @@ export function mergedPropertyChildren(
   }
   return inSchemaOrder(children, vocabulary.sequence);
 }
+
+/**
+ * Whether a rewrite left a property container holding exactly what it held: the same nodes,
+ * in any order.
+ *
+ * {@link mergedPropertyChildren} reuses a child whose value the op restates and re-sorts the
+ * rest into schema order, so a write of a value the text already has comes back as the same
+ * nodes in a new order. Applying that still rewrote the container and split the run at the
+ * range edges: the words did not change, but the saved package did. Word makes no change for
+ * such a format, so the appliers make none either (see {@link UNCHANGED_PROPERTIES_EFFECT}).
+ * A changed value, a dropped property or a new format record each produce a node the old
+ * container did not hold, so they still count as changes.
+ */
+export function keepsPropertyChildren(
+  prior: readonly OoxmlNode[],
+  next: readonly OoxmlNode[]
+): boolean {
+  if (prior.length !== next.length) return false;
+  const held = new Set(prior);
+  return next.every((child) => held.has(child));
+}
+
+/**
+ * The effect of a property write that changed no value. The transaction treats an op that
+ * returns its own part with nothing dirty as no change, so a press that restates every value
+ * publishes no revision and records no undo step.
+ */
+export const UNCHANGED_PROPERTIES_EFFECT: TreeOpEffect = {
+  dirty: [],
+  created: [],
+  deleted: [],
+  dependencyKeys: [],
+  impact: 'text-local',
+};
 
 /**
  * Where a new child belongs in an `xsd:sequence` container: BEFORE the first modelled

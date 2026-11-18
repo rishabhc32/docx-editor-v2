@@ -448,6 +448,12 @@ interface JournalPlan {
    * one run can be de-duplicated deterministically instead of duplicating the text (#581).
    */
   readonly replacementsByEffect: ReadonlyMap<SharedEffect, readonly LogicalId[]>;
+  /**
+   * The parent each child a splice inserts ends up under. Shared state gives a node this
+   * journal creates no parent edge until the journal ends, and the inline write needs the story
+   * of a new paragraph before that.
+   */
+  readonly placedIn: ReadonlyMap<LogicalId, LogicalId>;
 }
 
 /**
@@ -474,6 +480,7 @@ function planJournal(
   const mintedText = new Set<string>();
   const mintedNodes = new Set<string>();
   const replacementsByEffect = new Map<SharedEffect, LogicalId[]>();
+  const placedIn = new Map<LogicalId, LogicalId>();
   for (const effect of effects) {
     const refusal = validateEffect(registry, effect, projection);
     if (refusal) return refusal;
@@ -497,6 +504,7 @@ function planJournal(
       for (const childId of effect.childLogicalIds) {
         reinserted.add(childId);
         unlistedAtEnd.delete(childId);
+        placedIn.set(childId, effect.parentLogicalId);
       }
     } else if (effect.kind === 'moveNode') {
       reinserted.add(effect.logicalId);
@@ -507,7 +515,15 @@ function planJournal(
     }
     projectEffect(projection, effect);
   }
-  return { removed, reinserted, unlistedAtEnd, mintedText, mintedNodes, replacementsByEffect };
+  return {
+    removed,
+    reinserted,
+    unlistedAtEnd,
+    mintedText,
+    mintedNodes,
+    replacementsByEffect,
+    placedIn,
+  };
 }
 
 function mintedNodeCount(effects: readonly SharedEffect[]): number {
@@ -633,7 +649,7 @@ export function applyPrimitiveJournal(
     tombstoneRemoved(registry, effects, planned, formerChildren);
     const removed = deleteCopiesOfRemoved(registry, planned.removed);
     const written: InlineWritten = plan
-      ? applyInlinePlan(registry, plan, tokens)
+      ? applyInlinePlan(registry, plan, tokens, planned.placedIn)
       : { copied: new Set<string>(), deleted: new Set<string>(), embedded: new Set<string>() };
     recordRelocatedMarkers(
       registry,

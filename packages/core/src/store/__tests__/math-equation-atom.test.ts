@@ -72,6 +72,35 @@ describe('OMML equation model atom', () => {
     expect(serializeOoxmlPart(result.part)).not.toContain('<m:oMath>');
   });
 
+  test('a tracked deletion strikes the complete equation with the text around it', () => {
+    // `w:del` may hold `m:oMath` (`EG_RunLevelElts` → `EG_MathContent`). Leaving the equation
+    // outside the strike made Accept remove the text and keep the equation.
+    const part = parse(`<w:r><w:t>AB</w:t></w:r>${equation}<w:r><w:t>YZ</w:t></w:r>`);
+    const paragraph = paragraphOf(part);
+    const revision = { author: 'Ada', date: '2026-01-02T03:04:05Z' };
+    const struck = applyTreeOp(part, {
+      op: 'deleteText',
+      paragraphId: paragraph.id,
+      start: 1,
+      end: 4,
+      revision,
+    });
+    if (!struck.ok) throw new Error(struck.reason);
+    expect(serializeOoxmlPart(struck.part)).toContain(
+      '<w:r><w:delText>B</w:delText></w:r><m:oMath><m:r><m:t>x</m:t></m:r></m:oMath>' +
+        '<w:r><w:delText>Y</w:delText></w:r></w:del>'
+    );
+    expect(paragraphTextOf(struck.part, paragraph.id)).toBe('AB\uFFFCYZ');
+
+    const accepted = applyTreeOp(struck.part, { op: 'acceptAllRevisions' });
+    const rejected = applyTreeOp(struck.part, { op: 'rejectAllRevisions' });
+    if (!accepted.ok || !rejected.ok) throw new Error('revision resolution refused');
+    expect(paragraphTextOf(accepted.part, paragraph.id)).toBe('AZ');
+    expect(serializeOoxmlPart(accepted.part)).not.toContain('<m:oMath>');
+    expect(paragraphTextOf(rejected.part, paragraph.id)).toBe('AB\uFFFCYZ');
+    expect(serializeOoxmlPart(rejected.part)).not.toContain('<w:del ');
+  });
+
   test('typing at a leading equation boundary creates a sibling run', () => {
     const part = parse(`${equation}<w:r><w:t>Z</w:t></w:r>`);
     const paragraph = paragraphOf(part);

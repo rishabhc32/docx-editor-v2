@@ -373,7 +373,7 @@ describe('placeholder and temporary state are transitions, not text', () => {
     });
     const properties = contentControlPropertiesOf(controlOf(cleared));
     expect(properties.showingPlaceholder).toBe(true);
-    expect(contentControlTextOf(controlOf(cleared))).toBe('Click here to enter text.');
+    expect(contentControlTextOf(controlOf(cleared))).toBe('Click or tap here to enter text.');
   });
 
   test('a temporary control removes its wrapper on the first content edit, keeping content', () => {
@@ -908,8 +908,9 @@ describe('inline content controls contribute UTF-16 offsets', () => {
         '<w:r><w:t>ef</w:t></w:r></w:p>'
     );
     const next = applyV2(part, { op: 'deleteText', paragraphId: V2_PARAGRAPH, start: 2, end: 4 });
-    expect(paragraphTextOf(next, V2_PARAGRAPH)).toBe('abef');
-    expect(firstSdtV2(next)).toBeTruthy();
+    // The control declares no type, so it is rich text: emptied, it shows its prompt again.
+    expect(paragraphTextOf(next, V2_PARAGRAPH)).toBe('abClick or tap here to enter text.ef');
+    expect(isShowingPlaceholder(firstSdtV2(next))).toBe(true);
   });
 });
 
@@ -1130,7 +1131,7 @@ describe('setContentControlValue', () => {
     ).toBe('bound');
   });
 
-  test('repeating section ops are unsupported', () => {
+  test('a repeating section without an item has none to repeat or remove', () => {
     const part = loadV2(
       '<w:sdt><w:sdtPr><w15:repeatingSection/></w:sdtPr>' +
         '<w:sdtContent><w:p><w:r><w:t>item</w:t></w:r></w:p></w:sdtContent></w:sdt>'
@@ -1138,7 +1139,7 @@ describe('setContentControlValue', () => {
     const id = firstSdtV2(part).id;
     expect(rejectV2(part, { op: 'addRepeatingSectionItem', controlId: id })).toBe('unsupported');
     expect(rejectV2(part, { op: 'removeRepeatingSectionItem', controlId: id, index: 0 })).toBe(
-      'unsupported'
+      'invalidArgs'
     );
     expect(rejectV2(part, { op: 'setContentControlValue', controlId: id, value: 'x' })).toBe(
       'unsupported'
@@ -1354,7 +1355,7 @@ describe('showingPlcHdr first-input replacement', () => {
     });
     const after = findContentControl(emptied, control.id)!;
     expect(isShowingPlaceholder(after)).toBe(true);
-    expect(paragraphTextOf(emptied, V2_PARAGRAPH)).toBe('Click here to enter text.');
+    expect(paragraphTextOf(emptied, V2_PARAGRAPH)).toBe('Click or tap here to enter text.');
     // The restored prompt is a prompt: the next keystroke replaces it whole.
     const again = applyV2(emptied, {
       op: 'insertText',

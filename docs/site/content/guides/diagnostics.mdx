@@ -144,6 +144,7 @@ Codes are stable. New codes can be added, but existing codes are never renamed. 
 | <a id="edit-picture-selected" />`edit.picture-selected` | A picture is selected, so the new picture has no place to go and nothing was inserted. Place the caret in text next to the picture, then insert again. |
 | <a id="edit-cross-structure-join" />`edit.cross-structure-join` | The edit would join paragraphs that live in different containers, such as two table cells. Edit each container separately. |
 | <a id="edit-indivisible-content" />`edit.indivisible-content` | The edit would split content that must stay whole, such as an equation or a field. Select the whole item instead. |
+| <a id="edit-single-line-control" />`edit.single-line-control` | Enter would start a new paragraph inside a content control that holds one line, such as a plain text, list, or date control, or inside an inline rich text control. Word does not allow that, so nothing was applied. Press Enter outside the control. |
 | <a id="edit-field-structure" />`edit.field-structure` | The edit would break the structure of a field. Edit the field result as a whole, or remove the whole field. |
 | <a id="edit-section-mark" />`edit.section-mark` | The edit would remove a section break that holds page layout settings. Remove the section break on its own. |
 | <a id="edit-table-structure-unsupported" />`edit.table-structure-unsupported` | The table edit is not supported for this table shape, for example a table with merged cells. Change the merge first. |
@@ -163,6 +164,7 @@ Codes are stable. New codes can be added, but existing codes are never renamed. 
 | <a id="edit-preview-diverged" />`edit.preview-diverged` | The document answered a replayed read differently from the preview, so the commit wrote nothing. Read the document again and build a new preview. |
 | <a id="edit-collaboration-not-ready" />`edit.collaboration-not-ready` | The collaboration session is not ready to replicate edits, so this one was refused. Wait for the ready status, then retry; a destroyed session needs a rejoin. |
 | <a id="edit-collaboration-text-limit" />`edit.collaboration-text-limit` | One edit inserted more text than a collaboration session accepts at once. Insert the text in smaller parts. |
+| <a id="edit-collaboration-refused" />`edit.collaboration-refused` | The collaboration room refused this edit by its rules, so nothing was applied. The refusal report of the collaboration session names the rule. Read the document again before you choose another edit. |
 | <a id="edit-internal-invariant" />`edit.internal-invariant` | The editor refused an edit to protect the document structure. This is an engine defect: report the code with the engine version. |
 | <a id="edit-refused" />`edit.refused` | The edit was refused for a reason without a specific code. Read `snapshot().lastRejection` for the local message. |
 
@@ -220,6 +222,9 @@ A collaboration code is `collab.` followed by the session's own failure code. It
 | <a id="collab-collaboration-session-not-attached" />`collab.collaboration-session-not-attached` | The collaboration session could not take work: it was not attached, not ready yet, or already destroyed. Wait for the ready status, or rejoin when the session was destroyed. |
 | <a id="collab-collaboration-session-not-ready" />`collab.collaboration-session-not-ready` | The collaboration session could not take work: it was not attached, not ready yet, or already destroyed. Wait for the ready status, or rejoin when the session was destroyed. |
 | <a id="collab-collaboration-text-limit" />`collab.collaboration-text-limit` | One edit inserted more text than a collaboration session accepts at once. Insert the text in smaller parts. |
+| <a id="collab-ordered-unsupported-op" />`collab.ordered-unsupported-op` | The edit holds an operation an ordered room cannot record, so it was refused before it was made. The refusal report names the operation. |
+| <a id="collab-ordered-opaque-write" />`collab.ordered-opaque-write` | The edit is a write an ordered room cannot see, such as a comment or a review decision in the editor, so it was refused. Use the room server for review writes. |
+| <a id="collab-ordered-refused" />`collab.ordered-refused` | The ordered room, or this copy of it, refused the edit, so nothing changed. The refusal report names the reason. |
 | <a id="collab-experimental-collaboration-body-text-only" />`collab.experimental-collaboration-body-text-only` | This session replicates only body text, and the edit touched another part of the document. Make that change outside collaboration. |
 | <a id="collab-invalid-document-id" />`collab.invalid-document-id` | The collaboration factory rejected a value before joining. Fix the document id, session id, or identity that the host passed. |
 | <a id="collab-invalid-identity" />`collab.invalid-identity` | The collaboration factory rejected a value before joining. Fix the document id, session id, or identity that the host passed. |

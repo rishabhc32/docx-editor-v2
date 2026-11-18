@@ -9,6 +9,11 @@ Production use requires a commercial agreement: licensing@eigenpal.com
 // every other.
 
 import { afterEach, describe, expect, test } from 'bun:test';
+import { readOoxmlPackage, type OoxmlElement, type OoxmlNode } from '@docx-editor.dev/core/store';
+import * as Y from 'yjs';
+import { DEFAULT_DOCUMENT_LIMITS } from '../document/limits.ts';
+import { linearizeParagraph, materializeParagraph } from '../document/paragraph-linear.ts';
+import { decodeItems, encodeItems } from '../document/paragraph-text.ts';
 import { diffTokens, type Token } from '../document/paragraph-text-diff.ts';
 import {
   createPeerHarness,
@@ -116,5 +121,50 @@ describe('surrogate pairs across replicas', () => {
     for (const point of ['\u{1F200}', '\u{1F603}', '\u{1F604}']) expect(text).toContain(point);
     expect(text).not.toContain('\u{1F600}');
     for (const peer of [bob, carol]) expect(paragraphTexts(peer)).toEqual([text!]);
+  });
+});
+
+describe('surrogate pairs in repaired runs', () => {
+  test('a pair with no run takes one run, not one run for each half', () => {
+    // Shared text can hold characters with no run, after a concurrent edit; each takes the
+    // run of its nearest neighbor. Here the high half's nearest neighbor is the run before
+    // and the low half's is the run after (seed 8 of the `join` scenario with peer delivery).
+    const loaded = readOoxmlPackage(
+      zipDocument(
+        '<w:p><w:r><w:t>ab</w:t></w:r><w:r><w:rPr><w:b/></w:rPr><w:t>cd</w:t></w:r></w:p>'
+      )
+    );
+    if (!loaded.ok) throw new Error(loaded.reason);
+    let paragraph: OoxmlElement | null = null;
+    walk(loaded.package.parts.get(loaded.package.mainDocumentPart)!.root, (node) => {
+      if (node.kind === 'paragraph') paragraph ??= node as OoxmlElement;
+    });
+    const linear = linearizeParagraph(paragraph!);
+    const embeds = new Map<string, OoxmlNode>();
+    for (const item of linear.items) if (item.kind === 'embed') embeds.set(item.node.id, item.node);
+    const doc = new Y.Doc();
+    const text = doc.getText('inline');
+    const keys = new Set<string>();
+    for (const op of encodeItems(linear.items, paragraph!.id, DEFAULT_DOCUMENT_LIMITS)) {
+      for (const key of Object.keys(op.attributes ?? {})) keys.add(key);
+      if (typeof op.insert === 'string') text.insert(text.length, op.insert, { ...op.attributes });
+      else text.insertEmbed(text.length, op.insert, { ...op.attributes });
+    }
+    // A space and an emoji between the runs, with no run and no text element.
+    text.insert(2, ' \u{1F600}', Object.fromEntries([...keys].map((key) => [key, null])));
+    const items = decodeItems(
+      text.toDelta(),
+      (id) => embeds.get(id) ?? null,
+      DEFAULT_DOCUMENT_LIMITS,
+      paragraph!.id
+    );
+    const values: string[] = [];
+    walk(materializeParagraph({ shell: linear.shell, items }), (node) => {
+      if (node.kind === 'textValue') values.push(node.value);
+    });
+    expect(values.join('')).toBe('ab \u{1F600}cd');
+    // Every text element holds whole characters, as XML 1.0 asks.
+    const lone = /[\ud800-\udbff](?![\udc00-\udfff])|(?<![\ud800-\udbff])[\udc00-\udfff]/;
+    for (const value of values) expect(lone.test(value)).toBe(false);
   });
 });

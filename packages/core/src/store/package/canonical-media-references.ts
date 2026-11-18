@@ -1,6 +1,17 @@
-import { RELATIONSHIPS_NAMESPACE_URI, type OoxmlNode } from './ooxml-tree.ts';
+import { RELATIONSHIPS_NAMESPACE_URI, type OoxmlAttribute, type OoxmlNode } from './ooxml-tree.ts';
 
 const OFFICE_NAMESPACE_URI = 'urn:schemas-microsoft-com:office:office';
+
+/**
+ * Whether an attribute's value names a relationship of its part: any `r:` attribute, and VML's
+ * `o:relid`, the Office relationship id older Word writes for a picture's image (ECMA-376 Part 4).
+ */
+export function isRelationshipReference(attribute: OoxmlAttribute): boolean {
+  return (
+    attribute.namespaceUri === RELATIONSHIPS_NAMESPACE_URI ||
+    (attribute.namespaceUri === OFFICE_NAMESPACE_URI && attribute.localName === 'relid')
+  );
+}
 
 /**
  * Count authored relationship references, including opaque VML and dead MC branches.
@@ -28,10 +39,7 @@ export function canonicalMediaReferenceCount(
     if (node.attributes.length > 512) return { count, truncated: true };
     if (
       node.attributes.some(
-        (attribute) =>
-          (attribute.namespaceUri === RELATIONSHIPS_NAMESPACE_URI ||
-            (attribute.namespaceUri === OFFICE_NAMESPACE_URI && attribute.localName === 'relid')) &&
-          relationshipIds.has(attribute.value)
+        (attribute) => isRelationshipReference(attribute) && relationshipIds.has(attribute.value)
       )
     ) {
       count += 1;

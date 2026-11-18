@@ -2,11 +2,24 @@
 // Mirrors hf-lifecycle-shell but admits footnotes/endnotes part targets.
 
 import type { OoxmlPackage } from './ooxml-package.ts';
-import type { OoxmlElement, OoxmlNode, OoxmlParagraphNode } from './ooxml-tree.ts';
-import { isContentRevisionKind, isInlineRunContainer } from './ooxml-shared.ts';
+import {
+  readOoxmlPart,
+  type OoxmlElement,
+  type OoxmlNode,
+  type OoxmlPart,
+  type OoxmlParagraphNode,
+} from './ooxml-tree.ts';
+import {
+  isContentRevisionKind,
+  isInlineRunContainer,
+  WML_NAMESPACE_URI as W,
+} from './ooxml-shared.ts';
+import type { NoteKind } from './note-nodes.ts';
 import type { RelationshipRecord } from './relationships.ts';
 import { appendFixedRelationship } from './hf-lifecycle-shell.ts';
 import { ancestorPathHolding } from './note-citation-placement.ts';
+import { usedParaIds, w14PrefixInScopeAt, withFreshParaIds } from './para-id.ts';
+import { actorScopedSeed } from './actor-scoped-ids.ts';
 
 export {
   freeRelationshipId,
@@ -71,4 +84,40 @@ export function withNotesRelationship(
     order: owned.reduce((max, entry) => Math.max(max, entry.order), -1) + 1,
   };
   return appendFixedRelationship(pkg, owner, record);
+}
+
+/** A new notes part: Word's separator (`w:id="-1"`) and continuation separator (`w:id="0"`). */
+export function emptyNotesPart(
+  partName: string,
+  contentType: string,
+  noteKind: NoteKind
+): OoxmlPart | null {
+  const root = noteKind === 'footnote' ? 'footnotes' : 'endnotes';
+  const el = noteKind === 'footnote' ? 'footnote' : 'endnote';
+  const xml =
+    `<w:${root} xmlns:w="${W}">` +
+    `<w:${el} w:type="separator" w:id="-1">` +
+    `<w:p><w:r><w:separator/></w:r></w:p>` +
+    `</w:${el}>` +
+    `<w:${el} w:type="continuationSeparator" w:id="0">` +
+    `<w:p><w:r><w:continuationSeparator/></w:r></w:p>` +
+    `</w:${el}>` +
+    `</w:${root}>`;
+  const read = readOoxmlPart(xml, { name: partName, contentType });
+  return read.ok ? read.part : null;
+}
+
+/**
+ * A new note with a `w14:paraId` on its paragraph, unique in its notes part, as Word writes every
+ * paragraph and as an opened notes part's paragraphs have one: a collaboration session carries
+ * the caret into the note by it. A part that binds no w14 prefix is left as it is.
+ */
+export function withNewNoteIdentity(part: OoxmlPart, note: OoxmlNode, noteId: number): OoxmlNode {
+  return withFreshParaIds(
+    note,
+    new Set(usedParaIds(part.root)),
+    actorScopedSeed(`${part.name}:note:${noteId}`),
+    { value: 0 },
+    w14PrefixInScopeAt(part, part.root)
+  );
 }

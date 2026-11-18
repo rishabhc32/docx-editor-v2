@@ -97,3 +97,39 @@ export function zeroLengthGoesToHead(
     closesAnOpenRange(child, openedHere)
   );
 }
+
+/** What a split reads of an atomic unit: where it ends, and the nodes that leave with it. */
+interface AtomUnit {
+  readonly end: number;
+  readonly removeNodeIds?: readonly string[];
+}
+
+/**
+ * For every node an atomic unit owns, where that unit ends. A complex field counts ONE unit, at
+ * its begin character; its instruction, separator, cached result and end measure nothing.
+ * Placed by position, a split right after the field sent those to the new paragraph and left
+ * the begin character behind: one field broken across two paragraphs, its instruction read as
+ * text. They go where their unit goes instead.
+ */
+export function atomUnitEnds(segments: readonly AtomUnit[]): ReadonlyMap<string, number> {
+  const ends = new Map<string, number>();
+  for (const segment of segments) {
+    for (const id of segment.removeNodeIds ?? []) ends.set(id, segment.end);
+  }
+  return ends;
+}
+
+/** Where the atomic unit that owns a node of this zero-length child ends, or undefined. */
+export function atomUnitEndIn(
+  child: OoxmlNode,
+  ends: ReadonlyMap<string, number>
+): number | undefined {
+  if (ends.size === 0) return undefined;
+  const pending: OoxmlNode[] = [child];
+  for (let node = pending.pop(); node !== undefined; node = pending.pop()) {
+    const end = ends.get(node.id);
+    if (end !== undefined) return end;
+    if (node.kind !== 'textValue') pending.push(...node.children);
+  }
+  return undefined;
+}

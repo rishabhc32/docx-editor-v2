@@ -158,10 +158,16 @@ describe('paragraph anchor hot path', () => {
       expect(headerParagraph).toBeTruthy();
       const [nodeId, paraId] = headerParagraph!;
       expect(surface.session.paraIdOf(nodeId)).toBe(paraId);
-      surface.setSelection({
-        anchor: { paragraphId: nodeId, offset: 0 },
-        head: { paragraphId: nodeId, offset: 0 },
+      // Through the editor's command, which opens the header first: the surface refuses a
+      // selection outside the open story.
+      const selected = editor.exec({
+        type: 'setSelection',
+        range: {
+          anchor: { paragraphId: nodeId, offset: 0 },
+          head: { paragraphId: nodeId, offset: 0 },
+        },
       });
+      expect(selected.ok).toBe(true);
       expect(selectionRangeOf(surface)).toEqual({
         from: { paraId },
         to: { paraId },

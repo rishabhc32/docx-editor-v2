@@ -326,24 +326,30 @@ describe('setTableColumnWidths', () => {
     ['gridSpan', '<w:gridSpan w:val="2"/>'],
     ['hMerge', '<w:hMerge w:val="restart"/>'],
     ['vMerge', '<w:vMerge w:val="restart"/>'],
-  ] as const)('refuses merged tables (%s)', (_label, mergeMarkup) => {
-    const part = load(
-      `<w:tbl><w:tblGrid><w:gridCol w:w="2400"/><w:gridCol w:w="3600"/></w:tblGrid>` +
-        `<w:tr><w:tc><w:tcPr>${mergeMarkup}</w:tcPr><w:p/></w:tc><w:tc><w:p/></w:tc></w:tr></w:tbl>`
-    );
-    const table = firstTable(part);
-    const [col1, col2] = gridColIds(part, table.id);
-    expect(
-      validateTableResizeOp(part, {
-        op: 'setTableColumnWidths',
-        tableId: table.id,
-        leftGridColumnId: col1!,
-        rightGridColumnId: col2!,
-        leftWidthTwips: 3000,
-        rightWidthTwips: 3000,
-      })
-    ).toBe(_label === 'gridSpan' ? 'tree-invariant' : 'table-has-merge');
-  });
+  ] as const)(
+    'reads merges: a vertical one is resized, hMerge refused (%s)',
+    (_label, mergeMarkup) => {
+      const part = load(
+        `<w:tbl><w:tblGrid><w:gridCol w:w="2400"/><w:gridCol w:w="3600"/></w:tblGrid>` +
+          `<w:tr><w:tc><w:tcPr>${mergeMarkup}</w:tcPr><w:p/></w:tc><w:tc><w:p/></w:tc></w:tr></w:tbl>`
+      );
+      const table = firstTable(part);
+      const [col1, col2] = gridColIds(part, table.id);
+      expect(
+        validateTableResizeOp(part, {
+          op: 'setTableColumnWidths',
+          tableId: table.id,
+          leftGridColumnId: col1!,
+          rightGridColumnId: col2!,
+          leftWidthTwips: 3000,
+          rightWidthTwips: 3000,
+        })
+        // gridSpan here overruns its row; a vertical merge is one cell per row, as Word resizes it
+      ).toBe(
+        _label === 'gridSpan' ? 'tree-invariant' : _label === 'hMerge' ? 'table-has-merge' : null
+      );
+    }
+  );
 
   test('resizes a grid beneath a spanning header and preserves its merged width', () => {
     const part = load(

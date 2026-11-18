@@ -10,11 +10,14 @@ Production use requires a commercial agreement: licensing@eigenpal.com
 // as its content (what Word and the free tier render).
 
 import type { Editor } from '@docx-editor.dev/core/contracts/editor';
-import type { PaginatedSurface } from '@docx-editor.dev/core/editor';
+import {
+  commitCustomNodeInsert,
+  type CustomNodeCommitResult,
+  type PaginatedSurface,
+} from '@docx-editor.dev/core/editor';
 import {
   parseNoteScopeId,
   type CustomNodePayloadWrite,
-  type CustomNodeWriteResult,
   type StoryScope,
 } from '@docx-editor.dev/core/store';
 import type { AnyCustomNodeDefinition, CustomNodeDefinition } from './define-custom-node.ts';
@@ -92,7 +95,7 @@ export function payloadWriteOf(
  * "fix your call" from "this document says no" without string-matching a reason.
  */
 export function refusalOf(
-  result: Extract<CustomNodeWriteResult, { ok: false }>
+  result: Extract<CustomNodeCommitResult, { ok: false }>
 ): CustomNodeWriteOutcome {
   const reason = result.detail ? `${result.reason}: ${result.detail}` : result.reason;
   return {
@@ -329,7 +332,8 @@ export function insertCustomNode<Schema extends StandardSchemaV1 | undefined = u
   // `updateCustomNode` already resolve theirs: a caller may pass an `at` in a story it is not
   // standing in, and the id says which one that is.
   const scope = storyScopeOfId(editor, at.paragraphId);
-  const written = surface.session.insertCustomNode(
+  const written = commitCustomNodeInsert(
+    surface,
     {
       paragraphId: at.paragraphId,
       offset: at.offset,

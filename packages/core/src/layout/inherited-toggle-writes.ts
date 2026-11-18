@@ -1,13 +1,4 @@
 // A toggle press that takes a format suggestion back leaves no suggestion behind.
-//
-// Toggling a run property off writes an explicit off value (`w:b w:val="0"`), because the
-// property may come from a style, and removing the direct one would bring the style's back.
-// Where no style gives it, the off value changes nothing visible. On text whose `w:rPrChange`
-// records no such property, it still differs from that original, so Underline pressed twice in
-// suggesting mode left a format suggestion that changed nothing. There, the press removes the
-// direct property instead, as Word does: the run lands back on its original and the record
-// goes (`withPropertyChangeRecord`). The same holds for a toggle on that would restate what a
-// style gives over a recorded off value. Without a pending record the off value stays.
 
 import { findNode } from '../store/package/ooxml-edit.ts';
 import {
@@ -51,10 +42,55 @@ function recordedOriginal(container: OoxmlNode | undefined): readonly OoxmlPrope
   return record ? propertiesOf(propertyContainer(record, 'runProperties', 'rPr')) : null;
 }
 
+/** The run whose `w:rPr` a run toggle writes. */
+function toggledRun(
+  part: OoxmlPart,
+  op: Extract<TreeDocOp, { op: 'setRunProperties' }>,
+  paragraph: OoxmlNode,
+  displayMode: FormattingDisplayMode,
+  authorFilter: FormattingRevisionAuthorFilter | undefined
+): OoxmlNode | null {
+  // An edit covers one run's share of the range: the run it targets, else the run its end
+  // closes.
+  const target = op.targetRunIds?.[0];
+  return target
+    ? findNode(part, target)
+    : formattingRunAt(paragraph, op.end, displayMode, authorFilter);
+}
+
+/** Whether the styles alone give the look `written` gives, without the toggled `names`. */
+function stylesGiveSameLook(
+  table: StyleCascadeTable,
+  inherited: readonly OoxmlProperty[],
+  written: readonly OoxmlProperty[],
+  names: ReadonlySet<string>
+): boolean {
+  const unwritten = written.filter((property) => !names.has(property.localName));
+  return runStylesEqual(
+    resolveRunStyle(cascadeRunProperties(inherited, written, table)),
+    resolveRunStyle(cascadeRunProperties(inherited, unwritten, table))
+  );
+}
+
+/** The document state a toggle press resolves the styles and the shown runs against. */
+interface InheritedToggleOptions {
+  readonly styles: OoxmlElement | null;
+  readonly settings: OoxmlElement | null;
+  readonly displayMode: FormattingDisplayMode;
+  readonly authorFilter: FormattingRevisionAuthorFilter | undefined;
+}
+
 /**
  * `ops`, a toggle of `localName` over the selection, without the toggled property on each run
  * or paragraph mark whose pending format record does not name it, where the styles alone give
  * the same look.
+ *
+ * Toggling a run property off writes an explicit off value (`w:b w:val="0"`), because the
+ * property may come from a style. Where no style gives it and a `w:rPrChange` records no such
+ * property, Word removes the direct property instead: the run lands back on its original and
+ * the record goes (`withPropertyChangeRecord`). The same holds for a toggle on that would
+ * restate what a style gives over a recorded off value. Without a pending record the off
+ * value stays.
  *
  * Each `setRunProperties` and `setParagraphMarkProperties` op is resolved through the style
  * cascade twice, with and without the property and its complex-script twin. Other ops pass
@@ -64,14 +100,12 @@ export function withoutInheritedToggles(
   part: OoxmlPart,
   ops: readonly TreeDocOp[],
   localName: string,
-  styles: OoxmlElement | null,
-  settings: OoxmlElement | null,
-  displayMode: FormattingDisplayMode,
-  authorFilter: FormattingRevisionAuthorFilter | undefined
+  { styles, settings, displayMode, authorFilter }: InheritedToggleOptions
 ): TreeDocOp[] {
   const names = new Set(
     withComplexScriptCompanions(true, [{ localName }]).map((property) => property.localName)
   );
+
   // Built at the first op over a pending record, so a press elsewhere costs nothing.
   let cascade: { table: StyleCascadeTable; cellStyleOf: FormattingCellStyles } | undefined;
   return ops.map((op) => {
@@ -80,14 +114,10 @@ export function withoutInheritedToggles(
     const paragraph = findNode(part, op.paragraphId);
     if (paragraph?.kind !== 'paragraph') return op;
     const pPr = propertyContainer(paragraph, 'paragraphProperties', 'pPr');
-    let owner: OoxmlNode | null | undefined = pPr;
-    if (op.op === 'setRunProperties') {
-      // An edit covers one run's share of the range, so the run its end closes is that run.
-      const target = op.targetRunIds?.[0];
-      owner = target
-        ? findNode(part, target)
-        : formattingRunAt(paragraph, op.end, displayMode, authorFilter);
-    }
+    const owner =
+      op.op === 'setRunProperties'
+        ? toggledRun(part, op, paragraph, displayMode, authorFilter)
+        : pPr;
     const container = propertyContainer(owner, 'runProperties', 'rPr');
     const original = recordedOriginal(container);
     if (!original || original.some((property) => names.has(property.localName))) return op;
@@ -95,21 +125,18 @@ export function withoutInheritedToggles(
       const table = buildStyleCascadeTable(styles, undefined, settings);
       cascade = { table, cellStyleOf: createFormattingCellStyles(table) };
     }
+
     const { table, cellStyleOf } = cascade;
     const inherited = cascadeParagraphFormatting(
       table,
       pPr,
       cellStyleOf(part, paragraph, displayMode, authorFilter)
     ).runProperties;
+
     // The write replaces the properties it names; the rest of the container, `w:rStyle`
     // among them, stays and joins the cascade.
     const written = mergedProperties(propertiesOf(container), op.properties);
-    const unwritten = written.filter((property) => !names.has(property.localName));
-    const same = runStylesEqual(
-      resolveRunStyle(cascadeRunProperties(inherited, written, table)),
-      resolveRunStyle(cascadeRunProperties(inherited, unwritten, table))
-    );
-    if (!same) return op;
+    if (!stylesGiveSameLook(table, inherited, written, names)) return op;
     return {
       ...op,
       properties: op.properties.filter((property) => !names.has(property.localName)),

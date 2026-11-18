@@ -7,6 +7,7 @@ import type { EditorCommand, ExecResult } from '../contracts/editor.ts';
 import { bookmarkNameKey, listBookmarks, type TreeDocOp } from '@docx-editor.dev/core/store';
 import type { PaginatedSurface } from './paginated-surface-contract.ts';
 import { storyScopeOfPartName } from './surface-scope.ts';
+import { UNTRACKED_EDIT_REFUSAL } from './surface-untracked-edits.ts';
 
 export type FurnitureVariant = 'default' | 'first' | 'even';
 
@@ -24,7 +25,7 @@ const HEADER_FOOTER_COMMANDS: ReadonlySet<EditorCommand['type']> = new Set([
 
 const readOnlyHeaderFooters = new WeakSet<PaginatedSurface>();
 
-/** Share `headerFooterEditing: false` with admission without adding it to the public surface API. */
+/** Share `headerFooterEditing: false` with admission, not through the public surface API. */
 export function registerHeaderFooterEditing(
   surface: PaginatedSurface,
   enabled: boolean | undefined
@@ -148,6 +149,9 @@ export function slotArgsFromCommand(
 
 function lifecycleRefusal(reason: string | undefined): Exclude<ExecResult, { ok: true }> {
   const detail = reason ?? 'rejected';
+  // Suggesting's own refusal reads as it does from every other command (`setPageSetup`), so it
+  // keeps its diagnostic code (`edit.tracked-structure-unsupported`)
+  if (detail === UNTRACKED_EDIT_REFUSAL) return { ok: false, code: 'invalidArgs', reason: detail };
   if (detail === 'first-section' || detail.includes('first-section')) {
     return {
       ok: false,

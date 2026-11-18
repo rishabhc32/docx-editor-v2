@@ -1,0 +1,14 @@
+{
+  "impact": "migration-required",
+  "fields": ["canonicalModelVersion"],
+  "before": "A content control whose content held the range markers of a tracked move, such as a Word file with a moved word inside a text control, was read as a generic element, so the control lost its prompt, value, and lock behavior.",
+  "after": "The control's content admits w:moveFromRangeStart, w:moveFromRangeEnd, w:moveToRangeStart, and w:moveToRangeEnd, as CT_SdtContentRun allows them in EG_RangeMarkupElements, so the control stays a typed control. Every participant, a late joiner, a decision on the move with its undo, and the saved file keep it typed.",
+  "reason": "Shared records store the node kind that the writer chose. A room seeded from such a file now stores a typed control whose content holds move range markers, and a replica of format 1.4.3.1 refuses that part as known-node-invariant when it validates the remote package. The same shared content maps to a different document structure, which is the canonical model. canonicalModelVersion increases to 2, and saved rooms are exported and reseeded.",
+  "tests": [
+    "packages/pro/src/collaboration/__tests__/document-control-move-markers.test.ts",
+    "packages/core/src/store/__tests__/typed-content-controls.test.ts",
+    "packages/pro/src/collaboration/__tests__/read-collaboration-document.test.ts"
+  ],
+  "changeset": "control-move-range-markers",
+  "migration": "upgrade-rooms-to-format-1442"
+}

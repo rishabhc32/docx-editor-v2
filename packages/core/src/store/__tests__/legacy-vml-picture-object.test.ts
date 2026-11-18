@@ -193,9 +193,11 @@ describe('a picture with an embedded object beside it', () => {
     expect(saved.package.partBytes.get('/word/embeddings/oleObject1.bin')).toEqual(OLE_BYTES);
   });
 
-  test('cannot travel in a clipboard fragment', () => {
-    expect(containsClipboardObject([parse(picture()).root])).toBe(true);
+  test('travels in a clipboard fragment, as Word copies it; an ActiveX control does not', () => {
+    expect(containsClipboardObject([parse(picture()).root])).toBe(false);
     expect(containsClipboardObject([parse(picture({ ole: '' })).root])).toBe(false);
+    const control = picture({ after: '<w:control r:id="rAx" w:name="CheckBox1"/>' });
+    expect(containsClipboardObject([parse(control).root])).toBe(true);
   });
 
   test('keeps unsupported objects opaque', () => {

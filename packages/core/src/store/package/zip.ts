@@ -6,7 +6,7 @@
 
 import { unzipSync } from 'fflate';
 import { normalizePartName, partNameKey } from './opc-names.ts';
-import { writeZipEntriesSteps } from './zip-write.ts';
+import { writeZipEntriesSteps, ZipEntryWriter } from './zip-write.ts';
 
 /**
  * Why a zip was refused at the trust boundary.
@@ -177,16 +177,55 @@ export function writeZipSteps(
   const named = new Map<string, Uint8Array>();
   const seen = new Set<string>();
   for (const [partName, data] of entries) {
-    const norm = normalizePartName(partName);
-    if (!norm.ok) throw new Error(`unsafe part name on write: ${partName} (${norm.reason})`);
-    const fold = partNameKey(norm.partName); // OPC case-folded equivalence
-    if (seen.has(fold))
-      throw new Error(`OPC-equivalent duplicate part name on write: ${norm.partName}`);
-    seen.add(fold);
-    // Canonical part names carry a leading slash; ZIP entry names do not.
-    named.set(norm.partName.replace(/^\//, ''), data);
+    named.set(zipEntryName(partName, seen), data);
   }
+
   return writeZipEntriesSteps(named, FIXED_ENTRY_MTIME);
+}
+
+/** Parts written one at a time, as {@link writeZip} writes them. @internal */
+export interface ZipPartWriter {
+  /** The local header and the compressed bytes of one part, yielding between slices. */
+  part(partName: string, data: Uint8Array): Generator<void, readonly Uint8Array[]>;
+  /** The central directory and the end record, after the last part. */
+  end(): Uint8Array;
+}
+
+/**
+ * {@link writeZip} part by part: the bytes of each part as it is added, for a caller that hands
+ * them on before it reads the next part. The same parts in the same order give the same
+ * archive.
+ *
+ * @internal
+ */
+export function zipPartWriter(): ZipPartWriter {
+  const seen = new Set<string>();
+  const writer = new ZipEntryWriter(FIXED_ENTRY_MTIME);
+  return {
+    part: (partName, data) => writer.entry(zipEntryName(partName, seen), data),
+    end: () => writer.end(),
+  };
+}
+
+/**
+ * The ZIP entry name of a canonical part name, re-validated through the OPC normalization
+ * profile, and refused when `seen` already holds an OPC-equivalent name.
+ */
+function zipEntryName(partName: string, seen: Set<string>): string {
+  const norm = normalizePartName(partName);
+  if (!norm.ok) {
+    throw new Error(`unsafe part name on write: ${partName} (${norm.reason})`);
+  }
+
+  const fold = partNameKey(norm.partName); // OPC case-folded equivalence
+  if (seen.has(fold)) {
+    throw new Error(`OPC-equivalent duplicate part name on write: ${norm.partName}`);
+  }
+
+  seen.add(fold);
+
+  // Canonical part names carry a leading slash; ZIP entry names do not.
+  return norm.partName.replace(/^\//, '');
 }
 
 export { strToU8, strFromU8 } from 'fflate';

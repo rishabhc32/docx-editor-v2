@@ -955,7 +955,6 @@
     "bodyOnlySectionBreak": "Les sauts de section s’insèrent dans le corps du document.",
     "bodyOnlyToc": "Une table des matières s’insère dans le corps du document.",
     "furnitureOnlyPageField": "Ouvrez un en-tête ou un pied de page pour insérer un numéro de page.",
-    "suggestingSectionBreak": "Désactivez le mode suggestion pour insérer ce saut de section. Il modifie le début de la section suivante, ce qui ne peut pas être suggéré.",
     "tableCellSectionBreak": "Les sauts de section s’insèrent en dehors des tableaux.",
     "lockedSectionBreak": "La section suivante se trouve dans un contrôle de contenu verrouillé ou lié. Ce saut ne peut donc pas la modifier.",
     "lockedContentBreak": "Un contrôle de contenu verrouille ce texte. Vous ne pouvez pas insérer de saut de section ici.",

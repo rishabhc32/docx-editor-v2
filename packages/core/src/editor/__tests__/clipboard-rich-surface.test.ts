@@ -2,8 +2,8 @@
 //
 // Copy assembles both flavours from the live selection; paste routes the embedded
 // fragment through the bounded package read, the resource merge, and one atomic
-// `insertFragment` commit — and undo takes the whole landing back. Suggesting mode and
-// force-plain land on the tracked/plain lanes instead.
+// `insertFragment` commit — and undo takes the whole landing back. Suggesting mode lands
+// the same fragment as one tracked insertion; force-plain lands on the plain lane.
 
 import { GlobalRegistrator } from '@happy-dom/global-registrator';
 if (!GlobalRegistrator.isRegistered) GlobalRegistrator.register();
@@ -308,7 +308,7 @@ describe('rich paste', () => {
     expect(reverted.includes('center')).toBe(false);
   });
 
-  test('suggesting mode degrades the rich payload to the tracked plain lane', () => {
+  test('suggesting mode lands the rich payload as one tracked insertion', () => {
     const flavours = copyRichFlavours();
     const container = document.createElement('div');
     const mounted = mountPaginatedSurface(container, docx(paragraph('')), {
@@ -323,9 +323,9 @@ describe('rich paste', () => {
 
     const markup = serializeOoxmlPart(surface.session.part());
     expect(surface.session.bodyText()).toContain('bold');
-    // Plain lane: the text arrives tracked, the structure does not travel.
+    // As Word pastes with Track Changes on: the structure travels, and the text is tracked.
     expect(markup).toContain('w:ins');
-    expect(markup.includes('w:jc w:val="center"')).toBe(false);
+    expect(markup).toContain('w:jc w:val="center"');
   });
 
   test('an armed force-plain paste skips the rich lanes once', () => {

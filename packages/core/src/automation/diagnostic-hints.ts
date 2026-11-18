@@ -112,6 +112,8 @@ const HINTS: Readonly<Record<Exclude<DiagnosticCode, CollaborationDiagnosticCode
     'The edit would join paragraphs that live in different containers, such as two table cells. Edit each container separately.',
   'edit.indivisible-content':
     'The edit would split content that must stay whole, such as an equation or a field. Select the whole item instead.',
+  'edit.single-line-control':
+    'Enter would start a new paragraph inside a content control that holds one line, such as a plain text, list, or date control, or inside an inline rich text control. Word does not allow that, so nothing was applied. Press Enter outside the control.',
   'edit.field-structure':
     'The edit would break the structure of a field. Edit the field result as a whole, or remove the whole field.',
   'edit.section-mark':
@@ -150,6 +152,8 @@ const HINTS: Readonly<Record<Exclude<DiagnosticCode, CollaborationDiagnosticCode
     'The collaboration session is not ready to replicate edits, so this one was refused. Wait for the ready status, then retry; a destroyed session needs a rejoin.',
   'edit.collaboration-text-limit':
     'One edit inserted more text than a collaboration session accepts at once. Insert the text in smaller parts.',
+  'edit.collaboration-refused':
+    'The collaboration room refused this edit by its rules, so nothing was applied. The refusal report of the collaboration session names the rule. Read the document again before you choose another edit.',
   'edit.internal-invariant':
     'The editor refused an edit to protect the document structure. This is an engine defect: report the code with the engine version.',
   'edit.refused':
@@ -222,6 +226,12 @@ const COLLABORATION_HINTS: Readonly<Record<CollaborationDiagnosticCode, string>>
   'collab.collaboration-session-not-ready': COLLAB_GATE,
   'collab.collaboration-text-limit':
     'One edit inserted more text than a collaboration session accepts at once. Insert the text in smaller parts.',
+  'collab.ordered-unsupported-op':
+    'The edit holds an operation an ordered room cannot record, so it was refused before it was made. The refusal report names the operation.',
+  'collab.ordered-opaque-write':
+    'The edit is a write an ordered room cannot see, such as a comment or a review decision in the editor, so it was refused. Use the room server for review writes.',
+  'collab.ordered-refused':
+    'The ordered room, or this copy of it, refused the edit, so nothing changed. The refusal report names the reason.',
   'collab.experimental-collaboration-body-text-only':
     'This session replicates only body text, and the edit touched another part of the document. Make that change outside collaboration.',
   'collab.invalid-document-id': COLLAB_INPUT,

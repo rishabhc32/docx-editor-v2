@@ -955,7 +955,6 @@
     "bodyOnlySectionBreak": "分节符需插入文档正文。",
     "bodyOnlyToc": "目录需插入文档正文。",
     "furnitureOnlyPageField": "请打开页眉或页脚以插入页码。",
-    "suggestingSectionBreak": "请关闭建议模式以插入此分节符。它会更改下一节的起始位置，这种更改无法作为建议。",
     "tableCellSectionBreak": "分节符需插入表格之外。",
     "lockedSectionBreak": "下一节位于已锁定或链接的内容控件中，因此此分节符无法更改它。",
     "lockedContentBreak": "内容控件锁定了此文本，因此无法在此处分节。",

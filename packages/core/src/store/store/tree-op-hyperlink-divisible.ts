@@ -2,9 +2,9 @@ import { WML_NAMESPACE_URI, type OoxmlNode } from '../package/ooxml-tree.ts';
 
 /**
  * A link a range write can divide: each child is a text run, or a tracked insertion or deletion
- * of text runs, which divides like the link around it. A suggested link change strikes the
- * link's words and then lets go of only the copy after them. Another author's proposed link
- * holds its words in their insertion, so that strike lands inside the insertion.
+ * of text runs, which divides like the link around it. A tracked link change can leave a `w:del`
+ * of text runs, or a `w:ins` of text runs and such deletions, inside the link; both divide like
+ * plain runs.
  *
  * The rule for a ranged link op only: `isTextHyperlink` keeps its narrower meaning for its other
  * callers.
@@ -17,6 +17,7 @@ function isDivisibleText(node: OoxmlNode): boolean {
   if (node.kind === 'revisionInsert') {
     return node.children.every((child) => isTextRun(child, 't') || isStruckText(child));
   }
+
   return isStruckText(node) || isTextRun(node, 't');
 }
 

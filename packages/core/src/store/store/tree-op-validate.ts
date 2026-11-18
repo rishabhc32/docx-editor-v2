@@ -7,6 +7,7 @@ import { validateTableAuthoring } from './tree-op-table-batch.ts';
 import { validateTableProperties } from './tree-op-table-authoring.ts';
 import { validateCommitTextFormField } from './tree-op-field-results.ts';
 import { textFormFieldForEdit } from './text-form-fields.ts';
+import { validateRepeatingSectionItem } from './repeating-section-items.ts';
 import { coveredTextFormDefinitionRefusal } from './text-form-field-deletion.ts';
 import { validateTextFormFieldDefault } from './tree-op-field-results.ts';
 import { validateSetLegacyCheckbox } from './legacy-checkbox-fields.ts';
@@ -28,6 +29,7 @@ import { isAuthorableDataBinding } from '../package/custom-node-payloads.ts';
 import { validateDeleteBlock } from './tree-op-blocks.ts';
 import { validateTrackedTableEdit } from './tree-op-tracked-table-ops.ts';
 import { validateSetRevisionAttribution } from './revision-author-change.ts';
+import { enterDividesControl, splitDividesOneLineControl } from './tree-op-split-controls.ts';
 import {
   CONTENT_CONTROL_LOCKS,
   validateInsertContentControl,
@@ -382,7 +384,7 @@ export function validateTreeOp(
   }
 
   if (op.op === 'addRepeatingSectionItem' || op.op === 'removeRepeatingSectionItem') {
-    return 'unsupported';
+    return validateRepeatingSectionItem(part, op);
   }
 
   if (op.op === 'setContentControlValue') {
@@ -458,6 +460,8 @@ export function validateTreeOp(
     ) {
       return 'invalid-property-value';
     }
+    if (op.revision !== undefined && invalidRevisionAttribution(op.revision))
+      return 'invalid-property-value';
     if (op.anchorParagraphId !== undefined) {
       const anchor = findNode(part, op.anchorParagraphId);
       if (!anchor) return 'unknown-paragraph';
@@ -797,6 +801,8 @@ export function validateTreeOp(
       if (rangePartiallyOverlapsDrawing(paragraph, op.offset, op.offset + 1)) {
         return 'invalid-range';
       }
+      const oneLine = splitDividesOneLineControl(part, paragraph, [op.offset], enterDividesControl);
+      if (oneLine) return oneLine;
       // The reach classifier above distinguishes a split beside an inline control from one
       // inside it; reclassifying the zero-width point as text would move that boundary.
       return null;
@@ -818,7 +824,7 @@ export function validateTreeOp(
         if (restriction) return restriction;
         if (rangePartiallyOverlapsDrawing(paragraph, offset, offset + 1)) return 'invalid-range';
       }
-      return null;
+      return splitDividesOneLineControl(part, paragraph, op.offsets);
     }
     case 'deleteText': {
       if (!Number.isInteger(op.start) || !Number.isInteger(op.end)) return 'invalid-range';

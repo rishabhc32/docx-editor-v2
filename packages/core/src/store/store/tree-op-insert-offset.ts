@@ -7,6 +7,7 @@ import {
   createNodeIdAllocator,
   findNode,
   insertChildren,
+  parentNodeOf,
   replaceChildren,
   type EditOptions,
   type OoxmlEditResult,
@@ -124,6 +125,29 @@ export function insertRunPayloadAtOffset(
         ok: false,
         issues: [{ code: 'known-node-invariant', path: 'missing-run', nodeId: site.segment.runId }],
       };
+    }
+    // Right before an object (a picture, a field's first run, a note reference): a run of its
+    // own before the object's run, so the payload takes none of the object's run properties
+    // and never enters a field's runs
+    const segment = site.segment;
+    if (
+      segment.removeNodeIds !== undefined &&
+      segment.removeNodeIds.length > 0 &&
+      segment.node.kind !== 'textValue' &&
+      segment.node.kind !== 'tab' &&
+      segment.node.kind !== 'hardBreak'
+    ) {
+      const holder = parentNodeOf(part, run.id);
+      if (holder) {
+        const at = holder.children.findIndex((child) => child.id === run.id);
+        return insertChildren(
+          part,
+          holder.id,
+          Math.max(0, at),
+          [runElement(nextId, payload)],
+          options
+        );
+      }
     }
     const index = run.children.findIndex((child) => contains(child, site.segment.node.id));
     return insertChildren(part, run.id, Math.max(0, index), payload, options);

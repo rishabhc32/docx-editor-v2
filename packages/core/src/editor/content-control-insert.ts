@@ -14,6 +14,8 @@ import type { InsertableContentControlType } from '../contracts/types.ts';
 import type { TreeDocOp } from '@docx-editor.dev/core/store';
 import { isDocAnchor, resolveDocAnchor } from './anchor-resolution.ts';
 import type { PaginatedSurface } from './paginated-surface-contract.ts';
+import { canTrackContentControl } from '../store/store/tracked-content-control-insert.ts';
+import { partOfNodeId } from './surface-scope.ts';
 import { selectionMarkOf } from './surface-selection-ops.ts';
 
 /** The editor-facing command. `target` defaults to the selection, like every editor command. */
@@ -164,6 +166,7 @@ export function resolveContentControlInsertion(
     span = resolved.span;
   }
 
+  const revision = proposedWrapRevision(surface, span);
   return {
     ok: true,
     span,
@@ -175,6 +178,34 @@ export function resolveContentControlInsertion(
       type,
       ...(command.tag === undefined ? {} : { tag: command.tag }),
       ...(command.title === undefined ? {} : { alias: command.title }),
+      ...(revision === undefined ? {} : { revision }),
     },
   };
+}
+
+/**
+ * The revision a new control around words carries in suggesting mode, or undefined when it
+ * lands untracked.
+ *
+ * Suggesting proposes it the way the editing API does: the words struck and a copy of them in
+ * the new control, which Accept and Reject act on and an ordered room takes from a party. Only
+ * where that form exists: nonempty ordinary text with no review markup in it, an author to
+ * attribute it to, and, in collaboration, a session that takes such a write as one edit
+ * (`trackedRangeReplacement`). Anywhere else the control lands untracked, as before, and a
+ * review module that refuses untracked edits refuses it. A control at a caret has no tracked
+ * form: it holds only its prompt.
+ */
+function proposedWrapRevision(
+  surface: PaginatedSurface,
+  span: Span
+): { author: string; date: string } | undefined {
+  if (span.start === span.end || surface.editingMode() !== 'suggest') return undefined;
+  const author = surface.author()?.trim();
+  if (!author) return undefined;
+  const collaboration = surface.collaborationSession();
+  if (collaboration && collaboration.trackedRangeReplacement !== true) return undefined;
+  const part = partOfNodeId(surface.session, span.paragraphId) ?? surface.session.part();
+  if (!canTrackContentControl(part, span.paragraphId, span.start, span.end)) return undefined;
+  // Word's form: seconds, no fraction, as the surface's own tracked edits write it
+  return { author, date: `${new Date().toISOString().slice(0, 19)}Z` };
 }

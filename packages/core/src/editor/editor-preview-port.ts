@@ -20,6 +20,7 @@ import { packageStorePort } from '../automation/server-host.ts';
 import { DEFAULT_REVISION_MARKUP } from '../contracts/revision-markup.ts';
 import { layoutProjectionOf } from '../layout/revision-projection.ts';
 import { runWithTransactionActor } from '../store/package/actor-scoped-ids.ts';
+import { collaborationGateContext } from '../collaboration/gate-context.ts';
 import { findNode } from '../store/package/ooxml-edit.ts';
 import type { TreePackageStore } from '../store/store/tree-package-store.ts';
 import type { TreeDocOp } from '../store/store/tree-ops.ts';
@@ -70,7 +71,7 @@ export function previewForkPort(
   return {
     ...base,
     collaborative: () => !!collaboration,
-    trackedRangeReplacement: () => !collaboration,
+    trackedRangeReplacement: () => !collaboration || collaboration.trackedRangeReplacement === true,
     suggesting: () => surface.editingMode() === 'suggest',
     revisionDisplayMode: () => layoutProjectionOf(surface.revisionDisplayMode()),
     replacementLanding(paragraphId, start, end) {
@@ -96,7 +97,13 @@ export function previewForkPort(
             if (refusal !== null) return null;
             const written = attributed(ops);
             if (written.some(isTrackedEdit) && !review()) refusal = REVIEW_REQUIRED;
-            else refusal = collaboration?.gateOperations(written, scope) ?? null;
+            else
+              refusal =
+                collaboration?.gateOperations(
+                  written,
+                  scope,
+                  collaborationGateContext(() => store.currentPackage(), packageEdits, actor)
+                ) ?? null;
             return refusal === null ? written : null;
           },
           scope,

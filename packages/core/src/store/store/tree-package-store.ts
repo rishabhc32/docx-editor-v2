@@ -41,10 +41,10 @@ import {
 } from '../package/hf-lifecycle.ts';
 import {
   applyNoteLifecycleOp,
-  cascadeDeletedNoteReferences,
   isNoteLifecycleOp,
   type NoteLifecycleOp,
 } from '../package/note-lifecycle.ts';
+import { cascadeNoteReferenceChanges } from './note-body-strike.ts';
 import { resolveNotesPart } from '../package/note-references.ts';
 import type { NoteKind } from '../package/note-nodes.ts';
 import {
@@ -55,17 +55,13 @@ import { ORIGIN_IDS } from '../registry/frozen-ids.ts';
 import type { ImpactClass, TreeDocOp, TreeOpRejection } from './tree-op-types.ts';
 import type { RevisionAttributionInput } from './tree-op-types.ts';
 import {
-  RESOLUTION_OPS,
-  CONTENT_REMOVING_OPS,
-  deleteBlockMayStrandNote,
-  deleteMayEmptyCommentRange,
-  deleteMayStrandNote,
   FOOTER_REL_TYPE,
   HEADER_REL_TYPE,
   locateHeaderFooterPart,
+  mayRetainPrompt,
+  StoryDeletionGates,
 } from './tree-package-gates.ts';
 import { cascadeEmptiedComments } from '../package/comment-lifecycle.ts';
-import { hasAnyComment } from './comment-reads.ts';
 import {
   TreeDocumentStore,
   type SelectionMark,
@@ -157,6 +153,9 @@ export type PackageTransactResult =
       readonly detail?: string;
     };
 
+/** Undo and redo stacks with no entry, for dropping a store's history. */
+const NO_HISTORY = Object.freeze({ undoStack: [], redoStack: [] });
+
 /** Cap on simultaneously opened editable story stores (body + HF parts). Fail closed. */
 export const DEFAULT_MAX_EDITABLE_STORY_PARTS = 64;
 
@@ -169,7 +168,7 @@ export interface TreePackageStoreOptions {
   readonly maxEditableStoryParts?: number;
   /**
    * Test seam for note-reference cascade after `deleteText` / `deleteBlock`. Production uses
-   * {@link cascadeDeletedNoteReferences}.
+   * {@link cascadeNoteReferenceChanges}.
    */
   readonly cascadeDeletedNoteReferences?: NoteCascadeFn;
 }
@@ -249,7 +248,7 @@ export class TreePackageStore {
     this.contentLockPolicy = contentLockPolicyOf(options.contentLockPolicy);
     this.maxEditableStoryParts = options.maxEditableStoryParts ?? DEFAULT_MAX_EDITABLE_STORY_PARTS;
     this.cascadeNoteReferences =
-      options.cascadeDeletedNoteReferences ?? cascadeDeletedNoteReferences;
+      options.cascadeDeletedNoteReferences ?? cascadeNoteReferenceChanges;
     // The WHOLE package, not the part alone. A transaction writing several parts as one unit —
     // a comment's story markers plus its body in `comments.xml` plus the relationship and
     // content-type override — needs the package as its working set; a store handed one part
@@ -409,17 +408,8 @@ export class TreePackageStore {
     const beforePushes = store.historyPushCount;
     const compositionWasOpen = store.compositionActive;
     const checkpoint = store.checkpoint();
-    // `deleteText` / `deleteBlock` can remove noteReference atoms; skip package-wide
-    // cascade for every other op. Gates stay local to the op target (paragraph range or
-    // block subtree) so ordinary structural deletion never scans the whole package.
-    let mayDeleteNoteAtoms = false;
-    const deleteTargets = new Set<string>();
-    // Same shape, different question: whether the transaction can leave a comment covering no
-    // characters. Word deletes a comment whose words are deleted, and the reap that does it is
-    // a before/after diff, so it needs the same "was it even possible" gate.
-    let mayEmptyComments = false;
-    let anyComment: boolean | undefined;
-    const commentTargets = new Set<string>();
+    // Whether the commit may need the note-body and emptied-comment cascades.
+    const gates = new StoryDeletionGates(this.pkg);
     let turnsListOn = false;
     let listStyleId: string | undefined;
     // A `ctx.applyPackage` edit can write beyond the story part — a relationship, a content
@@ -468,43 +458,14 @@ export class TreePackageStore {
               listStyleId ??= op.properties.find((property) => property.localName === 'pStyle')
                 ?.attributes?.val;
             }
-            if (!mayDeleteNoteAtoms) {
-              if (
-                op.op === 'deleteText' &&
-                deleteMayStrandNote(this.pkg, store.part, op, deleteTargets)
-              ) {
-                mayDeleteNoteAtoms = true;
-              } else if (
-                op.op === 'deleteBlock' &&
-                deleteBlockMayStrandNote(this.pkg, store.part, op, deleteTargets)
-              ) {
-                mayDeleteNoteAtoms = true;
-              } else if (RESOLUTION_OPS.has(op.op) || CONTENT_REMOVING_OPS.has(op.op)) {
-                // Resolving a revision removes the content it covers, and a note reference is one
-                // model unit, so a struck-through selection carries it away. Not narrowable to a
-                // paragraph range: a revision's sites are wherever the file put them. The cascade
-                // is a diff, so it is free.
-                mayDeleteNoteAtoms = true;
-              }
+            gates.observe(op, store.part);
+            const applied = ctx.apply(op);
+            // A suggestion over a content control's prompt also writes the prompt into the
+            // glossary part (`content-control-prompt-glossary.ts`), which the sync cannot carry.
+            if (applied && !packageShellTouched && mayRetainPrompt(op)) {
+              packageShellTouched = ctx.shellTouched();
             }
-            if (!mayEmptyComments) {
-              if (op.op === 'deleteText' || op.op === 'deleteBlock') {
-                // The package as the transaction found it: one walk answers every op.
-                mayEmptyComments = deleteMayEmptyCommentRange(
-                  () => (anyComment ??= hasAnyComment(this.pkg)),
-                  store.part,
-                  op,
-                  commentTargets
-                );
-              } else if (RESOLUTION_OPS.has(op.op) || CONTENT_REMOVING_OPS.has(op.op)) {
-                // Rejecting an insertion removes the words it inserted, which a comment can be
-                // anchored over. A row or column deletion removes whole cell PARAGRAPHS, markers
-                // and all, and names a table rather than a paragraph, so there is no cheap
-                // subtree to probe. Opens the gate outright; the reap is a diff, so it is free.
-                mayEmptyComments = true;
-              }
-            }
-            return ctx.apply(op);
+            return applied;
           },
           ...packageSelections.context,
         });
@@ -552,7 +513,7 @@ export class TreePackageStore {
     // Body mutation + cascade share one package history unit; local story history is
     // discarded on promotion so a later undo cannot replay the orphan story entry.
     let cascaded = false;
-    if (result.change && mayDeleteNoteAtoms) {
+    if (result.change && gates.mayDeleteNoteAtoms) {
       const afterStory = this.currentPackage();
       const cascadedPkg = this.cascadeNoteReferences(beforePackage, afterStory);
       if (cascadedPkg === null) {
@@ -578,7 +539,7 @@ export class TreePackageStore {
     // output, so a comment anchored inside a note body that has just been deleted is measured
     // against the package the user will actually get. Both promote through the same pointer:
     // one undo puts the words, the note and the remark back together.
-    if (result.change && mayEmptyComments) {
+    if (result.change && gates.mayEmptyComments) {
       const afterNotes = this.currentPackage();
       const reaped = cascadeEmptiedComments(beforePackage, afterNotes, {
         storyPartName: story.partName,
@@ -917,17 +878,22 @@ export class TreePackageStore {
   }
 
   /** Delete a picture drawing and collect orphaned media in one package undo unit. */
-  deleteImage(scope: StoryScope, drawingNodeId: string): ImageIntentResult {
-    return deleteImageIntent(this, scope, drawingNodeId);
+  deleteImage(
+    scope: StoryScope,
+    drawingNodeId: string,
+    gate?: import('./tree-package-images.ts').ImageWriteGate
+  ): ImageIntentResult {
+    return deleteImageIntent(this, scope, drawingNodeId, gate);
   }
 
   /** Propose the deletion as a tracked change: the drawing goes into a `w:del`, media stays. */
   deleteImageTracked(
     scope: StoryScope,
     drawingNodeId: string,
-    revision: RevisionAttributionInput
+    revision: RevisionAttributionInput,
+    gate?: import('./tree-package-images.ts').ImageWriteGate
   ): ImageIntentResult {
-    return deleteImageTrackedIntent(this, scope, drawingNodeId, revision);
+    return deleteImageTrackedIntent(this, scope, drawingNodeId, revision, gate);
   }
 
   /** Fetch external bytes explicitly and embed them; no fetch on open/load. */
@@ -1057,9 +1023,14 @@ export class TreePackageStore {
   /**
    * Install a package this replica did not author, verbatim. No shell merge — see
    * `publishRemoteCanonicalPackage` for why merging one here diverges two replicas.
+   *
+   * The local history goes with it. Every entry predates this package, so undoing one would
+   * put back a package without the remote change. And each entry kept its own copy of every
+   * paragraph that changed since the entry before it, with the caches keyed by those nodes.
    */
   installAuthoritativePackageSnapshot(snapshot: OoxmlPackage): void {
     this.installPackageSnapshotInternal(snapshot, false);
+    this.dropHistory();
   }
 
   /** Publish one remotely materialized canonical package as one revision. */
@@ -1106,7 +1077,9 @@ export class TreePackageStore {
     for (const [name, store] of this.stories) {
       const part = merged.parts.get(name);
       if (!part) continue;
-      store.replacePart(part);
+      // A parked store that takes a part again (a notes part made anew after the first one
+      // went) gets the paragraph identity an opened store gets
+      store.replacePart(this.pkg.parts.has(name) ? part : normalizeParagraphIdentity(part));
     }
 
     this.rIdToPartName.clear();
@@ -1247,6 +1220,17 @@ export class TreePackageStore {
   private closeHistoryGroups(): void {
     closeHistoryGroupsExcept(this.body, this.stories, null);
     this.historyGroups.close();
+  }
+
+  /** Drop every undo and redo entry: the coordinator's and each story store's. */
+  private dropHistory(): void {
+    this.closeHistoryGroups();
+    this.undoOrder.length = 0;
+    this.redoOrder.length = 0;
+    // An open composition keeps the entry it is collecting
+    for (const store of [this.body, ...this.stories.values()]) {
+      store.restoreHistoryStacks(NO_HISTORY);
+    }
   }
 
   private pushUndoPointer(pointer: HistoryPointer, grouped?: HistoryPointerGroup): void {

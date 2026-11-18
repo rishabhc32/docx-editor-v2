@@ -3,20 +3,19 @@ Copyright (c) 2026 EigenPal, Inc. All rights reserved.
 Licensed under the EigenPal Pro Evaluation License 1.0 — see packages/pro/LICENSE.md.
 Production use requires a commercial agreement: licensing@eigenpal.com
 */
-/**
- * Table rows, cells and grids in the concurrent singleton rules of `singleton-children.ts`.
- *
- * Two people sizing one table row or shading one cell each give it a `w:trPr` or `w:tcPr`
- * when it had none, or each add a `w:shd` to the `w:tcPr` it had. The tree keeps those
- * containers generic, so validation accepts the copies, but later edits of that table refuse
- * with `duplicate-property-container` or leave the other copy behind, and the saved document
- * is not valid for Word. The rules show one copy of each, as they do for a paragraph's `w:pPr`.
- */
+// Table rows, cells and grids in the concurrent singleton rules of `singleton-children.ts`.
 
 import { WML_NAMESPACE_URI } from '@docx-editor.dev/core/store';
 import { ROW_PROPERTY_CONTAINERS } from '@docx-editor.dev/core/collaboration/replication';
 import { replicaOfLogicalId } from './identity.ts';
 import type { ChildShell } from './singleton-children.ts';
+
+/** The local name of a generic WML element, or null for any other node. */
+export function genericWmlName(
+  node: Pick<ChildShell, 'kind' | 'namespaceUri' | 'localName'>
+): string | null {
+  return node.kind === 'generic' && node.namespaceUri === WML_NAMESPACE_URI ? node.localName : null;
+}
 
 /**
  * The kind the singleton rules know a node by. The tree keeps most WML property containers
@@ -24,9 +23,8 @@ import type { ChildShell } from './singleton-children.ts';
  * the key its children group under too.
  */
 export function ruleKindOf(node: Pick<ChildShell, 'kind' | 'namespaceUri' | 'localName'>): string {
-  return node.kind === 'generic' && node.namespaceUri === WML_NAMESPACE_URI
-    ? `wml:${node.localName}`
-    : node.kind;
+  const name = genericWmlName(node);
+  return name === null ? node.kind : `wml:${name}`;
 }
 
 /** `ruleKindOf` by id. Only a generic node's shell is read: a typed node goes by its kind. */
@@ -41,7 +39,15 @@ export function ruleKindReader<Id>(
   };
 }
 
-/** The table entries of the rule tables in `singleton-children.ts`, by `ruleKindOf`. */
+/**
+ * The table entries of the rule tables in `singleton-children.ts`, by `ruleKindOf`.
+ *
+ * Two people sizing one table row or shading one cell each give it a `w:trPr` or `w:tcPr`
+ * when it had none, or each add a `w:shd` to the `w:tcPr` it had. The tree keeps those
+ * containers generic, so validation accepts the copies, but later edits of that table refuse
+ * with `duplicate-property-container` or leave the other copy behind, and the saved document
+ * is not valid for Word. The rules show one copy of each, as they do for a paragraph's `w:pPr`.
+ */
 export const TABLE_RULES = {
   /**
    * `SINGLETON_KINDS`. ECMA-376 `CT_Row`, `CT_Tc` and `CT_TblGrid`: two peers sizing a row,
@@ -108,10 +114,10 @@ export function inPropertyOrder<Id extends string>(
   const shown = order ?? children.map((_, index) => index);
   const rank = (index: number): number => {
     const shell = shells[index];
-    return shell?.kind === 'generic' && shell.namespaceUri === WML_NAMESPACE_URI
-      ? sequence.indexOf(shell.localName)
-      : -1;
+    const name = shell ? genericWmlName(shell) : null;
+    return name === null ? -1 : sequence.indexOf(name);
   };
+
   // Positions in `shown` of the children the sequence orders; the rest keep theirs.
   const slots = shown.flatMap((index, at) => (rank(index) >= 0 ? [at] : []));
   const modelled = slots.map((at) => shown[at]!);
@@ -122,6 +128,7 @@ export function inPropertyOrder<Id extends string>(
   ) {
     return null;
   }
+
   const result = [...shown];
   slots.forEach((slot, at) => {
     result[slot] = sorted[at]!;

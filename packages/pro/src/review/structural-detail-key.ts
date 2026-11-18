@@ -23,10 +23,12 @@ export function structuralDetailKey(
       ? 'revisions.structuralDetails.columnsDelete'
       : 'revisions.structuralDetails.columnDelete';
   }
+
   if (columns !== undefined && kind === 'cellInsert') {
     return columns > 1
       ? 'revisions.structuralDetails.columnsInsert'
       : 'revisions.structuralDetails.columnInsert';
   }
+
   return `revisions.structuralDetails.${kind}`;
 }

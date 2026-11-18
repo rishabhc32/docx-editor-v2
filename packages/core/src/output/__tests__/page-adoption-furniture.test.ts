@@ -2,8 +2,8 @@
 //
 // A table edit that changes column widths replaces every page the table crosses. Page-field
 // finalize then projects each page's footer again, so a footer showing PAGE is a new record
-// with the same content. Adoption must keep those sheets, and must still rebuild one whose
-// furniture or content-control chrome really changed.
+// with the same content. Adoption must keep those sheets, must repaint the band of one whose
+// furniture really changed, and must still rebuild one whose content-control chrome changed.
 
 import { GlobalRegistrator } from '@happy-dom/global-registrator';
 if (!GlobalRegistrator.isRegistered) GlobalRegistrator.register();
@@ -148,7 +148,7 @@ describe('adopting pages whose furniture layout rebuilt', () => {
     expect(cells(container).every((cell, i) => cell === painted[i])).toBe(true);
   });
 
-  test('a footer whose text changed rebuilds its sheet', () => {
+  test('a footer whose text changed repaints its band and keeps its sheet', () => {
     const { before, after } = footerEdit();
     const footer = after.pages[0]!.footer as HeaderFooterStoryRecord;
     const paragraph = footer.fragments[0] as ParagraphFragmentRecord;
@@ -170,10 +170,13 @@ describe('adopting pages whose furniture layout rebuilt', () => {
     const container = document.createElement('div');
     paintSemanticLayout(container, before, { scale: 1 });
     const sheets = Array.from(container.children);
+    const band = container.querySelector('[data-docx-hf="footer"]');
+    const painted = cells(container);
     paintSemanticLayout(container, edited, { scale: 1 });
     expect(container.innerHTML).toBe(coldPaint(edited, { scale: 1 }));
-    expect(container.children[0]).not.toBe(sheets[0]);
-    expect(container.children[1]).toBe(sheets[1]);
+    expect(Array.from(container.children).every((sheet, i) => sheet === sheets[i])).toBe(true);
+    expect(cells(container).every((cell, i) => cell === painted[i])).toBe(true);
+    expect(container.querySelector('[data-docx-hf="footer"]')).not.toBe(band);
     expect(container.querySelector('[data-docx-hf="footer"]')!.textContent).toContain('Sheet');
   });
 });

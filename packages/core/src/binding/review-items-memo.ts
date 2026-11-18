@@ -13,10 +13,7 @@ export interface ReviewItemsInputs {
   readonly customNodePayloads: ReadonlyMap<string, CustomNodePayloadRead>;
 }
 
-/**
- * States kept. Undo walks back through the states an edit just left, and each holds its
- * tree alive only while it is in this list; the history keeps those trees anyway.
- */
+/** States kept, at most. Undo walks back through the states an edit just left. */
 const CAPACITY = 8;
 
 /** Payload reads are rebuilt per call, so their fields are compared, not the objects. */
@@ -55,25 +52,44 @@ function sameInputs(left: ReviewItemsInputs, right: ReviewItemsInputs): boolean 
  * revision-keyed cache misses and the whole queue was derived again: a whole-document walk
  * per undo step on a document with thousands of changes. The derivation is a function of
  * these inputs alone, so equal inputs give back the queue derived for them before.
+ *
+ * An entry lives only while something else holds its tree (the document, the undo history):
+ * a tree nothing holds cannot come back, so its queue is dead weight. In a room every remote
+ * change drops the undo history, and the memo was then the only holder of its older trees and
+ * of their whole queues.
  */
 export function createReviewItemsMemo(): {
   get(inputs: ReviewItemsInputs): readonly ReviewItem[] | undefined;
   set(inputs: ReviewItemsInputs, items: readonly ReviewItem[]): void;
 } {
-  const entries: { inputs: ReviewItemsInputs; items: readonly ReviewItem[] }[] = [];
+  // Keyed weakly on the tree, so an entry goes with its tree. The entry's own reference to
+  // the tree does not keep it: a WeakMap value does not hold its key.
+  const byRoot = new WeakMap<
+    object,
+    { readonly inputs: ReviewItemsInputs; readonly items: readonly ReviewItem[] }
+  >();
+  // Most recent first, for the CAPACITY bound alone, so it holds the trees weakly too.
+  let recent: WeakRef<object>[] = [];
+  const touch = (root: object): void => {
+    const next = [new WeakRef(root)];
+    for (const ref of recent) {
+      const other = ref.deref();
+      if (other === undefined || other === root) continue;
+      if (next.length < CAPACITY) next.push(ref);
+      else byRoot.delete(other);
+    }
+    recent = next;
+  };
   return {
     get(inputs) {
-      const index = entries.findIndex((entry) => sameInputs(entry.inputs, inputs));
-      if (index < 0) return undefined;
-      const [entry] = entries.splice(index, 1);
-      entries.unshift(entry!);
-      return entry!.items;
+      const entry = byRoot.get(inputs.root);
+      if (!entry || !sameInputs(entry.inputs, inputs)) return undefined;
+      touch(inputs.root);
+      return entry.items;
     },
     set(inputs, items) {
-      const index = entries.findIndex((entry) => entry.inputs.root === inputs.root);
-      if (index >= 0) entries.splice(index, 1);
-      entries.unshift({ inputs, items });
-      if (entries.length > CAPACITY) entries.length = CAPACITY;
+      byRoot.set(inputs.root, { inputs, items });
+      touch(inputs.root);
     },
   };
 }

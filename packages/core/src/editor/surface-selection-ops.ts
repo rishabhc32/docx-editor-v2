@@ -10,6 +10,11 @@ import type { TextMeasurer } from '../layout/semantic-records.ts';
 import type { TreeDocxSessionView } from '@docx-editor.dev/core/binding';
 import { hiddenMarkRemovedIds, type RevisionView } from './hidden-mark-joins.ts';
 import type { RevisionAttributionInput } from '../store/store/tree-op-types.ts';
+import { contentControlPropertiesOf } from '../store/package/content-control-nodes.ts';
+import {
+  enclosingContentControls,
+  promptHoldsRange,
+} from '../store/store/tree-op-content-controls.ts';
 import { mergedPredecessorsOf } from '../layout/line-segments.ts';
 import { fieldResultSpeller } from '../layout/field-copy-text.ts';
 import { cellSelectionText, type CellSelection } from '../layout/semantic-cell-selection.ts';
@@ -230,6 +235,12 @@ export interface RangeDeletionPlan {
    * never sets it. Replacing lanes read `replaceAt ?? collapseTo`.
    */
   readonly replaceAt?: SemanticPosition;
+  /**
+   * The range lies in a control's prompt, which is the control's state, not its text: the plan
+   * deletes nothing, and a deleting lane is done with it (Word edits a prompt only in Design
+   * Mode). A replacing lane lands at `collapseTo`, where its insertion replaces the prompt.
+   */
+  readonly inPrompt?: true;
 }
 
 type TreeOp = Parameters<TreeDocxSessionView['applyTreeOps']>[0][number];
@@ -431,6 +442,19 @@ export function fragmentCoverageOf(
   };
 }
 
+/** Whether one control's prompt holds the whole range, in one paragraph or across its own. */
+function promptHolds(part: OoxmlPart, from: SemanticPosition, to: SemanticPosition): boolean {
+  if (from.paragraphId === to.paragraphId) {
+    return promptHoldsRange(part, from.paragraphId, from.offset, to.offset);
+  }
+  const showing = (paragraphId: string): string[] =>
+    enclosingContentControls(part, paragraphId)
+      .filter((control) => contentControlPropertiesOf(control).showingPlaceholder)
+      .map((control) => control.id);
+  const first = showing(from.paragraphId);
+  return showing(to.paragraphId).some((id) => first.includes(id));
+}
+
 /**
  * The plan that removes a document-ordered range, or an empty one when it is collapsed.
  *
@@ -450,8 +474,12 @@ export function planRangeDeletion(
   tableRevision?: RevisionAttributionInput
 ): RangeDeletionPlan {
   const textOf = (paragraphId: string): string => paragraphTextFromLayout(layout, paragraphId);
+  if (from.paragraphId === to.paragraphId && from.offset === to.offset)
+    return { ops: [], collapseTo: from };
+  // Deleting a selected prompt changes nothing, in either mode; typing over it lands at its
+  // start, where the insertion replaces it whole and the control keeps it for later
+  if (promptHolds(part, from, to)) return { ops: [], collapseTo: from, inPrompt: true };
   if (from.paragraphId === to.paragraphId) {
-    if (from.offset === to.offset) return { ops: [], collapseTo: from };
     return {
       ops: [
         { op: 'deleteText', paragraphId: from.paragraphId, start: from.offset, end: to.offset },

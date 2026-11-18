@@ -8,8 +8,10 @@
  * @public
  */
 
+import type { HistoryGroup } from '../store/store/history-group.ts';
 import type { StoryScope } from '../store/store/tree-package-store.ts';
 import type { TreeDocOp } from '../store/store/tree-op-types.ts';
+import type { OoxmlPackage } from '../store/package/ooxml-package.ts';
 import type { CollaborationDocumentPort } from './replication.ts';
 
 export { safeParticipantColor } from './participant-color.ts';
@@ -158,6 +160,97 @@ export interface CollaborationEditorPosition {
 }
 
 /**
+ * Which review write the editor commits: an accept or a reject, a change of suggestions'
+ * author, a comment write, or a package-scoped write (such as a custom node). @public
+ */
+export type CollaborationReviewWriteIntent =
+  | 'revision-resolve'
+  | 'revision-attribution'
+  | 'comment-add'
+  | 'comment-reply'
+  | 'comment-resolve'
+  | 'comment-delete'
+  | 'package-scoped';
+
+/**
+ * A review write as the editor is about to commit it, for a session that checks review writes
+ * by what they do (`gateReviewWrite`).
+ *
+ * @public
+ */
+export interface CollaborationReviewWrite {
+  /** Which review write it is. */
+  readonly intent: CollaborationReviewWriteIntent;
+  /** The ops the write commits, when the editor plans them before the commit (an accept). */
+  readonly ops?: readonly TreeDocOp[];
+  /**
+   * A new comment: its text and its range, in this replica's paragraph node ids. The store
+   * mints the comment's id and markers when it commits.
+   */
+  readonly comment?: {
+    readonly text: string;
+    readonly paragraphId: string;
+    readonly start: number;
+    readonly end: number;
+    readonly endParagraphId?: string;
+  };
+}
+
+/**
+ * What one of a write's package edits does, for a session that carries a package edit by its
+ * meaning rather than by the parts it rewrites. A package edit with no such description is
+ * opaque to it.
+ *
+ * - `document-properties`: core document properties written (`docProps/core.xml`), by name.
+ * - `bookmark-removal`: a bookmark's markers taken out of a story part the write's ops do not
+ *   address.
+ *
+ * @public
+ */
+export type CollaborationPackageWrite =
+  | {
+      readonly kind: 'document-properties';
+      readonly values: Readonly<Record<string, string>>;
+    }
+  | { readonly kind: 'bookmark-removal'; readonly partName: string; readonly name: string };
+
+/**
+ * What the editor knows about a write besides its ops, for a session that reads what the
+ * write adds outside the story text.
+ *
+ * A rich paste merges styles, numbering, media, relationships and notes into the package in
+ * the same transaction as its `insertFragment`, and a list or a link can create the style it
+ * needs. Those package edits are not ops, so a session that sees only the ops cannot tell what
+ * the blocks name. The context carries the package that holds them.
+ *
+ * @public
+ */
+export interface CollaborationGateContext {
+  /**
+   * The package the ops apply to, after the write's own package edits (a paste's merged
+   * styles, numbering, media and relationships; a style a list or a link needs). The ops'
+   * blocks name those parts by the ids this package holds.
+   *
+   * Absent when the editor has no package at hand for the write. The editor may compute it
+   * only when it is read, so read it only when the session needs it.
+   */
+  readonly package?: OoxmlPackage;
+  /**
+   * The editor's undo group of the write. The writes of one command that commit apart (a
+   * table of contents' rows, then its page numbers, which need the layout the rows made)
+   * carry the same group, and the editor alone undoes them as one step. A session that keeps
+   * its own undo steps joins them the same way. Absent when the write has no group.
+   */
+  readonly historyGroup?: HistoryGroup;
+  /**
+   * What the write's package edits do, in order. Present only when every one of them says what
+   * it does (`CollaborationPackageWrite`); a session that carries package edits by meaning
+   * refuses a write with an edit that does not.
+   */
+  readonly packageWrites?: readonly CollaborationPackageWrite[];
+}
+
+/**
  * Optional replication session attached to an editor or headless automation host.
  *
  * Implementations own replication state only. The attached document port remains the authored
@@ -206,8 +299,42 @@ export interface EditorCollaborationSession {
   /**
    * Check whether `ops` may commit now. Returns `null` to admit them, or the refusal code.
    * Call it before every store transaction a custom port commits.
+   *
+   * `context` tells what the write adds to the package besides the ops. The editor passes it
+   * for a rich paste, which it asks inside the store transaction once the clipboard's
+   * resources have merged and before the blocks land, and for a write that carries package
+   * edits. A session that needs only the ops ignores it.
    */
-  gateOperations(ops: readonly TreeDocOp[], scope: StoryScope): CollaborationFailureCode | null;
+  gateOperations(
+    ops: readonly TreeDocOp[],
+    scope: StoryScope,
+    context?: CollaborationGateContext
+  ): CollaborationFailureCode | null;
+  /**
+   * Whether the editing API may send this session a tracked write that changes text at several
+   * places in one batch: a tracked replacement across paragraphs, a tracked table or cell value
+   * write, and a tracked content control around existing text. The session's gate then admits
+   * or refuses each write by what it holds. Optional; without it the editing API refuses these
+   * writes in collaboration (`unsupported-capability`), because a session that places each
+   * piece against concurrent edits by itself cannot keep them together.
+   */
+  readonly trackedRangeReplacement?: boolean;
+  /**
+   * Check a review write (an accept, a reject, a comment) before it commits, by what it does.
+   * Returns `null` to admit it, or the refusal code. Optional: without it the editor asks
+   * `gateOperations([], scope)`, which answers readiness only.
+   */
+  gateReviewWrite?(
+    write: CollaborationReviewWrite,
+    scope: StoryScope
+  ): CollaborationFailureCode | null;
+  /**
+   * Why the session takes no write now, such as `collaboration-session-not-ready` while it
+   * joins, waits, or is offline with offline editing turned off. Returns `null` when it takes
+   * writes. Reports nothing and changes nothing. Optional; with it the editor gives this
+   * reason for an undo or redo that the session cannot run, rather than "nothing to undo".
+   */
+  writeRefusal?(): CollaborationFailureCode | null;
   /** Whether the shared undo history holds a local step to undo. */
   canUndo(): boolean;
   /** Whether the shared undo history holds a local step to redo. */
@@ -243,6 +370,14 @@ export interface EditorCollaborationSession {
   subscribeRemoteSelections(
     listener: (selections: readonly CollaborationRemoteSelection[]) => void
   ): () => void;
+  /**
+   * Give the editor this session's own version of the local edit the editor just committed,
+   * before the editor lays that edit out, so one layout pass shows both. The editor calls it
+   * at the end of each command it commits. Sending to shared state may still wait for
+   * `flushPendingJournals`. Optional: a session whose shared state is the editor's own commit
+   * has nothing to give.
+   */
+  settleLocalCommit?(): void;
   /**
    * Publish queued local journals to shared state.
    *

@@ -22,6 +22,7 @@ import { setReviewCommentResolved } from './docx-editor-comment-resolution.ts';
 import type { EditorHistoryGroups } from './editor-history-groups.ts';
 import { PRO_REVIEW_REASON } from './opening-editing-mode.ts';
 import type { PaginatedSurface } from './paginated-surface-contract.ts';
+import type { ReviewWrite } from './review-write-intent.ts';
 import { findReviewPlacement, replacementPairHalves } from './review-replacement-pairs.ts';
 import { reviewReplyRefusal } from './review-reply.ts';
 import { reviewWriteRefusal } from './review-write-refusal.ts';
@@ -67,6 +68,25 @@ function authorAndOptions(
   return [undefined, author as HistoryGroupOptions];
 }
 
+/** A new comment as a collaboration gate reads it: its text and its range. */
+function commentWrite(
+  text: string,
+  range: { from: SemanticPosition; to: SemanticPosition }
+): ReviewWrite {
+  return {
+    intent: 'comment-add',
+    comment: {
+      text,
+      paragraphId: range.from.paragraphId,
+      start: range.from.offset,
+      end: range.to.offset,
+      ...(range.to.paragraphId === range.from.paragraphId
+        ? {}
+        : { endParagraphId: range.to.paragraphId }),
+    },
+  };
+}
+
 /** `@w:date` is written to the second; milliseconds group with nothing. */
 const secondsPrecisionNow = (): string => `${new Date().toISOString().slice(0, 19)}Z`;
 
@@ -96,30 +116,33 @@ export function createReviewWrites(deps: ReviewWriteDeps) {
       return { ok: false, code: 'invalidArgs', reason: 'a comment needs both an author and text' };
     }
     let created: string | null = null;
-    const refused = surface.commitReviewOps((historyToken) => {
-      created = surface.session.replyToComment(
-        null,
-        {
-          paragraphId: range.from.paragraphId,
-          start: range.from.offset,
-          end: range.to.offset,
-          ...(range.to.paragraphId === range.from.paragraphId
-            ? {}
-            : { endParagraphId: range.to.paragraphId }),
-        },
-        text,
-        writer,
-        secondsPrecisionNow(),
-        // The story the SELECTED PARAGRAPH is in, not the one the reader happens to have
-        // open. Commenting on header or note text wrote against the body store, which has
-        // never heard of that paragraph, so the write was refused — after the affordance
-        // had already invited it.
-        deps.storyScopeOfParagraph(range.from.paragraphId),
-        undefined,
-        { historyToken }
-      );
-      return { committed: created !== null };
-    }, 'comment-add');
+    const refused = surface.commitReviewOps(
+      (historyToken) => {
+        created = surface.session.replyToComment(
+          null,
+          {
+            paragraphId: range.from.paragraphId,
+            start: range.from.offset,
+            end: range.to.offset,
+            ...(range.to.paragraphId === range.from.paragraphId
+              ? {}
+              : { endParagraphId: range.to.paragraphId }),
+          },
+          text,
+          writer,
+          secondsPrecisionNow(),
+          // The story the SELECTED PARAGRAPH is in, not the one the reader happens to have
+          // open. Commenting on header or note text wrote against the body store, which has
+          // never heard of that paragraph, so the write was refused after the affordance
+          // had already invited it.
+          deps.storyScopeOfParagraph(range.from.paragraphId),
+          undefined,
+          { historyToken }
+        );
+        return { committed: created !== null };
+      },
+      commentWrite(text, range)
+    );
     if (created === null) return reviewWriteRefusal(refused, 'the comment could not be committed');
     return { ok: true, changed: true };
   };

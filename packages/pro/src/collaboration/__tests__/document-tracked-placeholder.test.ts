@@ -11,7 +11,7 @@ import { applyAwarenessUpdate, encodeAwarenessUpdate } from 'y-protocols/awarene
 import { contentControlTextOf, contentControlsIn } from '@docx-editor.dev/core/store';
 import { createDocxEditor } from '@docx-editor.dev/core/editor';
 import { collaborationModule } from '../collaboration-module.ts';
-import { createPeerHarness, zipDocument } from './document-peer-support.ts';
+import { createPeerHarness, nodeText, zipDocument } from './document-peer-support.ts';
 import { mainPart, packageFingerprint, saveReopenDigest } from './document-support.ts';
 
 if (!GlobalRegistrator.isRegistered) GlobalRegistrator.register();
@@ -87,6 +87,10 @@ test('tracked placeholder replacement converges, undoes, redoes, reconnects, and
   expect(controlText(alice)).toBe('#');
   expect(controlText(bob)).toBe('#');
   expect(alice.surface!.session.bodyText()).toBe('# after!');
+  // The replaced prompt is kept for a decision to show again, and only the prompt: the text
+  // after the control is not moved into the glossary paragraph the same edit writes.
+  const glossary = bob.surface!.session.currentPackage().parts.get('/word/glossary/document.xml');
+  expect(glossary ? nodeText(glossary.root) : null).toBe('Click to enter text');
   caret(alice, 1);
   applyAwarenessUpdate(
     pair.bob.awareness,

@@ -24,6 +24,8 @@ interface Host {
 export function createLegacyDropdownInteraction(host: Host): {
   keydown(event: KeyboardEvent): boolean;
   sync(): void;
+  /** Wires the controls a paint just added and drops the records that hold the old pages. */
+  painted(): void;
   destroy(): void;
 } {
   const selector = 'select[data-docx-form-dropdown]';
@@ -99,8 +101,8 @@ export function createLegacyDropdownInteraction(host: Host): {
     );
     replacement?.focus({ preventScroll: true });
   };
-  const observer = new (hostWindowOf(host.pagesLayer).MutationObserver)((records) => {
-    // Only newly painted subtrees need wiring. Typing elsewhere must not scan every page.
+  // Only newly painted subtrees need wiring. Typing elsewhere must not scan every page.
+  const wire = (records: readonly MutationRecord[]) => {
     for (const record of records) {
       for (const node of record.addedNodes) {
         if (!isElementNode(node)) continue;
@@ -110,7 +112,8 @@ export function createLegacyDropdownInteraction(host: Host): {
         for (const control of controls) control.disabled = !locate(control)?.enabled;
       }
     }
-  });
+  };
+  const observer = new (hostWindowOf(host.pagesLayer).MutationObserver)(wire);
   observer.observe(host.pagesLayer, { childList: true, subtree: true });
   host.pagesLayer.addEventListener('pointerdown', pointer, true);
   host.pagesLayer.addEventListener('focusin', focus);
@@ -118,6 +121,11 @@ export function createLegacyDropdownInteraction(host: Host): {
   sync();
   return {
     sync,
+    painted() {
+      // A queued record holds the page it removed, with its whole subtree, until the task ends:
+      // a command that repaints every page several times would keep each old page DOM alive.
+      wire(observer.takeRecords());
+    },
     keydown(event) {
       const control = controlOf(event.target);
       if (!control) return false;

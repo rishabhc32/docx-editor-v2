@@ -24,10 +24,13 @@ export function selectionContainsClipboardObject(
         if (child.kind === 'textValue') continue;
         if (isClipboardObject(child)) {
           const span = index.spanOf(child);
-          // Opaque objects have no span; a whole-paragraph transfer must still refuse them.
+          // Opaque objects have no span; a whole-paragraph transfer must still refuse them. A
+          // control that paints no character sits at one place, inside the range or not.
           if (
             span
-              ? span.end > range.start && span.start < range.end
+              ? span.end > span.start
+                ? span.end > range.start && span.start < range.end
+                : range.start <= span.start && span.start < range.end
               : range.start === 0 && range.end === Infinity
           )
             return true;

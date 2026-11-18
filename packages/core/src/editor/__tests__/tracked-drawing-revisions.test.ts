@@ -16,6 +16,9 @@ import type { SurfaceEditingMode } from '../paginated-surface-contract.ts';
 import type { RevisionDisplayMode } from '../../layout/revision-projection.ts';
 import type { InlineDrawingRecord } from '../../layout/drawing-layout.ts';
 import { revisionItemsOf } from '../../store/store/review-reads.ts';
+import { collectReviewItems, serializeOoxmlPart } from '@docx-editor.dev/core/store';
+import type { ReviewModuleContribution } from '../../contracts/modules.ts';
+import { insertTextbox } from '../textbox-commands.ts';
 import {
   CT_NS,
   DRAWING_NS,
@@ -71,7 +74,11 @@ function docx(body: string): Uint8Array {
 async function mount(
   bytes: Uint8Array,
   revisionDisplayMode?: RevisionDisplayMode,
-  extra?: { readonly author?: string; readonly editingMode?: SurfaceEditingMode }
+  extra?: {
+    readonly author?: string;
+    readonly editingMode?: SurfaceEditingMode;
+    readonly reviewModel?: ReviewModuleContribution;
+  }
 ): Promise<{ surface: PaginatedSurface; container: HTMLElement }> {
   const container = document.createElement('div');
   document.body.append(container);
@@ -81,6 +88,7 @@ async function mount(
     ...(revisionDisplayMode ? { revisionDisplayMode } : {}),
     ...(extra?.author ? { author: extra.author } : {}),
     ...(extra?.editingMode ? { editingMode: extra.editingMode } : {}),
+    ...(extra?.reviewModel ? { reviewModel: extra.reviewModel } : {}),
   });
   if (!opened.ok) throw new Error(opened.reason);
   await settle();
@@ -349,6 +357,83 @@ describe('tracked drawings carry and paint their revision', () => {
       surface.undo();
       expect(lineDrawings(surface)).toHaveLength(0);
       expect(revisionItemsOf(surface.session.part())).toHaveLength(0);
+    } finally {
+      surface.destroy();
+      container.remove();
+    }
+  });
+
+  test('suggesting Insert Text Box proposes the text box as a tracked insertion of its run', async () => {
+    // Word records a new shape as it records a new picture: `w:ins` around the run that holds
+    // the drawing (`CT_RunTrackChange`). The editor refused a text box in suggesting mode.
+    const { surface, container } = await mount(
+      docx('<w:p><w:r><w:t xml:space="preserve">text</w:t></w:r></w:p>'),
+      undefined,
+      { author: 'Demo Reviewer', editingMode: 'suggest' }
+    );
+    try {
+      const [p1] = surface.session.paragraphIds();
+      surface.setSelection({
+        anchor: { paragraphId: p1!, offset: 4 },
+        head: { paragraphId: p1!, offset: 4 },
+      });
+      expect(insertTextbox(surface)).toEqual({ ok: true, changed: true });
+      await settle();
+      expect(serializeOoxmlPart(surface.session.part())).toMatch(
+        /<w:ins [^>]*w:author="Demo Reviewer"[^>]*><w:r><w:drawing[ >][\s\S]*<wps:txbx>/
+      );
+      const items = revisionItemsOf(surface.session.part());
+      expect(items).toHaveLength(1);
+      expect(items[0]!.revisionKind).toBe('insert');
+
+      // One undo takes the whole proposal back
+      surface.setActiveScope({ kind: 'body' });
+      surface.undo();
+      expect(serializeOoxmlPart(surface.session.part())).not.toContain('<wps:txbx>');
+      expect(revisionItemsOf(surface.session.part())).toHaveLength(0);
+    } finally {
+      surface.destroy();
+      container.remove();
+    }
+  });
+
+  test('a review module that refuses untracked edits admits a suggested picture and text box', async () => {
+    // Each carries its own record (`w:ins` around its run), so neither is an untracked edit.
+    const reviewModel: ReviewModuleContribution = {
+      displayModes: ['all-markup', 'proposed', 'original'],
+      collectReviewItems,
+      untrackedEdits: 'refuse',
+    };
+    const { surface, container } = await mount(
+      docx('<w:p><w:r><w:t xml:space="preserve">text</w:t></w:r></w:p>'),
+      undefined,
+      { author: 'Demo Reviewer', editingMode: 'suggest', reviewModel }
+    );
+    try {
+      const [p1] = surface.session.paragraphIds();
+      surface.setSelection({
+        anchor: { paragraphId: p1!, offset: 4 },
+        head: { paragraphId: p1!, offset: 4 },
+      });
+      const picture = await surface.insertImage({
+        paragraphId: p1!,
+        offset: 4,
+        bytes: PNG_1X1,
+        mime: 'image/png',
+        widthPoints: 36,
+        heightPoints: 36,
+        expectedPackageRevision: surface.session.packageRevision(),
+      });
+      expect(picture.ok).toBe(true);
+      await settle();
+      expect(insertTextbox(surface)).toEqual({ ok: true, changed: true });
+      await settle();
+      // Both inside the author's insertion (the text box extends the picture's): none untracked
+      const xml = serializeOoxmlPart(surface.session.part());
+      expect(xml.match(/<w:drawing[ >]/g)).toHaveLength(2);
+      expect(xml.replace(/<w:ins [^>]*>[\s\S]*?<\/w:ins>/g, '')).not.toContain('<w:drawing');
+      const items = revisionItemsOf(surface.session.part());
+      expect(items.map((item) => item.revisionKind)).toEqual(['insert']);
     } finally {
       surface.destroy();
       container.remove();

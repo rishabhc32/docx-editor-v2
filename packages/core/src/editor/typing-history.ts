@@ -5,16 +5,35 @@
 import type { HistoryGroup, OoxmlPackage, TreeModelChange } from '@docx-editor.dev/core/store';
 import type { SemanticSelection } from '../layout/semantic-interaction.ts';
 import { findNode } from '../store/package/ooxml-edit.ts';
-import { ooxmlTreesEqual } from '../store/package/ooxml-tree.ts';
-import type { OoxmlNode } from '../store/package/ooxml-tree.ts';
+import {
+  canonicalOoxmlFingerprintWithBindings,
+  type OoxmlNode,
+  type OoxmlPart,
+} from '../store/package/ooxml-tree.ts';
+import { inheritedNamespaceBindings } from '../store/package/wml-namespace.ts';
 import { ORIGIN_IDS } from '../store/registry/frozen-ids.ts';
 
 /** The paragraph node `paragraphId` names in `pkg`: story ids carry their part before `#`. */
-function paragraphIn(pkg: OoxmlPackage, paragraphId: string): OoxmlNode | null {
+function partOf(pkg: OoxmlPackage, paragraphId: string): OoxmlPart | undefined {
   const hash = paragraphId.indexOf('#');
-  const partName = hash > 0 ? paragraphId.slice(0, hash) : pkg.mainDocumentPart;
-  const part = pkg.parts.get(partName);
+  return pkg.parts.get(hash > 0 ? paragraphId.slice(0, hash) : pkg.mainDocumentPart);
+}
+
+function paragraphIn(pkg: OoxmlPackage, paragraphId: string): OoxmlNode | null {
+  const part = partOf(pkg, paragraphId);
   return part ? findNode(part, paragraphId) : null;
+}
+
+/**
+ * Whether two versions of a paragraph say the same thing, under the scope `part` (which holds
+ * `after`) gives them: a shape's choice names prefixes only the part's root declares.
+ */
+function sameParagraph(before: OoxmlNode, after: OoxmlNode, part: OoxmlPart): boolean {
+  const bindings = inheritedNamespaceBindings(part, after);
+  return (
+    canonicalOoxmlFingerprintWithBindings(before, bindings) ===
+    canonicalOoxmlFingerprintWithBindings(after, bindings)
+  );
 }
 
 /** Where a typing run expects the caret, or `null` when the selection is not a caret. */
@@ -84,9 +103,11 @@ export class TypingHistory {
     if (change.dirty.includes(id) || change.deleted.includes(id)) return this.end();
     if (change.dirty.length > 0 || change.deleted.length > 0) return;
     const before = this.landedNode;
-    const after = paragraphIn(this.currentPackage(), id);
+    const part = partOf(this.currentPackage(), id);
+    const after = part ? findNode(part, id) : null;
     if (before === after) return;
-    if (before === null || after === null || !ooxmlTreesEqual(before, after)) this.end();
+    if (before === null || after === null || !part || !sameParagraph(before, after, part))
+      this.end();
   }
 
   /** End the run: the next flush starts a new undo step. */

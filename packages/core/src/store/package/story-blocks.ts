@@ -21,7 +21,7 @@ import {
   flattenContentControls,
   isContentControlWrapper,
 } from './content-control-nodes.ts';
-import type { OoxmlNode, OoxmlPart } from './ooxml-tree.ts';
+import type { OoxmlElement, OoxmlNode, OoxmlPart } from './ooxml-tree.ts';
 import { isInlineRunContainer, WML_NAMESPACE_URI } from './ooxml-shared.ts';
 import { isNormalNote } from './note-nodes.ts';
 
@@ -136,6 +136,23 @@ export function storyParagraphs(root: OoxmlNode): readonly OoxmlNode[] {
 }
 
 /**
+ * A table's cells in document order. A controlled row or cell is still a row or a cell:
+ * `CT_SdtRow`/`CT_SdtCell` put the wrapper where the filter looks, so unwrap before filtering or
+ * the walk loses it.
+ */
+export function tableCellsOf(table: OoxmlNode): readonly OoxmlElement[] {
+  if (table.kind === 'textValue') return [];
+  const cells: OoxmlElement[] = [];
+  for (const row of flattenContentControls(table.children)) {
+    if (row.kind !== 'tableRow') continue;
+    for (const cell of flattenContentControls(row.children)) {
+      if (cell.kind === 'tableCell') cells.push(cell);
+    }
+  }
+  return cells;
+}
+
+/**
  * The block walk itself, appending into `out`.
  *
  * Exported so `allParagraphs` in the binding lane is the same traversal rather than a second
@@ -152,15 +169,7 @@ export function collectStoryParagraphs(
       continue;
     }
     if (child.kind === 'table') {
-      // A controlled row or cell is still a row or a cell: `CT_SdtRow`/`CT_SdtCell` put the
-      // wrapper where the filter looks, so unwrap before filtering or the story loses it.
-      for (const row of flattenContentControls(child.children)) {
-        if (row.kind !== 'tableRow') continue;
-        for (const cell of flattenContentControls(row.children)) {
-          if (cell.kind !== 'tableCell') continue;
-          collectStoryParagraphs(cell.children, out, sdtDepth);
-        }
-      }
+      for (const cell of tableCellsOf(child)) collectStoryParagraphs(cell.children, out, sdtDepth);
       continue;
     }
     const nested = blockStoryContainerChildren(child);

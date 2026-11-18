@@ -90,7 +90,7 @@ interface WrittenEntry {
   readonly utf8: boolean;
   readonly crc: number;
   readonly size: number;
-  readonly compressed: Uint8Array;
+  readonly compressedSize: number;
   readonly offset: number;
 }
 
@@ -101,9 +101,84 @@ function writeSharedFields(view: DataView, at: number, entry: WrittenEntry, time
   view.setUint16(at + 4, 8, true);
   view.setUint32(at + 6, time, true);
   view.setUint32(at + 10, entry.crc, true);
-  view.setUint32(at + 14, entry.compressed.length, true);
+  view.setUint32(at + 14, entry.compressedSize, true);
   view.setUint32(at + 18, entry.size, true);
   view.setUint16(at + 22, entry.name.length, true);
+}
+
+/**
+ * A deflated archive written one entry at a time: each entry's local header and data when it is
+ * added, the central directory and the end record last. It keeps only each entry's header
+ * fields, so a caller can hand every entry's bytes on before it adds the next.
+ *
+ * @internal
+ */
+export class ZipEntryWriter {
+  readonly #encoder = new TextEncoder();
+  readonly #time: number;
+  readonly #compress: ZipEntryCompressor;
+  readonly #written: WrittenEntry[] = [];
+  #offset = 0;
+  #centralLength = 0;
+
+  constructor(mtime: Date, compress: ZipEntryCompressor = deflateInSlices) {
+    this.#time = dosDateTime(mtime);
+    this.#compress = compress;
+  }
+
+  /** The local header and the compressed data of one entry, yielding between slices. */
+  *entry(entryName: string, data: Uint8Array): Generator<void, readonly Uint8Array[]> {
+    const name = this.#encoder.encode(entryName);
+    if (name.length > 0xffff) {
+      throw new Error(`ZIP entry name is too long: ${entryName}`);
+    }
+
+    const crc = yield* checksumInSlices(data);
+    const compressed = yield* this.#compress(data);
+    const entry: WrittenEntry = {
+      name,
+      utf8: name.length !== entryName.length,
+      crc,
+      size: data.length,
+      compressedSize: compressed.length,
+      offset: this.#offset,
+    };
+    this.#written.push(entry);
+    this.#offset += 30 + name.length + compressed.length;
+    this.#centralLength += 46 + name.length;
+    if (this.#written.length > 0xffff || this.#offset + this.#centralLength > 0xffffffff) {
+      throw new Error('the archive needs ZIP64, which this writer does not produce');
+    }
+
+    const header = new Uint8Array(30 + name.length);
+    const view = new DataView(header.buffer);
+    view.setUint32(0, 0x04034b50, true);
+    writeSharedFields(view, 4, entry, this.#time);
+    header.set(name, 30);
+    return [header, compressed];
+  }
+
+  /** The central directory and the end record, after the last entry. */
+  end(): Uint8Array {
+    const out = new Uint8Array(this.#centralLength + 22);
+    const view = new DataView(out.buffer);
+    let central = 0;
+    for (const entry of this.#written) {
+      view.setUint32(central, 0x02014b50, true);
+      view.setUint16(central + 4, 20, true);
+      writeSharedFields(view, central + 6, entry, this.#time);
+      view.setUint32(central + 42, entry.offset, true);
+      out.set(entry.name, central + 46);
+      central += 46 + entry.name.length;
+    }
+
+    view.setUint32(central, 0x06054b50, true);
+    view.setUint16(central + 8, this.#written.length, true);
+    view.setUint16(central + 10, this.#written.length, true);
+    view.setUint32(central + 12, this.#centralLength, true);
+    view.setUint32(central + 16, this.#offset, true);
+    return out;
+  }
 }
 
 /**
@@ -116,50 +191,17 @@ export function* writeZipEntriesSteps(
   mtime: Date,
   compress: ZipEntryCompressor = deflateInSlices
 ): Generator<void, Uint8Array> {
-  const encoder = new TextEncoder();
-  const time = dosDateTime(mtime);
-  const written: WrittenEntry[] = [];
-  let offset = 0;
-  let centralLength = 0;
+  const writer = new ZipEntryWriter(mtime, compress);
+  const chunks: Uint8Array[] = [];
+  let length = 0;
   for (const [entryName, data] of entries) {
-    const name = encoder.encode(entryName);
-    if (name.length > 0xffff) throw new Error(`ZIP entry name is too long: ${entryName}`);
-    const crc = yield* checksumInSlices(data);
-    const compressed = yield* compress(data);
-    written.push({
-      name,
-      utf8: name.length !== entryName.length,
-      crc,
-      size: data.length,
-      compressed,
-      offset,
-    });
-    offset += 30 + name.length + compressed.length;
-    centralLength += 46 + name.length;
+    for (const chunk of yield* writer.entry(entryName, data)) {
+      chunks.push(chunk);
+      length += chunk.length;
+    }
   }
-  if (written.length > 0xffff || offset + centralLength > 0xffffffff)
-    throw new Error('the archive needs ZIP64, which this writer does not produce');
 
-  const out = new Uint8Array(offset + centralLength + 22);
-  const view = new DataView(out.buffer);
-  let central = offset;
-  for (const entry of written) {
-    view.setUint32(entry.offset, 0x04034b50, true);
-    writeSharedFields(view, entry.offset + 4, entry, time);
-    out.set(entry.name, entry.offset + 30);
-    out.set(entry.compressed, entry.offset + 30 + entry.name.length);
-
-    view.setUint32(central, 0x02014b50, true);
-    view.setUint16(central + 4, 20, true);
-    writeSharedFields(view, central + 6, entry, time);
-    view.setUint32(central + 42, entry.offset, true);
-    out.set(entry.name, central + 46);
-    central += 46 + entry.name.length;
-  }
-  view.setUint32(central, 0x06054b50, true);
-  view.setUint16(central + 8, written.length, true);
-  view.setUint16(central + 10, written.length, true);
-  view.setUint32(central + 12, centralLength, true);
-  view.setUint32(central + 16, offset, true);
-  return out;
+  const end = writer.end();
+  chunks.push(end);
+  return concat(chunks, length + end.length);
 }

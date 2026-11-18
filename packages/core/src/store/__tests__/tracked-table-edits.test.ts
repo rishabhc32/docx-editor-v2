@@ -126,13 +126,13 @@ describe('tracked cell properties write w:tcPrChange', () => {
     expect(serializeOoxmlPart(next)).toBe(serializeOoxmlPart(part));
   });
 
-  test('a second change keeps the ORIGINAL as the record', () => {
+  test("a second change keeps the ORIGINAL as the record, in the first change's decision", () => {
     const part = load(TABLE(ROW(CELL('a'))));
     const red = apply(part, fill(part, 'FF0000'));
     const blue = apply(red, fill(red, '0000FF'));
     expect(cellProperties(blue)).toEqual([
       '<w:tcPr><w:tcW w:type="dxa" w:w="2400"/><w:shd w:fill="0000FF" w:val="clear"/>' +
-        `<w:tcPrChange ${STAMP} w:id="1"><w:tcPr><w:tcW w:type="dxa" w:w="2400"/></w:tcPr>` +
+        `<w:tcPrChange ${STAMP} w:id="0"><w:tcPr><w:tcW w:type="dxa" w:w="2400"/></w:tcPr>` +
         '</w:tcPrChange></w:tcPr>',
     ]);
   });

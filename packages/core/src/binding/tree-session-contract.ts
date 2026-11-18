@@ -508,14 +508,16 @@ export interface TreeDocxSessionView extends HeadlessDocumentView {
   /** Delete a picture drawing and collect orphaned media in one package undo unit. */
   deleteImage(
     scope: StoryScope,
-    drawingNodeId: string
+    drawingNodeId: string,
+    gate?: import('../store/store/tree-package-images.ts').ImageWriteGate
   ): import('../store/store/tree-package-images.ts').ImageIntentResult;
 
   /** Propose the drawing's deletion as a tracked change (`w:del`); media stays untouched. */
   deleteImageTracked(
     scope: StoryScope,
     drawingNodeId: string,
-    revision: import('../store/store/tree-op-types.ts').RevisionAttributionInput
+    revision: import('../store/store/tree-op-types.ts').RevisionAttributionInput,
+    gate?: import('../store/store/tree-package-images.ts').ImageWriteGate
   ): import('../store/store/tree-package-images.ts').ImageIntentResult;
 
   /** Apply image property tree ops plus hyperlink relationship wiring atomically. */

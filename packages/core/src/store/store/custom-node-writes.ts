@@ -20,24 +20,24 @@
 import {
   boundCustomXmlNodeIdOf,
   boundCustomXmlNodeIdsInPackage,
-  customNodeBinding,
 } from '../package/custom-node-payloads.ts';
 import {
   customXmlNodes,
   type CustomXmlNode,
-  readCustomXmlNode,
-  withCustomXmlNode,
-  withoutCustomXmlNode,
   withoutOrphanCustomXmlNodes,
 } from '../package/custom-xml-nodes.ts';
-import {
-  customXmlDataParts,
-  findCustomXmlDataPart,
-  withCustomXmlDataPart,
-} from '../package/custom-xml-part.ts';
+import { customXmlDataParts, findCustomXmlDataPart } from '../package/custom-xml-part.ts';
 import { contentControlsIn } from '../package/content-control-nodes.ts';
 import type { OoxmlPackage } from '../package/ooxml-package.ts';
-import type { TreeDocumentStore, TreeModelChange } from './tree-store.ts';
+import type { OoxmlPart } from '../package/ooxml-tree.ts';
+import {
+  MAX_CUSTOM_NODE_LABEL_LENGTH,
+  MAX_CUSTOM_NODE_PAYLOAD_LENGTH,
+  planCustomNodeInsert,
+  planCustomNodeRemoval,
+  type CustomNodeWritePlan,
+} from './custom-node-write-plan.ts';
+import type { TransactResult, TreeDocumentStore, TreeModelChange } from './tree-store.ts';
 import type { TreeOpRejection } from './tree-op-types.ts';
 
 /**
@@ -116,17 +116,30 @@ export type CustomNodeWriteResult =
     }
   | { readonly ok: false; readonly reason: CustomNodeWriteRejection; readonly detail?: string };
 
-/**
- * The largest payload one node may carry, in UTF-16 code units.
- *
- * Same figure as the read side's (`parseCustomNodeData`) and for the same reason: far past any
- * legitimate chip, far short of anything that hurts. Checked on the WRITE too, so a document
- * cannot be authored here holding a payload the reader will later refuse to parse.
- */
-export const MAX_CUSTOM_NODE_PAYLOAD_LENGTH = 256 * 1024;
+export { MAX_CUSTOM_NODE_LABEL_LENGTH, MAX_CUSTOM_NODE_PAYLOAD_LENGTH };
 
-/** The longest label a binding may paint. Word renders it as the control's whole content. */
-export const MAX_CUSTOM_NODE_LABEL_LENGTH = 4_096;
+/** Commit a plan on one story store: its package edits, then its ops, in one transaction. */
+function transactPlan(store: TreeDocumentStore, plan: CustomNodeWritePlan): TransactResult {
+  return store.transact((ctx) => {
+    for (const edit of plan.packageEdits) {
+      if (!ctx.applyPackage(edit)) return;
+    }
+    for (const op of plan.ops) {
+      if (!ctx.apply(op)) return;
+    }
+  });
+}
+
+/** A transaction's refusal as a write's. */
+function refusedWrite(
+  result: Extract<TransactResult, { ok: false }>
+): Extract<CustomNodeWriteResult, { ok: false }> {
+  return {
+    ok: false,
+    reason: result.reason,
+    ...(result.detail === undefined ? {} : { detail: result.detail }),
+  };
+}
 
 /**
  * Insert one custom node, with its payload, as a single transaction.
@@ -147,229 +160,45 @@ export function insertCustomNodeWrite(
    */
   dataOwnerPartName?: string
 ): CustomNodeWriteResult {
-  const payload = write.payload;
-  const storyPartName = store.part.name;
-  const dataPartName = dataOwnerPartName ?? storyPartName;
-
-  if (payload) {
-    if (payload.data.length > MAX_CUSTOM_NODE_PAYLOAD_LENGTH) {
-      return { ok: false, reason: 'payload-too-large', detail: 'data' };
-    }
-    if (payload.label.length > MAX_CUSTOM_NODE_LABEL_LENGTH) {
-      return { ok: false, reason: 'payload-too-large', detail: 'label' };
-    }
-  }
-
+  const planned = planCustomNodeInsert(store.package, store.part, write, dataOwnerPartName);
+  if (!planned.ok) return planned;
   // Ids, not nodes: the transaction rebuilds the tree, so nothing else carries across it.
-  const controlsBefore = new Set(contentControlsIn(store.part.root).map((entry) => entry.node.id));
-
-  // Resolved BEFORE the transaction, because afterwards the control is gone and nothing says
-  // what it pointed at.
-  const superseded =
-    write.replaceControlId === undefined
-      ? []
-      : boundNodesOf(store, storyPartName, write.replaceControlId);
-
-  // Set inside the transaction and read after it: the store's `ds:itemID` is not known until the
-  // part is authored, and the binding cannot be built without it.
-  let refusal: CustomNodeWriteRejection | null = null;
-  let refusalDetail: string | undefined;
-
-  const result = store.transact((ctx) => {
-    // The control being rewritten goes first, at the offsets the caller measured against the
-    // tree it could see. Its payload goes with it — a rewrite that kept the old node would
-    // leave the store growing an entry per edit.
-    if (write.replaceControlId !== undefined) {
-      ctx.apply({
-        op: 'removeContentControl',
-        controlId: write.replaceControlId,
-        keepContent: false,
-      });
-      for (const entry of superseded) {
-        ctx.applyPackage((current) => withoutCustomXmlNode(current, entry.partName, entry.nodeId));
-      }
-    }
-    // The replaced text goes first, so the offsets the caller supplied still describe the
-    // paragraph when the deletion is planned against it.
-    const replaced = write.replaceUntil;
-    if (replaced !== undefined && replaced <= write.offset) {
-      // A reversed or empty span is not a wrap. Silently inserting instead would put the node
-      // beside the text the caller believed it was replacing.
-      refusal = 'invalid-range';
-      refusalDetail = 'replaceUntil must be past offset';
-      return;
-    }
-    if (replaced !== undefined) {
-      ctx.apply({
-        op: 'deleteText',
-        paragraphId: write.paragraphId,
-        start: write.offset,
-        end: replaced,
-      });
-    }
-    if (!payload) {
-      ctx.apply({
-        op: 'insertInlineContentControl',
-        paragraphId: write.paragraphId,
-        offset: write.offset,
-        tag: write.tag,
-        text: write.text,
-        ...(write.alias === undefined ? {} : { alias: write.alias }),
-        ...(write.lock === undefined ? {} : { lock: write.lock }),
-      });
-      return;
-    }
-
-    let binding: ReturnType<typeof customNodeBinding> = null;
-    // THE STORE FIRST. Everything the binding quotes has to exist in the package before the body
-    // names it, so a transaction that dies at the body edit takes an unreferenced store with it
-    // rather than leaving one behind.
-    ctx.applyPackage((current) => {
-      const authored = withCustomXmlDataPart(
-        current,
-        dataPartName,
-        payload.namespaceUri,
-        payload.rootLocalName
-      );
-      if (!authored.part) {
-        refusal = 'store-not-authored';
-        refusalDetail =
-          `no customXml store could be created for ${payload.namespaceUri}. The namespace must ` +
-          `be free of control characters and quotes, the root name must be an XML name, and a ` +
-          `store this document already carries for that namespace must use the same root name ` +
-          `(${payload.rootLocalName})`;
-        return current;
-      }
-      // Built from the store's OWN root, never from what the caller asked for: the two agree
-      // by the check above, and deriving from the part means an xpath can never name an element
-      // the file does not have.
-      binding = customNodeBinding(authored.part, payload.rootLocalName, payload.nodeId);
-      if (!binding) {
-        refusal = 'unaddressable-payload';
-        refusalDetail =
-          `the node id ${JSON.stringify(payload.nodeId)} or the namespace ` +
-          `${JSON.stringify(payload.namespaceUri)} cannot be written into an XPath. Ids and root ` +
-          `names must match [A-Za-z_][\\w.-]{0,127}; a namespace may not contain a quote, an ` +
-          `angle bracket or an ampersand`;
-        return current;
-      }
-      const written = withCustomXmlNode(authored.pkg, authored.part.partName, {
-        id: payload.nodeId,
-        label: payload.label,
-        data: payload.data,
-      });
-      // READ IT BACK, the way `withCustomXmlDataPart` reads its own part back. `applyPackage`
-      // treats an unchanged package as a no-op rather than a rejection, and `withCustomXmlNode`
-      // answers the package unchanged on three paths — so without this the body gets a control
-      // bound to a node that was never written, and the caller is told `ok`.
-      if (!readCustomXmlNode(written, authored.part.partName, payload.nodeId)) {
-        refusal = 'store-not-authored';
-        refusalDetail = 'the payload node could not be written into the store';
-        return current;
-      }
-      return written;
-    });
-    if (refusal !== null || !binding) return;
-
-    ctx.apply({
-      op: 'insertInlineContentControl',
-      paragraphId: write.paragraphId,
-      offset: write.offset,
-      tag: write.tag,
-      text: write.text,
-      ...(write.alias === undefined ? {} : { alias: write.alias }),
-      ...(write.lock === undefined ? {} : { lock: write.lock }),
-      dataBinding: binding,
-    });
-  });
-
-  // The payload's own refusal wins over the transaction's outcome: `applyPackage` returning the
-  // package unchanged is not a rejection the store reports, so without this a refused store write
-  // would come back as a successful no-op — a caller told its node was written when it was not.
-  if (refusal !== null) {
-    return {
-      ok: false,
-      reason: refusal,
-      ...(refusalDetail === undefined ? {} : { detail: refusalDetail }),
-    };
-  }
-  if (!result.ok) {
-    return {
-      ok: false,
-      reason: result.reason,
-      ...(result.detail === undefined ? {} : { detail: result.detail }),
-    };
-  }
-  const nodeId = authoredControlId(store, controlsBefore);
+  const controlsBefore = contentControlIdsIn(store.part);
+  const result = transactPlan(store, planned.plan);
+  if (!result.ok) return refusedWrite(result);
+  const nodeId = authoredControlId(store.part, controlsBefore);
   return { ok: true, change: result.change, ...(nodeId === undefined ? {} : { nodeId }) };
 }
 
+/** The ids of every content control a story holds. */
+export function contentControlIdsIn(part: OoxmlPart): ReadonlySet<string> {
+  return new Set(contentControlsIn(part.root).map((entry) => entry.node.id));
+}
+
 /**
- * The content control this transaction added. Not from `change.created`, which reports touched
- * paragraphs rather than minted nodes and is empty for an inline insert.
+ * The content control a write added to the story. Not from `change.created`, which reports
+ * touched paragraphs rather than minted nodes and is empty for an inline insert.
  */
-function authoredControlId(
-  store: TreeDocumentStore,
+export function authoredControlId(
+  part: OoxmlPart,
   before: ReadonlySet<string>
 ): string | undefined {
-  for (const entry of contentControlsIn(store.part.root)) {
+  for (const entry of contentControlsIn(part.root)) {
     if (!before.has(entry.node.id)) return entry.node.id;
   }
   return undefined;
 }
 
-/**
- * Which store node, in which part, a control binds — across every store the story carries.
- *
- * Every store, not the first: a control's binding names one `w:storeItemID`, but a document may
- * hold several stores and only the one whose id matches answers. Resolving against all of them
- * means a removal cannot miss a payload because the store it lived in was not the store this
- * definition usually writes to.
- */
-function boundNodesOf(
-  store: TreeDocumentStore,
-  storyPartName: string,
-  controlNodeId: string
-): readonly { readonly partName: string; readonly nodeId: string }[] {
-  const control = contentControlsIn(store.part.root).find(
-    (entry) => entry.node.id === controlNodeId
-  );
-  if (!control) return [];
-  const bound: { readonly partName: string; readonly nodeId: string }[] = [];
-  for (const dataPart of customXmlDataParts(store.package, storyPartName)) {
-    const nodeId = boundCustomXmlNodeIdOf(control.node, dataPart.itemId);
-    if (nodeId !== null) bound.push({ partName: dataPart.partName, nodeId });
-  }
-  return bound;
-}
-
-/**
- * Remove a control and, in the same transaction, the payload it bound.
- *
- * The sweep would collect the node eventually — that is what makes deletion in Word survivable —
- * but "eventually" is the next open, and a document saved in between carries a payload for a
- * chip that is gone. Doing it here means the ordinary case is exact and the sweep is a backstop.
- */
+/** Remove a control and, in the same transaction, the payload it bound. */
 export function removeCustomNodeWrite(
   store: TreeDocumentStore,
   controlNodeId: string
 ): CustomNodeWriteResult {
-  const storyPartName = store.part.name;
-  const bound = boundNodesOf(store, storyPartName, controlNodeId);
-
-  const result = store.transact((ctx) => {
-    ctx.apply({ op: 'removeContentControl', controlId: controlNodeId, keepContent: false });
-    for (const entry of bound) {
-      ctx.applyPackage((current) => withoutCustomXmlNode(current, entry.partName, entry.nodeId));
-    }
-  });
-  if (!result.ok) {
-    return {
-      ok: false,
-      reason: result.reason,
-      ...(result.detail === undefined ? {} : { detail: result.detail }),
-    };
-  }
+  const result = transactPlan(
+    store,
+    planCustomNodeRemoval(store.package, store.part, controlNodeId)
+  );
+  if (!result.ok) return refusedWrite(result);
   return { ok: true, change: result.change };
 }
 

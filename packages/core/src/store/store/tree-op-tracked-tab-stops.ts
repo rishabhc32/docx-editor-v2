@@ -1,4 +1,4 @@
-// Tracked TAB STOPS — `w:tabs` recorded in `w:pPrChange` like every other paragraph property.
+// Tracked TAB STOPS: `w:tabs` recorded in `w:pPrChange` like every other paragraph property.
 //
 // `w:tabs` is a `CT_PPrBase` child, so Word records a tab-stop change the way it records an
 // indent: the paragraph keeps its new `w:tabs`, and a `w:pPrChange` holds the `w:pPr` as it
@@ -22,6 +22,7 @@ export function applyParagraphTabStopsOp(
   if (op.revision !== undefined && invalidRevisionAttribution(op.revision)) {
     return { ok: false, reason: 'invalid-property-value' };
   }
+
   const written = applySetParagraphTabStops(
     part,
     paragraph,

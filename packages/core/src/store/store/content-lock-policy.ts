@@ -5,7 +5,7 @@
 // added later meets the lock until it is named here.
 
 import type { ContentLockPolicy } from '../package/ooxml-edit.ts';
-import type { TreeDocOp } from './tree-op-types.ts';
+import type { OoxmlProperty, TreeDocOp } from './tree-op-types.ts';
 
 /**
  * Run properties that hide text. Hiding protected text removes it for every reader as surely
@@ -28,10 +28,22 @@ export function restylePassesContentLock(
   op: TreeDocOp,
   policy: ContentLockPolicy | undefined
 ): boolean {
-  if (policy?.allowFormattingInLockedContent !== true) return false;
   if (op.op !== 'setRunProperties' && op.op !== 'setParagraphMarkProperties') return false;
   if (op.revision !== undefined) return false;
-  return op.properties.every((property) => !HIDING_RUN_PROPERTIES.has(property.localName));
+  return formattingPassesContentLock(op.properties, policy);
+}
+
+/**
+ * Whether `policy` lets an untracked write of run `properties` past the content half of a lock:
+ * the rule of {@link restylePassesContentLock} for a caller that has the properties and knows
+ * the write is untracked (an ordered room's direct format).
+ */
+export function formattingPassesContentLock(
+  properties: readonly OoxmlProperty[],
+  policy: ContentLockPolicy | undefined
+): boolean {
+  if (policy?.allowFormattingInLockedContent !== true) return false;
+  return properties.every((property) => !HIDING_RUN_PROPERTIES.has(property.localName));
 }
 
 /**

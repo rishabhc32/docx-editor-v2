@@ -1,5 +1,5 @@
 import { withDisplayedHyphens } from '../package/hyphen-text.ts';
-import { withTailStyle } from './tree-op-paragraph-tail.ts';
+import { cloneSplitProperties, withTailStyle } from './tree-op-paragraph-tail.ts';
 import { applySetFieldCode } from './tree-op-field-code.ts';
 import { applyTableAuthoring } from './tree-op-table-batch.ts';
 import { applyTableProperties } from './tree-op-table-authoring.ts';
@@ -9,6 +9,7 @@ import {
   isInlineControl,
 } from './content-control-checkbox.ts';
 import { valueContent, withParagraphDiff } from './content-control-value-content.ts';
+import { applySplitAtBlockPrompt } from './content-control-prompt-enter.ts';
 import { applyFieldResultOp, isFieldResultOp } from './tree-op-field-results.ts';
 import { removeCoveredTextFormDefinitions } from './text-form-field-deletion.ts';
 // Op application over the canonical tree (tree-ops seam).
@@ -46,6 +47,7 @@ import {
 } from '../package/ooxml-tree.ts';
 import {
   applyEdits,
+  createMarkContainerIdAllocator,
   createNodeIdAllocator,
   findNode,
   insertChildren,
@@ -58,6 +60,7 @@ import { wmlFreshNamespaceContextAt } from '../package/wml-namespace.ts';
 import { contentControlLevelOf } from '../package/content-control-nodes.ts';
 import {
   applyTrackedContentControlValue,
+  keepingPrompt,
   proposedOverPrompt,
   resolveKeepingControlState,
 } from './tracked-content-control-value.ts';
@@ -73,13 +76,10 @@ import {
 import {
   applyParagraphMarkRevision,
   applyProposeParagraphMerge,
+  insertedMarkProperties,
   retractsOwnParagraphMark,
 } from './tree-op-tracked-marks.ts';
-import {
-  insideOwnInsertion,
-  ownProposedParagraph,
-  withPropertyChangeRecord,
-} from './tree-op-tracked-properties.ts';
+import { insideOwnInsertion, withPropertyChangeRecord } from './tree-op-tracked-properties.ts';
 import { nextRevisionId } from './tree-op-revision-ids.ts';
 import {
   isValidParaId,
@@ -129,13 +129,17 @@ import {
   rowRemovalEdits,
 } from './tree-op-table-vmerge-removal.ts';
 import {
-  PARAGRAPH_VOCABULARY,
   RUN_VOCABULARY,
+  UNCHANGED_PROPERTIES_EFFECT,
+  keepsPropertyChildren,
   mergedPropertyChildren,
 } from './tree-op-properties.ts';
 import {
-  applySetListLevel,
   applySetParagraphMarkProperties,
+  applySetParagraphProperties,
+} from './tree-op-paragraph-properties.ts';
+import {
+  applySetListLevel,
   withoutSectionMark,
   applySetListNumbering,
   applySetSectionMark,
@@ -152,6 +156,7 @@ import {
   clearPlaceholder,
   contentControlEffect,
   placeholderControlForInsertion,
+  promptHoldsParagraph,
   promptHoldsRange,
 } from './tree-op-content-controls.ts';
 import {
@@ -194,8 +199,15 @@ import { isDrawingTreeDocOp } from './tree-op-drawings.ts';
 import { applyInsertFragment } from './tree-op-fragment.ts';
 import { applyDrawingContentEdit } from './drawing-content-edit.ts';
 import { applyInsertBuildingBlock } from './building-block-insert.ts';
+import { applyRepeatingSectionItem } from './repeating-section-items.ts';
 import { applyBookmarkOp, isBookmarkTreeOp, withBookmarkEditRules } from './tree-op-bookmarks.ts';
-import { closesAnOpenRange, opensARange, zeroLengthGoesToHead } from './tree-op-split-markers.ts';
+import {
+  atomUnitEndIn,
+  atomUnitEnds,
+  closesAnOpenRange,
+  opensARange,
+  zeroLengthGoesToHead,
+} from './tree-op-split-markers.ts';
 import {
   promptInsertionOffset,
   restoreEmptiedPlaceholder,
@@ -264,9 +276,12 @@ function applyValidatedTreeOp(part: OoxmlPart, op: TreeDocOp, options?: EditOpti
       ? applyTrackedContentControl(part, op, options)
       : applyAutomationInsertContentControl(part, op, options);
   }
+  // Enter at a block control's prompt replaces the prompt too, as Word's Return does
+  const atPrompt = op.op === 'splitParagraph' ? applySplitAtBlockPrompt(part, op, options) : null;
+  if (atPrompt) return atPrompt;
   // Typing into a prompt REPLACES it. The transition belongs here rather than beside the
   // caret: an automation call and a paste insert text too, and a prompt that survived them
-  // would leave the typed characters appended to "Click here to enter text.". Suggesting
+  // would leave the typed characters appended to "Click or tap here to enter text.". Suggesting
   // mode replaces it the same way and proposes only the typed words, as Word does: struck,
   // the prompt left an accepted value still marked `w:showingPlcHdr`, in the prompt's style.
   if (op.op === 'insertText') {
@@ -294,9 +309,11 @@ function applyValidatedTreeOp(part: OoxmlPart, op: TreeDocOp, options?: EditOpti
         ...result,
         effect: withParagraphDiff(result.effect, prompt.control, cleared),
       };
+      // Directly too, the prompt stays the control's, in the glossary, as Word keeps a filled
+      // control's placeholder: emptied again, the control shows it
       return revision
         ? proposedOverPrompt(part, prompt.control, replaced, revision, options)
-        : replaced;
+        : keepingPrompt(part, prompt.control, replaced, options);
     }
   }
 
@@ -337,8 +354,9 @@ function applyValidatedTreeOp(part: OoxmlPart, op: TreeDocOp, options?: EditOpti
     return applyPartialHyperlink(part, op, options);
   }
   if (op.op === 'setHyperlinkTarget') return applySetHyperlinkTarget(part, op, options);
-  if (op.op === 'removeHyperlink')
+  if (op.op === 'removeHyperlink') {
     return applyRemoveHyperlink(part, op.linkId, options, op.styleId);
+  }
   if (op.op === 'setMathEquation' || op.op === 'removeMathEquation') {
     const equation = findNode(part, op.equationId);
     if (!equation || equation.kind === 'textValue') {
@@ -426,7 +444,7 @@ function applyValidatedTreeOp(part: OoxmlPart, op: TreeDocOp, options?: EditOpti
     return { ok: false, reason: 'invalidArgs', detail: 'package-lifecycle-op' };
   }
   if (op.op === 'addRepeatingSectionItem' || op.op === 'removeRepeatingSectionItem') {
-    return { ok: false, reason: 'unsupported' };
+    return applyRepeatingSectionItem(part, op, options);
   }
 
   const paragraph = findNode(part, op.paragraphId) as OoxmlParagraphNode;
@@ -447,7 +465,10 @@ function applyValidatedTreeOp(part: OoxmlPart, op: TreeDocOp, options?: EditOpti
           op.revision,
           options,
           op.bias,
-          owner
+          // A control that holds the whole paragraph, such as a block control, names no place
+          // in it: every offset there is already inside the control. Named, it kept each tracked
+          // keystroke out of the previous one's `w:ins`, so every key became its own revision.
+          owner !== null && !isAncestorOrSelf(part, owner.id, paragraph.id) ? owner : null
         );
       }
       return applyInsertContent(
@@ -517,7 +538,7 @@ function applyValidatedTreeOp(part: OoxmlPart, op: TreeDocOp, options?: EditOpti
         // Word keeps showing it. Typing over a selected prompt sends this deletion first, and
         // the insertion after it replaces the prompt.
         if (promptHoldsRange(part, paragraph.id, op.start, op.end)) {
-          return ok(part, contentControlEffect(paragraph.id, 'text-local'));
+          return promptKept(part, paragraph.id);
         }
         return applyDeleteTracked(part, paragraph, op.start, op.end, op.revision, options);
       }
@@ -535,6 +556,10 @@ function applyValidatedTreeOp(part: OoxmlPart, op: TreeDocOp, options?: EditOpti
         if (next && next.kind === 'paragraph') {
           return applyJoin(part, paragraph.id, next.id, options);
         }
+      }
+      // A mark inside a prompt is the prompt's: striking it proposes nothing, as for its text
+      if (op.kind === 'del' && promptHoldsParagraph(part, paragraph.id)) {
+        return promptKept(part, paragraph.id);
       }
       return applyParagraphMarkRevision(part, paragraph, op.kind, op.revision, options);
     }
@@ -555,6 +580,9 @@ function applyValidatedTreeOp(part: OoxmlPart, op: TreeDocOp, options?: EditOpti
         retractsOwnParagraphMark(previous, op.revision.author)
       ) {
         return applyJoin(part, previous.id, paragraph.id, options);
+      }
+      if (promptHoldsParagraph(part, paragraph.id)) {
+        return promptKept(part, paragraph.id);
       }
       return applyProposeParagraphMerge(part, paragraph, op.revision, options);
     }
@@ -598,64 +626,15 @@ function applyValidatedTreeOp(part: OoxmlPart, op: TreeDocOp, options?: EditOpti
         op.targetRunIds,
         op.revision
       );
-    case 'setParagraphProperties': {
-      const existing = paragraphPropertiesNodeOf(paragraph);
-      const prior = existing?.children ?? [];
-      let children: readonly OoxmlNode[] = mergedPropertyChildren(
-        prior,
+    case 'setParagraphProperties':
+      return applySetParagraphProperties(
+        part,
+        paragraph,
         op.properties,
-        PARAGRAPH_VOCABULARY,
-        nextId
+        options,
+        nextId,
+        op.revision
       );
-      // A tracked paragraph-property change records what `w:pPr` held in a `w:pPrChange`
-      // (§17.13.5.29), so Reject restores the alignment, indents and style it replaced.
-      //
-      // Skipped on a paragraph whose mark THIS author proposed adding, the same rule the run
-      // and mark writes apply: rejecting that `w:ins` runs the paragraph into the next one and
-      // takes its properties with it, so a record of what they used to be decides nothing.
-      const markProperties = namedChild(existing, 'rPr')?.children ?? [];
-      if (
-        op.revision &&
-        !ownProposedParagraph(part, paragraph.id, markProperties, op.revision.author)
-      ) {
-        children = withPropertyChangeRecord({
-          container: 'paragraphProperties',
-          prior,
-          next: children,
-          revision: op.revision,
-          mint: nextId,
-          // The transaction's minter when it lent one, else a lazy walk of this part.
-          nextRevisionId: () => options?.revisionIds?.() ?? nextRevisionId(part)(),
-        });
-      }
-      const effect: TreeOpEffect = {
-        dirty: [paragraph.id],
-        created: [],
-        deleted: [],
-        dependencyKeys: TEXT_DEPS,
-        impact: 'paragraph-local',
-      };
-      if (children.length === 0) {
-        // Nothing left to hold: the container goes rather than staying as an empty `w:pPr`,
-        // so a cleared paragraph digests identically to one that never had any.
-        return existing
-          ? fromEdit(removeNode(part, existing.id, options), effect)
-          : ok(part, effect);
-      }
-      if (existing) return fromEdit(replaceChildren(part, existing.id, children, options), effect);
-      const pPr = {
-        id: nextId(),
-        kind: 'paragraphProperties',
-        namespaceUri: WML_NAMESPACE_URI,
-        localName: 'pPr',
-        prefix: 'w',
-        namespaceBindings: [],
-        attributes: [],
-        children,
-      } as unknown as OoxmlNode;
-      // `w:pPr` must be the paragraph's FIRST child per the schema.
-      return fromEdit(insertChildren(part, paragraph.id, 0, [pPr], options), effect);
-    }
     default:
       return { ok: false, reason: 'unknown-op' };
   }
@@ -1174,7 +1153,9 @@ function applyPlaceholderReplace(
     });
   }
 
-  return fromEdit(replaceNode(part, control.id, nextControl, options), effect);
+  const replaced = fromEdit(replaceNode(part, control.id, nextControl, options), effect);
+  // The prompt stays the control's, in the glossary, as typing over it keeps it
+  return replaced.ok ? keepingPrompt(part, control, replaced, options) : replaced;
 }
 
 function findLast<T>(items: readonly T[], predicate: (item: T) => boolean): T | undefined {
@@ -1200,6 +1181,18 @@ function contains(node: OoxmlNode, id: string): boolean {
   if (node.id === id) return true;
   if (node.kind === 'textValue') return false;
   return node.children.some((child) => contains(child, id));
+}
+
+/** Whether `ancestorId` is `nodeId` or holds it, read up the part's parent index. */
+function isAncestorOrSelf(part: OoxmlPart, ancestorId: string, nodeId: string): boolean {
+  for (let id: string | undefined = nodeId; id !== undefined; id = parentOf(part, id)?.id) {
+    if (id === ancestorId) return true;
+  }
+  return false;
+}
+/** A tracked edit that a prompt takes in: the part unchanged, the paragraph repainted. */
+function promptKept(part: OoxmlPart, paragraphId: string): TreeOpResult {
+  return ok(part, contentControlEffect(paragraphId, 'text-local'));
 }
 
 /** Whether the element holding a text value is a `w:t` or a `w:delText`. */
@@ -2523,7 +2516,9 @@ function applySplit(
   tailStyleId?: string | null
 ): TreeOpResult {
   const nextId = createNodeIdAllocator(part);
+  const markId = createMarkContainerIdAllocator(part);
   const { children, segments, endIds } = fieldSplitChildren(paragraph, [offset], nextId);
+  const atomEnds = atomUnitEnds(segments);
   const headChildren: OoxmlNode[] = [];
   const tailChildren: OoxmlNode[] = [];
   const pPr = paragraphPropertiesNodeOf(paragraph);
@@ -2538,11 +2533,13 @@ function applySplit(
     if (isParagraphPropertiesNode(child)) continue;
     const runSegments = segmentsForChild(child, segments);
     if (runSegments.length === 0) {
-      ([...endIds].some((id) => contains(child, id)) ||
-      zeroLengthGoesToHead(child, cursor, offset, openedHere)
-        ? headChildren
-        : tailChildren
-      ).push(child);
+      const atomEnd = atomUnitEndIn(child, atomEnds);
+      const toHead =
+        atomEnd !== undefined
+          ? atomEnd <= offset
+          : [...endIds].some((id) => contains(child, id)) ||
+            zeroLengthGoesToHead(child, cursor, offset, openedHere);
+      (toHead ? headChildren : tailChildren).push(child);
       const opened = opensARange(child);
       if (opened) openedHere.add(opened);
       continue;
@@ -2568,8 +2565,9 @@ function applySplit(
   // inserting a fresh mark before the existing one, so the original mark — and the
   // section boundary it carries — stays after ALL the paragraph's content. Cloning it
   // onto both halves minted a phantom section (and a spurious page break) on every
-  // Enter in a section's last paragraph.
-  const headPPr = pPr ? withoutSectionMark(pPr) : undefined;
+  // Enter in a section's last paragraph. A deletion proposed on that mark stays there too.
+  const sectionless = pPr ? withoutSectionMark(pPr) : undefined;
+  const headPPr = sectionless ? insertedMarkProperties(sectionless) : undefined;
   // The HEAD keeps the original paragraph's `w14:paraId` (it is spread below); the tail
   // is the new paragraph and gets a fresh deterministic mint, exactly as Word assigns a
   // new id to the paragraph an Enter creates. Seeded by (head id, offset) so one
@@ -2589,7 +2587,7 @@ function applySplit(
         )
       : [],
     children: (() => {
-      const tailPPr = withTailStyle(pPr, tailStyleId, nextId);
+      const tailPPr = withTailStyle(pPr, tailStyleId, nextId, markId);
       return tailPPr ? [tailPPr, ...tailChildren] : tailChildren;
     })(),
   } as unknown as OoxmlNode;
@@ -2867,7 +2865,9 @@ function applySplitMany(
   options?: EditOptions
 ): TreeOpResult {
   const nextId = createNodeIdAllocator(part);
+  const markId = createMarkContainerIdAllocator(part);
   const { children, segments, endIds } = fieldSplitChildren(paragraph, offsets, nextId);
+  const atomEnds = atomUnitEnds(segments);
   const pPr = paragraphPropertiesNodeOf(paragraph);
   const pieceCount = offsets.length + 1;
   const pieces: OoxmlNode[][] = Array.from({ length: pieceCount }, () => []);
@@ -2880,13 +2880,15 @@ function applySplitMany(
     if (isParagraphPropertiesNode(child)) continue;
     const runSegments = segmentsForChild(child, segments);
     if (runSegments.length === 0) {
-      const piece = pieceIndexOf(
-        offsets,
-        cursor,
-        [...endIds].some((id) => contains(child, id)) || closesAnOpenRange(child, openedHere)
-          ? 'head'
-          : 'tail'
-      );
+      const atomEnd = atomUnitEndIn(child, atomEnds);
+      let piece: number;
+      if (atomEnd !== undefined) {
+        piece = pieceIndexOf(offsets, atomEnd - 1);
+      } else {
+        const closesRange =
+          [...endIds].some((id) => contains(child, id)) || closesAnOpenRange(child, openedHere);
+        piece = pieceIndexOf(offsets, cursor, closesRange ? 'head' : 'tail');
+      }
       pieces[piece]!.push(child);
       const opened = opensARange(child);
       if (opened) openedHere.add(opened);
@@ -2911,8 +2913,10 @@ function applySplitMany(
 
   // A `w:sectPr` in the mark belongs to the LAST piece only — the original mark ends up
   // after all the paragraph's content, exactly as the single-split rule keeps it on the
-  // tail. Duplicating it minted one phantom section per pasted line.
-  const strippedPPr = pPr ? withoutSectionMark(pPr) : undefined;
+  // tail. Duplicating it minted one phantom section per pasted line. The same holds for a
+  // deletion proposed on the mark: every earlier piece ends with a mark the split inserts.
+  const sectionless = pPr ? withoutSectionMark(pPr) : undefined;
+  const strippedPPr = sectionless ? insertedMarkProperties(sectionless) : undefined;
   // Tail `w14:paraId`s, minted in DESCENDING piece order: the equivalent sequence of
   // single splits runs last-offset-first, so its used-set grows from the last tail
   // backwards. Mirroring that order (including how a repeated offset's seed collision
@@ -2942,7 +2946,9 @@ function applySplitMany(
       prefix: 'w',
       namespaceBindings: [],
       attributes: tailIdentityAttributes[piece] ?? [],
-      children: source ? [cloneWithNewIds(source, nextId), ...pieces[piece]!] : pieces[piece]!,
+      children: source
+        ? [cloneSplitProperties(source, nextId, markId), ...pieces[piece]!]
+        : pieces[piece]!,
     } as unknown as OoxmlNode);
   }
 
@@ -3313,6 +3319,7 @@ function applySetRunProperties(
   let ownId: string | null = null;
   const mintRevisionId = (): string =>
     options?.revisionIds?.() ?? (ownId ??= nextRevisionId(current)());
+  let changed = false;
   for (const runId of runIds) {
     const run = findNode(current, runId);
     if (!run || run.kind !== 'run') continue;
@@ -3339,6 +3346,9 @@ function applySetRunProperties(
         nextRevisionId: mintRevisionId,
       });
     }
+    // A run that already says all of this keeps its `w:rPr` as authored.
+    if (keepsPropertyChildren(prior, children)) continue;
+    changed = true;
     if (children.length === 0) {
       if (!existing) continue;
       const cleared = replaceChildren(current, run.id, content, options);
@@ -3366,6 +3376,9 @@ function applySetRunProperties(
     if (!updated.ok) return fromEdit(updated, effect);
     current = updated.part;
   }
+  // No run changed a value, so the edge splits above are dropped with the rest: the format
+  // leaves the paragraph exactly as it was, as Word does.
+  if (!changed) return ok(part, UNCHANGED_PROPERTIES_EFFECT);
   return ok(current, effect);
 }
 

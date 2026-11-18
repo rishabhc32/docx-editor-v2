@@ -86,6 +86,13 @@ export interface SurfaceRangeEditDeps {
    * plan built from the pre-buffer selection edits beside text the user has already typed.
    */
   flushPendingInputAndLayout(): void;
+  /**
+   * Whether some pages still show an older layout: the pages after the screen that a
+   * deferred pass has not finished, or the body an opening in slices has not reached.
+   */
+  layoutPending?(): boolean;
+  /** Finish that layout now, so the published pages hold every paragraph. */
+  finishLayout?(): void;
   /** The author a tracked edit is attributed to, or undefined when the edit lands direct. */
   trackedAuthorOrNone(): string | undefined;
   /** `w:next` lane: whether an offset sits at the end of a paragraph's MODEL text. */
@@ -114,6 +121,12 @@ export interface SurfaceRangeEditOps {
   splitEndsTheParagraph(position: SemanticPosition): boolean;
   deleteSelectionPlan(trackedAuthor?: string): RangeDeletionPlan;
   deleteSelectionOps(): readonly TreeDocOp[];
+  /**
+   * The refusal for a write while the selection runs between paragraphs and one end is in
+   * no laid-out order, even after any pending layout is finished: text the page does not
+   * show, such as a paragraph hidden whole. Null when the selection is placed.
+   */
+  unplacedSelectionRefusal(): string | null;
   /** The plan for an explicit range of the active story; the selection does not move. */
   deleteRangePlan(range: SemanticSelection): {
     readonly ops: readonly TreeDocOp[];
@@ -121,6 +134,18 @@ export interface SurfaceRangeEditOps {
   };
   replacementOffset(from: SemanticPosition, to: SemanticPosition, trackedAuthor?: string): number;
 }
+
+/** Whether `order` names both ends of `selection`. */
+function holdsEnds(order: readonly string[], selection: SemanticSelection): boolean {
+  return order.includes(selection.anchor.paragraphId) && order.includes(selection.head.paragraphId);
+}
+
+/**
+ * The refusal of a write whose selection names a paragraph the laid-out pages do not hold,
+ * even after any pending layout is finished. Writing part of the range, or none of it with
+ * no report, would both lose the user's edit without a word.
+ */
+export const UNPLACED_SELECTION_REFUSAL = 'the selection ends in text that the page does not show';
 
 export function createSurfaceRangeEditOps(deps: SurfaceRangeEditDeps): SurfaceRangeEditOps {
   const { session } = deps;
@@ -144,12 +169,31 @@ export function createSurfaceRangeEditOps(deps: SurfaceRangeEditDeps): SurfaceRa
     // deferred under input pressure. (No-op mid-flush and when empty.)
     deps.flushPendingInputAndLayout();
     const selection = planSelection();
+    // A range end on a page that still shows an older layout (after the screen, where a
+    // deferred pass has not reached, or past an opening's first slices) is in no published
+    // order and has no published text. Every range reader below takes both from the pages,
+    // so it would see nothing to do, and the write would do nothing with no report.
+    // Finish that layout first. Only while one is pending, so the common case costs one check.
+    if (deps.layoutPending?.() && !holdsEnds(deps.paragraphOrder(), selection)) {
+      deps.finishLayout?.();
+    }
     // One paragraph is ordered by offset alone; skip the document-wide order walk.
     const order =
       selection.anchor.paragraphId === selection.head.paragraphId
         ? undefined
         : deps.paragraphOrder();
     return orderedRangeOf(deps.layout(), selection, order);
+  }
+
+  function unplacedSelectionRefusal(): string | null {
+    const selection = deps.selection();
+    // One paragraph is written by offsets alone, and a rectangle names its cells.
+    if (selection.anchor.paragraphId === selection.head.paragraphId || deps.cellSelection()) {
+      return null;
+    }
+    if (holdsEnds(deps.paragraphOrder(), selection)) return null;
+    if (deps.layoutPending?.()) deps.finishLayout?.();
+    return holdsEnds(deps.paragraphOrder(), selection) ? null : UNPLACED_SELECTION_REFUSAL;
   }
 
   function orderedStart(): SemanticPosition {
@@ -620,5 +664,6 @@ export function createSurfaceRangeEditOps(deps: SurfaceRangeEditDeps): SurfaceRa
     deleteSelectionOps,
     deleteRangePlan,
     replacementOffset,
+    unplacedSelectionRefusal,
   };
 }

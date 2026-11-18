@@ -10,7 +10,8 @@ export function textboxInsertionRefusal(
   surface: PaginatedSurface
 ): Exclude<ExecResult, { ok: true }> | null {
   const scope = surface.activeScope();
-  if (surface.editingMode() !== 'edit' || (scope.kind !== 'body' && scope.kind !== 'frame'))
+  // Suggesting proposes the text box as a tracked insertion of its run (`applyDrawingOps`)
+  if (surface.editingMode() === 'view' || (scope.kind !== 'body' && scope.kind !== 'frame'))
     return {
       ok: false,
       code: 'unsupported',

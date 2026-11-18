@@ -22,7 +22,6 @@
 import { textWithHyphens } from './tree-op-inline-elements.ts';
 import {
   WML_NAMESPACE_URI,
-  type OoxmlElement,
   type OoxmlNode,
   type OoxmlParagraphNode,
   type OoxmlPart,
@@ -40,7 +39,6 @@ import {
   replaceChildren,
   type EditOptions,
 } from '../package/ooxml-edit.ts';
-import { equivalentNodes } from './ooxml-node-equality.ts';
 import { nextRevisionId } from './tree-op-revision-ids.ts';
 import { TEXT_DEPS, fromEdit } from './tree-op-nodes.ts';
 import {
@@ -62,29 +60,22 @@ import type { RevisionAttributionInput, TreeOpEffect, TreeOpResult } from './tre
 import { build, revisionAttributes } from './tree-op-tracked-builders.ts';
 import { emptyParagraphRunProperties } from './mark-character-style-run.ts';
 import { liftedOutOfForeignInsertions } from './tree-op-tracked-foreign-split.ts';
+import { struckRunsAround } from './tree-op-tracked-struck-face.ts';
 
 export { sameEditingMoment } from './tree-op-tracked-adjacency.ts';
 export { build, revisionAttributes } from './tree-op-tracked-builders.ts';
-
-/** A `w:t`, or the `w:delText` the same characters become once struck. */
-export function textNode(mint: () => string, value: string, deleted: boolean): OoxmlNode {
-  const valueId = mint();
-  return build(
-    mint(),
-    deleted ? 'deletedText' : 'text',
-    deleted ? 'delText' : 't',
-    [],
-    [{ id: valueId, kind: 'textValue', value } as OoxmlNode]
-  );
-}
+export { childrenOf, isRunProperties, mergedRevisions, textNode } from './tree-op-tracked-merge.ts';
+import {
+  childrenOf,
+  coalesced,
+  isRunProperties,
+  mergedRevisions,
+  textNode,
+} from './tree-op-tracked-merge.ts';
 
 /** A `w:r` over its children — the ONE spelling of the run shape this module writes. */
 function runOf(mint: () => string, children: readonly OoxmlNode[]): OoxmlNode {
   return build(mint(), 'run', 'r', [], children);
-}
-
-export function isRunProperties(node: OoxmlNode): boolean {
-  return node.kind !== 'textValue' && node.kind === 'runProperties';
 }
 
 /**
@@ -412,6 +403,11 @@ function applyTrackedInsertion(
   // inside it at its trailing edge), says which container the words belong in.
   const requestedDestination =
     bias === 'right' || owner ? insertionDestination(paragraph, offset, owner, bias) : null;
+  // A run inside this author's own insertion inside the requested destination: the words extend it
+  const extendsOwnInsertionAtDestination = (stack: readonly OoxmlNode[], node: OoxmlNode) =>
+    requestedDestination !== null &&
+    stack.some((held) => requestedDestination.path.has(held.id)) &&
+    insertionAuthor([...stack, node]) === revision.author;
   // Minted LAZILY, on the first wrapper actually built: `nextRevisionId` walks the whole
   // part, and typing on inside your own `w:ins` — every keystroke after the first — extends
   // the existing wrapper and builds none, so it must not pay that walk. A transaction lends
@@ -479,6 +475,13 @@ function applyTrackedInsertion(
     if (offsets.segments.length > 0) return null;
     const styled = emptyParagraphRunProperties(paragraph, mint);
     return styled.length > 0 ? styled : null;
+  };
+  // Beside struck words the walk holds no run: the struck run before the caret, else the one
+  // after it, lends its face (`tree-op-tracked-struck-face.ts`). Null when none touches it.
+  const struckFace = (level: readonly OoxmlNode[], leftOnly = false): OoxmlNode[] | null => {
+    const { left, right } = struckRunsAround(level, offset, offsets);
+    const run = left ?? (leftOnly ? null : right);
+    return run ? insertedRunProperties(mint, run) : null;
   };
   let exceedsDepth = false;
   const wrappers = new Set<string>();
@@ -665,12 +668,14 @@ function applyTrackedInsertion(
           [...stack, node],
           nextInlineContainerDepth(node, containerDepth)
         );
-        // The adopted deletion ends exactly where the container does, so the inner walk
-        // comes back unplaced. The replacement still belongs beside the struck words,
-        // INSIDE the container that holds them.
+        // The adopted deletion, or the wrapper the requested site leaves (another author's
+        // words at a control's end), ends where the container does, so the inner walk comes
+        // back unplaced. The words still belong at its end, INSIDE the container.
         if (
           !placed &&
-          (holdsReplaced || (sharedTrailingOwner && node.id === trailingDestination?.holderId)) &&
+          (holdsReplaced ||
+            (sharedTrailingOwner && node.id === trailingDestination?.holderId) ||
+            node.id === requestedDestination?.landingNodeId) &&
           offset === cursor.offset
         ) {
           rebuilt.push(
@@ -700,7 +705,7 @@ function applyTrackedInsertion(
         (node.kind === 'revisionDelete' || node.kind === 'revisionMoveFrom')
       ) {
         cursor.offset = end;
-        out.push(node, wrap([], containerDepth));
+        out.push(node, wrap(struckFace(nodes) ?? [], containerDepth));
         placed = true;
         continue;
       }
@@ -726,7 +731,7 @@ function applyTrackedInsertion(
           placed = true;
           continue;
         }
-        out.push(wrap([], containerDepth));
+        out.push(wrap(struckFace(nodes) ?? [], containerDepth));
         placed = true;
         cursor.offset = end;
         out.push(node);
@@ -754,10 +759,7 @@ function applyTrackedInsertion(
         offset !== start &&
         requestedDestination !== null &&
         !requestedDestination.path.has(node.id) &&
-        !(
-          stack.some((held) => requestedDestination.path.has(held.id)) &&
-          insertionAuthor([...stack, node]) === revision.author
-        )
+        !extendsOwnInsertionAtDestination(stack, node)
       ) {
         cursor.offset = end;
         out.push(node);
@@ -774,7 +776,8 @@ function applyTrackedInsertion(
           cursor.offset = end + payload.length;
           continue;
         }
-        const properties = insertedRunProperties(mint, node);
+        const properties =
+          (offset === start ? struckFace(nodes, true) : null) ?? insertedRunProperties(mint, node);
         if (offset === start) {
           out.push(wrap(properties, containerDepth), node);
         } else if (offset === end) {
@@ -805,7 +808,8 @@ function applyTrackedInsertion(
     if (offset !== cursor.offset) {
       return { ok: false, reason: 'offset-out-of-range', detail: 'offset past the paragraph' };
     }
-    children = [...children, wrap(fieldDestination ? fieldProperties() : [], 0)];
+    const face = fieldDestination ? fieldProperties() : struckFace(paragraph.children, true);
+    children = [...children, wrap(face ?? [], 0)];
   }
   if (exceedsDepth) return { ok: false, reason: 'invalid-range' };
   return fromEdit(replaceChildren(part, paragraph.id, children, options), effect);
@@ -879,115 +883,6 @@ function splitRunAndInsert(
  * valid, and read identically by anything that concatenates, but it accumulates one element
  * per keystroke and is not what Word writes.
  */
-function coalesced(mint: () => string, nodes: readonly OoxmlNode[]): OoxmlNode[] {
-  const out: OoxmlNode[] = [];
-  for (const node of nodes) {
-    const previous = out[out.length - 1];
-    const mergeable =
-      previous !== undefined &&
-      previous.kind === node.kind &&
-      (node.kind === 'text' || node.kind === 'deletedText');
-    if (!mergeable) {
-      out.push(node);
-      continue;
-    }
-    const left = childrenOf(previous).find((child) => child.kind === 'textValue');
-    const right = childrenOf(node).find((child) => child.kind === 'textValue');
-    const value =
-      (left && left.kind === 'textValue' ? left.value : '') +
-      (right && right.kind === 'textValue' ? right.value : '');
-    out[out.length - 1] = textNode(mint, value, node.kind === 'deletedText');
-  }
-  return out;
-}
-
-/** A node's children, or none for a text value — the union's only childless member. */
-export function childrenOf(node: OoxmlNode): readonly OoxmlNode[] {
-  return node.kind === 'textValue' ? [] : node.children;
-}
-
-/**
- * Fold adjacent revision wrappers that are the same revision into one.
- *
- * Striking a character at a time leaves `<w:del id=0/><w:del id=0/><w:del id=0/>` — one
- * decision by every reader that groups on the id, but three elements where Word writes one,
- * and three more on the next keystroke. Same id, same author, same date, side by side: one
- * wrapper holding all their runs.
- */
-export function mergedRevisions(mint: () => string, nodes: readonly OoxmlNode[]): OoxmlNode[] {
-  const out: OoxmlNode[] = [];
-  for (const node of nodes) {
-    const previous = out[out.length - 1];
-    if (
-      previous !== undefined &&
-      previous.kind !== 'textValue' &&
-      node.kind !== 'textValue' &&
-      previous.kind === node.kind &&
-      (node.kind === 'revisionInsert' || node.kind === 'revisionDelete') &&
-      sameRevision(previous, node)
-    ) {
-      out[out.length - 1] = {
-        ...previous,
-        children: mergedRevisionRuns(mint, previous.children, node.children),
-      } as OoxmlNode;
-      continue;
-    }
-    out.push(node);
-  }
-  return out;
-}
-
-/** Merge the boundary runs when repeated deletion split one formatted run per keypress. */
-function mergedRevisionRuns(
-  mint: () => string,
-  left: readonly OoxmlNode[],
-  right: readonly OoxmlNode[]
-): OoxmlNode[] {
-  const previous = left[left.length - 1];
-  const next = right[0];
-  if (
-    previous?.kind !== 'run' ||
-    next?.kind !== 'run' ||
-    !mergeableTextRun(previous) ||
-    !mergeableTextRun(next)
-  ) {
-    return [...left, ...right];
-  }
-  const previousProperties = previous.children.filter(isRunProperties);
-  const nextProperties = next.children.filter(isRunProperties);
-  if (!equivalentNodes(previousProperties, nextProperties)) return [...left, ...right];
-  const content = coalesced(mint, [
-    ...previous.children.filter((child) => !isRunProperties(child)),
-    ...next.children.filter((child) => !isRunProperties(child)),
-  ]);
-  const merged = { ...previous, children: [...previousProperties, ...content] } as OoxmlNode;
-  return [...left.slice(0, -1), merged, ...right.slice(1)];
-}
-
-/** Only plain text runs are safe to collapse; drawings, breaks and generic atoms stay separate. */
-function mergeableTextRun(run: OoxmlElement): boolean {
-  const content = run.children.filter((child) => !isRunProperties(child));
-  return (
-    content.length > 0 &&
-    content.every((child) => child.kind === 'text' || child.kind === 'deletedText')
-  );
-}
-
-/** Two wrappers are the same revision when their `CT_TrackChange` triple agrees. */
-function sameRevision(a: OoxmlElement, b: OoxmlElement): boolean {
-  const read = (node: OoxmlElement, localName: string): string | undefined =>
-    node.attributes.find(
-      (attribute) =>
-        attribute.namespaceUri === WML_NAMESPACE_URI && attribute.localName === localName
-    )?.value;
-  return (
-    read(a, 'id') !== undefined &&
-    read(a, 'id') === read(b, 'id') &&
-    read(a, 'author') === read(b, 'author') &&
-    read(a, 'date') === read(b, 'date')
-  );
-}
-
 /** Shared with `tree-op-tracked-marks.ts`, which writes the paragraph-mark wrappers. */
 export function isWmlNamed(node: OoxmlNode, localName: string): boolean {
   return (

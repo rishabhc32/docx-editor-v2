@@ -43,6 +43,10 @@ import {
   tocAtPosition,
   selectionTouchesTocRange,
   opTouchesTocRange,
+  pageNumbersFor,
+  tocParagraphIdsOf,
+  tocRegionLineCount,
+  tocRegionOf,
   paragraphInBodyToc,
 } from './surface-toc-ranges.ts';
 import { tocBoundaryForLayout } from './surface-toc-boundary.ts';
@@ -58,9 +62,12 @@ import { registerSurfaceMeasurement } from './surface-measurement.ts';
 import { startOpeningSlices } from './surface-progressive-open.ts';
 import { createDeferredLayout } from './surface-deferred-layout.ts';
 import { createCanonicalLayout } from './surface-canonical-layout.ts';
+import { noteLiveLayoutPass } from './surface-layout-passes.ts';
+import { stepCollaborationHistory } from './collaboration-history-step.ts';
 import { drainLayoutSteps, type LayoutSteps } from '../layout/layout-steps.ts';
 import { createReviewOrderIndex } from './surface-review-order.ts';
 import { litReviewKeys, reviewItemsByKey } from './review-replacement-pairs.ts';
+import { bandClassFor, RANGE_SUFFIX } from './review-band-class.ts';
 import { bodyBlockCountOf, bodyBlocksOf } from '../layout/body-block-limit.ts';
 import {
   createContentControlWidgetSessions,
@@ -115,7 +122,6 @@ import {
   planTocEntries,
   resolveTocRowHeadings,
   validateTreeOp,
-  type DetectedToc,
   type OoxmlElement,
   type StoryScope,
   type TreeDocOp,
@@ -132,9 +138,7 @@ import {
   resolveDefaultSurfaceMeasurer,
   cellSelectionRects,
   keyedRangeRects,
-  formatPageNumber,
   emptyTocPlaceholderParagraphIds,
-  paragraphFragmentsOf,
   reviewItemKey,
   reviewThreadRootOf,
   selectionRects,
@@ -233,6 +237,7 @@ import {
   createKeyDownHandler,
 } from './surface-input.ts';
 import { createSurfaceClipboardOps } from './surface-clipboard-ops.ts';
+import { gateContextsFor } from '../collaboration/gate-context.ts';
 import { createSurfaceRangeEditOps } from './surface-range-edit.ts';
 import {
   carriedSelectionOf,
@@ -298,6 +303,8 @@ import {
   partOfNodeId,
   storyScopeOfNodeId,
   noteScopeIdInLayout,
+  OUTSIDE_STORY_REFUSAL,
+  selectionInStory,
 } from './surface-scope.ts';
 import { createCaretViewFollower, type CaretFollowMode } from './surface-caret-follow.ts';
 import { createInPlaceReplacement } from './surface-replace-in-place.ts';
@@ -345,6 +352,7 @@ export type {
   RemoteCaretLabelAnchor,
   RemoteCaretLabelHost,
   SectionBreakInsertType,
+  ReviewWrite,
   ReviewWriteIntent,
   SurfaceFormatting,
 } from './paginated-surface-contract.ts';
@@ -384,6 +392,7 @@ export function mountPaginatedSurface(
   const reviewOrder = createReviewOrderIndex(session);
   const reviewOrderIndex = reviewOrder.index;
   const collaborationSession = options.collaborationModel?.session;
+  const gateContext = gateContextsFor(session, collaborationSession);
   let author = options.author;
   let scale = options.scale ?? 96 / 72;
   const tableLabelState = {
@@ -393,10 +402,11 @@ export function mountPaginatedSurface(
   const VIEWING_REFUSAL = 'the document is open for viewing';
   /** Document protection, as opposed to the reversible mode — the wording `gateCommand` uses. */
   const TOC_READ_ONLY_REFUSAL = 'the table of contents is generated and read-only';
+  const TOC_FORMAT_SKIPPED = `${TOC_READ_ONLY_REFUSAL}; the rest of the selection was formatted`;
   /** Set while formatting writes its ops outside a selected table of contents. */
   let formattingOutsideToc = false;
-  /** Separates a decision's key from its per-range index. A NUL cannot occur in either. */
-  const RANGE_SUFFIX = '\u0000range\u0000';
+  /** Set when that write committed without the table's part; the commit then reports it. */
+  let formattingSkippedToc = false;
   /** One timestamp per edit. The clock is the host's; the store never reads one. */
   // SECONDS precision, like Word. Milliseconds are valid `xsd:dateTime` but no other editor
   // writes them, and two revisions differing only in milliseconds never group.
@@ -420,6 +430,7 @@ export function mountPaginatedSurface(
   let producer = producerIdentity();
   // `lockedControlNavigation: 'atomic'`: inline controls with locked content are one caret unit.
   const atomicNavigation = options.lockedControlNavigation === 'atomic';
+  const headerFootersLocked = options.headerFooterEditing === false;
   // Construction only. Everything read at RUN time (focus, selection, listeners, timers)
   // resolves from `pagesLayer`, because `moveTo` can carry the pages to another window.
   const mountDocument = container.ownerDocument;
@@ -654,7 +665,9 @@ export function mountPaginatedSurface(
     let result: ReturnType<DocumentSelectionHistory['step']>;
     try {
       result = documentSelectionHistory.step(direction, () => {
-        if (collaborationSession) return collaborationSession[direction]();
+        if (collaborationSession) {
+          return stepCollaborationHistory(collaborationSession, direction, publishRefusal);
+        }
         const revision = session.packageRevision();
         mark = session[direction]();
         return session.packageRevision() !== revision;
@@ -1183,7 +1196,11 @@ export function mountPaginatedSurface(
       if (kept.length === 0) return apply(ops);
       formattingOutsideToc = true;
       try {
-        return apply(kept);
+        const result = apply(kept);
+        // Word formats the table's text too; this editor keeps it read-only, so the part it
+        // leaves out is reported, never dropped in silence.
+        formattingSkippedToc = result.committed && kept.length < ops.length;
+        return result;
       } finally {
         formattingOutsideToc = false;
       }
@@ -1245,7 +1262,6 @@ export function mountPaginatedSurface(
     // asks. Without it, bulleting or indenting one selected column also hit the cells between
     // its corners in document order.
     selectedCells: () => cellSelection?.cellIds,
-    editingMode: () => editingMode,
     publishRefusal,
     // RAW, on purpose: `orderedRange()` flushes pending input, and this is asked from `can`.
     caretParagraphId: () =>
@@ -1299,7 +1315,7 @@ export function mountPaginatedSurface(
     // Asked BEFORE the relationship is minted. The gated session refuses the ops in viewing mode
     // either way, but the mint is a package write that the refusal does not roll back — Ctrl+K in a
     // document open for reading left its target declared in `.rels`.
-    refusesWrite: () => writeRefusal(true) !== null,
+    writeRefusal: () => writeRefusal(true),
     withMintActor: (mint) => runWithTransactionActor(collaborationSession?.identity.actorId, mint),
     storyScope,
     // Non-null exactly when suggesting: the link lane then replaces with tracked ops.
@@ -1405,6 +1421,7 @@ export function mountPaginatedSurface(
     context?: LayoutDocumentContext,
     bodyBlockLimit?: number
   ): LayoutSteps<SemanticLayout> {
+    if (!context) noteLiveLayoutPass();
     const activeAuthorFilter = context ? context.authorFilter : revisionFilter();
     const activeLayoutSession = context?.layoutSession ?? layoutSession;
     const activeFurnitureSource = context?.furnitureSource ?? furnitureSource;
@@ -1471,6 +1488,8 @@ export function mountPaginatedSurface(
   let deferredPublishRender: number | null = null;
   /** Nonzero while `commitNow` applies its ops; see `renderPublishedLayout`. */
   let commitRunDepth = 0;
+  /** A local commit in flight owes the room's version of it: a host's read keeps the pages. */
+  let settleOwed = false;
   let commitPaintOwed = false;
 
   // Armed once, after the first published render: the derivations a structural edit reads
@@ -1747,6 +1766,7 @@ export function mountPaginatedSurface(
     // Peers see this caret move too, or they keep painting it at the old offset.
     if (carried !== selection) {
       selection = carried;
+      noteOps?.followCaret(noteScopeIdInLayout(layout, carried.head.paragraphId));
       publishLocalCollaborationSelection();
     }
     // Repaint from HERE, so a commit that never went through this surface — undo, or
@@ -1821,6 +1841,8 @@ export function mountPaginatedSurface(
         currentLayout.revision === modelChange.fromRevision
       );
     } else remoteCaret.noteLocal();
+    if (commitRunDepth > 0 && modelChange.origin !== ORIGIN_IDS.mutationRemote)
+      settleOwed = collaborationSession?.settleLocalCommit !== undefined;
     scheduler.notify(modelChange);
   });
   const collaborationPort = collaborationSession
@@ -2745,13 +2767,15 @@ export function mountPaginatedSurface(
       },
       reviewAuthors.get().value
     );
+    // Now, not at the end of the task: the observer's queued records hold the replaced pages.
+    legacyDropdownInteraction?.painted();
     // Paint just rebuilt every span, so the caret's field lost its mark with the old DOM.
     textboxEditing?.syncDom();
     syncActiveFieldShading(pagesLayer, collapsedCaretPosition(), { domReplaced: true });
     setHeaderFooterEditingChrome(container, pagesLayer, activeHf != null);
     // Viewing mode hides write affordances the painter cannot know about — today the
     // blank header/footer "double-click to add" band.
-    setEditingModeChrome(container, editingMode, options.headerFooterEditing === false);
+    setEditingModeChrome(container, editingMode, headerFootersLocked);
     // The pages are absolutely positioned, so the layer has no intrinsic size and the
     // surface would collapse to zero — pages then escape whatever centres or scrolls it.
     // Size it from the records, which is the only place the extent is known.
@@ -2910,7 +2934,12 @@ export function mountPaginatedSurface(
     scope: StoryScope = storyScope(),
     packageEdits?: NonNullable<Parameters<TreeDocxSession['applyTreeOps']>[4]>['packageEdits']
   ): ReturnType<TreeDocxSession['applyTreeOps']> {
-    const refusal = untrackedEdits.refusal(ops) ?? collaborationSession?.gateOperations(ops, scope);
+    // The group of the commit in flight, if any: it travels with the transaction into local
+    // history and, through the gate and the journal, to the collaboration undo authority.
+    const historyGroup = commitHistoryGroup.value;
+    const refusal =
+      untrackedEdits.refusal(ops) ??
+      collaborationSession?.gateOperations(ops, scope, gateContext(packageEdits, historyGroup));
     if (refusal) {
       return {
         committed: false,
@@ -2920,9 +2949,6 @@ export function mountPaginatedSurface(
       };
     }
     collaborationOperationCounter += 1;
-    // The group of the commit in flight, if any: it travels with the transaction into local
-    // history and, through the journal, to the collaboration undo authority.
-    const historyGroup = commitHistoryGroup.value;
     return session.applyTreeOps(
       ops,
       selectionBefore,
@@ -2961,6 +2987,9 @@ export function mountPaginatedSurface(
     // to sit has anything to say about it. Without the second exemption a caret parked in a
     // table of contents refused it with a reason about the table of contents.
     if (refreshWriteBlocked(container)) return writeBlockReason(container);
+    // Every lane that replaces a range: its plan cannot see an end the page does not show.
+    const unplaced = edits && checkSelection ? unplacedSelectionRefusal() : null;
+    if (unplaced !== null) return unplaced;
     const protectionWrite = isDocumentProtectionBatch(ops);
     if (editingMode === 'view' && !protectionWrite) return VIEWING_REFUSAL;
     if (
@@ -3143,6 +3172,7 @@ export function mountPaginatedSurface(
     // itself commits through here with an empty buffer.
     flushTypeBuffer();
     if (!flushingTypeBuffer) typingHistory.end();
+    formattingSkippedToc = false;
     const finishSelectionHistory = documentSelectionHistory.begin();
     // An edit invalidates the rectangle: its cells' content has changed, and the collapsed
     // DOM selection it installed still points at the PRE-edit anchor. Left standing it kept
@@ -3178,7 +3208,7 @@ export function mountPaginatedSurface(
         const raw = String(rejection.reason ?? UNEXPLAINED_WRITE_REFUSAL);
         rejected = lastRejection = refuse(writeRejectionReason(raw, session.settingsRoot()), raw);
       } else {
-        lastRejection = null;
+        lastRejection = formattingSkippedToc ? refuse(TOC_FORMAT_SKIPPED) : null;
         if (typeof result === 'boolean' ? result : result.committed) reportEdit();
         // The post-edit selection is installed BEFORE the paint, so the single render below
         // paints the new pages, mirrors the new caret into the DOM and reports one state
@@ -3219,7 +3249,8 @@ export function mountPaginatedSurface(
       finishSelectionHistory();
       publishLocalCollaborationSelection();
     } catch (error) {
-      if ((commitRunDepth -= 1) === 0 && commitPaintOwed) {
+      if ((commitRunDepth -= 1) === 0) settleOwed = false;
+      if (commitRunDepth === 0 && commitPaintOwed) {
         try {
           render();
         } catch {
@@ -3229,6 +3260,16 @@ export function mountPaginatedSurface(
       throw error;
     }
     commitRunDepth -= 1;
+    // A room gives the editor its own version of what the commit wrote (an ordered room's list).
+    // Landed here, after the post-edit caret and before the layout below, one pass lays out both.
+    // A script's command reads its own commit back, and a commit inside another command's run is
+    // followed by more of its ops, so the room's version reaches those later.
+    if (commitRunDepth === 0) {
+      settleOwed = false;
+      if (!options?.automation) {
+        collaborationSession?.settleLocalCommit?.();
+      }
+    }
     // A committed edit repaints through the scheduler's publish; a REFUSED one commits
     // nothing, so the surface still has to refresh the state it just changed. Under input
     // pressure the publish may hand layout+paint to the scheduler's own task — see
@@ -3476,7 +3517,7 @@ export function mountPaginatedSurface(
     mirrorToDom: () => selectionSync.mirrorToDom(),
     notify: () => options.onChange?.(currentState()),
     materializedPages: () => materializedSet,
-    entryRefused: () => editingMode === 'view' || options.headerFooterEditing === false,
+    entryRefused: () => editingMode === 'view' || headerFootersLocked,
     leaveOtherStories: () => {
       noteOps?.exitNote();
       textboxEditing?.exit();
@@ -3490,6 +3531,7 @@ export function mountPaginatedSurface(
       textboxEditing?.exit();
     },
     applyOps,
+    suggesting: () => editingMode === 'suggest',
     commit,
     selection: () => selection,
     selectionMark: () => selectionMark(),
@@ -3805,54 +3847,6 @@ export function mountPaginatedSurface(
   const remotePresenceColor = presenceColors.forAuthor;
   const declaredPresenceColor = presenceColors.declaredFor;
 
-  /** The class a band draws in, or null when this range should not be drawn at all. */
-  function bandClassFor(
-    key: string,
-    activeKeys: ReadonlySet<string>,
-    byKey: ReadonlyMap<string, ReviewItem>
-  ): string | null {
-    // A revision's key is suffixed per range when one decision covers several sites, so the
-    // active test compares the DECISION, not the site. Split on NUL, which an author name
-    // cannot contain — `#` can, and an author called `A#b` never saw their band light up.
-    const parts = key.split(RANGE_SUFFIX);
-    const decision = parts[0]!;
-    const isActive = activeKeys.has(decision);
-    if (key.startsWith('comment-')) {
-      const item = byKey.get(decision);
-      const resolved = item?.kind === 'comment' && item.resolved;
-      if (resolved && !isActive) return null;
-      return isActive
-        ? `docx-comment-band docx-comment-band--active${resolved ? ' docx-comment-band--resolved-active' : ''}`
-        : 'docx-comment-band';
-    }
-    // A custom node's band only while its card is open: the chip tint already marks the
-    // node persistently, and the comment band is the right weight for "this is the one".
-    if (key.startsWith('custom-')) {
-      return isActive ? 'docx-comment-band docx-comment-band--active' : null;
-    }
-    const item = byKey.get(decision);
-    if (!item || item.kind !== 'revision') return null;
-    // In the revision's OWN colour — green for text arriving, red for text leaving — so the
-    // band never contradicts the decoration beneath it. A REPLACEMENT is one decision in two
-    // colours: its leading ranges are the struck half, the rest is what took their place, and
-    // painting the pair one neutral grey said "something changed here" about an edit whose
-    // two halves the page is already colouring.
-    const index = parts.length > 1 ? Number(parts[1]) : 0;
-    const kindOf = (revisionKind: ReviewRevisionKind): 'delete' | 'insert' | 'other' => {
-      if (revisionKind === 'delete' || revisionKind === 'moveFrom') return 'delete';
-      if (revisionKind === 'insert' || revisionKind === 'moveTo') return 'insert';
-      if (revisionKind === 'replace' && item.replacedRangeCount !== undefined) {
-        return index < item.replacedRangeCount ? 'delete' : 'insert';
-      }
-      return 'other';
-    };
-    const kind = kindOf(item.revisionKind);
-    // Every pending change carries a band, faint until it is the open one. A tracked page
-    // with no tint at all made "which of these is selected" a question about a 1px margin
-    // bar; a page where only the active one tints made the others look resolved.
-    return `docx-revision-band docx-revision-band--${kind}${isActive ? ' docx-revision-band--active' : ''}`;
-  }
-
   let commentHighlightLayout: SemanticLayout | null = null;
   let commentHighlightActiveKey: string | undefined;
   let commentHighlightAuthors: ReadonlyMap<string, ReviewAuthorInfo> | null = null;
@@ -4009,51 +4003,6 @@ export function mountPaginatedSurface(
     return opTouchesTocRange(session.part(), op);
   }
 
-  function tocParagraphIds(): ReadonlySet<string> {
-    return new Set(
-      detectBodyTocs(session.part()).flatMap((toc) => [
-        toc.beginParagraphId,
-        ...toc.resultParagraphIds,
-        toc.endParagraphId,
-      ])
-    );
-  }
-
-  /** Every paragraph one TOC owns. Re-read per pass: a replace mints new result ids. */
-  function tocRegionOf(toc: DetectedToc): ReadonlySet<string> {
-    return new Set([toc.beginParagraphId, toc.endParagraphId, ...toc.resultParagraphIds]);
-  }
-
-  /** Painted lines the TOC regions occupy, which bounds the caret's escape from one. */
-  function tocRegionLineCount(paragraphIds: ReadonlySet<string>): number {
-    let lines = 0;
-    for (const page of currentLayout.pages) {
-      for (const fragment of paragraphFragmentsOf(page)) {
-        if (paragraphIds.has(fragment.paragraphId)) lines += fragment.lines.length;
-      }
-    }
-    return lines;
-  }
-
-  function pageNumbersFor(
-    layout: SemanticLayout,
-    paragraphIds: readonly string[]
-  ): ReadonlyMap<string, string> {
-    const wanted = new Set(paragraphIds);
-    const result = new Map<string, string>();
-    for (const page of layout.pages) {
-      for (const fragment of paragraphFragmentsOf(page)) {
-        if (!wanted.has(fragment.paragraphId) || result.has(fragment.paragraphId)) continue;
-        const source = page.pageFieldSource;
-        result.set(
-          fragment.paragraphId,
-          formatPageNumber(source?.pageNumber ?? page.index + 1, source?.format)
-        );
-      }
-    }
-    return result;
-  }
-
   function canRefreshToc(tocId?: string): boolean {
     if (editingMode === 'view' || !session.editable) return false;
     const toc = targetToc(tocId);
@@ -4159,7 +4108,7 @@ export function mountPaginatedSurface(
         surface.layout(),
         outline.map((entry) => entry.blockId)
       ),
-      tocParagraphIds(),
+      tocParagraphIdsOf(session.part()),
       // Planning runs BEFORE the transaction, so no ambient actor is bound yet. Passed
       // explicitly, the `_Toc` names two peers mint concurrently land in separate stripes
       // instead of colliding on one name that then anchors both hyperlinks.
@@ -4181,7 +4130,24 @@ export function mountPaginatedSurface(
     return op !== null && validateTreeOp(session.part(), op) === null;
   }
 
+  /**
+   * A contents command's writes as ONE undo step, as Word's Update Table is: the rows, then
+   * each page pass, which needs the layout the rows made, commit apart but share the group.
+   */
+  function inOneUndoStep(run: () => boolean): boolean {
+    if (commitHistoryGroup.value !== undefined) return run();
+    return commitHistoryGroup.around(surface, run, (landed) => landed);
+  }
+
   function insertToc(): boolean {
+    return inOneUndoStep(insertTocNow);
+  }
+
+  function refreshToc(tocId?: string, mode: 'entire' | 'pageNumbers' = 'entire'): boolean {
+    return inOneUndoStep(() => refreshTocNow(tocId, mode));
+  }
+
+  function insertTocNow(): boolean {
     if (!canInsertToc()) return false;
     const op = insertTocOp();
     if (!op) return false;
@@ -4194,11 +4160,13 @@ export function mountPaginatedSurface(
       );
       return false;
     }
+    // A room publishes its copy of the rows first, so the page pass names the nodes it shows
+    collaborationSession?.flushPendingJournals();
     const created = detectBodyTocs(session.part()).find((toc) => !existing.has(toc.id));
-    return created ? refreshToc(created.id, 'pageNumbers') : true;
+    return created ? refreshTocNow(created.id, 'pageNumbers') : true;
   }
 
-  function refreshToc(tocId?: string, mode: 'entire' | 'pageNumbers' = 'entire'): boolean {
+  function refreshTocNow(tocId: string | undefined, mode: 'entire' | 'pageNumbers'): boolean {
     let toc = targetToc(tocId);
     if (!toc || !canRefreshToc(toc.id)) return false;
 
@@ -4237,6 +4205,7 @@ export function mountPaginatedSurface(
         );
         return false;
       }
+      collaborationSession?.flushPendingJournals();
       layout = surface.layout();
       toc = targetToc(toc.id);
       if (!toc) return true;
@@ -4278,6 +4247,7 @@ export function mountPaginatedSurface(
         }
         break;
       }
+      collaborationSession?.flushPendingJournals();
       layout = surface.layout();
       toc = targetToc(toc.id) ?? toc;
     }
@@ -4331,6 +4301,7 @@ export function mountPaginatedSurface(
     deleteSelectionOps,
     deleteRangePlan,
     replacementOffset,
+    unplacedSelectionRefusal,
   } = createSurfaceRangeEditOps({
     session,
     layout: editingLayout,
@@ -4342,6 +4313,13 @@ export function mountPaginatedSurface(
     storyScope,
     paragraphOrder,
     flushPendingInputAndLayout,
+    layoutPending: () => deferredLayout.pending() || openingBlockLimit !== null,
+    finishLayout: () => {
+      // A full pass ends an opening in slices; a deferred pass then finishes its later pages.
+      if (openingBlockLimit !== null) scheduler.invalidateAll(session.packageRevision(), 'opening');
+      flushLayout();
+      deferredLayout.finish();
+    },
     trackedAuthorOrNone,
     atParagraphEnd: (paragraphId, offset) => nextStyle.atParagraphEnd(paragraphId, offset),
     revisionView,
@@ -4353,7 +4331,7 @@ export function mountPaginatedSurface(
     createSurfaceClipboardOps({
       session,
       textFormFieldId: () => textFormInteraction?.fieldId() ?? null,
-      richPasteAllowed: () => !textboxEditing?.active(),
+      richPasteAllowed: () => !textboxEditing?.active() && writeRefusal(true) === null,
       paragraphIds: editingParagraphIds,
       layout: editingLayout,
       cellSelection: () => cellSelection,
@@ -4361,7 +4339,10 @@ export function mountPaginatedSurface(
       storyScope,
       paragraphOrder,
       actorId: () => collaborationSession?.identity.actorId,
-      collaborationGate: (ops, scope) => collaborationSession?.gateOperations(ops, scope) ?? null,
+      collaborationGate: (...gated) => collaborationSession?.gateOperations(...gated) ?? null,
+      trackedAuthor: trackedAuthorOrNone,
+      trackedDate,
+      onTrackedChange: () => runtimeOptions.onTrackedChange?.(),
       now,
       flushPendingInputAndLayout,
       orderedRange,
@@ -4391,6 +4372,18 @@ export function mountPaginatedSurface(
     // and actor binding every other lane goes through.
     applyGatedTreeOps: (ops, before, after, scope) =>
       applyJournaledOps(trackedOps(ops), before, after, scope ?? storyScope()),
+    // A custom node's planned write (`custom-node-commit.ts`), gated with its package edits.
+    applyGatedPackageWrite: (ops, scope, packageEdits) => {
+      const reason = writeRefusal(true, ops, false);
+      if (reason !== null) return { committed: false, rejected: true, opCount: 0, reason };
+      let result: ReturnType<typeof applyJournaledOps> | undefined;
+      const refused = commit(
+        () => (result = applyJournaledOps(ops, null, null, scope, packageEdits))
+      );
+      return (
+        result ?? { committed: false, rejected: true, opCount: 0, reason: refused ?? undefined }
+      );
+    },
     storyScope,
     imageDecodePort: () => decodePort,
     textMeasurer: () => measurer,
@@ -4398,12 +4391,12 @@ export function mountPaginatedSurface(
     // sharing the store — must not leave a caller reading geometry for a revision the model
     // has left behind. Nothing pending makes this a plain read.
     layout: () => {
-      flushPendingInputAndLayout();
+      if (!settleOwed) flushPendingInputAndLayout();
       return currentLayout;
     },
     state: currentState,
     currentPage: (mode = 'caret') => {
-      flushPendingInputAndLayout();
+      if (!settleOwed) flushPendingInputAndLayout();
       if (mode === 'viewport') {
         const page = viewportPage(container, currentLayout, scale);
         if (page !== null) return page;
@@ -4551,7 +4544,7 @@ export function mountPaginatedSurface(
         );
         return;
       }
-      if (removeCaretParagraph('backward')) return;
+      if (plan.inPrompt || removeCaretParagraph('backward')) return;
       // Word keeps the typing format across Backspace: bold armed at a caret survives
       // deleting the character before it, re-anchored where the caret lands.
       const armed = armedAtCaret() ?? undefined;
@@ -4793,7 +4786,7 @@ export function mountPaginatedSurface(
         selectionSync.selectionLineId()
       );
       if (!moved) return;
-      const tocIds = tocParagraphIds();
+      const tocIds = tocParagraphIdsOf(session.part());
       const outside = tocEscapePosition(
         session.part(),
         moved.position,
@@ -4825,7 +4818,7 @@ export function mountPaginatedSurface(
         const escape: NavigationCommand = backwards.has(command) ? 'up' : 'down';
         // One iteration per line the region occupies, plus slack for the landing line. The
         // loop breaks the moment it is outside, so an over-generous bound costs nothing.
-        const limit = tocRegionLineCount(tocIds) + 4;
+        const limit = tocRegionLineCount(currentLayout, tocIds) + 4;
         for (let step = 0; step < limit; step += 1) {
           const next = navigateInActiveScope(
             editingLayout(),
@@ -5002,6 +4995,11 @@ export function mountPaginatedSurface(
     ...format,
 
     setSelection: (next) => {
+      // Refused, not applied, outside the open story (`selectionInStory`).
+      if (!selectionInStory(session, storyScope(), next)) {
+        publishRefusal(OUTSIDE_STORY_REFUSAL);
+        return;
+      }
       // An explicit host write that MOVES the caret is an intentional selection — a test or
       // an automation host addressing a drawing's anchor means the drawing. A same-position
       // write stays inert: the font-load remount restores the saved caret through here
@@ -5117,7 +5115,9 @@ export function mountPaginatedSurface(
         pageOffsetX: materializedExtent?.pageOffsetX ?? new Map<number, number>(),
       }),
 
-    commitReviewOps: (run, intent) => {
+    commitReviewOps: (run, named) => {
+      const write = typeof named === 'object' ? named : undefined;
+      const intent = typeof named === 'object' ? named.intent : named;
       // The text the caret's paragraph held BEFORE the resolution, so the caret can be mapped
       // across what Accept or Reject removed. Clamping alone only fires when the paragraph
       // ends up shorter than the offset; a caret in the MIDDLE of a paragraph that shrank
@@ -5150,11 +5150,14 @@ export function mountPaginatedSurface(
           }
           // The READINESS gate the typing lane asks (`applyJournaledOps`). Review writes
           // reach the store past `applyOps`, so without this a disconnected replica still
-          // committed a comment locally and never replicated it. The ops are opaque here —
-          // the callback builds them — so the gate sees an empty batch: its readiness and
-          // attachment ladder still answers, which is the half this lane was missing.
+          // committed a comment locally and never replicated it. A write that names its ops or
+          // its comment goes to a session that checks review writes by them; any other is
+          // opaque, so the gate sees an empty batch and answers readiness and attachment.
           if (collaborationSession) {
-            const collaborationRefusal = collaborationSession.gateOperations([], storyScope());
+            const collaborationRefusal =
+              write && collaborationSession.gateReviewWrite
+                ? collaborationSession.gateReviewWrite(write, storyScope())
+                : collaborationSession.gateOperations([], storyScope());
             if (collaborationRefusal) {
               return { committed: false, rejected: true, opCount: 0, reason: collaborationRefusal };
             }
@@ -5342,7 +5345,7 @@ export function mountPaginatedSurface(
       // A mode change moves no content, so nothing else here repaints. The chrome class
       // still has to follow immediately: without this the blank header/footer band kept
       // inviting a double-click to add a story that viewing mode then refused.
-      setEditingModeChrome(container, editingMode, options.headerFooterEditing === false);
+      setEditingModeChrome(container, editingMode, headerFootersLocked);
       // Painted chrome reads the mode too — content-control widgets disable themselves on
       // it, and table furniture re-derives from it — so the pages have to be rebuilt even
       // though not one character moved.
@@ -5488,7 +5491,10 @@ export function mountPaginatedSurface(
       const ranged = !selectionsEqual(selection, collapsedAt(selection.head));
       if (ranged && deleteAtomicControl('backward')) return true;
       const plan = deleteSelectionPlan();
-      if (plan.ops.length === 0) return false;
+      // Handled once refused: the keys' fallbacks would delete something else instead.
+      const unplaced = ranged ? unplacedSelectionRefusal() : null;
+      if (unplaced !== null) return !publishRefusal(unplaced);
+      if (plan.ops.length === 0) return plan.inPrompt === true;
       commit(
         () => applyOps(plan.ops, selectionMark(), caretMark(plan.collapseTo)),
         () => collapsedAt(plan.collapseTo)
@@ -5693,6 +5699,11 @@ export function mountPaginatedSurface(
       trackedDate,
       decodePort: () => decodePort,
       actorId: () => collaborationSession?.identity.actorId,
+      // A picture write commits outside the op lane: it asks the same gates the lane asks
+      gate: (ops, pkg) =>
+        untrackedEdits.refusal(ops) ??
+        collaborationSession?.gateOperations(ops, storyScope(), { package: pkg }) ??
+        null,
     }),
 
     // `preventScroll`: the pages layer is the WHOLE document tall, and focusing it scrolls
@@ -5937,7 +5948,8 @@ export function mountPaginatedSurface(
           session,
           commit,
           refusal: () => writeRefusal(true, ops, false),
-          gate: (values, scope) => collaborationSession?.gateOperations(values, scope) ?? null,
+          gate: (values, scope) =>
+            collaborationSession?.gateOperations(values, scope, gateContext()) ?? null,
           collaborationActive: collaborationSession !== undefined,
         }),
     },
@@ -6065,7 +6077,7 @@ export function mountPaginatedSurface(
       noteOps?.exitNote();
       hfScope?.exitHeaderFooter();
     },
-    writable: () => hostEditable && editingMode === 'edit' && session.editable,
+    writable: () => hostEditable && editingMode !== 'view' && session.editable,
   });
   pointer = createPointerController(
     {
@@ -6151,8 +6163,10 @@ export function mountPaginatedSurface(
         return hfScope?.exitHeaderFooter();
       },
       enterEmptyHeaderFooter: (kind, pageIndex) => {
-        // Creating the part is a WRITE — viewing and read-only furniture refuse it like any lane.
-        if (editingMode === 'view' || options.headerFooterEditing === false) return;
+        // Creating the part is a WRITE: viewing and read-only furniture refuse it like any lane.
+        if (editingMode === 'view' || headerFootersLocked) {
+          return;
+        }
         flushPendingInputAndLayout();
         const scope = hfScope;
         if (!scope) return;

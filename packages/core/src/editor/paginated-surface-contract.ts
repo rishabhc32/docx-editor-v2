@@ -4,7 +4,7 @@ import type { ResolvedRevisionMarkup } from '../contracts/revision-markup.ts';
 
 import type { SurfaceParagraphFormat, ParagraphPropertyEdit } from './paragraph-format-contract.ts';
 import type { TreeApplyResult, TreeDocxSessionView } from '@docx-editor.dev/core/binding';
-import type { BookmarkIndex, SelectionMark } from '@docx-editor.dev/core/store';
+import type { BookmarkIndex } from '@docx-editor.dev/core/store';
 import type { StoryScope } from '../store/store/tree-package-store.ts';
 import type { TreeDocOp } from '../store/store/tree-op-types.ts';
 import type {
@@ -36,7 +36,7 @@ import type {
  */
 export type SurfaceEditingMode = 'edit' | 'suggest' | 'view';
 
-import type { ReviewWriteIntent } from './review-write-intent.ts';
+import type { ReviewWrite, ReviewWriteIntent } from './review-write-intent.ts';
 import type { SurfaceOverlayPainter } from './surface-overlay-sheet.ts';
 import type {
   ContentControlOps,
@@ -47,7 +47,7 @@ import type {
   FormatPainterSurfaceState,
 } from './surface-format-painter-contract.ts';
 import type { PaginatedSurfacePerf } from './surface-perf-contract.ts';
-export type { ReviewWriteIntent, ContentControlOps, ContentControlSurfaceState };
+export type { ReviewWrite, ReviewWriteIntent, ContentControlOps, ContentControlSurfaceState };
 export type {
   FormatPainterLevel,
   FormatPainterMode,
@@ -294,7 +294,7 @@ export interface PaginatedSurface {
    * `block: 'nearest'`, so an already-visible target never yanks the viewport.
    */
   revealPosition(position: SemanticPosition, options?: RevealOptions): boolean;
-  /** Set the selection directly, for a host driving the surface programmatically. */
+  /** Set the selection directly, for a host; one outside the open story sets `lastRejection`. */
   setSelection(next: SemanticSelection): void;
   /**
    * Select one painted drawing at its host paragraph, as a pointer press would.
@@ -679,14 +679,14 @@ export interface PaginatedSurface {
    * reason counts as refused (`'rejected'`). Gate and `run` reasons also become
    * `lastRejection`; a skipped refresh changes nothing, `lastRejection` included.
    *
-   * `run` receives the store history token of this commit, for the store write it performs.
+   * `run` receives the store history token of this commit. A `ReviewWrite` names its ops too.
    */
   commitReviewOps(
     run: (historyToken: symbol | undefined) => {
       readonly committed: boolean;
       readonly reason?: unknown;
     },
-    intent?: ReviewWriteIntent
+    intent?: ReviewWriteIntent | ReviewWrite
   ): string | null;
   /**
    * The layout as last PUBLISHED, without forcing pending work.
@@ -974,26 +974,4 @@ export type {
   SurfaceParagraphFormat,
 } from './paragraph-format-contract.ts';
 
-/** The surface with the internal members that other editor modules reach by cast. */
-export type ScaleMutableSurface = PaginatedSurface & {
-  setScale(nextScale: number): boolean;
-  /**
-   * Why the mode rules would refuse these automation ops now, or null: the check
-   * `applyAutomationOps` makes, without writing. A preview fork asks it so it refuses what a
-   * commit would.
-   */
-  automationWriteRefusal(ops: readonly TreeDocOp[], packageEdits: boolean): string | null;
-  /**
-   * The gated, attributed session write for command lanes that live OUTSIDE this file —
-   * today the content-control commands. Same collaboration gate, actor and revision
-   * attribution as the typing lane (`trackedOps`, `applyJournaledOps`); the command's own
-   * mode/lock gate has already run. Internal, reached by cast like `setScale` — see
-   * `applyGatedSurfaceTreeOps` in `content-controls.ts` for the accessor.
-   */
-  applyGatedTreeOps(
-    ops: readonly TreeDocOp[],
-    selectionBefore?: SelectionMark | null,
-    selectionAfter?: SelectionMark | null,
-    scope?: StoryScope
-  ): TreeApplyResult;
-};
+export type { ScaleMutableSurface } from './scale-mutable-surface.ts';

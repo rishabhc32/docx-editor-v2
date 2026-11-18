@@ -11,6 +11,7 @@ import {
   openHeadlessDocument,
   readOoxmlPart,
   type OoxmlElement,
+  type OoxmlPart,
 } from '@docx-editor.dev/core/store';
 import type { OoxmlNode } from '../../store/package/ooxml-tree.ts';
 import {
@@ -22,7 +23,10 @@ import { createDocumentLinkProjectors } from '../document-link-projector.ts';
 import { createDocumentStyleDependencies } from '../document-style-deps.ts';
 import { createFixedMeasurer } from '../fixed-measurer.ts';
 import { createParagraphLayoutCache } from '../layout-cache.ts';
-import type { NumberingIndex } from '../numbering-index.ts';
+import { buildNumberingIndex, type NumberingIndex } from '../numbering-index.ts';
+import { withResolvedListItems } from '../list-resolve.ts';
+import { storyBlocks } from '../story-roots.ts';
+import { applyTreeOp } from '../../store/store/tree-ops.ts';
 import { readTableStructure } from '../semantic-table.ts';
 
 const W = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main';
@@ -36,6 +40,9 @@ function released(make: () => object): () => boolean {
     return ref.deref() === undefined;
   };
 }
+
+/** Leaves the frames that made a value, so no stale stack slot can keep it for the collector. */
+const nextTask = () => new Promise((resolve) => setTimeout(resolve, 0));
 
 test('a large answer stays only for the latest revision of its node', () => {
   const memo = createSubtreeAggregateMemo<object>();
@@ -151,5 +158,79 @@ test('a header laid out again does not keep the header story it replaced', () =>
   numbering = { abstractNums: new Map(), nums: new Map() } as unknown as NumberingIndex;
   const next = source.furniture()!.headers.get('default')!;
   expect(next.fragments.length).toBeGreaterThan(0);
+  expect(gone()).toBe(true);
+});
+
+test('a header edited again keeps no story for its older revision', async () => {
+  const view = headerDocument();
+  const [section] = view.headerFooterPartsBySection();
+  const older = section!.headers.get('default')!;
+  let header = older;
+  const source = createDocumentFurnitureSource({
+    view: {
+      ...view,
+      headerFooterPartsBySection: () => [{ ...section!, headers: new Map([['default', header]]) }],
+    },
+    measurer: createFixedMeasurer(6, 14),
+    producer: 'retention-test',
+    cache: createParagraphLayoutCache(),
+    ...createDocumentStyleDependencies(view),
+    linkProjectors: createDocumentLinkProjectors(view),
+    displayMode: 'proposed',
+    drawingTokenForParagraphForPart: () => '',
+  });
+  const gone = released(() => source.furniture()!.headers.get('default')!);
+  // The undo history still holds the older header part. Its story, and the numbering index
+  // that story was laid out with, must not stay for it once the edited header is laid out.
+  header = { ...older, root: { ...older.root } };
+  expect(source.furniture()!.headers.get('default')!.part).toBe(header);
+  expect(older.name).toBe(header.name);
+  await nextTask();
+  expect(gone()).toBe(true);
+});
+
+test("a story's list resolve stays only for the latest revision of its first block", async () => {
+  const numbering = () => {
+    const read = readOoxmlPart(
+      `<w:numbering xmlns:w="${W}"><w:abstractNum w:abstractNumId="1"><w:lvl w:ilvl="0">` +
+        '<w:start w:val="1"/><w:numFmt w:val="decimal"/><w:lvlText w:val="%1."/></w:lvl>' +
+        '</w:abstractNum><w:num w:numId="1"><w:abstractNumId w:val="1"/></w:num></w:numbering>',
+      { name: '/word/numbering.xml', contentType: 'app/xml' }
+    );
+    if (!read.ok) throw new Error(read.reason);
+    return buildNumberingIndex(read.part.root);
+  };
+  const item = (text: string) =>
+    '<w:p><w:pPr><w:numPr><w:ilvl w:val="0"/><w:numId w:val="1"/></w:numPr></w:pPr>' +
+    `<w:r><w:t>${text}</w:t></w:r></w:p>`;
+  let anchor: OoxmlElement | undefined;
+  let edited: OoxmlPart | undefined;
+  const gone = released(() => {
+    const read = readOoxmlPart(`<w:hdr xmlns:w="${W}">${item('one')}${item('two')}</w:hdr>`, {
+      name: '/word/header1.xml',
+      contentType: 'app/xml',
+    });
+    if (!read.ok) throw new Error(read.reason);
+    const index = numbering();
+    const blocks = storyBlocks(read.part);
+    expect(withResolvedListItems({ numberingIndex: index }, blocks).listItems?.size).toBe(2);
+    anchor = blocks[0];
+    const result = applyTreeOp(read.part, {
+      op: 'insertText',
+      paragraphId: anchor!.id,
+      offset: 0,
+      text: 'x',
+    });
+    if (!result.ok) throw new Error('the edit was refused');
+    edited = result.part;
+    return index;
+  });
+  // An edit in the first paragraph, then a numbering edit. The undo history still holds the
+  // older first paragraph, which must not keep the older resolve and its numbering index.
+  const blocks = storyBlocks(edited!);
+  expect(withResolvedListItems({ numberingIndex: numbering() }, blocks).listItems?.size).toBe(2);
+  expect(blocks[0]).not.toBe(anchor);
+  expect(blocks[0]!.id).toBe(anchor!.id);
+  await nextTask();
   expect(gone()).toBe(true);
 });

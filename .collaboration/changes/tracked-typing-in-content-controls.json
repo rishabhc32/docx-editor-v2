@@ -1,0 +1,14 @@
+{
+  "impact": "compatible",
+  "fields": [],
+  "before": "In suggesting mode, each keystroke typed in a paragraph inside a block content control wrote its own w:ins beside the previous one. Tracked typing at the end of an inline control whose content ended in a w:ins or w:del that the typing could not extend, such as another author's suggestion, landed after the control's w:sdt.",
+  "after": "Tracked typing in a block content control extends the author's w:ins from the same editing moment, as it does in a paragraph outside a control. Tracked typing at an inline control's trailing edge lands in a new w:ins at the end of its w:sdtContent when the content ends in a revision wrapper that the typing cannot extend.",
+  "reason": "The replicated results are existing w:ins, w:r, and w:sdtContent structures that released participants already read and write. No stored field, operation kind, or identity rule changes. A released participant still writes one w:ins for each keystroke in a block control, or the text after the control, and its result replicates and converges with participants on this version.",
+  "tests": [
+    "packages/core/src/editor/__tests__/suggesting-control-prompts.test.ts",
+    "packages/pro/src/__tests__/suggesting-prompt-caret.test.ts",
+    "packages/pro/src/collaboration/__tests__/document-prompt-caret.test.ts"
+  ],
+  "changeset": "tracked-typing-in-content-controls",
+  "migration": null
+}

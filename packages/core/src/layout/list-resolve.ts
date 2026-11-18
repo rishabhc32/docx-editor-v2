@@ -12,6 +12,10 @@ import {
 
 import type { OoxmlElement, OoxmlNode } from '@docx-editor.dev/core/store';
 import type { OoxmlProperty } from '../store/store/tree-op-types.ts';
+import {
+  createSubtreeAggregateMemo,
+  LARGE_SUBTREE_ANSWER,
+} from '../store/package/subtree-memo-policy.ts';
 import { framedTokenJoin } from './layout-cache.ts';
 import {
   createListCounterState,
@@ -768,7 +772,9 @@ function numberedParagraphsOfBlock(
  * a closed document's resolve — its numbered subtrees, item map, cascade and index — dies
  * with its tree instead of being pinned until some other document lays out. An edit to the
  * first block itself only misses (one extra resolve), never mixes: the numbered sequence is
- * still compared node-for-node.
+ * still compared node-for-node. Only the latest revision of an anchor keeps its resolve: the
+ * undo history keeps old block nodes alive, and an entry on each kept the numbering index of
+ * its pass, one whole index per header edit in a room that rebuilds numbering on every publish.
  */
 interface LastStoryResolve {
   readonly rawIndex: NumberingIndex | undefined;
@@ -783,7 +789,7 @@ interface LastStoryResolve {
     readonly resolve: ListSequenceResolve;
   };
 }
-const lastStoryResolvesByAnchor = new WeakMap<OoxmlElement, LastStoryResolve>();
+const lastStoryResolvesByAnchor = createSubtreeAggregateMemo<LastStoryResolve>();
 const lastStoryResolvesBySession = new WeakMap<LayoutSession, LastStoryResolve>();
 
 function sameNumberedParagraph(paragraph: OoxmlElement, previous: OoxmlElement | undefined) {
@@ -854,8 +860,9 @@ function resolveStoryListItemsStable(
     const next = { ...last, blocks, numberedByBlock };
     if (memoOwner) lastStoryResolvesBySession.set(memoOwner, next);
     else {
-      if (first) lastStoryResolvesByAnchor.set(first, next);
-      if (lastBlock && lastBlock !== first) lastStoryResolvesByAnchor.set(lastBlock, next);
+      if (first) lastStoryResolvesByAnchor.set(first, next, LARGE_SUBTREE_ANSWER);
+      if (lastBlock && lastBlock !== first)
+        lastStoryResolvesByAnchor.set(lastBlock, next, LARGE_SUBTREE_ANSWER);
     }
     return last.listItems;
   }
@@ -896,8 +903,9 @@ function resolveStoryListItemsStable(
   };
   if (memoOwner) lastStoryResolvesBySession.set(memoOwner, next);
   else {
-    if (first) lastStoryResolvesByAnchor.set(first, next);
-    if (lastBlock && lastBlock !== first) lastStoryResolvesByAnchor.set(lastBlock, next);
+    if (first) lastStoryResolvesByAnchor.set(first, next, LARGE_SUBTREE_ANSWER);
+    if (lastBlock && lastBlock !== first)
+      lastStoryResolvesByAnchor.set(lastBlock, next, LARGE_SUBTREE_ANSWER);
   }
   return listItems;
 }

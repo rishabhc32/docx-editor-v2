@@ -28,7 +28,8 @@ type RevisionCapableOp = Extract<
       | 'setListLevel'
       | (typeof REVISION_CAPABLE_TABLE_OPS)[number]
       | 'setParagraphTabStops'
-      | 'setContentControlValue';
+      | 'setContentControlValue'
+      | 'setSectionProperties';
   }
 >;
 const REVISION_CAPABLE_OPS: ReadonlySet<TreeDocOp['op']> = new Set<RevisionCapableOp['op']>([
@@ -55,14 +56,39 @@ const REVISION_CAPABLE_OPS: ReadonlySet<TreeDocOp['op']> = new Set<RevisionCapab
   // A control's value is CONTENT: the old text struck and the new one inserted inside the
   // control, as Word records a pick. Never a format record, so formatting tracking off keeps it.
   'setContentControlValue',
+  // Page setup is section formatting: the store records the section before it in a
+  // `w:sectPrChange`, as Word does. (The type a section break gives the next section is not:
+  // Word writes it untracked beside the break's proposed mark, `surface-untracked-edits.ts`.)
+  'setSectionProperties',
 ]);
 
 export function isRevisionCapable(op: TreeDocOp): op is RevisionCapableOp {
   return REVISION_CAPABLE_OPS.has(op.op);
 }
 
+/**
+ * Whether the op writes a different first page or the header and footer distances alone.
+ *
+ * Those are section formatting: the store records the section before them in a
+ * `w:sectPrChange`, as it does for page setup and as Word does. A write that also turns odd and
+ * even pages on or off is not one: that is a document setting with no tracked form, a lifecycle
+ * write is one op, and the room makes a setting only as a direct edit.
+ */
+export function isSectionFurnitureFormat(
+  op: TreeDocOp
+): op is Extract<TreeDocOp, { op: 'setSectionFurnitureOptions' }> {
+  return (
+    op.op === 'setSectionFurnitureOptions' &&
+    op.evenAndOddHeaders === undefined &&
+    (op.titlePage !== undefined ||
+      op.headerDistanceTwips !== undefined ||
+      op.footerDistanceTwips !== undefined)
+  );
+}
+
 export function isTrackedEdit(op: TreeDocOp): boolean {
   if (isRevisionCapable(op)) return op.revision !== undefined;
+  if (isSectionFurnitureFormat(op)) return op.revision !== undefined;
   switch (op.op) {
     case 'setParagraphMarkRevision':
     case 'proposeParagraphMerge':
@@ -70,9 +96,13 @@ export function isTrackedEdit(op: TreeDocOp): boolean {
     // Paste proposes its breaks through the op itself, so a paste of newlines alone is a
     // tracked edit with no `insertText` beside it to report for it.
     case 'insertContentControl':
+    // A tracked rich paste writes its whole fragment as one insertion.
+    case 'insertFragment':
     case 'authorTable':
     case 'deleteBlock':
     case 'splitParagraphMany':
+    // A new picture or text box proposes its own run (`w:ins`); the lanes that write one set it
+    case 'insertDrawing':
       return op.revision !== undefined;
     default:
       return false;
@@ -108,6 +138,9 @@ export function attributeTrackedOps(
       if (!trackFormatting && isPropertyChangeOp(op.op)) return [op];
       return [op.revision !== undefined ? op : { ...op, revision }];
     }
+    // Section formatting, as page setup: formatting tracking off writes it untracked
+    if (isSectionFurnitureFormat(op))
+      return [op.revision !== undefined || !trackFormatting ? op : { ...op, revision }];
     // A SPLIT becomes a real split plus a proposed mark on the first paragraph: the text
     // is already in two paragraphs, and what is being proposed is the break between them.
     // §17.13.5 puts the new mark on the FIRST paragraph, and rejecting it runs the two

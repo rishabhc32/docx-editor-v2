@@ -9,6 +9,7 @@
 // Deleting one in a story the batch does not write into is a package edit of that transaction
 // too, so a batch can delete bookmarks anywhere and still edit one story.
 
+import { describedPackageEdit } from '../collaboration/gate-context.ts';
 import { bookmarkNameKey, bookmarkNameProblem } from '../store/package/bookmark-names.ts';
 import type { OoxmlPackage } from '../store/package/ooxml-package.ts';
 import {
@@ -401,7 +402,11 @@ export function planBookmarks(
       kind: 'command',
       ops: [],
       story: writing ?? found.story.story,
-      packageEdits: [(pkg: OoxmlPackage) => withoutBookmarkInPart(pkg, partName, name)],
+      packageEdits: [
+        describedPackageEdit({ kind: 'bookmark-removal', partName, name }, (pkg: OoxmlPackage) =>
+          withoutBookmarkInPart(pkg, partName, name)
+        ),
+      ],
       answer: () => APPLIED,
     };
   }

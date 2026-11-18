@@ -24,6 +24,14 @@ export function isInertMarker(node: OoxmlNode): boolean {
 }
 
 /**
+ * Whether a paragraph-mark stamp created this node: its id is in the `mark` family. Read
+ * after the LAST `#`, so a part name that contains the family marker does not count.
+ */
+export function isMarkStampContainer(node: OoxmlNode): boolean {
+  return node.id.slice(node.id.lastIndexOf('#') + 1).startsWith('mark:');
+}
+
+/**
  * A `w:pPr` or `w:rPr` that a paragraph-mark stamp created and that held nothing but the
  * revision marks this resolution drops.
  *
@@ -37,7 +45,7 @@ export function isInertMarker(node: OoxmlNode): boolean {
 export function heldOnlyResolvedMarks(node: OoxmlNode, dropped: ReadonlySet<string>): boolean {
   if (node.kind === 'textValue' || node.children.length === 0) return false;
   // Only a container a mark stamp created; a source container stays, empty or not.
-  if (!node.id.slice(node.id.lastIndexOf('#') + 1).startsWith('mark:')) return false;
+  if (!isMarkStampContainer(node)) return false;
   const markProperties =
     node.kind === 'runProperties' ||
     (node.kind === 'generic' &&

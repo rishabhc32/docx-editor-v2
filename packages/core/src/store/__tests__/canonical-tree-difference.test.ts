@@ -6,13 +6,11 @@
 
 import { describe, expect, test } from 'bun:test';
 import { zipSync, strToU8 } from 'fflate';
-import {
-  canonicalOoxmlFingerprint,
-  canonicalTreeDifference,
-  ooxmlTreesEqual,
-} from '../package/ooxml-serialize.ts';
+import { canonicalTreeDifference } from '../package/ooxml-difference.ts';
+import { canonicalOoxmlFingerprint, ooxmlTreesEqual } from '../package/ooxml-serialize.ts';
 import { readOoxmlPackage, withPart, type OoxmlPackage } from '../package/ooxml-package.ts';
 import type { OoxmlNode, OoxmlPart } from '../package/ooxml-tree.ts';
+import { inheritedNamespaceBindings } from '../package/wml-namespace.ts';
 import { ORIGIN_IDS } from '../registry/frozen-ids.ts';
 import { remotePackageDelta } from '../store/tree-package-remote.ts';
 import { TreePackageStore } from '../store/tree-package-store.ts';
@@ -206,9 +204,50 @@ describe('canonicalTreeDifference agrees with the fingerprint oracle', () => {
     const body = `${PARAGRAPH.repeat(60)}<w:sectPr/>`;
     const left = mainPart(loadPackage(documentBytes(body)));
     const right = mainPart(loadPackage(documentBytes(body)));
-    const difference = canonicalTreeDifference(left, right, 32);
+    const difference = canonicalTreeDifference(left, right, { budget: 32 });
     expect(difference.undecided).toBe(true);
     expect(difference.visited).toBeLessThanOrEqual(33);
+  });
+});
+
+describe('a subtree compares under the scope its part gives it', () => {
+  const MC = 'http://schemas.openxmlformats.org/markup-compatibility/2006';
+  const WPS = 'http://schemas.microsoft.com/office/word/2010/wordprocessingShape';
+  // As Word writes a shape: `wps` declared only on `w:document`, named by the choice's `Requires`
+  const shapeLine = (tail: string) =>
+    '<w:p><w:r><w:t>Seal</w:t></w:r><w:r><mc:AlternateContent>' +
+    '<mc:Choice Requires="wps"><w:t>a</w:t></mc:Choice>' +
+    `<mc:Fallback><w:t>b</w:t></mc:Fallback></mc:AlternateContent></w:r><w:r><w:t>${tail}</w:t></w:r></w:p>`;
+  const lineOf = (tail: string) => {
+    const part = mainPart(
+      loadPackage(documentBytes(shapeLine(tail), ` xmlns:mc="${MC}" xmlns:wps="${WPS}"`))
+    );
+    const body = part.root.children[0];
+    const line = body?.kind === 'textValue' ? undefined : body?.children[0];
+    if (!line || line.kind !== 'paragraph') throw new Error('no paragraph');
+    return { part, line };
+  };
+
+  test("two reads of a shape's line compare equal through the root's prefixes", () => {
+    const left = lineOf('here.');
+    const right = lineOf('here.');
+    expect(left.line).not.toBe(right.line);
+    const difference = canonicalTreeDifference(left.line, right.line, {
+      bindings: inheritedNamespaceBindings(left.part, left.line),
+    });
+    expect(difference.undecided).toBe(false);
+    expect(difference.equal).toBe(true);
+  });
+
+  test('a difference after the choice is named, not thrown', () => {
+    const left = lineOf('here.');
+    const right = lineOf('there.');
+    const difference = canonicalTreeDifference(left.line, right.line, {
+      bindings: inheritedNamespaceBindings(left.part, left.line),
+    });
+    expect(difference.equal).toBe(false);
+    expect(difference.reach).toBe('paragraph-text');
+    expect(difference.paragraphIds).toEqual([right.line.id]);
   });
 });
 

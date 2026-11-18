@@ -420,22 +420,9 @@ export function ensureNumberingLevel(
   kind: ListKind
 ): OoxmlPackage | null {
   if (!Number.isInteger(level) || level < 0 || level >= LEVEL_COUNT) return null;
-  // `numId` is FILE-DERIVED (a paragraph's `w:numPr`), used here only as a comparison
-  // key — bounded like the layout index bounds ids, so a pathological id cannot make the
-  // lookups below churn through megabyte string comparisons.
-  if (numId.length === 0 || numId.length > 64) return null;
-  const numbering = pkg.parts.get(NUMBERING_PART);
-  if (!numbering) return null;
-  const root = numbering.root;
-
-  const num = childrenNamed(root, 'num').find((node) => attribute(node, 'numId') === numId);
-  const abstractRef = num ? childrenNamed(num, 'abstractNumId')[0] : undefined;
-  const abstractId = abstractRef ? attribute(abstractRef, 'val') : undefined;
-  if (!abstractId) return null;
-  const abstract = childrenNamed(root, 'abstractNum').find(
-    (node) => attribute(node, 'abstractNumId') === abstractId
-  );
-  if (!abstract) return null;
+  const found = abstractNumOf(pkg, numId);
+  if (!found) return null;
+  const { numbering, abstract } = found;
   if (childrenNamed(abstract, 'numStyleLink').length > 0) return null;
 
   const levels = childrenNamed(abstract, 'lvl');
@@ -459,6 +446,45 @@ export function ensureNumberingLevel(
   if (!inserted.ok) return null;
 
   return withPart(pkg, inserted.part);
+}
+
+/** The numbering part and the `w:abstractNum` that the list `numId` names, or null. */
+function abstractNumOf(
+  pkg: OoxmlPackage,
+  numId: string
+): { numbering: OoxmlPart; abstract: OoxmlElement } | null {
+  // `numId` is FILE-DERIVED (a paragraph's `w:numPr`), used here only as a comparison
+  // key, bounded like the layout index bounds ids, so a pathological id cannot make the
+  // lookups below churn through megabyte string comparisons.
+  if (numId.length === 0 || numId.length > 64) return null;
+  const numbering = pkg.parts.get(NUMBERING_PART);
+  if (!numbering) return null;
+  const root = numbering.root;
+  const num = childrenNamed(root, 'num').find((node) => attribute(node, 'numId') === numId);
+  const abstractRef = num ? childrenNamed(num, 'abstractNumId')[0] : undefined;
+  const abstractId = abstractRef ? attribute(abstractRef, 'val') : undefined;
+  if (!abstractId) return null;
+  const abstract = childrenNamed(root, 'abstractNum').find(
+    (node) => attribute(node, 'abstractNumId') === abstractId
+  );
+  return abstract ? { numbering, abstract } : null;
+}
+
+/**
+ * The number format (`w:numFmt/@w:val`, `bullet` for a bullet) that the definition of the list
+ * `numId` declares for `level`, or null when it declares no such level.
+ */
+export function numberingLevelFormat(
+  pkg: OoxmlPackage,
+  numId: string,
+  level: number
+): string | null {
+  const found = abstractNumOf(pkg, numId);
+  const lvl = found
+    ? childrenNamed(found.abstract, 'lvl').find((node) => parsedIlvl(node) === level)
+    : undefined;
+  const numFmt = lvl ? childrenNamed(lvl, 'numFmt')[0] : undefined;
+  return numFmt ? (attribute(numFmt, 'val') ?? null) : null;
 }
 
 /** Re-key a grafted subtree so it cannot collide with the part it is joining. */

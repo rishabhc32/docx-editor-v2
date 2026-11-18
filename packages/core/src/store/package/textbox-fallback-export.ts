@@ -177,25 +177,79 @@ function* staleFallbacks(part: OoxmlPart): Generator<void, [OoxmlElement, OoxmlE
     if (!choice || !fallback || choice.kind === 'textValue' || fallback.kind === 'textValue') {
       continue;
     }
-    const modern = storyUnder(choice, (parent) => isNamed(parent, WPS_NAMESPACE_URI, 'txbx'));
-    const legacy = storyUnder(fallback, (parent) => isNamed(parent, VML_NAMESPACE_URI, 'textbox'));
-    if (!modern || !legacy) continue;
-    if (sameMarkup(modern.node, legacy.node, { left: MAX_SCANNED_NODES })) continue;
-    nextId ??= createNodeIdAllocator(part);
-    const mint = nextId;
-    // A prefix the DrawingML side declared on its way down must still resolve in the copy.
-    const declared = new Set(legacy.node.namespaceBindings.map((binding) => binding.prefix));
-    const carried = modern.bindings.filter((binding) => !declared.has(binding.prefix));
-    pairs.push([
-      legacy.node,
-      {
-        ...legacy.node,
-        namespaceBindings: [...legacy.node.namespaceBindings, ...carried],
-        children: modern.node.children.map((child) => cloneWithFreshIds(child, mint)),
-      } as OoxmlElement,
-    ]);
+    const pair = fallbackReplacement(choice, fallback, () => {
+      nextId ??= createNodeIdAllocator(part);
+      return nextId();
+    });
+    if (pair) pairs.push(pair);
   }
   return pairs;
+}
+
+/**
+ * A wrapper's VML fallback story and the copy of its DrawingML story to put in its place, or
+ * null when the wrapper holds no such pair or the two agree. `live` says the DrawingML story is
+ * the one edits change.
+ */
+function fallbackReplacement(
+  choice: OoxmlElement,
+  fallback: OoxmlElement,
+  mint: () => string,
+  live: (modern: OoxmlElement) => boolean = () => true
+): [OoxmlElement, OoxmlElement] | null {
+  const modern = storyUnder(choice, (parent) => isNamed(parent, WPS_NAMESPACE_URI, 'txbx'));
+  const legacy = storyUnder(fallback, (parent) => isNamed(parent, VML_NAMESPACE_URI, 'textbox'));
+  if (!modern || !legacy || !live(modern.node)) return null;
+  if (sameMarkup(modern.node, legacy.node, { left: MAX_SCANNED_NODES })) return null;
+  // A prefix the DrawingML side declared on its way down must still resolve in the copy: the
+  // nearest binding of each, once (an element may not declare one prefix twice)
+  const declared = new Set(legacy.node.namespaceBindings.map((binding) => binding.prefix));
+  const nearest = new Map<string, OoxmlNamespaceBinding>();
+  for (const binding of modern.bindings) nearest.set(binding.prefix, binding);
+  const carried = [...nearest.values()].filter((binding) => !declared.has(binding.prefix));
+  return [
+    legacy.node,
+    {
+      ...legacy.node,
+      namespaceBindings: [...legacy.node.namespaceBindings, ...carried],
+      children: modern.node.children.map((child) => cloneWithFreshIds(child, mint)),
+    } as OoxmlElement,
+  ];
+}
+
+/** `node` with the element `id` below it replaced; the same node when it holds none. */
+function replacedBelow(node: OoxmlNode, id: string, next: OoxmlElement): OoxmlNode {
+  if (node.kind === 'textValue') return node;
+  if (node.id === id) return next;
+  let changed = false;
+  const children = node.children.map((child) => {
+    const replaced = replacedBelow(child, id, next);
+    if (replaced !== child) changed = true;
+    return replaced;
+  });
+  return changed ? ({ ...node, children } as OoxmlNode) : node;
+}
+
+/**
+ * A text box wrapper (`mc:AlternateContent`) with its VML fallback story in step with its
+ * DrawingML story `liveStoryId`, as a save writes it: for a caller that draws the wrapper
+ * itself (the ordered model's compose), so what it draws is what the save writes and a reopen
+ * reads. The node itself when it is no such wrapper, the two stories agree, or the DrawingML
+ * story is not `liveStoryId`.
+ */
+export function withTextboxFallbackInStep(
+  node: OoxmlNode,
+  liveStoryId: string,
+  mint: () => string
+): OoxmlNode {
+  if (!isMcAlternateContent(node)) return node;
+  const choice = node.children.find((child) => isNamed(child, MC_NAMESPACE_URI, 'Choice'));
+  const fallback = node.children.find((child) => isNamed(child, MC_NAMESPACE_URI, 'Fallback'));
+  if (!choice || !fallback || choice.kind === 'textValue' || fallback.kind === 'textValue') {
+    return node;
+  }
+  const pair = fallbackReplacement(choice, fallback, mint, (modern) => modern.id === liveStoryId);
+  return pair ? replacedBelow(node, pair[0].id, pair[1]) : node;
 }
 
 /** An export snapshot in which every text box's VML fallback story matches its DrawingML one. */

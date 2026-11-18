@@ -1,4 +1,4 @@
-import { containsClipboardObject } from './clipboard-object-policy.ts';
+import { containsClipboardObject, dropsWithItsPart } from './clipboard-object-policy.ts';
 // Clipboard fragment extraction: a semantic range becomes a minimal, valid
 // WordprocessingML package (rich-clipboard-fidelity tasks 1.2-1.6).
 //
@@ -18,13 +18,14 @@ import {
 } from '../package/ooxml-tree.ts';
 import type { OoxmlExternalTarget, OoxmlPackage } from '../package/ooxml-package.ts';
 import type { ContentTypeIndex } from '../package/content-types.ts';
-import { resolveContentTypeOf, relationshipsOf } from '../package/package-edit.ts';
+import { resolveContentTypeOf, relationshipsOf, relsPartNameFor } from '../package/package-edit.ts';
 import { resolveInternalTarget, validateExternalTarget } from '../package/opc-names.ts';
 import type { RelationshipRecord } from '../package/relationships.ts';
 import { escapeXmlAttribute } from '../package/sinks.ts';
 import { resolveNotesPart } from '../package/note-references.ts';
 import { writeZip, strToU8 } from '../package/zip.ts';
 import { applyTreeOp } from './tree-op-apply.ts';
+import { acceptedFragmentBlocks, acceptedNote } from './fragment-final-view.ts';
 import { explicitDocDefaults } from '../package/application-doc-defaults.ts';
 import { paragraphLength } from './tree-op-segments.ts';
 import { attributeValueOf } from './tree-op-nodes.ts';
@@ -50,6 +51,7 @@ import {
   mediaExtensionOf,
   noteReferenceClosure,
   numberingClosure,
+  rehomedRecords,
   relationshipXml,
   styleClosure,
   stylesIndexOf,
@@ -58,6 +60,15 @@ import {
   walkNodes,
 } from './clipboard-fragment-closure.ts';
 import { partialTableBlocks } from './clipboard-fragment-tables.ts';
+import { copiedPictureBullets } from './clipboard-fragment-picture-bullets.ts';
+import {
+  collectObjectParts,
+  emptyObjectParts,
+  isObjectRelationship,
+  objectBytes,
+  withDiagramDrawingIds,
+  writeObjectParts,
+} from './clipboard-fragment-objects.ts';
 
 const CT_XMLNS = 'http://schemas.openxmlformats.org/package/2006/content-types';
 
@@ -442,6 +453,11 @@ export function extractFragmentPackage(
   options?: {
     /** Copy-side degrade tier 1: leave media behind; their drawings degrade away. */
     readonly omitMedia?: boolean;
+    /**
+     * The source tracks changes: copy the accepted final view, as Word does. Without it the
+     * tracked changes travel as they are, with their authors and dates.
+     */
+    readonly acceptChanges?: boolean;
   }
 ): FragmentExtractResult {
   const sourcePart = pkg.parts.get(coverage.partName);
@@ -514,6 +530,10 @@ export function extractFragmentPackage(
     });
   blocks = [...balanceFieldsAcrossBlocks(blocks)];
   blocks = [...balanceBookmarks(blocks)];
+  // The source tracks changes: the accepted final view (the engine refused one: no fragment)
+  const accepted = options?.acceptChanges ? acceptedFragmentBlocks(part, blocks) : blocks;
+  if (!accepted) return { ok: false, reason: 'trim-refused' };
+  blocks = [...accepted];
 
   // Referenced note bodies travel; their styles and rels join the closure. The set
   // is TRANSITIVE over note bodies — the SAME closure the merge scrubs against, so
@@ -544,6 +564,7 @@ export function extractFragmentPackage(
   if (footnoteIds.size === 0) footnotesPart = null;
   if (endnoteIds.size === 0) endnotesPart = null;
 
+  let notesRefused = false;
   const includedNotes = (
     notesPart: OoxmlPart | null,
     kind: 'footnote' | 'endnote',
@@ -561,13 +582,21 @@ export function extractFragmentPackage(
       }
       if (id !== undefined && ids.has(canonicalNoteId(id))) {
         const stripped = stripExcluded(child);
-        if (stripped && isElementNode(stripped)) notes.push(stripped);
+        if (!stripped || !isElementNode(stripped)) continue;
+        // A note's own tracked changes are accepted with the blocks'
+        const own = options?.acceptChanges ? acceptedNote(part, stripped) : stripped;
+        if (own) {
+          notes.push(own);
+        } else {
+          notesRefused = true;
+        }
       }
     }
     return notes;
   };
   const footnotes = includedNotes(footnotesPart, 'footnote', footnoteIds);
   const endnotes = includedNotes(endnotesPart, 'endnote', endnoteIds);
+  if (notesRefused) return { ok: false, reason: 'trim-refused' };
   const noteBodies: OoxmlNode[] = [...footnotes, ...endnotes];
 
   if (containsClipboardObject(blocks) || containsClipboardObject(noteBodies)) {
@@ -634,8 +663,10 @@ export function extractFragmentPackage(
   );
 
   // Relationship subsets, per owner story.
-  const usedDocRels = new Set<string>();
-  collectRelationshipIds(blocks, usedDocRels);
+  const blockRels = new Set<string>();
+  collectRelationshipIds(blocks, blockRels);
+  // A diagram's drawing is named by its data part, never by the blocks.
+  const usedDocRels = withDiagramDrawingIds(pkg, sourcePart.name, blockRels);
   const docRecords = relationshipsOf(pkg, sourcePart.name).filter((record) =>
     usedDocRels.has(record.id)
   );
@@ -647,6 +678,9 @@ export function extractFragmentPackage(
   // shared set let a dropped document rel id filter a valid footnote rel out of the zip.
   const mediaEntries = new Map<string, Uint8Array>();
   let mediaBytes = 0;
+  // A chart's or a diagram's own parts travel whole, under their own names, with their
+  // relationships (`clipboard-fragment-objects.ts`); one that does not check degrades.
+  const objects = emptyObjectParts();
   const resolveMedia = (records: readonly RelationshipRecord[]): Set<string> => {
     const droppable = new Set<string>();
     for (const record of records) {
@@ -669,25 +703,35 @@ export function extractFragmentPackage(
         }
         continue;
       }
+      if (
+        isObjectRelationship(record) &&
+        options?.omitMedia !== true &&
+        collectObjectParts(pkg, record, objects)
+      ) {
+        continue;
+      }
       // Styles/numbering/notes/theme rels are re-authored below; anything else internal
-      // (chart parts, embedded objects) cannot travel whole and its drawing degrades.
+      // (an embedded object, a part that does not check) cannot travel and its drawing degrades.
       droppable.add(record.id);
     }
     return droppable;
   };
   const docDroppable = resolveMedia(docRecords);
+  // A list's picture bullets, with their images: relationships of the numbering part
+  const pictureBullets = copiedPictureBullets(
+    pkg,
+    numbering.part,
+    [...numbering.abstracts, ...numbering.nums],
+    resolveMedia
+  );
 
   const dropDanglingDrawings = (
     node: OoxmlNode,
     droppable: ReadonlySet<string>
   ): OoxmlNode | null => {
     if (node.kind === 'textValue') return node;
-    // An embedded object's part never travels, so the object drops as a whole.
-    if (
-      node.kind === 'drawing' ||
-      (node.namespaceUri === WML_NAMESPACE_URI &&
-        (node.localName === 'pict' || node.localName === 'object'))
-    ) {
+    // An embedded object's part never travels, so the object drops as a whole
+    if (dropsWithItsPart(node)) {
       const ids = new Set<string>();
       collectRelationshipIds([node], ids);
       for (const id of ids) if (droppable.has(id)) return null;
@@ -720,8 +764,9 @@ export function extractFragmentPackage(
     notes: OoxmlElement[]
   ): RelationshipRecord[] => {
     if (!notesPart) return [];
-    const used = new Set<string>();
-    collectRelationshipIds(notes, used);
+    const named = new Set<string>();
+    collectRelationshipIds(notes, named);
+    const used = withDiagramDrawingIds(pkg, notesPart.name, named);
     const records = relationshipsOf(pkg, notesPart.name).filter((record) => used.has(record.id));
     const droppable = resolveMedia(records);
     if (droppable.size > 0) {
@@ -743,6 +788,8 @@ export function extractFragmentPackage(
   // The same parts, kept as trees: the ok result carries them as an assembled
   // package so the copy path never re-parses its own zip.
   const fragmentParts = new Map<string, OoxmlPart>();
+  // Relationships of parts besides the stories': the numbering part's, an object's.
+  const objectRels: Array<readonly [string, readonly RelationshipRecord[]]> = [];
 
   const addXmlPart = (name: string, contentType: string, root: OoxmlElement): void => {
     const partValue = syntheticPart(name, contentType, root);
@@ -750,24 +797,6 @@ export function extractFragmentPackage(
     overrides.push([name, contentType]);
     fragmentParts.set(name, partValue);
   };
-
-  // A kept record RE-HOMES onto the fragment part that will own its rels part: the
-  // source part may live in another folder, and a relative target would then
-  // resolve against the wrong base. Internal targets become absolute (the media
-  // ships under its ORIGINAL canonical name), so both flavours resolve alike.
-  const rehomedRecords = (
-    records: readonly RelationshipRecord[],
-    ownerPart: string
-  ): RelationshipRecord[] =>
-    records.map((record) => {
-      if (record.targetMode === 'External') return { ...record, ownerPart };
-      const resolved = resolveInternalTarget(record.ownerPart, record.rawTarget);
-      return {
-        ...record,
-        ownerPart,
-        rawTarget: resolved.ok ? resolved.partName : record.rawTarget,
-      };
-    });
 
   // Fragment document rels: the used source subset plus the parts this fragment authors.
   const fragmentDocRels: RelationshipRecord[] = rehomedRecords(
@@ -809,11 +838,17 @@ export function extractFragmentPackage(
   // numbering.xml
   if (numbering.part && (numbering.nums.length > 0 || numbering.abstracts.length > 0)) {
     const numberingRoot = withChildren(numbering.part.root as OoxmlElement, [
+      ...pictureBullets.bullets,
       ...numbering.abstracts.map((node) => literalizeThemeReferences(node, fonts) as OoxmlElement),
       ...numbering.nums,
     ]);
     addXmlPart('/word/numbering.xml', NUMBERING_CT, numberingRoot);
     addFragmentRel(NUMBERING_REL, 'numbering.xml');
+    if (pictureBullets.records.length > 0) {
+      const records = rehomedRecords(pictureBullets.records, '/word/numbering.xml');
+      entries.set('word/_rels/numbering.xml.rels', strToU8(relationshipXml(records)));
+      objectRels.push(['/word/numbering.xml', records]);
+    }
   }
 
   // notes parts
@@ -849,6 +884,19 @@ export function extractFragmentPackage(
       mediaExtensions.set(ext, resolveContentTypeOf(pkg, name) ?? 'application/octet-stream');
     }
   }
+
+  // Charts' and diagrams' parts, with their own relationships.
+  writeObjectParts(objects, {
+    xml: addXmlPart,
+    bytes: (name, bytes, contentType) => {
+      entries.set(name.slice(1), bytes);
+      overrides.push([name, contentType]);
+    },
+    relationships: (owner, records) => {
+      entries.set(relsPartNameFor(owner).slice(1), strToU8(relationshipXml(records)));
+      objectRels.push([owner, records]);
+    },
+  });
 
   // rels
   const rootRelationship: RelationshipRecord = {
@@ -893,6 +941,7 @@ export function extractFragmentPackage(
   if (fragmentEndnoteRels.length > 0) {
     fragmentRelationships.set('/word/endnotes.xml', fragmentEndnoteRels);
   }
+  for (const [owner, records] of objectRels) fragmentRelationships.set(owner, records);
   const externalTargets: OoxmlExternalTarget[] = [];
   for (const records of fragmentRelationships.values()) {
     for (const record of records) {
@@ -938,6 +987,6 @@ export function extractFragmentPackage(
     }),
     lastMarkCovered: coverage.lastMarkCovered,
     blockCount: blocks.length,
-    mediaBytes,
+    mediaBytes: mediaBytes + objectBytes(objects),
   };
 }

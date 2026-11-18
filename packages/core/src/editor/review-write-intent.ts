@@ -1,3 +1,5 @@
+import type { CollaborationReviewWrite } from '../collaboration/index.ts';
+
 /**
  * Which review write is being committed through `commitReviewOps`.
  *
@@ -16,3 +18,11 @@ export type ReviewWriteIntent =
   | 'comment-resolve'
   | 'comment-delete'
   | 'package-scoped';
+
+/**
+ * A review write with what it does, for a collaboration session that checks review writes by
+ * their ops or their comment (`gateReviewWrite`).
+ *
+ * @public
+ */
+export type ReviewWrite = CollaborationReviewWrite & { readonly intent: ReviewWriteIntent };

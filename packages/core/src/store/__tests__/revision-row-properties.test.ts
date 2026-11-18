@@ -100,6 +100,9 @@ test('a tracked row the editor wrote resolves back to a row without row properti
     expect(rowsOf(tracked)).toContain('<w:trPr>');
     const plan = planRevisionBatch(tracked, action, revisionItemsOf(tracked).map(reviewItemKey));
     expect(plan.result.skipped).toEqual([]);
-    expect(rowsOf(apply(tracked, plan.ops))).not.toContain('<w:trPr');
+    const resolved = rowsOf(apply(tracked, plan.ops));
+    expect(resolved).not.toContain('<w:trPr');
+    // The cells' mark stamps go with their containers
+    expect(resolved).not.toContain('<w:pPr');
   }
 });

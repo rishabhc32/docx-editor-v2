@@ -296,6 +296,17 @@ export function contentControlPropertiesContainerOf(control: OoxmlNode): OoxmlEl
   );
 }
 
+/**
+ * The building-block gallery a `w:docPartObj` control names (`w:docPartGallery/@w:val`), or
+ * undefined. Word wraps a table of contents in a control whose gallery is "Table of Contents".
+ */
+export function contentControlDocPartGalleryOf(control: OoxmlNode): string | undefined {
+  const properties = contentControlPropertiesContainerOf(control);
+  const docPartObj = namedChild(properties, WML_NAMESPACE_URI, 'docPartObj');
+  const gallery = namedChild(docPartObj, WML_NAMESPACE_URI, 'docPartGallery');
+  return gallery ? wmlAttribute(gallery, 'val') : undefined;
+}
+
 /** A control's `w:sdtEndPr` — the run properties applied to its closing marker. */
 export function contentControlEndPropertiesNodeOf(
   control: OoxmlNode

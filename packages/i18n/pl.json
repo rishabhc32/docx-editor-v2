@@ -955,7 +955,6 @@
     "bodyOnlySectionBreak": "Podziały sekcji wstawia się w treści głównej dokumentu.",
     "bodyOnlyToc": "Spis treści wstawia się w treści głównej dokumentu.",
     "furnitureOnlyPageField": "Otwórz nagłówek lub stopkę, aby wstawić numer strony.",
-    "suggestingSectionBreak": "Wyłącz sugerowanie, aby wstawić ten podział sekcji. Zmienia on początek następnej sekcji, czego nie można zasugerować.",
     "tableCellSectionBreak": "Podziały sekcji wstawia się poza tabelą.",
     "lockedSectionBreak": "Następna sekcja znajduje się w zablokowanej lub powiązanej kontrolce zawartości, więc ten podział nie może jej zmienić.",
     "lockedContentBreak": "Kontrolka zawartości blokuje ten tekst, więc nie można tutaj wstawić podziału sekcji.",

@@ -660,10 +660,9 @@ function createPartDrawingContextSlot(options: {
     isCompatibleWith: (nextPart, nextPkg) => {
       const nextTheme = createPackageShapeThemeResolvers(nextPkg);
       if (nextTheme.cacheToken !== theme.cacheToken) return false;
-      if (nextPart === part && stylesPartOf(nextPkg) === stylesPart) {
-        lastCompatiblePart = nextPart;
-        return true;
-      }
+      // Against the last compatible part, not the one the slot was made from: holding that
+      // first tree kept the first version of every paragraph edited since, for the slot's life.
+      if (nextPart === lastCompatiblePart && stylesPartOf(nextPkg) === stylesPart) return true;
       if (
         stylesPartOf(nextPkg) === stylesPart &&
         drawingInputsUnchangedByParagraphEdit(lastCompatiblePart.root, nextPart.root)

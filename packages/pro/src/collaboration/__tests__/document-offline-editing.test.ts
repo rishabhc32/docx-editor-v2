@@ -134,4 +134,19 @@ describe('offline editing', () => {
       )
     ).toBe('collaboration-session-not-ready');
   });
+
+  // Backlog row 44: the editor gives this reason for an undo the session cannot run.
+  test('writeRefusal names why a session takes no write, with no report', async () => {
+    const { alice } = await pausedHarness.pair(proseBytes());
+    pausedHarness.apply(alice, [insertTextOp(pausedHarness.paragraphIdAt(alice, 0), 0, 'x')]);
+    expect(alice.room.session.writeRefusal?.()).toBeNull();
+    expect(alice.room.session.canUndo()).toBe(true);
+    const failures = alice.room.session.statusSnapshot().failureCount;
+    alice.room.session.setTransportStatus('disconnected', 'transport-disconnected', 'test-drop');
+    expect(alice.room.session.writeRefusal?.()).toBe('collaboration-session-not-ready');
+    expect(alice.room.session.canUndo()).toBe(false);
+    alice.room.session.destroy();
+    expect(alice.room.session.writeRefusal?.()).toBe('collaboration-session-destroyed');
+    expect(alice.room.session.statusSnapshot().failureCount).toBe(failures);
+  });
 });

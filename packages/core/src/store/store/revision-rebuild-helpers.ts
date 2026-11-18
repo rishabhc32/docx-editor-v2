@@ -7,6 +7,7 @@ import {
   type OoxmlNode,
   type OoxmlPart,
 } from '../package/ooxml-tree.ts';
+import { mathRunResolution } from './revision-math-runs.ts';
 
 export type Resolution = 'unwrap' | 'remove' | 'restore';
 
@@ -23,7 +24,8 @@ export function resolutionOf(node: OoxmlElement, action: 'accept' | 'reject'): R
       // back into `w:t`.
       return action === 'accept' ? 'remove' : 'restore';
     default:
-      return 'remove';
+      // A mark around a math run's content reads as a generic element
+      return mathRunResolution(node, action) ?? 'remove';
   }
 }
 

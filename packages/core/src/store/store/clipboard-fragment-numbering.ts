@@ -8,6 +8,9 @@
 // without an actor, the actor's stripe with one. "One past the highest" is the same number
 // on every replica that pastes from one snapshot, so two concurrent pastes appended two
 // different definitions under one `numId` and the replicas could not agree on either.
+//
+// A level's picture bullet (`w:lvlPicBulletId`) is compared by its look, not its id, and an
+// imported definition brings its bullets (`clipboard-fragment-picture-bullets.ts`).
 
 import {
   MAX_RELATIONSHIP_NUMBER,
@@ -23,6 +26,12 @@ import {
   styleSignature,
 } from './clipboard-fragment-defaults.ts';
 import { withRewrittenAttribute } from './clipboard-fragment-identifiers.ts';
+import {
+  bySignatureLook,
+  planPictureBulletImport,
+  withPictureBulletIds,
+  type PictureBulletContext,
+} from './clipboard-fragment-picture-bullets.ts';
 
 export interface NumberingImportPlan {
   /** Fragment `numId` → target `numId`, for `rewriteIdentifiers`. */
@@ -31,13 +40,22 @@ export interface NumberingImportPlan {
   readonly numsToImport: OoxmlElement[];
   /** Renumbered `w:abstractNum` definitions to insert before the first `w:num`. */
   readonly abstractsToImport: OoxmlElement[];
+  /** Renumbered `w:numPicBullet`s the imported definitions name, before every definition. */
+  readonly bulletsToImport: OoxmlElement[];
 }
 
-/** A definition's identity: its abstract's fingerprint plus the instance's level overrides. */
-function numSignature(num: OoxmlElement, abstract: OoxmlElement | undefined): string {
-  return `${abstract ? styleSignature(abstract) : 'none'}::${num.children
+/**
+ * A definition's identity: its abstract's fingerprint plus the instance's level overrides,
+ * each picture bullet by its look (`identities`).
+ */
+function numSignature(
+  num: OoxmlElement,
+  abstract: OoxmlElement | undefined,
+  identities: ReadonlyMap<string, string> | undefined
+): string {
+  return `${abstract ? styleSignature(bySignatureLook(abstract, identities)) : 'none'}::${num.children
     .filter((inner) => isWml(inner, 'lvlOverride'))
-    .map(nodeSignature)
+    .map((inner) => nodeSignature(bySignatureLook(inner as OoxmlElement, identities)))
     .join('')}`;
 }
 
@@ -52,8 +70,8 @@ function abstractIdOf(num: OoxmlElement): string | undefined {
  */
 function freshIds(
   target: OoxmlPart | null,
-  localName: 'abstractNum' | 'num',
-  attributeName: 'abstractNumId' | 'numId'
+  localName: 'abstractNum' | 'num' | 'numPicBullet',
+  attributeName: 'abstractNumId' | 'numId' | 'numPicBulletId'
 ): () => string | null {
   // `0` is Word's "no numbering" sentinel; a stripe that lands on it moves to the next slot.
   const used = new Set<string>(['0']);
@@ -75,16 +93,19 @@ function freshIds(
 
 /**
  * Plan the numbering a fragment brings into `target`. `null` when no fresh id is left;
- * an empty plan when the fragment carries no numbering part.
+ * an empty plan when the fragment carries no numbering part. `bullets` compares picture
+ * bullets by their look (`pictureBulletContext`).
  */
 export function planNumberingImport(
   fragmentNumbering: OoxmlPart | null,
-  targetNumbering: OoxmlPart | null
+  targetNumbering: OoxmlPart | null,
+  bullets?: PictureBulletContext
 ): NumberingImportPlan | null {
   const plan: NumberingImportPlan = {
     numIdMap: new Map(),
     numsToImport: [],
     abstractsToImport: [],
+    bulletsToImport: [],
   };
   if (!fragmentNumbering || !isElementNode(fragmentNumbering.root)) return plan;
 
@@ -114,7 +135,7 @@ export function planNumberingImport(
       if (!numId) continue;
       const abstractId = abstractIdOf(child);
       const abstract = abstractId ? targetAbstractById.get(abstractId) : undefined;
-      targetNumSignatures.set(numSignature(child, abstract), numId);
+      targetNumSignatures.set(numSignature(child, abstract, bullets?.target), numId);
     }
   }
 
@@ -126,7 +147,7 @@ export function planNumberingImport(
     if (!numId) continue;
     const abstractId = abstractIdOf(num);
     const abstract = abstractId ? fragmentAbstracts.get(abstractId) : undefined;
-    const signature = numSignature(num, abstract);
+    const signature = numSignature(num, abstract, bullets?.fragment);
     const reusable = targetNumSignatures.get(signature);
     if (reusable !== undefined) {
       plan.numIdMap.set(numId, reusable);
@@ -157,5 +178,20 @@ export function planNumberingImport(
     plan.numsToImport.push(imported);
     targetNumSignatures.set(signature, freshNumId);
   }
-  return plan;
+  const pictures = planPictureBulletImport(
+    fragmentNumbering,
+    [...plan.abstractsToImport, ...plan.numsToImport],
+    bullets,
+    freshIds(targetNumbering, 'numPicBullet', 'numPicBulletId')
+  );
+  if (pictures === null) return null;
+  if (pictures.bulletIdMap.size === 0) return plan;
+  return {
+    numIdMap: plan.numIdMap,
+    numsToImport: plan.numsToImport.map((n) => withPictureBulletIds(n, pictures.bulletIdMap)),
+    abstractsToImport: plan.abstractsToImport.map((a) =>
+      withPictureBulletIds(a, pictures.bulletIdMap)
+    ),
+    bulletsToImport: pictures.bulletsToImport,
+  };
 }

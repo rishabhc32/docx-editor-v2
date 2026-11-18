@@ -362,7 +362,7 @@ describe('a prompt in suggesting mode', () => {
     expect(body(rejected)).toContain('<w:showingPlcHdr/>');
     // The store reads no glossary here, so the type's own prompt stands in.
     expect(content(rejected)).toBe(
-      '<w:r><w:rPr><w:rStyle w:val="PlaceholderText"/></w:rPr><w:t>Click here to enter text.</w:t></w:r>'
+      '<w:r><w:rPr><w:rStyle w:val="PlaceholderText"/></w:rPr><w:t>Click or tap here to enter text.</w:t></w:r>'
     );
     const accepted = apply(part, { op: 'acceptAllRevisions' });
     expect(body(accepted)).not.toContain('showingPlcHdr');
@@ -383,18 +383,20 @@ describe('a decision that empties a control', () => {
   const struck = (part: OoxmlPart) =>
     apply(part, { op: 'deleteText', paragraphId: paragraphId(part), start: 0, end: 4, revision });
 
-  test('shows its prompt again, in the glossary’s words when the transaction lends them', () => {
+  test('shows its prompt again, as the glossary block has it when the transaction lends it', () => {
     const part = struck(filled());
+    const prompt =
+      '<w:r><w:rPr><w:rStyle w:val="PlaceholderText"/><w:i/></w:rPr><w:t>Enter a name.</w:t></w:r>';
+    const block = parse(`<w:p>${prompt}</w:p>`).root.children[0]!;
+    const paragraph = block.kind === 'textValue' ? undefined : block.children[0];
     const accepted = applyTreeOp(
       part,
       { op: 'acceptAllRevisions' },
-      { placeholderText: (name) => (name === 'Name' ? 'Enter a name.' : undefined) }
+      { placeholderBlocks: (name) => (name === 'Name' && paragraph ? [paragraph] : undefined) }
     );
     if (!accepted.ok) throw new Error(accepted.reason);
     expect(body(accepted.part)).toContain('<w:showingPlcHdr/>');
-    expect(content(accepted.part)).toBe(
-      '<w:r><w:rPr><w:rStyle w:val="PlaceholderText"/></w:rPr><w:t>Enter a name.</w:t></w:r>'
-    );
+    expect(content(accepted.part)).toBe(prompt);
   });
 
   test('leaves a control that keeps content alone', () => {

@@ -8,6 +8,7 @@ import { drawingAtomProjection } from '../package/drawing-atom-projection.ts';
 import {
   createNodeIdAllocator,
   findNode,
+  parentNodeOf,
   removeNode,
   replaceNode,
   type EditOptions,
@@ -370,17 +371,9 @@ export function validateDrawingOp(part: OoxmlPart, op: DrawingTreeDocOp): TreeOp
       if (!Number.isInteger(op.offset) || op.offset < 0 || op.offset > len)
         return 'offset-out-of-range';
       if (splitsSurrogate(paragraph, op.offset)) return 'splits-surrogate-pair';
+      // Inside an object (a picture, a field, a note reference) a picture has no place; right
+      // before one it does, as in Word: the insert lands in a run of its own there
       if (offsetInsideAtomicSegment(paragraph, op.offset)) return 'invalid-range';
-      const boundary = segmentsOf(paragraph).find((segment) => segment.start === op.offset);
-      if (
-        boundary?.removeNodeIds &&
-        boundary.removeNodeIds.length > 0 &&
-        boundary.node.kind !== 'textValue' &&
-        boundary.node.kind !== 'tab' &&
-        boundary.node.kind !== 'hardBreak'
-      ) {
-        return 'invalid-range';
-      }
       if (op.drawing.kind !== 'drawing') return 'not-a-drawing';
       const anchor = anchorRootOf(op.drawing);
       if (!anchor) return 'not-a-drawing';
@@ -1565,14 +1558,22 @@ export function applyDrawingOp(
       if (typeof ctx === 'string') return { ok: false, reason: ctx };
       const targetId = ctx.projection.textboxStory ? op.drawingNodeId : ctx.drawing.id;
       const paragraph = paragraphContainingNode(part, targetId);
+      // The run the object leaves empty goes with it, as Word removes it: nothing but its
+      // properties would be left
+      const run = parentNodeOf(part, targetId);
+      const removed =
+        run?.kind === 'run' &&
+        run.children.every((child) => child.id === targetId || child.kind === 'runProperties')
+          ? run.id
+          : targetId;
       const effect: TreeOpEffect = {
         dirty: paragraph ? [paragraph.id, targetId] : [targetId],
         created: [],
-        deleted: [targetId],
+        deleted: removed === targetId ? [targetId] : [targetId, removed],
         dependencyKeys: TEXT_DEPS,
         impact: drawingOpImpact(op),
       };
-      return fromEdit(removeNode(part, targetId, options), effect);
+      return fromEdit(removeNode(part, removed, options), effect);
     }
     case 'replaceDrawingResource': {
       const ctx = drawingContext(part, op.drawingNodeId, op.op);

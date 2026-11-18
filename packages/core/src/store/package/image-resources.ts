@@ -138,6 +138,8 @@ export interface ImageResourceLookup {
   ) => Promise<ImageResourceState>;
   readonly resolveLinked: (ownerPartName: string, relationshipId: string) => ImageResourceState;
   readonly resolveForProjection: (projection: DrawingProjection) => Promise<ImageResourceState>;
+  // Drawings of the lookup's package that reference `partName`. The lookup does not keep its
+  // package alive, so once nothing else holds that package no drawing of it is live: zero.
   readonly liveReferenceCount: (partName: string) => number;
   readonly dispose: () => void;
 }
@@ -711,8 +713,14 @@ export function validateRasterHeader(
   }
 }
 
+/**
+ * What a lookup reads of its package: relationships, part bytes and content types. Never the
+ * XML part trees, which change with every edit while these stay the same.
+ */
+type ImageResourceSubstrate = Pick<OoxmlPackage, 'relationships' | 'partBytes' | 'contentTypes'>;
+
 function claimedMimeForPart(
-  pkg: OoxmlPackage,
+  pkg: ImageResourceSubstrate,
   partName: string
 ): RenderableImageMime | PreservedImageMime | 'unknown' {
   const resolved = resolveContentType(pkg.contentTypes, partName);
@@ -798,7 +806,7 @@ function relationshipFingerprint(
 }
 
 function resolveEmbeddedPartName(
-  pkg: OoxmlPackage,
+  pkg: ImageResourceSubstrate,
   ownerPartName: string,
   relationshipId: string
 ): ImageRelationshipResolution {
@@ -934,7 +942,15 @@ function createImageResourceCacheInternal(
   decodePort: ImageDecodePort,
   limits: ImageResourceLimits
 ): ImageResourceLookup {
-  const pkg = initialPkg;
+  // The substrate, not the package. A layout owner keeps one lookup for every revision whose
+  // media is the same, so holding the package kept its first document tree, and with it the
+  // first version of every paragraph a long session edited.
+  const pkg: ImageResourceSubstrate = {
+    relationships: initialPkg.relationships,
+    partBytes: initialPkg.partBytes,
+    contentTypes: initialPkg.contentTypes,
+  };
+  const owner = new WeakRef(initialPkg);
   let generation = 0;
   let disposed = false;
   const lifetimeAbort = createHostAbortController();
@@ -1395,14 +1411,19 @@ function createImageResourceCacheInternal(
     resolveEmbedded,
     resolveLinked,
     resolveForProjection,
-    liveReferenceCount: (partName: string) => liveDrawingReferenceCount(pkg, partName),
+    liveReferenceCount: (partName: string) => {
+      const current = owner.deref();
+      return current ? liveDrawingReferenceCount(current, partName) : 0;
+    },
     dispose: () => {
       if (disposed) return;
       disposed = true;
       lifetimeAbort.abort();
       invalidateAll();
       validatedBytesRegistry.dispose();
-      unregisterLookupIfCurrent(pkg, decodePort, limits, lookup);
+      const current = owner.deref();
+      // A collected package took its registry entry with it.
+      if (current) unregisterLookupIfCurrent(current, decodePort, limits, lookup);
     },
   });
   return lookup;

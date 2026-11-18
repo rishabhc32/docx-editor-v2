@@ -453,6 +453,9 @@ describe('undo never strands the caret (review regressions)', () => {
   });
 });
 
+// A paste between two words gets a space on each side, as Word's Smart cut and paste does
+// (`store/store/fragment-smart-spacing.ts`): the space is part of the paste, so the caret
+// lands after it, and a paste that ends with a paragraph mark gets no space after it.
 describe('paste is one commit, whatever the clipboard holds', () => {
   function paste(container: HTMLElement, text: string): void {
     const layer = container.querySelector('.docx-pages') as HTMLElement;
@@ -471,7 +474,7 @@ describe('paste is one commit, whatever the clipboard holds', () => {
     putCaret(surface, 5);
     paste(container, 'one\ntwo\nthree\nfour');
     expect(surface.state().revision).toBe(1);
-    expect(surface.session.bodyText()).toBe('helloone\ntwo\nthree\nfour');
+    expect(surface.session.bodyText()).toBe('hello one\ntwo\nthree\nfour');
   });
 
   test('one undo reverses the whole paste', () => {
@@ -487,7 +490,7 @@ describe('paste is one commit, whatever the clipboard holds', () => {
     const { surface, container } = mount(paragraph('headtail'));
     putCaret(surface, 4);
     paste(container, 'A\nB');
-    expect(surface.session.bodyText()).toBe('headA\nBtail');
+    expect(surface.session.bodyText()).toBe('head A\nB tail');
   });
 
   test('the caret lands at the end of the pasted text', () => {
@@ -495,8 +498,8 @@ describe('paste is one commit, whatever the clipboard holds', () => {
     putCaret(surface, 4);
     paste(container, 'A\nBB');
     const head = surface.state().selection.head;
-    // In the paragraph holding 'BBtail', right after the pasted 'BB'.
-    expect(head.offset).toBe(2);
+    // In the paragraph holding 'BB tail', right after the pasted 'BB' and its space.
+    expect(head.offset).toBe(3);
     expect(surface.session.paragraphIds().indexOf(head.paragraphId)).toBe(1);
   });
 
@@ -516,7 +519,7 @@ describe('paste is one commit, whatever the clipboard holds', () => {
     const { surface, container } = mount(paragraph('headtail'));
     putCaret(surface, 4);
     paste(container, 'A\n');
-    expect(surface.session.bodyText()).toBe('headA\ntail');
+    expect(surface.session.bodyText()).toBe('head A\ntail');
     // Caret at the START of the suffix paragraph: the last pasted line is empty.
     expect(surface.state().selection.head.offset).toBe(0);
   });
@@ -557,7 +560,7 @@ describe('paste is one commit, whatever the clipboard holds', () => {
     putCaret(surface, 4);
     paste(container, 'one\n\ntwo\n\n\nthree');
     expect(surface.state().lastRejection).toBeNull();
-    expect(surface.session.bodyText()).toBe('seedone\n\ntwo\n\n\nthree');
+    expect(surface.session.bodyText()).toBe('seed one\n\ntwo\n\n\nthree');
     expect(surface.state().revision).toBe(1);
   });
 });

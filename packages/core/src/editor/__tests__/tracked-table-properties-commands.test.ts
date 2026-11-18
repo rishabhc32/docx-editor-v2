@@ -7,7 +7,7 @@
 import { GlobalRegistrator } from '@happy-dom/global-registrator';
 if (!GlobalRegistrator.isRegistered) GlobalRegistrator.register();
 
-import { afterEach, describe, expect, test } from 'bun:test';
+import { afterEach, describe, expect, setSystemTime, test } from 'bun:test';
 import { zipSync, strToU8 } from 'fflate';
 import { createDocxEditor, type DocxEditorInstance } from '../docx-editor.ts';
 import {
@@ -21,6 +21,7 @@ import { resolveRevisionMarkup } from '../../contracts/revision-markup.ts';
 import type { ExecResult } from '../../contracts/types.ts';
 import { HELD_ROW_REASON } from '../surface-tracked-table-refusal.ts';
 import { planTableRowHeightResize } from '../table-command-plan.ts';
+import { selectCellRectangle } from './paginated-surface-fixtures.ts';
 import {
   findTableOccurrence,
   tableColumnDividerResizeTargetFrom,
@@ -294,20 +295,21 @@ describe.each(CASES)('$name', (entry) => {
   });
 });
 
+const FILL = { type: 'setCellFill', color: { kind: 'hex', value: 'FF0000' } } as const;
+// Paragraphs in order: before, a1, a2, b1, b2, after.
+const A1 = 1;
+const B1 = 3;
+
+function caret(editor: DocxEditorInstance, paragraph: number): void {
+  const position = { paragraphId: editor.surface!.session.paragraphIds()[paragraph]!, offset: 0 };
+  editor.surface!.setSelection({ anchor: position, head: position });
+}
+
 // A ROW HOLDS ONE AUTHOR'S PENDING DECISION AT A TIME. Bob proposes a fill in the first row,
 // which records on each of its cells. Bea's change to that row used to take some of his records
 // over, and rejecting hers and then his reset those cells to `tcW auto`. It is refused instead.
 describe("a row with another author's pending fill", () => {
-  const FILL = { type: 'setCellFill', color: { kind: 'hex', value: 'FF0000' } } as const;
   const HELD: ExecResult = { ok: false, code: 'unsupported', reason: HELD_ROW_REASON };
-  // Paragraphs in order: before, a1, a2, b1, b2, after.
-  const A1 = 1;
-  const B1 = 3;
-
-  function caret(editor: DocxEditorInstance, paragraph: number): void {
-    const position = { paragraphId: editor.surface!.session.paragraphIds()[paragraph]!, offset: 0 };
-    editor.surface!.setSelection({ anchor: position, head: position });
-  }
   const authors = (editor: DocxEditorInstance): unknown[] => [
     ...new Set(editor.getReviewItems().map((item) => item.kind === 'revision' && item.author)),
   ];
@@ -369,4 +371,54 @@ describe("a row with another author's pending fill", () => {
       expect(widths(editor)).toEqual(Array(4).fill('dxa:3000'));
     });
   }
+});
+
+// A height on a row with no `w:trPr` has no row record: its cells' records and the table's
+// anchor hold it (Word's form). The author's fill in that row, before or after the height, joins
+// the cells' one decision, so Reject All takes the height too (backlog 34). A fill over a column
+// of two rows, each with its own height, joins each row's own decision.
+describe("an author's own heights and fill on rows with no properties", () => {
+  type Step = (editor: DocxEditorInstance) => void;
+  const height =
+    (row: number): Step =>
+    (editor) =>
+      expect(dragRowHeight(editor, row, 900)).toEqual(LANDED);
+  const fill: Step = (editor) => {
+    caret(editor, A1);
+    expect(editor.exec(FILL)).toEqual(LANDED);
+  };
+  /** One press over the first column of both rows. */
+  const columnFill: Step = (editor) => {
+    selectCellRectangle(editor.surface!, { row: 0, column: 0 }, { row: 1, column: 0 });
+    expect(editor.exec(FILL)).toEqual(LANDED);
+  };
+  const CASES: Readonly<Record<string, { steps: readonly Step[]; rows: number }>> = {
+    'height, then fill': { steps: [height(0), fill], rows: 1 },
+    'fill, then height': { steps: [fill, height(0)], rows: 1 },
+    'two heights, then a column fill': { steps: [height(0), height(1), columnFill], rows: 2 },
+    'a column fill, then two heights': { steps: [columnFill, height(0), height(1)], rows: 2 },
+  };
+  const count = (xml: string, text: string): number => xml.split(text).length - 1;
+  afterEach(() => setSystemTime());
+
+  for (const [order, { steps, rows }] of Object.entries(CASES))
+    for (const action of ['accept', 'reject'] as const)
+      test(`${order}: ${action} all decides every one`, () => {
+        const editor = mount(docxOf(BODY), 'suggesting');
+        const original = xmlOf(mount(docxOf(BODY), 'editing'));
+        // Each step a minute after the one before, as a person makes them
+        for (const [minute, step] of steps.entries()) {
+          setSystemTime(new Date(Date.UTC(2026, 10, 3, 9, minute)));
+          step(editor);
+        }
+        expect(editor.exec({ type: 'resolveAllReviewChanges', action }).ok).toBe(true);
+        const xml = xmlOf(editor);
+        expect(xml).not.toMatch(RECORDS);
+        if (action === 'reject') expect(xml.replaceAll('<w:tr><w:trPr/>', '<w:tr>')).toBe(original);
+        else
+          expect({
+            heights: count(xml, '<w:trHeight w:hRule="exact" w:val="900"/>'),
+            fills: count(xml, 'w:fill="FF0000"'),
+          }).toEqual({ heights: rows, fills: rows });
+      });
 });

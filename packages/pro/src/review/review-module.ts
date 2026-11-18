@@ -48,9 +48,9 @@ export interface ReviewModuleOptions extends ProLicenseOptions {
   readonly pane?: ReviewPaneOptions;
   /**
    * What suggesting mode does with a local edit it cannot record as a suggestion, such as a
-   * page-setup or list change. `'apply'` (the default) applies it directly, with no markup and
-   * no review card. `'refuse'` refuses the whole edit and reports why in
-   * `snapshot().lastRejection`, so every change a reviewer sees arrives as a suggestion.
+   * header and footer option or a document setting. `'apply'` (the default) applies it
+   * directly, with no markup and no review card. `'refuse'` refuses the whole edit and reports
+   * why in `snapshot().lastRejection`, so every change a reviewer sees arrives as a suggestion.
    *
    * Tracked edits, comments, bookmarks, accepting or rejecting changes, and formatting left
    * untracked by `trackFormatting: false` or the document's `w:doNotTrackFormatting` stay
@@ -69,8 +69,9 @@ export function reviewModule(options: ReviewModuleOptions = {}): EditorModule {
   // Validate now, so a misspelled setting fails where the host wrote it.
   const pane = options.pane === undefined ? undefined : { ...resolveReviewPane(options.pane) };
   const { untrackedEdits } = options;
-  if (untrackedEdits !== undefined && untrackedEdits !== 'apply' && untrackedEdits !== 'refuse')
+  if (untrackedEdits !== undefined && untrackedEdits !== 'apply' && untrackedEdits !== 'refuse') {
     throw new TypeError('Invalid untrackedEdits');
+  }
   rememberLicenseKey(options.licenseKey);
   return {
     id: 'review',

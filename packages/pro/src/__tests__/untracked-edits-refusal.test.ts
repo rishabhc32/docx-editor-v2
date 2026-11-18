@@ -4,8 +4,9 @@ Licensed under the EigenPal Pro Evaluation License 1.0 — see packages/pro/LICE
 Production use requires a commercial agreement: licensing@eigenpal.com
 */
 // `reviewModule({ untrackedEdits: 'refuse' })`: suggesting refuses a local edit it cannot record
-// as a suggestion, whole, and keeps every edit it can record. Page setup is the example of an edit
-// with no tracked form; the default keeps applying it directly.
+// as a suggestion, whole, and keeps every edit it can record. Different odd and even pages is the
+// example of an edit with no tracked form: a setting in `settings.xml`, which Word never tracks.
+// The default keeps applying it directly. Page setup has a tracked form, Word's `w:sectPrChange`.
 
 import { GlobalRegistrator } from '@happy-dom/global-registrator';
 if (!GlobalRegistrator.isRegistered) GlobalRegistrator.register();
@@ -109,26 +110,45 @@ function select(editor: Editor, paragraph: number, start: number, end = start) {
 
 const body = (editor: Editor) => serializeOoxmlPart(editor.surface!.session.part());
 const leftMargin = (editor: Editor) => /<w:pgMar[^>]*w:left="(\d+)"/.exec(body(editor))?.[1];
+/** Whether the saved settings turn different odd and even pages on. */
+const oddAndEven = async (editor: Editor) => {
+  const settings = unzipSync(new Uint8Array(await editor.save()))['word/settings.xml'];
+  return (
+    settings !== undefined &&
+    /<w:evenAndOddHeaders\b(?! w:val="(false|0)")/.test(strFromU8(settings))
+  );
+};
 const accepted = (editor: Editor) => editor.snapshot().lastRejection ?? null;
 const controlId = (editor: Editor) =>
   contentControlsIn(editor.surface!.session.part().root)[0]!.node.id;
 const REASON = 'suggesting cannot record this change as a suggestion';
-/** Ask for a left margin through the toolbar's command; true when it was applied. */
-const setMargin = (editor: Editor, twips: number) =>
-  editor.exec({ type: 'setPageSetup', marginLeft: twips }).ok;
+/** Ask for different odd and even pages through the command; true when it was applied. */
+const setOddAndEven = (editor: Editor, on = true) =>
+  editor.exec({ type: 'setHeaderFooterOptions', evenAndOddHeaders: on }).ok;
 
 describe("untrackedEdits: 'refuse' while suggesting", () => {
-  test('a page-setup change is refused, with the reason and its diagnostic code', () => {
+  test('a settings change is refused, with the reason and its diagnostic code', async () => {
     const editor = mount();
     const before = body(editor);
-    const result = editor.exec({ type: 'setPageSetup', marginLeft: 720 });
+    const result = editor.exec({ type: 'setHeaderFooterOptions', evenAndOddHeaders: true });
     expect(result.ok).toBe(false);
     expect(accepted(editor)).toBe(REASON);
     expect(!result.ok && result.reason).toBe(REASON);
     expect(diagnosticCodeOfRefusal(REASON)).toBe('edit.tracked-structure-unsupported');
-    expect(editor.exec({ type: 'setPageSetup', orientation: 'landscape' }).ok).toBe(false);
     expect(body(editor)).toBe(before);
+    expect(await oddAndEven(editor)).toBe(false);
     expect(editor.getTrackedChanges()).toEqual([]);
+  });
+
+  test("a page-setup change is a suggestion, Word's w:sectPrChange", () => {
+    const editor = mount();
+    expect(editor.exec({ type: 'setPageSetup', marginLeft: 720 }).ok).toBe(true);
+    expect(accepted(editor)).toBeNull();
+    expect(leftMargin(editor)).toBe('720');
+    expect(body(editor)).toContain('<w:sectPrChange ');
+    expect(editor.getTrackedChanges()).toHaveLength(1);
+    expect(editor.exec({ type: 'resolveAllReviewChanges', action: 'reject' }).ok).toBe(true);
+    expect(leftMargin(editor)).toBe('1440');
   });
 
   test('tab stops pressed with spacing land as one suggestion', () => {
@@ -144,9 +164,9 @@ describe("untrackedEdits: 'refuse' while suggesting", () => {
     expect(editor.getTrackedChanges()).toHaveLength(1);
   });
 
-  test('edits it can record still land as suggestions beside a refused one', () => {
+  test('edits it can record still land as suggestions beside a refused one', async () => {
     const editor = mount();
-    expect(setMargin(editor, 720)).toBe(false);
+    expect(setOddAndEven(editor)).toBe(false);
     select(editor, 0, 5);
     editor.surface!.type(' new');
     select(editor, 1, 0, 6);
@@ -167,12 +187,12 @@ describe("untrackedEdits: 'refuse' while suggesting", () => {
     expect(editor.getTrackedChanges().length).toBeGreaterThanOrEqual(5);
     expect(editor.exec({ type: 'resolveAllReviewChanges', action: 'accept' }).ok).toBe(true);
     expect(editor.getTrackedChanges()).toEqual([]);
-    expect(leftMargin(editor)).toBe('1440');
+    expect(await oddAndEven(editor)).toBe(false);
   });
 
   test('Enter continues a blank-separated list as a suggestion', () => {
     const editor = mount({ document: withNumbering(SEPARATED_LIST) });
-    expect(setMargin(editor, 720)).toBe(false);
+    expect(setOddAndEven(editor)).toBe(false);
     select(editor, 2, 'Item two'.length);
     editor.surface!.splitParagraph();
     expect(accepted(editor)).toBeNull();
@@ -352,9 +372,9 @@ describe("untrackedEdits: 'refuse' while suggesting", () => {
     }
   });
 
-  test('formatting left untracked on purpose is applied while page setup is still refused', () => {
+  test('formatting left untracked on purpose is applied while a settings change is still refused', () => {
     const editor = mount({ trackFormatting: false });
-    expect(setMargin(editor, 720)).toBe(false);
+    expect(setOddAndEven(editor)).toBe(false);
     select(editor, 1, 0, 6);
     expect(editor.exec({ type: 'toggleMark', mark: 'bold' }).ok).toBe(true);
     expect(accepted(editor)).toBeNull();
@@ -362,21 +382,21 @@ describe("untrackedEdits: 'refuse' while suggesting", () => {
     expect(editor.getTrackedChanges()).toEqual([]);
   });
 
-  test('undo and redo of an earlier direct edit are not refused', () => {
+  test('undo and redo of an earlier direct edit are not refused', async () => {
     const editor = mount({ mode: 'edit' });
-    expect(setMargin(editor, 720)).toBe(true);
+    expect(setOddAndEven(editor)).toBe(true);
     expect(editor.exec({ type: 'setEditingMode', mode: 'suggesting' }).ok).toBe(true);
-    expect(setMargin(editor, 900)).toBe(false);
+    expect(setOddAndEven(editor, false)).toBe(false);
     expect(editor.exec({ type: 'undo' }).ok).toBe(true);
-    expect(leftMargin(editor)).toBe('1440');
+    expect(await oddAndEven(editor)).toBe(false);
     expect(editor.exec({ type: 'redo' }).ok).toBe(true);
-    expect(leftMargin(editor)).toBe('720');
+    expect(await oddAndEven(editor)).toBe(true);
   });
 
   test('the editing API lane keeps its own tracked-change policy', () => {
     // Its host refuses operations with no tracked form while suggesting, before this lane.
     const editor = mount();
-    expect(setMargin(editor, 900)).toBe(false);
+    expect(setOddAndEven(editor)).toBe(false);
     const result = editor.surface!.applyAutomationOps(() => [
       { op: 'setSectionProperties', marginLeftTwips: 720 },
     ]);
@@ -418,7 +438,7 @@ describe("everyday edits under untrackedEdits: 'refuse'", () => {
 });
 
 describe('only refuse, and only while suggesting', () => {
-  test('the default and apply keep applying the change directly', () => {
+  test('the default and apply keep applying the change directly', async () => {
     const policies: [ReviewModuleOptions, boolean][] = [
       [{ untrackedEdits: 'refuse' }, false],
       [{}, true],
@@ -426,17 +446,17 @@ describe('only refuse, and only while suggesting', () => {
     ];
     for (const [review, applies] of policies) {
       const editor = mount({ review });
-      expect(setMargin(editor, 720)).toBe(applies);
-      expect(leftMargin(editor)).toBe(applies ? '720' : '1440');
+      expect(setOddAndEven(editor)).toBe(applies);
+      expect(await oddAndEven(editor)).toBe(applies);
     }
   });
 
-  test('refuse applies the change once the editor leaves suggesting', () => {
+  test('refuse applies the change once the editor leaves suggesting', async () => {
     const editor = mount();
-    expect(setMargin(editor, 720)).toBe(false);
+    expect(setOddAndEven(editor)).toBe(false);
     expect(editor.exec({ type: 'setEditingMode', mode: 'editing' }).ok).toBe(true);
-    expect(setMargin(editor, 720)).toBe(true);
-    expect(leftMargin(editor)).toBe('720');
+    expect(setOddAndEven(editor)).toBe(true);
+    expect(await oddAndEven(editor)).toBe(true);
   });
 
   test('an unknown value throws where the host wrote it', () => {

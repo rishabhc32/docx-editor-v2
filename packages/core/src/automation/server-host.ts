@@ -46,6 +46,7 @@ import {
   type EditorCollaborationSession,
 } from '../collaboration/index.ts';
 import { createCollaborationDocumentPort } from '../collaboration/replication.ts';
+import { collaborationGateContext } from '../collaboration/gate-context.ts';
 import { normalizeCollaborationTextPackage } from '../collaboration/document-port.ts';
 import {
   addPackageComment,
@@ -291,7 +292,15 @@ export function packageStorePort(
         )
       );
       if (ops === null) return { ok: false, reason: 'unsupported-target' };
-      const collaborationRefusal = collaboration?.gateOperations(ops, scope);
+      const collaborationRefusal = collaboration?.gateOperations(
+        ops,
+        scope,
+        collaborationGateContext(
+          () => store.currentPackage(),
+          packageEdits,
+          collaboration.identity.actorId
+        )
+      );
       if (collaborationRefusal) return { ok: false, reason: collaborationRefusal };
       const partName = collaboration ? store.partFor(scope)?.name : undefined;
       const result = store.transact(

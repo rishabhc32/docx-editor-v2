@@ -116,6 +116,32 @@ export function ensureHyperlinkRelationship(
   url: string,
   ownerPart: string = pkg.mainDocumentPart
 ): EnsuredHyperlinkRelationship | null {
+  return ensureExternalRelationship(pkg, url, ownerPart, HYPERLINK_RELATIONSHIP_TYPE);
+}
+
+/** The image relationship type, which a picture linked by address (`a:blip/@r:link`) names. */
+const IMAGE_RELATIONSHIP_TYPE =
+  'http://schemas.openxmlformats.org/officeDocument/2006/relationships/image';
+
+/**
+ * An external image relationship for a picture linked by address, minted or reused, under the
+ * same gate as a hyperlink's: Word keeps a pasted picture's link as it is (paste evidence 3). The
+ * address is only written; nothing in this engine loads or fetches it.
+ */
+export function ensureLinkedImageRelationship(
+  pkg: OoxmlPackage,
+  url: string,
+  ownerPart: string
+): EnsuredHyperlinkRelationship | null {
+  return ensureExternalRelationship(pkg, url, ownerPart, IMAGE_RELATIONSHIP_TYPE);
+}
+
+function ensureExternalRelationship(
+  pkg: OoxmlPackage,
+  url: string,
+  ownerPart: string,
+  type: string
+): EnsuredHyperlinkRelationship | null {
   // The same gate the READ side applies, applied on the way in: an authored external relationship
   // must be an absolute URI. Writing `/admin/delete-account` as `TargetMode="External"` is not a
   // shape Word produces, and it would hand the next reader a target that resolves against whatever
@@ -129,10 +155,7 @@ export function ensureHyperlinkRelationship(
   // package — a scoped insert that cannot name its story must fail atomically.
   if (owner !== pkg.mainDocumentPart && !pkg.parts.has(owner)) return null;
   const reusable = pkg.externalTargets.find(
-    (entry) =>
-      entry.ownerPart === owner &&
-      entry.type === HYPERLINK_RELATIONSHIP_TYPE &&
-      entry.rawTarget === target
+    (entry) => entry.ownerPart === owner && entry.type === type && entry.rawTarget === target
   );
   if (reusable) return { pkg, relationshipId: reusable.id };
 
@@ -148,7 +171,7 @@ export function ensureHyperlinkRelationship(
   const authored = readOoxmlPart(
     `<Relationships xmlns="${REL}">` +
       `<Relationship Id="${escapeXmlChecked(id, 'relationship id')}"` +
-      ` Type="${HYPERLINK_RELATIONSHIP_TYPE}"` +
+      ` Type="${type}"` +
       ` Target="${escapeXmlChecked(target, 'relationship target')}"` +
       ' TargetMode="External"/>' +
       '</Relationships>',
@@ -165,7 +188,7 @@ export function ensureHyperlinkRelationship(
     {
       ownerPart: owner,
       id,
-      type: HYPERLINK_RELATIONSHIP_TYPE,
+      type,
       rawTarget: target,
       sinkSafe: true,
     },
@@ -182,7 +205,7 @@ export function ensureHyperlinkRelationship(
   const record = {
     ownerPart: owner,
     id,
-    type: HYPERLINK_RELATIONSHIP_TYPE,
+    type,
     rawTarget: target,
     targetMode: 'External' as const,
     order,

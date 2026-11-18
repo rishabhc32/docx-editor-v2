@@ -43,6 +43,14 @@ import { noteOnPage, storyContentBox } from './surface-story-geometry.ts';
 
 export { storyContentBox };
 
+/** What the store answers for one bookmark write. */
+interface BookmarkWriteResult {
+  readonly committed: boolean;
+  readonly rejected: boolean;
+  readonly opCount: number;
+  readonly reason?: string;
+}
+
 /** What the bookmark lane reads from and writes through. */
 export interface SurfaceBookmarkDeps {
   readonly session: StoryScopeLookup & {
@@ -55,7 +63,7 @@ export interface SurfaceBookmarkDeps {
       after?: unknown,
       scope?: StoryScope,
       options?: { readonly packageEdits?: readonly ((pkg: OoxmlPackage) => OoxmlPackage)[] }
-    ): { readonly committed: boolean; readonly reason?: string };
+    ): BookmarkWriteResult;
   };
   readonly storyScope: () => StoryScope;
   readonly orderedRange: () => {
@@ -64,7 +72,14 @@ export interface SurfaceBookmarkDeps {
   };
   /** Why a write cannot happen at the selection now, or null. */
   readonly writeRefusal: () => string | null;
-  readonly commit: (run: () => boolean, selectionAfter?: () => SemanticSelection | null) => void;
+  /**
+   * Run one write. The run hands back the store's whole answer, not only whether it
+   * committed: the commit reports a refusal's reason only from that answer.
+   */
+  readonly commit: (
+    run: () => BookmarkWriteResult,
+    selectionAfter?: () => SemanticSelection | null
+  ) => void;
   /** Jump; with `orShow`, a story that cannot be opened is only scrolled to (`'shown'`). */
   readonly goToPosition: (
     position: { paragraphId: string; offset: number },
@@ -202,10 +217,11 @@ export function createSurfaceBookmarks(deps: SurfaceBookmarkDeps): SurfaceBookma
   ): boolean => {
     let committed = false;
     deps.commit(() => {
-      committed = deps.session.applyTreeOps([op], undefined, undefined, scope, {
+      const result = deps.session.applyTreeOps([op], undefined, undefined, scope, {
         packageEdits,
-      }).committed;
-      return committed;
+      });
+      committed = result.committed;
+      return result;
     });
     return committed;
   };
@@ -338,10 +354,11 @@ export function createSurfaceBookmarks(deps: SurfaceBookmarkDeps): SurfaceBookma
       if (edits.length === 0) return false;
       let committed = false;
       deps.commit(() => {
-        committed = deps.session.applyTreeOps([], undefined, undefined, first.scope, {
+        const result = deps.session.applyTreeOps([], undefined, undefined, first.scope, {
           packageEdits: edits,
-        }).committed;
-        return committed;
+        });
+        committed = result.committed;
+        return result;
       });
       return committed;
     },

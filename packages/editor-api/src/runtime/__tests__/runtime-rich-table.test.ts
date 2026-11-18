@@ -180,7 +180,7 @@ test('rejecting a table beside an existing table removes its separator', async (
   }
 });
 
-test('a proposed table with another author’s cell revision refuses structural configuration', async () => {
+test('a proposed table with another author’s cell revision takes a tracked column, not a direct one', async () => {
   const runtime = await DocxEditor.createServer(docx(p('Anchor')), { author: 'Writer' });
   try {
     await runtime.run(async (c) => {
@@ -197,15 +197,15 @@ test('a proposed table with another author’s cell revision refuses structural 
     files['word/document.xml'] = strToU8(xml);
     const reopened = await DocxEditor.createServer(zipSync(files), { author: 'Writer' });
     try {
-      const before = await reopened.save();
-      await expect(
-        reopened.run(async (c) => {
-          c.document.changeTrackingMode = 'TrackMineOnly';
-          c.document.body.tables.getFirst().addColumns('End', 1);
-          await c.sync();
-        })
-      ).rejects.toMatchObject({ code: 'NotSupported' });
-      expect(await reopened.save()).toEqual(before);
+      await reopened.run(async (c) => {
+        c.document.changeTrackingMode = 'TrackMineOnly';
+        c.document.body.tables.getFirst().addColumns('End', 1);
+        await c.sync();
+      });
+      // The other author's text keeps its own revision; the column is the writer's suggestion
+      const saved = strFromU8(unzipSync(await reopened.save())['word/document.xml']!);
+      expect(saved).toMatch(/<w:cellIns [^>]*w:author="Writer"/);
+      expect(saved).toMatch(/<w:ins w:author="Other" w:id="900"><w:r><w:t>Other text</);
     } finally {
       reopened.dispose();
     }

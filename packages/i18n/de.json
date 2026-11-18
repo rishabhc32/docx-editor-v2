@@ -955,7 +955,6 @@
     "bodyOnlySectionBreak": "Abschnittsumbrüche werden im Haupttext des Dokuments eingefügt.",
     "bodyOnlyToc": "Ein Inhaltsverzeichnis wird im Haupttext des Dokuments eingefügt.",
     "furnitureOnlyPageField": "Öffnen Sie eine Kopf- oder Fußzeile, um eine Seitenzahl einzufügen.",
-    "suggestingSectionBreak": "Schalten Sie den Vorschlagsmodus aus, um diesen Abschnittsumbruch einzufügen. Er ändert den Beginn des nächsten Abschnitts. Diese Änderung kann nicht vorgeschlagen werden.",
     "tableCellSectionBreak": "Abschnittsumbrüche werden außerhalb einer Tabelle eingefügt.",
     "lockedSectionBreak": "Der nächste Abschnitt liegt in einem gesperrten oder verknüpften Inhaltssteuerelement. Dieser Umbruch kann ihn daher nicht ändern.",
     "lockedContentBreak": "Ein Inhaltssteuerelement sperrt diesen Text. Sie können hier keinen Abschnittsumbruch einfügen.",

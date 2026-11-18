@@ -817,7 +817,9 @@ export function applyInlinePlan(
   registry: DocumentRegistry,
   plan: InlinePlan,
   /** Each plan paragraph's tokens, encoded before the write began. */
-  encoded: ReadonlyMap<LogicalId, Token[]> = new Map()
+  encoded: ReadonlyMap<LogicalId, Token[]> = new Map(),
+  /** The parent the journal gives each node it places, which shared state lists only later. */
+  placedIn: ReadonlyMap<LogicalId, LogicalId> = new Map()
 ): InlineWritten {
   const embedsAfter = new Set<string>();
   // Block children are records the record pipeline writes; the rest is shared text.
@@ -873,7 +875,7 @@ export function applyInlinePlan(
     },
     (token, paragraph) =>
       decodeAttributes(token.attributes, registry.limits, writes[paragraph]!.id).text?.id ?? '',
-    (paragraph) => storyRootOf(registry, writes[paragraph]!.id)
+    (paragraph) => storyRootOf(registry, writes[paragraph]!.id, placedIn)
   );
   for (const write of writes) {
     const text = write.text ?? writeInlineText(write.record, []);
@@ -915,14 +917,22 @@ export function applyInlinePlan(
 }
 
 /**
- * The root of the story a node is in: the part root its parents lead to. Empty for a node
- * with no parent edge yet, which a paragraph this edit created has until the edit ends.
+ * The root of the story a node is in: the part root its parents lead to. A node this edit
+ * created has no parent edge in shared state until the edit ends, so the parent the edit placed
+ * it under stands in: a new paragraph in a part the edit writes, as the glossary that keeps a
+ * replaced prompt, is in that part's story. Empty for a node with no parent either way.
  */
-function storyRootOf(registry: DocumentRegistry, id: LogicalId): string {
-  if (registry.parentOf(id) === null) return '';
+function storyRootOf(
+  registry: DocumentRegistry,
+  id: LogicalId,
+  placedIn: ReadonlyMap<LogicalId, LogicalId>
+): string {
+  const parentOf = (node: LogicalId): LogicalId | null =>
+    registry.parentOf(node) ?? placedIn.get(node) ?? null;
+  if (parentOf(id) === null) return '';
   let at: LogicalId = id;
   for (let depth = 0; depth < registry.limits.maxTreeDepth; depth += 1) {
-    const parent = registry.parentOf(at);
+    const parent = parentOf(at);
     if (parent === null) return at;
     at = parent;
   }

@@ -32,7 +32,6 @@
     "bodyOnlyToc": "La tabla de contenido va en el cuerpo del documento.",
     "bodyOnlyNote": "Las notas al pie y notas al final se añaden desde el cuerpo del documento.",
     "furnitureOnlyPageField": "Abre un encabezado o pie de página para insertar un número de página.",
-    "suggestingSectionBreak": "Desactiva las sugerencias para insertar este salto de sección. Cambia dónde empieza la sección siguiente, y eso no se puede sugerir.",
     "tableCellSectionBreak": "Los saltos de sección van fuera de una tabla.",
     "lockedSectionBreak": "Un control de contenido bloqueado o vinculado contiene la sección siguiente, así que este salto no puede cambiarla.",
     "lockedContentBreak": "Un control de contenido bloquea este texto, así que no puedes insertar aquí un salto de sección.",

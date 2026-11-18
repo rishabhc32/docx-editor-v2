@@ -955,7 +955,6 @@
     "bodyOnlySectionBreak": "Bölüm sonları belgenin gövdesine eklenir.",
     "bodyOnlyToc": "İçindekiler tablosu belgenin gövdesine eklenir.",
     "furnitureOnlyPageField": "Sayfa numarası eklemek için bir üstbilgi veya altbilgi açın.",
-    "suggestingSectionBreak": "Bu bölüm sonunu eklemek için öneri modunu kapatın. Bu işlem sonraki bölümün başlangıcını değiştirir ve öneri olarak uygulanamaz.",
     "tableCellSectionBreak": "Bölüm sonları tablonun dışına eklenir.",
     "lockedSectionBreak": "Kilitli veya bağlantılı bir içerik denetimi sonraki bölümü içerdiği için bu bölüm sonu onu değiştiremez.",
     "lockedContentBreak": "Bir içerik denetimi bu metni kilitlediği için buraya bölüm sonu ekleyemezsiniz.",

@@ -117,6 +117,27 @@ describe('canonical table authoring', () => {
     ]);
   });
 
+  test("a tracked new table's values are the author's inserted text, as Word writes them", () => {
+    // Word writes text in its own inserted rows inside `w:ins`, under the row's `w:trPr/w:ins`
+    // (a Word file: `e2e/fixtures/list-pagination-break.docx`). The values were left plain, so
+    // the table's text showed as base text inside the inserted rows.
+    const part = load('<w:p><w:r><w:t>Untouched</w:t></w:r></w:p>');
+    const body = part.root.children[0]!;
+    if (body.kind === 'textValue') throw new Error('body');
+    const revision = { author: 'Ana', date: '2026-10-28T08:00:00Z' };
+    const plan = planInsertTable(read(part), body.children[0]!.id, 0, 1, 2, [['A', 'B']], revision);
+    if (!plan.ok) throw new Error(plan.reason);
+    const xml = serializeOoxmlPart(plan.resultPart);
+    const inserted = /<w:ins w:author="Ana" w:date="[^"]*" w:id="\d+"><w:r><w:t>(\w)<\/w:t>/g;
+    expect([...xml.matchAll(inserted)].map((m) => m[1])).toEqual(['A', 'B']);
+    const rejected = planRevisionBatch(plan.resultPart, 'reject').ops.reduce((current, op) => {
+      const result = applyTreeOp(current, op);
+      if (!result.ok) throw new Error(result.reason);
+      return result.part;
+    }, plan.resultPart);
+    expect(serializeOoxmlPart(rejected)).not.toContain('<w:tbl>');
+  });
+
   test('creates and fills a table in one atomic ordered plan', () => {
     const { part, id } = tableFixture();
     expect(tableRead(read(part), id)?.values).toEqual([

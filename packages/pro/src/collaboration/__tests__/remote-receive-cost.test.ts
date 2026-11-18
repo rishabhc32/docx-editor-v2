@@ -17,10 +17,8 @@ Production use requires a commercial agreement: licensing@eigenpal.com
 import { afterEach, describe, expect, test } from 'bun:test';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-import {
-  canonicalFingerprintNodeVisits,
-  canonicalTreeDifference,
-} from '../../../../core/src/store/package/ooxml-serialize.ts';
+import { canonicalTreeDifference } from '../../../../core/src/store/package/ooxml-difference.ts';
+import { canonicalFingerprintNodeVisits } from '../../../../core/src/store/package/ooxml-serialize.ts';
 import { paragraphTextOf, type OoxmlNode, type TreeModelChange } from '@docx-editor.dev/core/store';
 import { createPeerHarness, walk, zipDocument, type Peer } from './document-peer-support.ts';
 
@@ -171,7 +169,7 @@ describe('cost of receiving one remote character', () => {
     harness.expectConverged(alice, bob);
   });
 
-  test('a structural remote edit stays wholesale', async () => {
+  test('a received split names the paragraphs it touched, not the document', async () => {
     const bytes = zipDocument(
       '<w:p><w:r><w:t>alpha</w:t></w:r></w:p>' +
         '<w:p><w:r><w:t>beta</w:t></w:r></w:p>' +
@@ -191,8 +189,13 @@ describe('cost of receiving one remote character', () => {
 
     const published = received as TreeModelChange | null;
     expect(published).not.toBeNull();
-    expect(published?.impact).toBe('global');
-    expect(published?.dirty).toEqual([]);
+    // The paragraphs around the split keep their ids, so the block list change is named: the
+    // head and the new tail, never the whole document
+    expect(published?.impact).toBe('flow-structural');
+    expect(published?.dirty).toEqual([authored]);
+    expect(published?.created).toHaveLength(1);
+    expect(published?.deleted).toEqual([]);
     expect(bob.store.currentPackage()).not.toBe(previous);
+    harness.expectConverged(alice, bob);
   });
 });

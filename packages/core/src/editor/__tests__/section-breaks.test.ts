@@ -14,6 +14,7 @@ import { createDocxEditor, type DocxEditorInstance } from '../docx-editor.ts';
 import { stubReviewModule } from './review-test-module.ts';
 import { selectCellRectangle } from './paginated-surface-fixtures.ts';
 import { MAX_GATED_BREAK_SPAN } from '../surface-section-breaks.ts';
+import { serializeOoxmlPart } from '../../store/package/ooxml-tree.ts';
 
 const W = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main';
 const CT = 'http://schemas.openxmlformats.org/package/2006/content-types';
@@ -153,13 +154,10 @@ describe('insertBreak section kinds', () => {
   });
 });
 
-describe('suggesting mode publishes the one break it cannot propose', () => {
-  // The reason has to reach `can`, not just `exec`: a gate the toolbar cannot see is a
-  // button that lies. The row greys out and carries the engine's own words.
-  const SUGGESTED_REASON =
-    'a section break that changes where the next section starts cannot be suggested; ' +
-    'turn off suggesting to insert it';
-
+describe('suggesting mode proposes a break that retypes the next section, as Word does', () => {
+  // Word with track changes on proposes the break's paragraph mark (`w:pPr/w:rPr/w:ins`) and
+  // writes the type it gives the section after it untracked: `w:type`, no `w:sectPrChange`
+  // (Microsoft Word for Mac, 2026-10-29: a continuous break inserted with tracking on).
   function caretIn(editor: DocxEditorInstance): void {
     const id = editor.surface!.session.paragraphIds()[0]!;
     editor.surface!.setSelection({
@@ -168,32 +166,35 @@ describe('suggesting mode publishes the one break it cannot propose', () => {
     });
   }
 
-  test('a continuous break reports the refusal through can, and changes nothing', () => {
+  test("a continuous break proposes its mark and writes the next section's type untracked", () => {
     const editor = mount(p('before after'), 'suggesting');
     caretIn(editor);
     expect(editor.can({ type: 'insertBreak', kind: 'sectionContinuous' } as never)).toEqual({
-      ok: false,
-      code: 'unsupported',
-      reason: SUGGESTED_REASON,
+      ok: true,
     });
-    expect(editor.exec({ type: 'insertBreak', kind: 'sectionContinuous' } as never)).toMatchObject({
-      ok: false,
+    expect(editor.exec({ type: 'insertBreak', kind: 'sectionContinuous' } as never)).toEqual({
+      ok: true,
+      changed: true,
     });
-    expect(editor.surface!.session.paragraphIds()).toHaveLength(1);
-    expect(sectionTypes(editor)).toEqual([]);
+    expect(editor.surface!.session.paragraphIds()).toHaveLength(2);
+    expect(sectionTypes(editor)).toEqual(['continuous']);
+    const xml = serializeOoxmlPart(editor.surface!.session.part());
+    expect(xml).toMatch(/<w:rPr><w:ins [^>]*w:author="Ada Lovelace"[^>]*\/><\/w:rPr><w:sectPr>/);
+    expect(xml).not.toContain('sectPrChange');
   });
 
-  test('a next-page break that would REMOVE an authored type is refused with it', () => {
+  test('a next-page break removes an authored type the same way', () => {
     const editor = mount(
       p('before after') +
         '<w:sectPr><w:type w:val="oddPage"/><w:pgSz w:w="12240" w:h="15840"/></w:sectPr>',
       'suggesting'
     );
     caretIn(editor);
-    expect(editor.can({ type: 'insertBreak', kind: 'section' } as never)).toMatchObject({
-      ok: false,
-      reason: SUGGESTED_REASON,
+    expect(editor.can({ type: 'insertBreak', kind: 'section' } as never)).toEqual({ ok: true });
+    expect(editor.exec({ type: 'insertBreak', kind: 'section' } as never)).toMatchObject({
+      ok: true,
     });
+    // The new first section keeps the type it was cut with; the next one starts a page
     expect(sectionTypes(editor)).toEqual(['oddPage']);
   });
 
@@ -210,14 +211,9 @@ describe('suggesting mode publishes the one break it cannot propose', () => {
 });
 
 describe('the gate and the write read ONE authority', () => {
-  const SUGGESTED_REASON =
-    'a section break that changes where the next section starts cannot be suggested; ' +
-    'turn off suggesting to insert it';
-
-  test('the LIVE mode decides, not the one the editor was constructed with', () => {
+  test('a retyping break is live in either mode, and the mode can move under it', () => {
     // The most common way into suggesting is a file that declares `w:trackRevisions` —
-    // nobody passes a mode at all. Reading the constructed one left the gate silent there:
-    // the row stayed enabled and the press did nothing.
+    // nobody passes a mode at all. The row must answer the same in the mode the editor is in.
     const editor = mount(p('before after'), 'edit');
     const id = editor.surface!.session.paragraphIds()[0]!;
     editor.surface!.setSelection({
@@ -230,13 +226,11 @@ describe('the gate and the write read ONE authority', () => {
 
     editor.surface!.setEditingMode('suggest');
     expect(editor.can({ type: 'insertBreak', kind: 'sectionContinuous' } as never)).toEqual({
-      ok: false,
-      code: 'unsupported',
-      reason: SUGGESTED_REASON,
+      ok: true,
     });
-    expect(editor.surface!.insertSectionBreak('continuous')).toBe(false);
+    expect(editor.surface!.insertSectionBreak('continuous')).toBe(true);
 
-    // And back: a mode that moved must not leave a permanently dead control behind.
+    // And back: a mode that moved must not leave a dead control behind.
     editor.surface!.setEditingMode('edit');
     expect(editor.can({ type: 'insertBreak', kind: 'sectionContinuous' } as never)).toEqual({
       ok: true,
@@ -299,8 +293,8 @@ describe('the break gate stays cheap enough to run on every toolbar derivation',
     // Both ends resolve to the same governing section, so the landing cannot be anywhere
     // else and the exact answer needs no deletion plan.
     expect(editor.can({ type: 'insertBreak', kind: 'section' } as never)).toEqual({ ok: true });
-    expect(editor.can({ type: 'insertBreak', kind: 'sectionContinuous' } as never)).toMatchObject({
-      ok: false,
+    expect(editor.can({ type: 'insertBreak', kind: 'sectionContinuous' } as never)).toEqual({
+      ok: true,
     });
   });
 
@@ -446,7 +440,7 @@ describe('the gate bounds how far it will plan', () => {
     Array.from({ length: 600 }, (_, i) => p(`b ${i}`)).join('') +
     '<w:sectPr><w:pgSz w:w="12240" w:h="15840"/></w:sectPr>';
 
-  test('a span past the bound stays enabled, and exec still refuses exactly', () => {
+  test('a span past the bound stays enabled, and exec writes the break', () => {
     const editor = mount(LONG_MIXED, 'suggesting');
     editor.surface!.selectAll();
     // Sections disagree and the span reaches both, so the cheap answers do not settle it.
@@ -454,10 +448,7 @@ describe('the gate bounds how far it will plan', () => {
       ok: true,
     });
     expect(editor.exec({ type: 'insertBreak', kind: 'sectionContinuous' } as never)).toMatchObject({
-      ok: false,
-      reason:
-        'a section break that changes where the next section starts cannot be suggested; ' +
-        'turn off suggesting to insert it',
+      ok: true,
     });
   });
 
@@ -469,13 +460,11 @@ describe('the gate bounds how far it will plan', () => {
       head: { paragraphId: id, offset: 1 },
     });
     // The caret's section is the mid-body continuous one, so a continuous break retypes
-    // nothing and a next-page break retypes it.
+    // nothing and a next-page break retypes it: both are proposed, as Word proposes them.
     expect(editor.can({ type: 'insertBreak', kind: 'sectionContinuous' } as never)).toEqual({
       ok: true,
     });
-    expect(editor.can({ type: 'insertBreak', kind: 'section' } as never)).toMatchObject({
-      ok: false,
-    });
+    expect(editor.can({ type: 'insertBreak', kind: 'section' } as never)).toEqual({ ok: true });
   });
 });
 
@@ -705,8 +694,8 @@ describe('the lock pre-check reads WML locks, not every element named lock', () 
   // `v:shapetype` for every legacy picture — turned it true. One stray shape then cost the
   // gate its cheap exact answers: past the span bound it answered "allowed" for a break it
   // already knew would refuse, and ordering the selection flushed pending input on the way.
-  // Long enough to be past the span bound, and UNIFORM, so the cheap short-circuits settle
-  // it: every section starts nextPage, a continuous break retypes, suggesting refuses.
+  // Long enough to be past the span bound: neither declares a lock that holds content, so the
+  // cheap answer stands and a continuous break goes in, as Word suggests it.
   const LONG = (extra: string) =>
     Array.from({ length: 200 }, (_, i) => p(`a ${i}`)).join('') +
     extra +
@@ -719,18 +708,19 @@ describe('the lock pre-check reads WML locks, not every element named lock', () 
     '<w:sdt><w:sdtPr><w:lock w:val="sdtLocked"/></w:sdtPr>' +
     `<w:sdtContent>${p('shell')}</w:sdtContent></w:sdt>`;
 
+  // The press deletes the selection first: a control that cannot be removed (`sdtLocked`)
+  // refuses that deletion, which is the store's answer, not the gate's.
   test.each([
-    ['a VML o:lock', VML_SHAPE],
-    ['an sdtLocked shell, which leaves content editable', SDT_LOCKED_SHELL],
-    ['nothing', ''],
-  ])('%s does not cost the exact answer', (_label, extra) => {
+    ['a VML o:lock', VML_SHAPE, true],
+    ['an sdtLocked shell, which leaves content editable', SDT_LOCKED_SHELL, false],
+    ['nothing', '', true],
+  ])('%s does not hold the break back', (_label, extra, presses) => {
     const editor = mount(LONG(extra), 'suggesting');
     editor.surface!.selectAll();
-    // Past the span bound, so only the cheap short-circuits can answer — and they must run.
-    expect(editor.can({ type: 'insertBreak', kind: 'sectionContinuous' } as never)).toMatchObject({
-      ok: false,
+    expect(editor.can({ type: 'insertBreak', kind: 'sectionContinuous' } as never)).toEqual({
+      ok: true,
     });
-    expect(editor.surface!.insertSectionBreak('continuous')).toBe(false);
+    expect(editor.surface!.insertSectionBreak('continuous')).toBe(presses);
   });
 
   test('and it still answers for a control that really does hold content', () => {
@@ -861,11 +851,12 @@ describe('the cheap answers survive a document that declares a real lock', () =>
     '</w:sdtContent></w:sdt>' +
     '<w:sectPr><w:pgSz w:w="12240" w:h="15840"/></w:sectPr>';
 
-  test('a select-all past the bound still refuses a continuous break', () => {
+  test('a select-all past the bound stays live, and the press refuses the locked content', () => {
     const editor = mount(LOCKED_SOMEWHERE, 'suggesting');
     editor.surface!.selectAll();
-    expect(editor.can({ type: 'insertBreak', kind: 'sectionContinuous' } as never)).toMatchObject({
-      ok: false,
+    // Past the bound the gate does not plan; the press does, and the deletion meets the lock
+    expect(editor.can({ type: 'insertBreak', kind: 'sectionContinuous' } as never)).toEqual({
+      ok: true,
     });
     expect(editor.surface!.insertSectionBreak('continuous')).toBe(false);
   });
@@ -874,13 +865,6 @@ describe('the cheap answers survive a document that declares a real lock', () =>
 describe('the span bound is what decides when the gate stops planning', () => {
   // Nothing pinned the bound, so it could be raised back to a number that costs tens of
   // milliseconds per row per toolbar derivation without a test noticing.
-  const MIXED = (count: number) =>
-    Array.from({ length: count }, (_, i) => p(`a ${i}`)).join('') +
-    '<w:p><w:pPr><w:sectPr><w:type w:val="continuous"/><w:pgSz w:w="12240" w:h="15840"/>' +
-    '</w:sectPr></w:pPr><w:r><w:t>mid</w:t></w:r></w:p>' +
-    Array.from({ length: count }, (_, i) => p(`b ${i}`)).join('') +
-    '<w:sectPr><w:pgSz w:w="12240" w:h="15840"/></w:sectPr>';
-
   test('MAX_GATED_BREAK_SPAN is the measured value, not a round number', () => {
     // Pinned exactly. `toBeLessThanOrEqual` passed at the value the measurement rejected, so
     // the bound could drift back to tens of milliseconds per row without a test noticing.
@@ -888,16 +872,23 @@ describe('the span bound is what decides when the gate stops planning', () => {
   });
 
   test('a span inside the bound is answered exactly; past it the press answers', () => {
-    // Sections disagree, so neither short-circuit settles it and only the plan can.
+    // The span ends inside content a control holds: only the plan finds that landing.
     // Wide enough that both spans address real paragraphs whatever the bound is, so a pass
     // can never come from an out-of-range index.
     const half = MAX_GATED_BREAK_SPAN + 40;
-    const editor = mount(MIXED(half), 'suggesting');
+    const editor = mount(
+      Array.from({ length: half }, (_, i) => p(`a ${i}`)).join('') +
+        '<w:sdt><w:sdtPr><w:lock w:val="contentLocked"/></w:sdtPr><w:sdtContent>' +
+        p('held') +
+        '</w:sdtContent></w:sdt>' +
+        '<w:sectPr><w:pgSz w:w="12240" w:h="15840"/></w:sectPr>',
+      'suggesting'
+    );
     const ids = editor.surface!.session.paragraphIds();
     const spanning = (count: number) => {
       editor.surface!.setSelection({
-        anchor: { paragraphId: ids[half - Math.floor(count / 2)]!, offset: 0 },
-        head: { paragraphId: ids[half + Math.ceil(count / 2)]!, offset: 1 },
+        anchor: { paragraphId: ids[half - count]!, offset: 0 },
+        head: { paragraphId: ids[half]!, offset: 1 },
       });
       return editor.can({ type: 'insertBreak', kind: 'sectionContinuous' } as never);
     };

@@ -83,6 +83,11 @@ export interface CollaborationFailure {
 export type CollaborationFailureCode =
 /** Edit refused by the session gate. The status does not change. Wait for `ready`. */
 'collaboration-session-destroyed' | 'collaboration-session-not-attached' | 'collaboration-session-not-ready' | 'collaboration-text-limit' | 'experimental-collaboration-body-text-only'
+/**
+* Edit refused by an ordered room's gate (`@docx-editor.dev/core/collaboration/ordered`).
+* The status does not change. The session's refusal report names the op or the reason.
+*/
+| 'ordered-unsupported-op' | 'ordered-opaque-write' | 'ordered-refused'
 /** Factory input rejected before joining. Fix the value the host passed. */
 | 'invalid-document-id' | 'invalid-identity' | 'invalid-identity-color' | 'invalid-session-id'
 /** Join or seed did not complete. Connect the provider, check the room id, and retry. */

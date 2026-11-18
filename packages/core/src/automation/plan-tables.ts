@@ -12,6 +12,7 @@ import {
   tableNodes,
   tableRead,
   tableCellRead,
+  isOwnTableInsertion,
   planInsertTable,
   planTableMutation,
   type AutomationTableMutation,
@@ -271,13 +272,34 @@ export function planTableOperation(
           'unsupported-capability',
           'tracked table value replacement is unsupported in collaboration'
         );
+      // Tracked table and cell properties and columns: outside collaboration and in a session
+      // that takes several tracked ops as one batch (an ordered room) only. In the author's own
+      // new table they are not tracked, so every session takes them.
+      const changesPropertiesOrColumns =
+        mutation.kind === 'properties' ||
+        mutation.kind === 'addColumns' ||
+        mutation.kind === 'deleteColumns' ||
+        (mutation.kind === 'cell' &&
+          (mutation.shadingColor !== undefined ||
+            mutation.verticalAlignment !== undefined ||
+            mutation.columnWidth !== undefined));
+      if (
+        revision &&
+        context.trackedRangeReplacement === false &&
+        !isOwnTableInsertion(reads, table.id, revision.author) &&
+        changesPropertiesOrColumns
+      ) {
+        return refuse(
+          'unsupported-capability',
+          'tracked table property and column changes are unsupported in collaboration'
+        );
+      }
       const planned = planTableMutation(reads, table.id, mutation, revision);
       if (!planned.ok)
         return refuse(
           planned.reason === 'unsupported-revision'
             ? 'unsupported-revision'
-            : planned.reason === 'tracked-table-deletion-unsupported' ||
-                planned.reason === 'unsupported-tracked-table-operation'
+            : planned.reason === 'tracked-table-deletion-unsupported'
               ? 'unsupported-capability'
               : 'unsupported-content',
           planned.reason

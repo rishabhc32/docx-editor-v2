@@ -541,7 +541,8 @@
             "p": "Controlled",
             "align": "left"
           }
-        ]
+        ],
+        "prompt": false
       },
       {
         "p": "END sdt-contained-ins",
@@ -708,10 +709,11 @@
       {
         "sdt": [
           {
-            "p": "",
+            "p": "     ",
             "align": "left"
           }
-        ]
+        ],
+        "prompt": true
       },
       {
         "p": "END sdt-contained-del",
@@ -1455,10 +1457,11 @@
       {
         "sdt": [
           {
-            "p": "",
+            "p": "     ",
             "align": "left"
           }
-        ]
+        ],
+        "prompt": true
       },
       {
         "p": "END sdt-contained-ins",
@@ -1546,7 +1549,8 @@
             "p": "Controlled",
             "align": "left"
           }
-        ]
+        ],
+        "prompt": false
       },
       {
         "p": "END sdt-contained-del",

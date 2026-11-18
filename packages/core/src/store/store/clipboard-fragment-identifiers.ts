@@ -6,6 +6,7 @@
 // bookmark/SDT/revision/`docPr` ids - keyed by node kind and (for `w:id`) parent so an
 // unrelated `w:id` is never touched.
 
+import { isRelationshipReference } from '../package/canonical-media-references.ts';
 import {
   WML_NAMESPACE_URI,
   type OoxmlAttribute,
@@ -16,8 +17,6 @@ import { attributeValueOf } from './tree-op-nodes.ts';
 import { carriesRevisionId } from './tree-op-revision-ids.ts';
 import { isWml } from './clipboard-fragment-defaults.ts';
 import { canonicalNoteId } from './clipboard-fragment-closure.ts';
-
-const R_NS = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships';
 
 export function withRewrittenAttribute(
   node: OoxmlElement,
@@ -136,12 +135,12 @@ export function rewriteIdentifiers(node: OoxmlNode, maps: RewriteMaps): OoxmlNod
       const mapped = value !== undefined ? docPrIds.get(value) : undefined;
       if (mapped !== undefined) next = withRewrittenAttribute(next, '', 'id', mapped);
     }
-    // Relationship references (r:id, r:embed, r:link).
+    // Relationship references (r:id, r:embed, r:link, VML's o:relid).
     for (const attribute of next.attributes) {
-      if (attribute.namespaceUri !== R_NS) continue;
+      if (!isRelationshipReference(attribute)) continue;
       const mapped = relIds.get(attribute.value);
       if (mapped !== undefined && mapped !== attribute.value) {
-        next = withRewrittenAttribute(next, R_NS, attribute.localName, mapped);
+        next = withRewrittenAttribute(next, attribute.namespaceUri, attribute.localName, mapped);
       }
     }
 

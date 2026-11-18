@@ -34,6 +34,8 @@ import type { TreeModelChange } from '../store/store/tree-store.ts';
 
 const BODY: StoryScope = Object.freeze({ kind: 'body' });
 const MAX_COLLABORATIVE_PARAGRAPH_TEXT = 1_000_000;
+const HYPERLINK_RELATIONSHIP =
+  'http://schemas.openxmlformats.org/officeDocument/2006/relationships/hyperlink';
 
 /** Options for a canonical collaboration document port. @public */
 export interface CreateCollaborationDocumentPortOptions {
@@ -293,6 +295,17 @@ export function createCollaborationDocumentPort(
         if (text !== null) return text;
       }
       return null;
+    },
+    hyperlinkTarget(partName: string, relationshipId: string) {
+      const target = store
+        .currentPackage()
+        .externalTargets.find(
+          (candidate) =>
+            candidate.ownerPart === partName &&
+            candidate.id === relationshipId &&
+            candidate.type === HYPERLINK_RELATIONSHIP
+        );
+      return target?.rawTarget ?? null;
     },
     paragraphByStableId(paragraphId: string) {
       const stableId = paragraphId.toUpperCase();

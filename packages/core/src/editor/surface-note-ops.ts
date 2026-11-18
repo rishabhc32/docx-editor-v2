@@ -23,7 +23,11 @@ import {
   parseNoteScopeId,
   type NoteKind,
 } from '../store/package/note-nodes.ts';
-import { resolveNotesPart } from '../store/package/note-references.ts';
+import {
+  collectPackageNoteReferences,
+  resolveNotesPart,
+} from '../store/package/note-references.ts';
+import type { StoryScope } from '../store/store/tree-package-store.ts';
 
 export interface NoteOps {
   insertNote(noteKind: NoteKind): boolean;
@@ -52,6 +56,14 @@ export interface NoteOps {
     pageIndex?: number
   ): boolean;
   exitNote(restoreBody?: boolean): void;
+  /**
+   * A remote change carried the caret, and the open note follows it. A session may compose a
+   * note this editor made under its own id (an ordered room numbers notes for every copy), so
+   * the open note can name a note the package no longer holds while the caret stands in the
+   * session's note. `scopeId` is the note that holds the caret's paragraph, or null outside the
+   * notes. Only the scope moves: the caller placed the caret and paints next.
+   */
+  followCaret(scopeId: string | null): void;
   activeNoteScope(): Extract<ViewScope, { kind: 'note' }> | null;
   activeNotePageIndex(): number | null;
   /**
@@ -68,8 +80,11 @@ export function createNoteOps(deps: {
   applyOps: (
     ops: readonly TreeDocOp[],
     before?: { paragraphId: string; start: number; end: number } | null,
-    after?: { paragraphId: string; start: number; end: number } | null
+    after?: { paragraphId: string; start: number; end: number } | null,
+    scope?: StoryScope
   ) => TreeApplyResult;
+  /** Edits are suggestions: a deleted note is its struck reference, as Word records it. */
+  suggesting?: () => boolean;
   commit: (
     run: () => TreeApplyResult | boolean,
     selectionAfter?: () => SemanticSelection | null
@@ -116,6 +131,36 @@ export function createNoteOps(deps: {
       }
       return result;
     }, selectionAfter);
+    return deps.lastRejection() === null;
+  };
+
+  /**
+   * Suggesting deletes a note as Word does with Track Changes on: its reference in the main text
+   * is struck (a tracked `deleteText`), and the note goes when the strike is accepted. The note
+   * is never removed outright, which no reviewer could reject.
+   */
+  const strikeNote = (noteKind: NoteKind, noteId: number): boolean => {
+    const main = deps.session.currentPackage().mainDocumentPart;
+    const ops: TreeDocOp[] = collectPackageNoteReferences(deps.session.currentPackage(), {
+      maxHits: Number.POSITIVE_INFINITY,
+    })
+      .filter((hit) => hit.partName === main && hit.noteKind === noteKind && hit.noteId === noteId)
+      .map((hit) => ({
+        op: 'deleteText',
+        paragraphId: hit.paragraphId,
+        start: hit.atomOffset,
+        end: hit.atomOffset + 1,
+      }));
+    if (ops.length === 0) {
+      deps.setLastRejection('note reference not found');
+      return false;
+    }
+    deps.setLastRejection(null);
+    deps.commit(() => {
+      const result = deps.applyOps(ops, deps.selectionMark(), null, { kind: 'body' });
+      if (result.rejected) deps.setLastRejection(String(result.reason ?? 'rejected'));
+      return result;
+    });
     return deps.lastRejection() === null;
   };
 
@@ -228,6 +273,7 @@ export function createNoteOps(deps: {
     },
 
     deleteNote(noteKind, noteId) {
+      if (deps.suggesting?.()) return strikeNote(noteKind, noteId);
       return commitLifecycle({ op: 'deleteNote', noteKind, noteId } as TreeDocOp);
     },
 
@@ -264,6 +310,22 @@ export function createNoteOps(deps: {
       deps.noteModelMoved();
       deps.render();
       deps.notify();
+    },
+
+    followCaret(scopeId) {
+      if (!activeNote || scopeId === activeNote.id) return;
+      activeNotePageIndex = null;
+      if (scopeId !== null) {
+        activeNote = { kind: 'note', id: scopeId };
+        return;
+      }
+      // Outside the notes, the open note stays while the package still holds it
+      const parsed = parseNoteScopeId(activeNote.id);
+      const part = parsed && resolveNotesPart(deps.session.currentPackage(), parsed.noteKind);
+      if (parsed && part && findNoteById(part.root, parsed.noteId)) return;
+      activeNote = null;
+      savedBodySelection = null;
+      deps.setActiveScopeBodyOrHf({ kind: 'body' });
     },
 
     activeNoteScope() {

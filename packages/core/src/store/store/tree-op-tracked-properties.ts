@@ -82,6 +82,8 @@ export const PROPERTY_CHANGE_WRAPPER_OF_OP: ReadonlyMap<string, string> =
     ['setListNumbering', 'pPrChange'],
     ...TABLE_CHANGE_WRAPPER_OF_OP,
     ['setParagraphTabStops', 'pPrChange'],
+    // Page setup (`tree-op-section-record.ts`)
+    ['setSectionProperties', 'sectPrChange'],
   ]);
 
 /** `w:rPr` records through `w:rPrChange`; `w:pPr` through `w:pPrChange`. */

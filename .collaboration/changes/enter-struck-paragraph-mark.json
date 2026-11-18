@@ -1,0 +1,15 @@
+{
+  "impact": "compatible",
+  "fields": [],
+  "before": "Enter inside a paragraph whose mark another author proposed removing copied that proposed deletion onto the new mark, so Accept all also removed the new paragraph break.",
+  "after": "The new mark carries only its own insertion. The proposed deletion stays on the original mark at the end of the tail paragraph, and resolving it removes the property containers that its proposal created.",
+  "reason": "The split writes ordinary shared nodes: head paragraph properties without the deletion, and a tail paragraph that holds it. The collaboration schema, operation encoding, and repair rules do not change, so released readers materialize these writes as written. A released writer still copies the deletion, and its peers replicate that result as before.",
+  "tests": [
+    "packages/pro/src/collaboration/__tests__/document-enter-struck-mark.test.ts",
+    "packages/core/src/store/__tests__/tracked-mark-split.test.ts",
+    "packages/core/src/editor/__tests__/suggesting-keystrokes.test.ts",
+    "packages/core/src/editor/__tests__/list-separator-enter.test.ts"
+  ],
+  "changeset": "enter-struck-paragraph-mark",
+  "migration": null
+}

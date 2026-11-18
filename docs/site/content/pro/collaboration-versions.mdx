@@ -238,6 +238,23 @@ Choose one of two procedures:
 
 Try the procedure on copies of your rooms in a test deployment before you upgrade production rooms. Collaboration undo history starts afresh in a migrated room.
 
+### Upgrade rooms to format 1.4.4.2
+
+Format `docx-collaboration:1.4.4.2` changes how participants resolve concurrent note settings and how they read some content controls:
+
+- When two participants each add the first footnote or endnote at the same time, the settings part shows one `w:footnotePr` or `w:endnotePr`. Format `docx-collaboration:1.4.3.1` showed both copies, which the settings part allows only once.
+- A content control whose content holds the range markers of a tracked move stays a content control, with its prompt, value, and lock. Earlier formats read such a control as unknown content. A participant with format `docx-collaboration:1.4.3.1` refuses a room that holds such a control.
+
+Format `docx-collaboration:1.4.4.2` also includes the changes of [format 1.4.3.1](#upgrade-rooms-to-format-1431). Participants with formats `docx-collaboration:1.4.2.1` and `docx-collaboration:1.4.3.1` would show different documents for the same room, so the formats refuse to share a room.
+
+To upgrade a room that format `docx-collaboration:1.4.2.1` or `docx-collaboration:1.4.3.1` saved, do these steps:
+
+1. Export the room to a DOCX file with a build that supports the room's recorded format.
+2. Seed a new room from that DOCX file with the new build.
+3. Check the new room against the export before it replaces the earlier room.
+
+For rooms that you store, see [Migrate rooms on a server](#migrate-rooms-on-a-server).
+
 ### Upgrade rooms to format 1.4.3.1
 
 Format `docx-collaboration:1.4.3.1` changes how participants resolve concurrent changes to table properties:

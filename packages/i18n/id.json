@@ -955,7 +955,6 @@
     "bodyOnlySectionBreak": "Pemisah bagian ditempatkan di isi dokumen.",
     "bodyOnlyToc": "Daftar isi ditempatkan di isi dokumen.",
     "furnitureOnlyPageField": "Buka header atau footer untuk menyisipkan nomor halaman.",
-    "suggestingSectionBreak": "Nonaktifkan mode saran untuk menyisipkan pemisah bagian ini. Pemisah ini mengubah awal bagian berikutnya, yang tidak dapat dijadikan saran.",
     "tableCellSectionBreak": "Pemisah bagian ditempatkan di luar tabel.",
     "lockedSectionBreak": "Bagian berikutnya berada dalam kontrol konten yang dikunci atau ditautkan, sehingga pemisah ini tidak dapat mengubahnya.",
     "lockedContentBreak": "Kontrol konten mengunci teks ini, sehingga Anda tidak dapat memisahkan bagian di sini.",

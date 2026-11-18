@@ -28,9 +28,19 @@ import {
   withRelationships,
   withRelationshipsPartFor,
 } from '../package/package-edit.ts';
-import { withBinaryParts, validateEmbeddedImageBytes } from '../package/drawing-package-edit.ts';
-import { sniffImageMime, type SupportedImageMime } from '../package/image-resources.ts';
-import { ensureHyperlinkRelationship } from '../package/hyperlink-part.ts';
+import { isRelationshipReference } from '../package/canonical-media-references.ts';
+import { withBinaryParts } from '../package/drawing-package-edit.ts';
+import type { RelationshipRecord } from '../package/relationships.ts';
+import {
+  admittedMediaMime,
+  isObjectRelationship,
+  mergeObjectParts,
+  withDiagramDrawingIds,
+} from './clipboard-fragment-objects.ts';
+import {
+  ensureHyperlinkRelationship,
+  ensureLinkedImageRelationship,
+} from '../package/hyperlink-part.ts';
 import { ensureNotesPart } from '../package/note-lifecycle.ts';
 import { resolveNotesPart } from '../package/note-references.ts';
 import { resolveInternalTarget } from '../package/opc-names.ts';
@@ -67,10 +77,20 @@ import {
 } from './clipboard-fragment-closure.ts';
 import { mintFragmentUniqueIds } from './clipboard-fragment-unique-ids.ts';
 import { planNumberingImport } from './clipboard-fragment-numbering.ts';
+import {
+  mergedPictureBullets,
+  pictureBulletContext,
+  withPictureBulletIds,
+} from './clipboard-fragment-picture-bullets.ts';
 
 const R_NS = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships';
 const HYPERLINK_REL = `${R_NS}/hyperlink`;
 const IMAGE_REL = `${R_NS}/image`;
+/** The external relationships a paste keeps, each with how it lands in the target package. */
+const EXTERNAL_RELATIONSHIP_ENSURERS = new Map([
+  [HYPERLINK_REL, ensureHyperlinkRelationship],
+  [IMAGE_REL, ensureLinkedImageRelationship],
+]);
 const NUMBERING_REL = `${R_NS}/numbering`;
 const STYLES_REL = `${R_NS}/styles`;
 const NUMBERING_CT = 'application/vnd.openxmlformats-officedocument.wordprocessingml.numbering+xml';
@@ -159,7 +179,9 @@ function withoutDanglingDrawings(
       walkAll([node], (inner) => {
         if (inner.kind === 'textValue') return;
         for (const attribute of inner.attributes) {
-          if (attribute.namespaceUri === R_NS && dropRelIds.has(attribute.value)) dangling = true;
+          if (isRelationshipReference(attribute) && dropRelIds.has(attribute.value)) {
+            dangling = true;
+          }
         }
       });
       return dangling ? null : node;
@@ -188,43 +210,6 @@ function withoutDanglingDrawings(
     return out;
   }
   return rewriteChildren(nodes);
-}
-
-const SUPPORTED_RASTER_MIMES: ReadonlySet<string> = new Set([
-  'image/png',
-  'image/jpeg',
-  'image/gif',
-  'image/bmp',
-  'image/webp',
-]);
-
-/** Aliases OPC files legitimately declare for the same signature class. */
-const DECLARED_MIME_ALIASES: Readonly<Record<string, string>> = {
-  'image/jpg': 'image/jpeg',
-  'image/x-ms-bmp': 'image/bmp',
-  'image/x-bmp': 'image/bmp',
-};
-
-/**
- * The content type fragment media is admitted under, or null to drop it.
- *
- * Signature over claim: the sniffed mime must agree with the declared class, and a
- * supported raster must additionally pass the same header + dimension gate the
- * insert-image lane applies (`validateEmbeddedImageBytes`). Vector and preserved formats
- * (SVG, TIFF, EMF, WMF) travel signature-checked; the paint lane re-validates and renders
- * them inert.
- */
-function admittedMediaMime(bytes: Uint8Array, declaredType: string): string | null {
-  const sniffed = sniffImageMime(bytes);
-  if (sniffed === 'unknown') return null;
-  const normalizedDeclared = Object.hasOwn(DECLARED_MIME_ALIASES, declaredType)
-    ? DECLARED_MIME_ALIASES[declaredType]!
-    : declaredType;
-  if (normalizedDeclared !== sniffed) return null;
-  if (SUPPORTED_RASTER_MIMES.has(sniffed)) {
-    if (!validateEmbeddedImageBytes(bytes, sniffed as SupportedImageMime)) return null;
-  }
-  return sniffed;
 }
 
 // ---------------------------------------------------------------------------
@@ -274,12 +259,25 @@ export function mergeFragmentIntoPackage(
   // pass below compares definitions AFTER applying this map, so a repeated paste of the
   // same payload recognizes its own earlier imports instead of minting `…Pasted` copies.
   // ------------------------------------------------------------------
+  const fragmentNumbering = relatedPart(
+    fragment,
+    fragment.mainDocumentPart,
+    NUMBERING_REL,
+    '/word/numbering.xml'
+  );
+  const targetNumbering = relatedPart(
+    pkg,
+    pkg.mainDocumentPart,
+    NUMBERING_REL,
+    '/word/numbering.xml'
+  );
   const numbering = planNumberingImport(
-    relatedPart(fragment, fragment.mainDocumentPart, NUMBERING_REL, '/word/numbering.xml'),
-    relatedPart(pkg, pkg.mainDocumentPart, NUMBERING_REL, '/word/numbering.xml')
+    fragmentNumbering,
+    targetNumbering,
+    pictureBulletContext(fragment, fragmentNumbering, pkg, targetNumbering)
   );
   if (!numbering) return { ok: false, reason: 'merge-refused' };
-  const { numIdMap, numsToImport, abstractsToImport } = numbering;
+  const { numIdMap, numsToImport, abstractsToImport, bulletsToImport } = numbering;
 
   // ------------------------------------------------------------------
   // Styles: reuse by fingerprint, else import under fresh id + unique name.
@@ -440,11 +438,21 @@ export function mergeFragmentIntoPackage(
     const pendingRelByMediaPart = new Map<string, number>();
     const recordPending: Array<{ recordId: string; index: number }> = [];
     const records = fragment.relationships.get(fragmentOwner) ?? [];
+    // A diagram's drawing is named by its data part, never by the blocks.
+    const used = withDiagramDrawingIds(fragment, fragmentOwner, usedIds);
+    const objectRecords: RelationshipRecord[] = [];
     for (const record of records) {
-      if (!usedIds.has(record.id)) continue;
+      if (!used.has(record.id)) continue;
+      if (isObjectRelationship(record)) {
+        objectRecords.push(record);
+        continue;
+      }
       if (record.targetMode === 'External') {
-        if (record.type === HYPERLINK_REL) {
-          const ensured = ensureHyperlinkRelationship(pkg, record.rawTarget, targetOwner);
+        // A link's address, or a picture's linked by address: Word keeps both as they are,
+        // through the same gate; nothing here loads the address
+        const ensure = EXTERNAL_RELATIONSHIP_ENSURERS.get(record.type);
+        if (ensure) {
+          const ensured = ensure(pkg, record.rawTarget, targetOwner);
           if (ensured) {
             pkg = ensured.pkg;
             relIdMap.set(record.id, ensured.relationshipId);
@@ -548,6 +556,11 @@ export function mergeFragmentIntoPackage(
         }
       }
     }
+    // A chart's or a diagram's parts, under new names (`clipboard-fragment-objects.ts`).
+    const objects = mergeObjectParts(pkg, fragment, objectRecords, targetOwner);
+    pkg = objects.pkg;
+    for (const [from, to] of objects.relIdMap) relIdMap.set(from, to);
+    for (const id of objects.dropRelIds) dropRelIds.add(id);
     return { relIdMap, dropRelIds };
   };
 
@@ -848,21 +861,53 @@ export function mergeFragmentIntoPackage(
       numberingPart = pkg.parts.get('/word/numbering.xml') ?? null;
     }
     if (!numberingPart) return { ok: false, reason: 'merge-refused' };
-    // `w:abstractNum` elements precede every `w:num` per the schema.
-    const current = pkg.parts.get(numberingPart.name)!;
-    const firstNumIndex = current.root.children.findIndex((child) => isWml(child, 'num'));
-    const abstractRewrites = abstractsToImport.map((node) =>
-      rewriteIdentifiers(node, { styleIds: styleIdMap, numIds: numIdMap })
+    // Picture bullets, with their images as relationships of the numbering part; a bullet
+    // whose image did not merge drops, and its levels keep their text.
+    const bulletRels = mergeRels(
+      fragmentNumbering?.name ?? '/word/numbering.xml',
+      numberingPart.name,
+      relationshipIdsIn(bulletsToImport)
     );
+    const pictureBullets = mergedPictureBullets(
+      bulletsToImport,
+      bulletRels.relIdMap,
+      bulletRels.dropRelIds
+    );
+    // `CT_Numbering`: picture bullets, then `w:abstractNum`s, then every `w:num`.
+    const insertIndexBefore = (names: readonly string[]): number | undefined => {
+      const index = pkg.parts
+        .get(numberingPart!.name)!
+        .root.children.findIndex((child) => names.some((name) => isWml(child, name)));
+      return index === -1 ? undefined : index;
+    };
     let appended = appendToPart(
       pkg,
-      current,
-      abstractRewrites,
-      firstNumIndex === -1 ? undefined : firstNumIndex
+      pkg.parts.get(numberingPart.name)!,
+      pictureBullets.bullets,
+      insertIndexBefore(['abstractNum', 'num', 'numIdMacAtCleanup'])
     );
     if (!appended) return { ok: false, reason: 'merge-refused' };
     pkg = appended;
-    appended = appendToPart(pkg, pkg.parts.get(numberingPart.name)!, numsToImport);
+    const abstractRewrites = abstractsToImport.map((node) =>
+      rewriteIdentifiers(withPictureBulletIds(node, pictureBullets.dropped), {
+        styleIds: styleIdMap,
+        numIds: numIdMap,
+      })
+    );
+    appended = appendToPart(
+      pkg,
+      pkg.parts.get(numberingPart.name)!,
+      abstractRewrites,
+      insertIndexBefore(['num', 'numIdMacAtCleanup'])
+    );
+    if (!appended) return { ok: false, reason: 'merge-refused' };
+    pkg = appended;
+    appended = appendToPart(
+      pkg,
+      pkg.parts.get(numberingPart.name)!,
+      numsToImport.map((node) => withPictureBulletIds(node, pictureBullets.dropped)),
+      insertIndexBefore(['numIdMacAtCleanup'])
+    );
     if (!appended) return { ok: false, reason: 'merge-refused' };
     pkg = appended;
   }

@@ -11,6 +11,7 @@ import type {
   InsertImageInput,
   ApplyImagePropertiesInput,
   ImageIntentResult,
+  ImageWriteGate,
 } from '../store/store/tree-package-images.ts';
 import type { DrawingTreeDocOp } from '../store/store/tree-op-types.ts';
 import type { SurfaceEditingMode } from './paginated-surface-contract.ts';
@@ -22,7 +23,7 @@ import type { SurfaceEditingMode } from './paginated-surface-contract.ts';
  * could pass would be a second identity for the same mint, which is the thing actor-scoped
  * allocation exists to prevent.
  */
-export type SurfaceInsertImageInput = Omit<InsertImageInput, 'decodePort' | 'actorId'>;
+export type SurfaceInsertImageInput = Omit<InsertImageInput, 'decodePort' | 'actorId' | 'gate'>;
 
 const VIEWING_REFUSAL = 'the document is open for viewing';
 const SUGGESTING_IMAGE_REFUSAL = 'image changes are not supported in suggesting mode';
@@ -53,6 +54,11 @@ export function createImageOps(deps: {
    * wrap here would be unbound by the time `wp:docPr/@id` is taken.
    */
   actorId: () => string | undefined;
+  /**
+   * The collaboration gate for a picture write, asked inside its transaction with the ops it
+   * means and what it adds beside them (the picture's bytes, a link's address).
+   */
+  gate: ImageWriteGate;
 }): {
   applyDrawingOps: (ops: readonly DrawingTreeDocOp[]) => TreeApplyResult;
   applyImageProperties: (input: ApplyImagePropertiesInput) => ImageIntentResult;
@@ -89,7 +95,18 @@ export function createImageOps(deps: {
   return {
     applyDrawingOps(ops) {
       if (deps.editingMode() === 'view') return refuseViewing();
-      if (deps.editingMode() === 'suggest') return refuseSuggestingPropertyEdit();
+      let written = ops;
+      if (deps.editingMode() === 'suggest') {
+        // Suggesting PROPOSES a new object (a text box) as Word records a new shape: its run
+        // in a `w:ins`. Word has no tracked form for an object's properties (no change element
+        // of `CT_Drawing`, `CT_Inline` or `CT_Anchor`), so those stay refused here.
+        if (!ops.every((op) => op.op === 'insertDrawing')) return refuseSuggestingPropertyEdit();
+        const author = deps.author();
+        if (author === undefined || author === '')
+          return { committed: false, rejected: true, opCount: 0, reason: TRACKED_AUTHOR_REFUSAL };
+        const revision = { author, date: deps.trackedDate() };
+        written = ops.map((op) => ({ ...op, revision }));
+      }
       const mark = deps.selectionMark();
       // Through `commit`, not `applyOps` alone: the commit tail is what publishes layout and
       // paint synchronously. Applied bare, the resize reached the screen through the
@@ -97,7 +114,7 @@ export function createImageOps(deps: {
       // superseded geometry — so the selection overlay kept the drawing's old frame.
       let result: TreeApplyResult = { committed: false, rejected: true, opCount: 0 };
       deps.commit(() => {
-        result = deps.applyOps(ops, mark, mark);
+        result = deps.applyOps(written, mark, mark);
         return result;
       });
       return result;
@@ -112,7 +129,10 @@ export function createImageOps(deps: {
       }
       let result: ImageIntentResult = { ok: false, reason: 'invalidArgs' };
       deps.commit(() => {
-        result = deps.session.applyImageProperties(deps.storyScope(), input);
+        result = deps.session.applyImageProperties(deps.storyScope(), {
+          ...input,
+          gate: deps.gate,
+        });
         return {
           committed: result.ok,
           rejected: !result.ok,
@@ -140,11 +160,13 @@ export function createImageOps(deps: {
       let result: ImageIntentResult = { ok: false, reason: 'invalidArgs' };
       deps.commit(() => {
         result = tracked
-          ? deps.session.deleteImageTracked(deps.storyScope(), drawingNodeId, {
-              author: author!,
-              date: deps.trackedDate(),
-            })
-          : deps.session.deleteImage(deps.storyScope(), drawingNodeId);
+          ? deps.session.deleteImageTracked(
+              deps.storyScope(),
+              drawingNodeId,
+              { author: author!, date: deps.trackedDate() },
+              deps.gate
+            )
+          : deps.session.deleteImage(deps.storyScope(), drawingNodeId, deps.gate);
         return {
           committed: result.ok,
           rejected: !result.ok,
@@ -176,6 +198,7 @@ export function createImageOps(deps: {
         decodePort: deps.decodePort(),
         ...(tracked ? { revision: { author: author!, date: deps.trackedDate() } } : {}),
         ...(actorId ? { actorId } : {}),
+        gate: deps.gate,
       });
     },
 
@@ -201,6 +224,7 @@ export function createImageOps(deps: {
           ...options,
           commitGuard: () => deps.editingMode() === 'edit' && options.commitGuard?.() !== false,
           ...(actorId ? { actorId } : {}),
+          gate: deps.gate,
         }
       );
     },

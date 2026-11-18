@@ -3,8 +3,9 @@ import { readOoxmlPart, type OoxmlNode } from '../../store/package/ooxml-tree.ts
 import { createSurfaceClipboardOps, type SurfaceClipboardDeps } from '../surface-clipboard-ops.ts';
 
 const W = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main';
+// An ActiveX control: the one object no copy carries (an embedded object travels, as in Word)
 const object =
-  '<w:object xmlns:v="urn:schemas-microsoft-com:vml"><v:shape type="#_x0000_t75" style="width:10pt;height:12pt"><v:imagedata xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" r:id="preview"/></v:shape></w:object>';
+  '<w:object xmlns:v="urn:schemas-microsoft-com:vml"><v:shape type="#_x0000_t75" style="width:10pt;height:12pt"><v:imagedata xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" r:id="preview"/></v:shape><w:control xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" r:id="ax" w:name="CheckBox1"/></w:object>';
 
 function part(name: string, root: string, content: string) {
   const paragraph = `<w:p><w:r>${content}</w:r></w:p>`;

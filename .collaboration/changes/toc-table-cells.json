@@ -1,0 +1,10 @@
+{
+  "impact": "no-impact",
+  "fields": [],
+  "before": "The editor found tables of contents in body paragraphs and body content controls only.",
+  "after": "Tables of contents and table of contents controls inside table cells are read-only too.",
+  "reason": "An editor-local write refusal. It writes no shared state and changes no stored meaning; a refused edit makes no change to replicate.",
+  "tests": ["packages/core/src/editor/__tests__/toc-table-cells.test.ts"],
+  "changeset": "toc-table-cells",
+  "migration": null
+}

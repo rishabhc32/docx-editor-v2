@@ -21,6 +21,8 @@ import {
   type OoxmlAttribute,
   type OoxmlElement,
   type OoxmlNode,
+  type OoxmlParagraphNode,
+  type OoxmlTableCellNode,
 } from '../package/ooxml-tree.ts';
 import type { WmlFreshNamespaceContext } from '../package/wml-namespace.ts';
 import { paragraphPropertiesNodeOf } from './tree-op-nodes.ts';
@@ -155,4 +157,75 @@ export function insertedCellParagraphContent(
 export function insertedCellParagraphNodeCount(sourceCell: OoxmlElement): number {
   const source = sourceContent(sourceCell);
   return source?.count ?? 0;
+}
+
+/**
+ * A new row's cell with each paragraph mark inserted (`w:pPr/w:rPr/w:ins`): Word's form for a
+ * row it inserts with Track Changes on, beside the row's `w:trPr/w:ins`, with no `w:cellIns`
+ * (a file Word saved: `e2e/fixtures/list-pagination-break.docx`). `marker` makes one `w:ins`
+ * for each mark.
+ */
+export function withInsertedCellMarks(
+  cell: OoxmlTableCellNode,
+  marker: () => OoxmlElement,
+  markId: () => string,
+  wml: WmlFreshNamespaceContext
+): OoxmlTableCellNode {
+  const children = cell.children.map((child) =>
+    child.kind === 'paragraph' ? paragraphWithInsertedMark(child, marker(), markId, wml) : child
+  );
+  return Object.freeze({ ...cell, children }) as OoxmlTableCellNode;
+}
+
+/**
+ * The paragraph with `marker` on its mark. The `w:ins` goes first in the mark's properties
+ * (`EG_ParaRPrTrackChanges`), and a new `w:rPr` after the base properties: only `w:sectPr`
+ * and `w:pPrChange` may follow it in `CT_PPr`. Containers the stamp creates take `markId`'s ids
+ * (`createMarkContainerIdAllocator`), so accepting removes them.
+ */
+export function paragraphWithInsertedMark(
+  paragraph: OoxmlParagraphNode,
+  marker: OoxmlElement,
+  markId: () => string,
+  wml: WmlFreshNamespaceContext
+): OoxmlParagraphNode {
+  const fresh = (kind: OoxmlElement['kind'], localName: string, children: readonly OoxmlNode[]) =>
+    ({
+      id: markId(),
+      kind,
+      namespaceUri: WML_NAMESPACE_URI,
+      localName,
+      ...(wml.elementPrefix === undefined ? {} : { prefix: wml.elementPrefix }),
+      namespaceBindings: [],
+      attributes: [],
+      children,
+    }) as OoxmlElement;
+  const pPr = paragraphPropertiesNodeOf(paragraph);
+  if (!pPr) {
+    return {
+      ...paragraph,
+      children: [
+        fresh('paragraphProperties', 'pPr', [fresh('runProperties', 'rPr', [marker])]),
+        ...paragraph.children,
+      ],
+    } as OoxmlParagraphNode;
+  }
+  const rPr = pPr.children.find((child) => isWmlElement(child, 'rPr')) as OoxmlElement | undefined;
+  const trailing = (child: OoxmlNode) =>
+    isWmlElement(child, 'sectPr') || isWmlElement(child, 'pPrChange');
+  const properties: OoxmlNode[] = rPr
+    ? pPr.children.map((child) =>
+        child === rPr ? withChildren(rPr, [marker, ...rPr.children]) : child
+      )
+    : [
+        ...pPr.children.filter((child) => !trailing(child)),
+        fresh('runProperties', 'rPr', [marker]),
+        ...pPr.children.filter(trailing),
+      ];
+  return {
+    ...paragraph,
+    children: paragraph.children.map((child) =>
+      child === pPr ? withChildren(pPr, properties) : child
+    ),
+  } as OoxmlParagraphNode;
 }

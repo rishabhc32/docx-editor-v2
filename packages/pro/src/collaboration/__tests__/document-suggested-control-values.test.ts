@@ -302,6 +302,71 @@ test('a pick over a prompt is proposed alone, and a peer rejection shows the pro
   }
 });
 
+/** A prompt the control holds only in its content: no glossary block, a face of its own. */
+const OWN_PROMPT_RUN =
+  '<w:r><w:rPr><w:rStyle w:val="PlaceholderText"/><w:color w:val="808080"/></w:rPr>' +
+  '<w:t>Enter the party name</w:t></w:r>';
+const OWN_PROMPTED = sdt('<w:showingPlcHdr/><w:text/>', OWN_PROMPT_RUN);
+const OWN_PROMPT_RANGE = ['Term: '.length, 'Term: Enter the party name'.length] as const;
+const promptContent = (editor: Editor) =>
+  /<w:sdtContent>(.*?)<\/w:sdtContent>/s.exec(xml(editor))?.[1] ?? '';
+
+test('a prompt with no glossary block comes back on every replica after a peer rejection', async () => {
+  // The suggestion keeps the prompt as a glossary block before it removes it. That block is a
+  // part of its own, so it has to reach the peer, a participant who joins later, and the file.
+  const { pair, alice, bob, converge } = await peers(OWN_PROMPTED);
+  pair.pause();
+  select(alice, ...OWN_PROMPT_RANGE);
+  alice.surface!.type('Ana');
+  select(bob, 4);
+  bob.surface!.type('s');
+  bob.surface!.flushPendingInput();
+  pair.alice.room.session.flushPendingJournals();
+  pair.bob.room.session.flushPendingJournals();
+  pair.resume();
+  converge();
+  expect(xml(bob)).toMatch(/<w:placeholder><w:docPart w:val="[0-9A-F]{32}"\/><\/w:placeholder>/);
+  expect(bob.surface!.session.currentPackage().parts.has('/word/glossary/document.xml')).toBe(true);
+  expect(revisions(bob)).toEqual(['insert:Alice']);
+
+  // Undo takes the block back with the words; redo writes both again.
+  expect(alice.exec({ type: 'undo' }).ok).toBe(true);
+  converge();
+  expect(promptContent(bob)).toBe(OWN_PROMPT_RUN);
+  expect(bob.surface!.session.currentPackage().parts.has('/word/glossary/document.xml')).toBe(
+    false
+  );
+  expect(alice.exec({ type: 'redo' }).ok).toBe(true);
+  converge();
+  expect(revisions(bob)).toEqual(['insert:Alice']);
+
+  // A participant who joins now rejects, and every replica shows the control's own prompt.
+  const returning = await harness.join(pair.bob, 'returning');
+  const carol = mount(returning.room.document, 'Carol', returning);
+  for (const card of carol.getReviewItems().filter((item) => item.kind === 'revision')) {
+    expect(carol.rejectReviewItem(card.key).ok).toBe(true);
+  }
+  returning.room.session.flushPendingJournals();
+  converge();
+  for (const editor of [alice, bob, carol]) {
+    expect(promptContent(editor)).toBe(OWN_PROMPT_RUN);
+    expect(xml(editor)).toContain('<w:showingPlcHdr/>');
+    expect(editor.surface!.session.bodyText()).toBe('Terms: Enter the party name');
+    expect(revisions(editor)).toEqual([]);
+  }
+  expect(packageFingerprint(carol.surface!.session.currentPackage())).toBe(
+    packageFingerprint(bob.surface!.session.currentPackage())
+  );
+
+  // Saved while a new suggestion is pending, the file keeps the prompt for Reject to show.
+  select(alice, 'Terms: '.length, 'Terms: Enter the party name'.length);
+  alice.surface!.type('Bea');
+  converge();
+  const reopened = mount(new Uint8Array(await bob.save()), 'Reader');
+  expect(reopened.exec({ type: 'resolveAllReviewChanges', action: 'reject' }).ok).toBe(true);
+  expect(promptContent(reopened)).toBe(OWN_PROMPT_RUN);
+});
+
 test('a peer deleting the control while its prompt is typed over converges', async () => {
   // Only agreement is asserted. Replacing a prompt rewrites the control's `w:sdtPr`, and the
   // peer's concurrent deletion can leave the control split in two, as typing in editing mode

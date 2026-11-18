@@ -185,6 +185,10 @@ function unrecordedDefaults(cell: OoxmlElement): Record<string, Record<string, s
   }
   return values;
 }
+/** A cell with no record of its own, as a rejected row formatting decision leaves it. */
+export function withUnrecordedCellDefaults(cell: OoxmlElement, mint: () => string): OoxmlElement {
+  return patch(cell, unrecordedDefaults(cell), mint);
+}
 function restoreUnrecordedCells(
   original: OoxmlElement,
   row: OoxmlElement,
@@ -205,10 +209,55 @@ function restoreUnrecordedCells(
     new Map(
       tableChildren(row, 'tableCell').map((cell) => [
         cell.id,
-        recorded.has(cell.id) ? cell : patch(cell, unrecordedDefaults(cell), mint),
+        recorded.has(cell.id) ? cell : withUnrecordedCellDefaults(cell, mint),
       ])
     )
   );
+}
+
+/**
+ * The cell's pending `w:tcPrChange` takes the removed cell's width and grid span too when it holds
+ * the cell as it showed: a record taken beside a pending column holds the width the column lent
+ * (Word writes no record for it), so a later reject of the record keeps what the column gave
+ * back (a party's table or row property over its own new column).
+ */
+function withRecordTakingCell(
+  cell: OoxmlElement,
+  shown: { readonly width: OoxmlElement; readonly span: number },
+  taken: { readonly width: number; readonly span: number },
+  mint: () => string
+): OoxmlElement {
+  const pr = child(cell, 'tcPr');
+  const record = pr && child(pr, 'tcPrChange');
+  const inner = record && child(record, 'tcPr');
+  const recorded = inner && child(inner, 'tcW');
+  const type = revisionAttribute(shown.width, 'type');
+  if (!pr || !record || !inner || !recorded || !type) return cell;
+  if (
+    revisionAttribute(recorded, 'type') !== type ||
+    positiveWidth(recorded, 0) !== positiveWidth(shown.width, 0) ||
+    number(child(inner, 'gridSpan'), 'val', 1) !== shown.span
+  )
+    return cell;
+  const followed = patch(
+    record,
+    {
+      tcW: { type, w: String(positiveWidth(shown.width, 0) + taken.width) },
+      gridSpan: { val: String(shown.span + taken.span) },
+    },
+    mint
+  );
+  return {
+    ...cell,
+    children: cell.children.map((c) =>
+      c === pr
+        ? ({
+            ...pr,
+            children: pr.children.map((r) => (r === record ? followed : r)),
+          } as OoxmlElement)
+        : c
+    ),
+  } as OoxmlElement;
 }
 
 /** Word gives deleted cell space to the preceding survivor (or the first following cell). */
@@ -267,11 +316,22 @@ export function rebuildRevisionTable(
       if (!extra || c.kind !== 'tableCell') return c;
       const originalCell = priorCells.find((cell) => cell.id === c.id);
       const originalProperties = originalCell && child(originalCell, 'tcPr');
-      // A rejected cell-property record already describes the pre-insertion geometry.
-      if (originalProperties?.children.some((property) => restoredProperties.has(property.id)))
-        return c;
       const pr = child(c, 'tcPr');
       const width = pr && child(pr, 'tcW');
+      // A rejected cell-property record already describes the pre-insertion geometry, unless it
+      // holds the width the cell showed: a record taken beside a pending column holds the lent
+      // width (Word writes no record for it), so the cell still takes the removed width back.
+      const shown = originalProperties && child(originalProperties, 'tcW');
+      const lent =
+        width !== undefined &&
+        shown !== undefined &&
+        revisionAttribute(width, 'type') === revisionAttribute(shown, 'type') &&
+        positiveWidth(width, 0) === positiveWidth(shown, 0);
+      if (
+        !lent &&
+        originalProperties?.children.some((property) => restoredProperties.has(property.id))
+      )
+        return c;
       const currentSpan = number(pr && child(pr, 'gridSpan'), 'val', 1);
       const record = originalProperties && child(originalProperties, 'tcPrChange');
       const recorded = record && recordedProperties(record);
@@ -291,24 +351,30 @@ export function rebuildRevisionTable(
         revisionAttribute(historicalWidth, 'type') === extra.type
           ? Math.max(0, positiveWidth(width, 0) - positiveWidth(historicalWidth, 0))
           : 0;
-      return patch(
+      const added = Math.max(0, extra.width - absorbedWidth);
+      const takesWidth =
+        width &&
+        extra.type &&
+        ['dxa', 'pct'].includes(extra.type) &&
+        revisionAttribute(width, 'type') === extra.type;
+      const patched = patch(
         c,
         {
           gridSpan: { val: String(currentSpan + extra.span - absorbedSpan) },
-          ...(width &&
-          extra.type &&
-          ['dxa', 'pct'].includes(extra.type) &&
-          revisionAttribute(width, 'type') === extra.type
-            ? {
-                tcW: {
-                  type: extra.type,
-                  w: String(positiveWidth(width, 0) + Math.max(0, extra.width - absorbedWidth)),
-                },
-              }
+          ...(takesWidth
+            ? { tcW: { type: extra.type!, w: String(positiveWidth(width, 0) + added) } }
             : {}),
         },
         mint
       );
+      return takesWidth && added > 0
+        ? withRecordTakingCell(
+            patched,
+            { width, span: currentSpan },
+            { width: added, span: extra.span - absorbedSpan },
+            mint
+          )
+        : patched;
     });
     return replaceTableChildren(row, new Map(cells.map((c) => [c.id, c])));
   });

@@ -35,6 +35,10 @@ import type {
   TableRowOccurrenceTarget,
 } from '../layout/table-interaction-targets.ts';
 import { lowerColorValueForBorder, lowerColorValueForFill } from './color-value-lower.ts';
+import {
+  columnDeletionOrder,
+  wholeMergedCellIds,
+} from '../store/store/tree-op-table-merged-cells.ts';
 import { storedGridColumnOf } from './stored-grid-column.ts';
 import {
   headerRowsActive,
@@ -860,8 +864,7 @@ export function planTableCommand(input: TableCommandPlannerInput): TableCommandP
           kind: 'adoptCommittedCaret',
         });
       }
-      const ids =
-        selectedColumns.gridColumnIds.length > 0 ? selectedColumns.gridColumnIds : [gridColumnId];
+      const ids = columnDeletionOrder(part, tableId, selectedColumns.gridColumnIds, gridColumnId);
       const ops: TreeDocOp[] = ids.map((id) => ({
         op: 'deleteTableColumn',
         tableId,
@@ -887,7 +890,7 @@ export function planTableCommand(input: TableCommandPlannerInput): TableCommandP
       const op: TreeDocOp = {
         op: 'setTableCellFill',
         tableId: anchor.tableId,
-        cellIds: anchor.cellIds,
+        cellIds: wholeMergedCellIds(part, anchor.tableId, anchor.cellIds),
         color: storeColor,
       };
       return planValidated(part, [op], { kind: 'preserveSelection' });
@@ -897,7 +900,7 @@ export function planTableCommand(input: TableCommandPlannerInput): TableCommandP
       const op: TreeDocOp = {
         op: 'setTableCellVerticalAlignment',
         tableId: anchor.tableId,
-        cellIds: anchor.cellIds,
+        cellIds: wholeMergedCellIds(part, anchor.tableId, anchor.cellIds),
         alignment: command.alignment,
       };
       return planValidated(part, [op], { kind: 'preserveSelection' });
@@ -908,7 +911,7 @@ export function planTableCommand(input: TableCommandPlannerInput): TableCommandP
         const op: TreeDocOp = {
           op: 'setTableCellBorders',
           tableId: anchor.tableId,
-          cellIds: anchor.cellIds,
+          cellIds: wholeMergedCellIds(part, anchor.tableId, anchor.cellIds),
           scope: 'none',
           target: visualBorderTarget(
             command.target as TableBorderEdgeTarget,
@@ -922,7 +925,7 @@ export function planTableCommand(input: TableCommandPlannerInput): TableCommandP
       const op: TreeDocOp = {
         op: 'setTableCellBorders',
         tableId: anchor.tableId,
-        cellIds: anchor.cellIds,
+        cellIds: wholeMergedCellIds(part, anchor.tableId, anchor.cellIds),
         scope: visualBorderTarget(command.scope, isVisualRtlTable(input.layout, anchor.tableId)),
         spec: lowered.spec,
       };

@@ -12,7 +12,8 @@ if (!GlobalRegistrator.isRegistered) GlobalRegistrator.register();
 import { describe, expect, test } from 'bun:test';
 import { zipSync, strToU8 } from 'fflate';
 import { mountPaginatedSurface, type PaginatedSurface } from '../paginated-surface.ts';
-import { serializeOoxmlPart, type OoxmlNode } from '@docx-editor.dev/core/store';
+import { serializeOoxmlPart, type OoxmlNode, type OoxmlPart } from '@docx-editor.dev/core/store';
+import { applyTreeOp } from '../../store/store/tree-op-apply.ts';
 import { selectCellRectangle } from './paginated-surface-fixtures.ts';
 import { diagnosticCodeOfRefusal } from '../diagnostic-codes.ts';
 
@@ -73,7 +74,7 @@ function withSurface(body: string, run: (surface: PaginatedSurface) => void): vo
 }
 
 /** Every paragraph's text, in document order. */
-function paragraphTexts(surface: PaginatedSurface): string[] {
+function paragraphTexts(source: PaginatedSurface | OoxmlPart): string[] {
   const out: string[] = [];
   const collect = (node: OoxmlNode, into: string[]): void => {
     if (node.kind === 'textValue') {
@@ -92,7 +93,7 @@ function paragraphTexts(surface: PaginatedSurface): string[] {
     }
     for (const child of node.children) walk(child);
   };
-  walk(surface.session.part().root);
+  walk('session' in source ? source.session.part().root : source.root);
   return out;
 }
 
@@ -251,6 +252,65 @@ describe('Enter then Backspace, in suggesting mode', () => {
         expect(xml).toMatch(/<w:del[^>]*w:author="Ada Lovelace"/);
       }
     );
+  });
+});
+
+/** Each paragraph's own mark revisions, as `kind:author`, in document order. */
+function markRevisions(part: OoxmlPart): string[][] {
+  const out: string[][] = [];
+  const named = (node: OoxmlNode, localName: string) =>
+    node.kind !== 'textValue' && node.localName === localName;
+  const walk = (node: OoxmlNode): void => {
+    if (node.kind === 'textValue') return;
+    if (node.kind !== 'paragraph') return node.children.forEach(walk);
+    const pPr = node.children.find((child) => named(child, 'pPr'));
+    const rPr = pPr?.kind === 'textValue' ? undefined : pPr?.children.find((c) => named(c, 'rPr'));
+    const marks = rPr && rPr.kind !== 'textValue' ? rPr.children : [];
+    out.push(
+      marks.flatMap((mark) =>
+        mark.kind !== 'textValue' && (mark.localName === 'ins' || mark.localName === 'del')
+          ? [`${mark.localName}:${mark.attributes.find((a) => a.localName === 'author')?.value}`]
+          : []
+      )
+    );
+  };
+  walk(part.root);
+  return out;
+}
+
+// ENTER INSIDE A PARAGRAPH WHOSE MARK ANOTHER REVIEWER PROPOSED REMOVING.
+//
+// The mark between two paragraphs is the END of the first. Word splits by inserting a fresh
+// mark before the existing one, so the head ends with the NEW mark and the tail keeps the
+// ORIGINAL one, still struck. The head copied the strike, so Accept all removed the new mark
+// along with the old one and took the Enter back as part of somebody else's join.
+describe('Enter inside a paragraph whose mark another author proposed removing', () => {
+  test('the new mark is only an insertion, and the struck mark stays at the end', () => {
+    withSurface(plainParagraph('Heading Level 3') + plainParagraph('Next paragraph'), (surface) => {
+      surface.setAuthor('Ben');
+      caretTo(surface, 1, 0);
+      surface.deleteBackward();
+      surface.setAuthor('Cy');
+      caretTo(surface, 0, 1);
+      surface.splitParagraph();
+      expect(surface.state().lastRejection).toBeNull();
+      expect(paragraphTexts(surface)).toEqual(['H', 'eading Level 3', 'Next paragraph']);
+      expect(markRevisions(surface.session.part())).toEqual([['ins:Cy'], ['del:Ben'], []]);
+
+      const decided = (op: 'acceptAllRevisions' | 'rejectAllRevisions') => {
+        const result = applyTreeOp(surface.session.part(), { op });
+        if (!result.ok) throw new Error(result.reason);
+        return result.part;
+      };
+      // Neither decision leaves a revision or an emptied property container behind: the
+      // source paragraphs had no `w:pPr`, and the containers the proposals wrote go with them.
+      const accepted = decided('acceptAllRevisions');
+      expect(paragraphTexts(accepted)).toEqual(['H', 'eading Level 3Next paragraph']);
+      expect(serializeOoxmlPart(accepted)).not.toMatch(/<w:(ins|del|pPr)\b/);
+      const rejected = decided('rejectAllRevisions');
+      expect(paragraphTexts(rejected)).toEqual(['Heading Level 3', 'Next paragraph']);
+      expect(serializeOoxmlPart(rejected)).not.toMatch(/<w:(ins|del|pPr)\b/);
+    });
   });
 });
 
@@ -797,29 +857,33 @@ describe('typing over a cell rectangle, in suggesting mode', () => {
   });
 });
 
-describe('a section break that retypes the following section cannot be suggested', () => {
-  // `w:type` lands on the section that STARTS at the mark, which hangs on a paragraph the
-  // break does not touch. Word records that as `w:sectPrChange`; this engine refuses
-  // `sectPrChange` in accept and reject, so writing it here would leave a layout change no
-  // reviewer could undo — the split would come back out and the retype would stay.
+describe('a section break that retypes the following section, in suggesting mode', () => {
+  // As Word writes it with track changes on: the break's mark is proposed, and the type it
+  // gives the section after it is written untracked (`w:type`, no `w:sectPrChange`), so a
+  // reject of the break joins the paragraphs and the type stays.
   const WITH_ODD_PAGE =
     '<w:p><w:r><w:t xml:space="preserve">Alpha one</w:t></w:r></w:p>' +
     '<w:sectPr><w:type w:val="oddPage"/><w:pgSz w:w="12240" w:h="15840"/></w:sectPr>';
 
-  test('a continuous break is refused, and writes nothing', () => {
+  test('a continuous break proposes its mark and writes the type untracked', () => {
     withSurface(plainParagraph('Alpha one'), (surface) => {
       selectIn(surface, 0, 5, 5);
-      const before = serializeOoxmlPart(surface.session.part());
-      expect(surface.insertSectionBreak('continuous')).toBe(false);
-      expect(serializeOoxmlPart(surface.session.part())).toBe(before);
+      expect(surface.insertSectionBreak('continuous')).toBe(true);
+      expect(paragraphTexts(surface)).toEqual(['Alpha', ' one']);
+      const xml = serializeOoxmlPart(surface.session.part());
+      expect(xml).toContain('<w:type w:val="continuous"/>');
+      expect(xml).not.toContain('sectPrChange');
     });
   });
 
-  test('a next-page break that would REMOVE an authored type is refused too', () => {
+  test('a next-page break that removes an authored type writes that untracked too', () => {
     withSurface(WITH_ODD_PAGE, (surface) => {
       selectIn(surface, 0, 5, 5);
-      expect(surface.insertSectionBreak('nextPage')).toBe(false);
-      expect(serializeOoxmlPart(surface.session.part())).toContain('<w:type w:val="oddPage"/>');
+      expect(surface.insertSectionBreak('nextPage')).toBe(true);
+      // The first section is cut from the odd-page one and keeps its type; the next starts a page
+      expect(
+        serializeOoxmlPart(surface.session.part()).match(/<w:type w:val="oddPage"\/>/g)
+      ).toHaveLength(1);
     });
   });
 

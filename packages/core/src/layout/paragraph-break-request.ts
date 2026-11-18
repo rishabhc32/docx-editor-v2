@@ -187,6 +187,24 @@ export interface ParagraphBreakRequest {
   >;
 }
 
+let paragraphBreaks = 0;
+
+/**
+ * @internal Deterministic work recorder: paragraphs broken into lines again (a break cache
+ * miss), counted across every layout since the last reset. A keystroke that re-breaks the
+ * document shows here however fast the machine is.
+ */
+export function paragraphBreakTestRecorder(): { readonly breaks: number; reset(): void } {
+  return {
+    get breaks() {
+      return paragraphBreaks;
+    },
+    reset() {
+      paragraphBreaks = 0;
+    },
+  };
+}
+
 /** Build placement-dependent flow options only when the measured break is absent. */
 export function breakPreparedParagraphLazily(
   cache: ParagraphLayoutCache<readonly PendingLine[]> | undefined,
@@ -198,6 +216,7 @@ export function breakPreparedParagraphLazily(
   if (cached) return cached;
   const reused = reuse?.();
   if (reused) return reused;
+  paragraphBreaks += 1;
   const lines = breakPreparedParagraph({ ...prepare(), cache: undefined, cacheKey: null });
   // Preserve the breaker's snapshot ownership and single lookup on a cache miss.
   if (cache && cacheKey !== null)

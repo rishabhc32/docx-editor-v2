@@ -269,3 +269,73 @@ describe('a split places zero-length content by its position', () => {
     expect(shapeOf(tail)).toEqual([]);
   });
 });
+
+describe('a split right after a field keeps the field whole', () => {
+  // A complex field counts ONE character, at its begin mark; its instruction, separator,
+  // result and end count none. Placed by position, they went to the new paragraph and left the
+  // begin mark behind: one field across two paragraphs, its instruction read as text in Word.
+  const PAGE =
+    '<w:r><w:fldChar w:fldCharType="begin"/></w:r><w:r><w:instrText xml:space="preserve"> PAGE </w:instrText></w:r>' +
+    '<w:r><w:fldChar w:fldCharType="separate"/></w:r><w:r><w:t>1</w:t></w:r>' +
+    '<w:r><w:fldChar w:fldCharType="end"/></w:r>';
+  const FIELDED = `<w:p><w:r><w:t>Page </w:t></w:r>${PAGE}<w:r><w:t> of the deed</w:t></w:r></w:p>`;
+  const fieldParts = ['begin', 'instrText', 'separate', 'result', 'end'];
+  /** The field's pieces in a paragraph, in order. */
+  const fieldShape = (paragraph: OoxmlNode): string[] => {
+    const out: string[] = [];
+    const walk = (node: OoxmlNode): void => {
+      if (node.kind === 'textValue') return;
+      if (node.localName === 'fldChar')
+        out.push(node.attributes.find((a) => a.localName === 'fldCharType')?.value ?? '');
+      else if (node.localName === 'instrText') out.push('instrText');
+      else if (node.localName === 't' && textOf(node) === '1') out.push('result');
+      for (const child of node.children) walk(child);
+    };
+    walk(paragraph);
+    return out;
+  };
+
+  test('Enter right after the field leaves it in the first paragraph', () => {
+    const part = load(FIELDED);
+    // "Page " is five characters and the field is the sixth.
+    const [head, tail] = halves(part, nodeById(part, '/word/document.xml#0.0.0').id, 6);
+    expect(fieldShape(head)).toEqual(fieldParts);
+    expect(fieldShape(tail)).toEqual([]);
+    expect(textOf(tail)).toBe(' of the deed');
+  });
+
+  test('Enter right before the field takes it to the second paragraph', () => {
+    const part = load(FIELDED);
+    const [head, tail] = halves(part, nodeById(part, '/word/document.xml#0.0.0').id, 5);
+    expect(fieldShape(head)).toEqual([]);
+    expect(fieldShape(tail)).toEqual(fieldParts);
+  });
+
+  test('a many-way split (a pasted text) keeps the field in its piece', () => {
+    const part = load(FIELDED);
+    const id = nodeById(part, '/word/document.xml#0.0.0').id;
+    const split = apply(part, { op: 'splitParagraphMany', paragraphId: id, offsets: [3, 6] });
+    const body = split.root.children.find((c) => c.kind !== 'textValue' && c.localName === 'body');
+    const paragraphs = (body?.kind === 'textValue' ? [] : (body?.children ?? [])).filter(
+      (c) => c.kind !== 'textValue' && c.localName === 'p'
+    );
+    expect(paragraphs.map((p) => fieldShape(p))).toEqual([[], fieldParts, []]);
+    expect(paragraphs.map((p) => textOf(p))).toEqual(['Pag', 'e  PAGE 1', ' of the deed']);
+  });
+
+  test('Enter at the end of a text form field keeps its end mark with its result', () => {
+    const part = load(
+      '<w:p><w:r><w:t>Name: </w:t></w:r><w:r><w:fldChar w:fldCharType="begin"><w:ffData>' +
+        '<w:name w:val="Text1"/><w:enabled/><w:calcOnExit w:val="0"/><w:textInput/></w:ffData>' +
+        '</w:fldChar></w:r><w:r><w:instrText xml:space="preserve"> FORMTEXT </w:instrText></w:r>' +
+        '<w:r><w:fldChar w:fldCharType="separate"/></w:r><w:r><w:t>typed</w:t></w:r>' +
+        '<w:r><w:fldChar w:fldCharType="end"/></w:r><w:r><w:t> here</w:t></w:r></w:p>'
+    );
+    const id = nodeById(part, '/word/document.xml#0.0.0').id;
+    const text = paragraphTextOf(part, id) ?? '';
+    const [head, tail] = halves(part, id, text.indexOf(' here'));
+    expect(fieldShape(head).at(-1)).toBe('end');
+    expect(fieldShape(tail)).toEqual([]);
+    expect(textOf(tail)).toBe(' here');
+  });
+});

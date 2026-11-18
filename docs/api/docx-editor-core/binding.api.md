@@ -153,8 +153,8 @@ export interface TreeDocxSessionView extends HeadlessDocumentView {
         readonly commentId: string;
         readonly parentCommentId?: string;
     }[], scope?: StoryScope, noteId?: number, options?: PackageWriteOptions): boolean;
-    deleteImage(scope: StoryScope, drawingNodeId: string): ImageIntentResult;
-    deleteImageTracked(scope: StoryScope, drawingNodeId: string, revision: RevisionAttributionInput): ImageIntentResult;
+    deleteImage(scope: StoryScope, drawingNodeId: string, gate?: ImageWriteGate): ImageIntentResult;
+    deleteImageTracked(scope: StoryScope, drawingNodeId: string, revision: RevisionAttributionInput, gate?: ImageWriteGate): ImageIntentResult;
     documentFonts(): readonly string[];
     documentOutline(): readonly DocumentOutlineEntry[];
     documentProperties(): DocumentProperties;

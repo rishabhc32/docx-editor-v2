@@ -18,6 +18,7 @@ import { propertyElement } from '../store/store/tree-op-properties.ts';
 
 /** Word's built-in hyperlink character style, by name: Word localizes the id, not the name. */
 const HYPERLINK_NAME = 'hyperlink';
+
 /** The styleId Word gives the built-in. */
 const HYPERLINK_STYLE_ID = 'Hyperlink';
 
@@ -42,6 +43,7 @@ export function hyperlinkStyleWrite(styles: DocumentStyles): HyperlinkStyleWrite
   for (let suffix = 1; usedStyleIds.has(styleId); suffix++) {
     styleId = `${HYPERLINK_STYLE_ID}${suffix}`;
   }
+
   return { styleId, packageEdits: [ensureHyperlinkStyle(styleId)] };
 }
 
@@ -64,6 +66,7 @@ function declaredHyperlinkStyleId(styles: DocumentStyles): string | null {
     if (style.name.trim().toLowerCase() === HYPERLINK_NAME) return style.styleId;
     if (byId === null && style.styleId === HYPERLINK_STYLE_ID) byId = style.styleId;
   }
+
   return byId;
 }
 
@@ -93,14 +96,17 @@ function ensureHyperlinkStyle(styleId: string): (pkg: OoxmlPackage) => OoxmlPack
           node.kind !== 'textValue' &&
           node.attributes.some((a) => a.localName === 'styleId' && a.value === styleId)
       )
-    )
+    ) {
       return pkg;
+    }
+
     const style = hyperlinkStyleElement(part, styleId);
     if (existing) {
       const inserted = insertChildren(part, part.root.id, part.root.children.length, [style]);
       if (!inserted.ok) throw new Error(`Cannot insert style ${styleId}`);
       return withPart(pkg, inserted.part);
     }
+
     let next = withNewPart(
       pkg,
       name,
@@ -146,6 +152,7 @@ function hyperlinkStyleElement(styles: OoxmlPart, styleId: string): OoxmlElement
       element('u', { val: 'single' }),
     ]),
   ]);
+
   // Keep the inserted subtree valid even when the source uses another XML prefix.
   return { ...style, namespaceBindings: [{ prefix: 'w', namespaceUri: WML_NAMESPACE_URI }] };
 }
@@ -157,8 +164,12 @@ function defaultCharacterStyleId(styles: OoxmlPart): string | null {
     if (child.kind === 'textValue' || child.localName !== 'style') continue;
     const style = readStyleDefinition(child);
     if (style?.type !== 'character') continue;
-    if (style.isDefault) found = style.styleId;
-    else if (found === style.styleId) found = null;
+    if (style.isDefault) {
+      found = style.styleId;
+    } else if (found === style.styleId) {
+      found = null;
+    }
   }
+
   return found;
 }

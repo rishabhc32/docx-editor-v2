@@ -458,7 +458,17 @@ test('a reused text identity outside a row is not silently absorbed into it', ()
   expect(textItem.revisionKind).toBe('insert');
   const rowItem = items.find((i) => i.structuralChanges?.includes('rowInsert'))!;
   expect(rowItem.addresses.some((a) => a.id === firstId)).toBe(false);
+  // The row's rejection takes the text inside it along; the text outside that shares its id
+  // stays pending, as Word keeps each insertion its own decision
   const plan = planRevisionBatch(read.part, 'reject', [reviewItemKey(rowItem)]);
-  expect(plan.ops).toEqual([]);
-  expect(plan.result.skipped[0]?.reason).toBe('incomplete-group');
+  expect(plan.result.skipped).toEqual([]);
+  let part = read.part;
+  for (const op of plan.ops) {
+    const result = applyTreeOp(part, op);
+    expect(result.ok).toBe(true);
+    if (result.ok) part = result.part;
+  }
+  const left = revisionItemsOf(part);
+  expect(left.map((item) => item.revisionKind)).toEqual(['insert']);
+  expect(left[0]!.text).toContain('Outside');
 });

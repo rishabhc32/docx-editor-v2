@@ -5,6 +5,7 @@ import type { SetTextFormFieldDefaultOp, CommitTextFormFieldOp } from './text-fo
 import type { SetLegacyCheckboxOp } from './legacy-checkbox-fields.ts';
 import type { InsertBuildingBlockOp } from './building-block-insert.ts';
 import type { InsertBookmarkOp, DeleteBookmarkOp } from './tree-op-bookmarks.ts';
+import type { InsertFragmentOp } from './fragment-op-types.ts';
 // The op vocabulary and effect/rejection contracts (tree-ops seam).
 //
 // This module owns what an op IS — the declarative, JSON-safe `TreeDocOp` shapes, the
@@ -13,7 +14,7 @@ import type { InsertBookmarkOp, DeleteBookmarkOp } from './tree-op-bookmarks.ts'
 
 import type { ParagraphTabStop } from '../../contracts/types.ts';
 import type { ContentControlLock } from '../package/content-control-nodes.ts';
-import type { OoxmlDrawingNode, OoxmlNode, OoxmlPart } from '../package/ooxml-tree.ts';
+import type { OoxmlDrawingNode, OoxmlPart } from '../package/ooxml-tree.ts';
 import type {
   DrawingLocksInput,
   DrawingPositionInput,
@@ -478,6 +479,8 @@ export type TreeDocOp =
        * one. Absent means every section.
        */
       readonly anchorParagraphId?: string;
+      /** Tracked, as Word: each section records its earlier properties (`w:sectPrChange`). */
+      readonly revision?: RevisionAttributionInput;
     }
   | {
       /**
@@ -852,6 +855,8 @@ export type TreeDocOp =
       readonly evenAndOddHeaders?: boolean;
       readonly headerDistanceTwips?: number;
       readonly footerDistanceTwips?: number;
+      /** Tracked as Word: `w:sectPrChange`; `evenAndOddHeaders`, a setting, stays untracked. */
+      readonly revision?: RevisionAttributionInput;
     }
   | {
       /**
@@ -987,23 +992,7 @@ export type TreeDocOp =
         readonly numStart?: number;
       };
     }
-  | {
-      /**
-       * Insert clipboard-fragment blocks at a paragraph position, atomically.
-       *
-       * Blocks only — resources (styles, numbering, media, rels, note parts) merge through
-       * the package-edit path in the same transaction, and the whole commit is promoted to
-       * a package undo unit. A merged edge paragraph takes the properties of the paragraph
-       * mark that ends it: the fragment's first mark leading, the host's original mark
-       * trailing. Nodes receive fresh ids at apply.
-       */
-      readonly op: 'insertFragment';
-      readonly paragraphId: string;
-      readonly offset: number;
-      readonly blocks: readonly OoxmlNode[];
-      /** True when the fragment's last paragraph mark travelled (its paragraph stays whole). */
-      readonly lastMarkCovered?: boolean;
-    }
+  | InsertFragmentOp
   | {
       readonly op: 'insertDrawing';
       readonly paragraphId: string;
@@ -1200,6 +1189,7 @@ export type TreeOpRejection =
    * caller learns the node would not have landed where they asked.
    */
   | 'indivisible-content'
+  | 'single-line-control'
   /**
    * The range has one end inside a field's editable saved result and the other outside it.
    * Deleting it would leave the field's begin, separate, and end markers unbalanced, so it is
@@ -1301,7 +1291,17 @@ export type TreeOpRejection =
   /** A clipboard fragment block is not a paragraph, table, or content control subtree. */
   | 'fragment-invalid-block'
   /** A clipboard fragment exceeds its block or node budget. */
-  | 'fragment-resource-budget';
+  | 'fragment-resource-budget'
+  /** A tracked fragment holds a custom XML tracked range, which no tracked paste can place. */
+  | 'fragment-holds-revisions'
+  /** Paragraphs pasted in a link, which Word turns into a `HYPERLINK` field (not written yet). */
+  | 'fragment-paragraphs-in-link'
+  /**
+   * A tracked fragment holds content no revision markup can carry: a block-level content
+   * control, an equation, a subdocument, or an element this engine does not model. Written
+   * untracked, it would be a silent edit inside a proposal, so the fragment is refused instead.
+   */
+  | 'fragment-untrackable-content';
 
 /** Whether an op applied, with the effect it produced or the reason it was refused. */
 export type TreeOpResult =

@@ -151,6 +151,7 @@ export interface CollaborationDocumentPort {
     readonly documentId: string;
     flushPendingJournals(): void;
     hasPendingJournals(): boolean;
+    hyperlinkTarget?(partName: string, relationshipId: string): string | null;
     observePrimitiveJournal(listener: (journal: CanonicalPrimitiveJournal) => void): () => void;
     // (undocumented)
     paragraphByNodeId(nodeId: string): CollaborationParagraph | null;

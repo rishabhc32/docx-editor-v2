@@ -955,7 +955,6 @@
     "bodyOnlySectionBreak": "As quebras de seção devem ficar no corpo do documento.",
     "bodyOnlyToc": "O sumário deve ficar no corpo do documento.",
     "furnitureOnlyPageField": "Abra um cabeçalho ou rodapé para inserir um número de página.",
-    "suggestingSectionBreak": "Desative o modo de sugestão para inserir esta quebra de seção. Ela altera o início da próxima seção, o que não pode ser sugerido.",
     "tableCellSectionBreak": "As quebras de seção devem ficar fora de uma tabela.",
     "lockedSectionBreak": "Um controle de conteúdo bloqueado ou vinculado contém a próxima seção, por isso esta quebra não pode alterá-la.",
     "lockedContentBreak": "Um controle de conteúdo bloqueia este texto, por isso não é possível inserir uma quebra de seção aqui.",

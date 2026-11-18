@@ -168,13 +168,13 @@ describe('tracked row properties write w:trPrChange', () => {
     expect(tableXml(rejected).replace('<w:tr><w:trPr/>', '<w:tr>')).toBe(tableXml(part));
   });
 
-  test('a second change keeps the ORIGINAL as the record', () => {
+  test("a second change keeps the ORIGINAL as the record, in the first change's decision", () => {
     const part = load(TWO_BY_TWO);
     const once = apply(part, rowHeight(part));
     const twice = apply(once, rowHeight(once, 1, 1200));
     expect(containers(twice, 'trPr')).toEqual([
       '<w:trPr><w:cantSplit/><w:trHeight w:hRule="exact" w:val="1200"/>' +
-        `${record('trPr', '<w:cantSplit/>', '1')}</w:trPr>`,
+        `${record('trPr', '<w:cantSplit/>', '0')}</w:trPr>`,
     ]);
   });
 
@@ -351,6 +351,47 @@ describe.each(GESTURES)('%s', (_name, gesture) => {
     );
   });
 });
+
+// A resize's `w:tblGridChange` carries only `@w:id`, so an address decides it apart from the
+// records that carry its author. Rejected after them, it was a lone grid record, which the
+// engine keeps as unused history: the new grid stayed. The author's decision takes it along.
+describe.each(GESTURES.filter(([name]) => name === 'column resize' || name === 'right edge'))(
+  '%s in a reopened file',
+  (_name, gesture) => {
+    test.each(['accept', 'reject'] as const)('%s by its addresses, in either order', (action) => {
+      const part = load(TWO_BY_TWO);
+      const reopened = readOoxmlPart(serializeOoxmlPart(apply(part, gesture(part))), {
+        name: NAME,
+        contentType: CONTENT_TYPE,
+      });
+      if (!reopened.ok) throw new Error(reopened.reason);
+      const saved = reopened.part;
+      const grid = collectByKind(saved.root, 'generic').find(
+        (node) => node.localName === 'tblGridChange'
+      )!;
+      const id = grid.attributes.find((attribute) => attribute.localName === 'id')!.value;
+      const op = action === 'accept' ? 'acceptRevision' : 'rejectRevision';
+      const card = revisionItemsOf(saved)[0]!;
+      const whole = planRevisionBatch(saved, action, [reviewItemKey(card)]).ops.reduce(
+        apply,
+        saved
+      );
+      const authorFirst = apply(saved, { op, revision: { id, ...BEA } });
+      // The grid went with its gesture: nothing is left under its address.
+      expect(applyTreeOp(authorFirst, { op, revision: { id, author: '' } })).toMatchObject({
+        ok: false,
+        reason: 'unknown-revision',
+      });
+      const gridFirst = apply(apply(saved, { op, revision: { id, author: '' } }), {
+        op,
+        revision: { id, ...BEA },
+      });
+      expect(fingerprint(authorFirst)).toBe(fingerprint(whole));
+      expect(fingerprint(gridFirst)).toBe(fingerprint(whole));
+      expect(serializeOoxmlPart(authorFirst)).not.toMatch(/PrChange|GridChange/);
+    });
+  }
+);
 
 test("rejecting one author's row leaves another author's row and every other cell alone", () => {
   const part = load(TWO_BY_TWO);

@@ -18,15 +18,6 @@ import {
 import { effectiveContentLockAt, isBoundAt } from '../store/store/tree-op-nodes.ts';
 import type { RangeDeletionPlan } from './surface-selection-ops.ts';
 
-/**
- * The one break this engine cannot propose. Spelled once, and listed in
- * `DISABLED_REASON_KEYS` so chrome renders it in the reader's language rather than raw
- * English — an engine `disabledReason` is text a user reads.
- */
-export const SUGGESTED_BREAK_REFUSAL =
-  'a section break that changes where the next section starts cannot be suggested; ' +
-  'turn off suggesting to insert it';
-
 /** The store's own rule, published so the control can grey out instead of failing on press. */
 export const TABLE_CELL_BREAK_REFUSAL = 'a section break cannot be inserted inside a table cell';
 
@@ -148,15 +139,14 @@ export const heldByControl = (part: OoxmlPart, paragraphId: string): boolean =>
 /**
  * Every refusal a break at ONE KNOWN LANDING carries, or null.
  *
- * All three are about the section that STARTS at the mark, so all three are questions only a
- * landing can answer. `suggesting` is passed in rather than read, because the gate and the
- * write reach here from different places and there must be one answer.
+ * Each is about the landing or the section that STARTS at the mark, so each is a question only
+ * a landing can answer. A break that retypes that section is suggested like any other: the
+ * store records the type it had in a `w:sectPrChange`, as Word records "Section start".
  */
 export function landedBreakRefusal(
   part: OoxmlPart,
   paragraphId: string,
-  breakType: 'nextPage' | 'continuous',
-  suggesting: boolean
+  breakType: 'nextPage' | 'continuous'
 ): string | null {
   // A cell first, in the SAME order the write asks: it falls back to `collapseTo` when the
   // landing is nested, and refuses when that is nested too. Checking it only at the two cheap
@@ -174,10 +164,7 @@ export function landedBreakRefusal(
   // Then the section's OWN paragraph, which is not the one the caret is in. Said in the
   // lane's words: the store's `locked` is a diagnostic, and read as a sentence it would
   // claim the selection is locked when the selection is ordinary editable text.
-  if (ownerId !== null && heldByControl(part, ownerId)) return LOCKED_SECTION_BREAK_REFUSAL;
-  // Suggesting comes LAST of the three. It tells the user to turn suggesting off, and that is
-  // only worth saying when doing so would actually let the break through.
-  return suggesting ? SUGGESTED_BREAK_REFUSAL : null;
+  return ownerId !== null && heldByControl(part, ownerId) ? LOCKED_SECTION_BREAK_REFUSAL : null;
 }
 
 /** What {@link sectionBreakGate} needs from the surface to answer without asking twice. */
@@ -185,7 +172,6 @@ export interface SectionBreakGateInput {
   /** Read per step: `orderedRange` flushes, and the sections must come from the tree after it. */
   part(): OoxmlPart;
   readonly breakType: 'nextPage' | 'continuous';
-  readonly suggesting: boolean;
   /** A rectangle is by construction inside a table. */
   readonly cellRectangle: boolean;
   /** The paragraph a COLLAPSED caret is in, or null for a range. */
@@ -205,7 +191,7 @@ export interface SectionBreakGateInput {
  * that had no gate at all before this feature as well as on the new one.
  */
 export function sectionBreakGate(input: SectionBreakGateInput): string | null {
-  const { breakType, suggesting } = input;
+  const { breakType } = input;
   // In a table cell a section cannot end at all: Word never writes one there, and the read
   // side would ignore it. Refused whatever the mode, from the two selections that say so
   // without ordering anything. A RECTANGLE is the table gesture, and leaving it out left both
@@ -216,17 +202,16 @@ export function sectionBreakGate(input: SectionBreakGateInput): string | null {
     // A CARET is its own landing, so it settles every question with no ordering, no flush and
     // one walk — and a caret is what a toolbar derives against nearly always. `orderedRange()`
     // flushes pending input, which is a write, and this is a read React runs during render.
-    return landedBreakRefusal(input.part(), input.caretParagraphId, breakType, suggesting);
+    return landedBreakRefusal(input.part(), input.caretParagraphId, breakType);
   }
-  // A RANGE has three questions left, and each needs a reason to exist: the suggesting one
-  // needs suggesting, and the cell and lock ones need the document to hold a table or declare
-  // a lock at all. None of them, and there is nothing to work out — which is nearly every
-  // document, and one walk is what it costs to know that without ordering the selection.
+  // A RANGE has two questions left, and each needs a reason to exist: the document must hold a
+  // table or declare a lock at all. Neither, and there is nothing to work out, which is nearly
+  // every document, and one walk is what it costs to know that without ordering the selection.
   //
   // Before `orderedRange()`, which is fine: flushing pending input adds no table, and declares
   // no lock.
   const hazards = paragraphHazards(input.part());
-  if (!suggesting && hazards.inCell.size === 0 && hazards.held.size === 0) return null;
+  if (hazards.inCell.size === 0 && hazards.held.size === 0) return null;
   // AFTER the flush `orderedRange` runs, so the sections come from the tree the plan would be
   // built against.
   const { from, to } = input.orderedRange();
@@ -270,9 +255,6 @@ export function sectionBreakGate(input: SectionBreakGateInput): string | null {
     if (exact && oneSection && atStart.ownerId !== null && heldByControl(part, atStart.ownerId)) {
       return LOCKED_SECTION_BREAK_REFUSAL;
     }
-    // Suggesting refuses it, and says so here only when nothing else could have refused
-    // first: otherwise the plan below names the real reason, which is what the press will.
-    if (suggesting && exact) return SUGGESTED_BREAK_REFUSAL;
   }
   // A settled type that IS the requested one refuses nothing — once the two unseen things
   // are ruled out.
@@ -280,15 +262,7 @@ export function sectionBreakGate(input: SectionBreakGateInput): string | null {
   // So the plan is BOUNDED by how much it would have to walk (see `MAX_GATED_BREAK_SPAN`).
   // Past it the control stays enabled and the press reports the refusal exactly, from `exec`,
   // which has already paid for a write.
-  //
-  // Past it a definite retype still REFUSES while suggesting — the press will too, and the
-  // reason may be the more specific one. Answering `null` there was a live row for a break
-  // the gate already knew would fail. A retype is only DEFINITE when the span's sections
-  // agree on a type that is not the requested one; where they disagree the answer really does
-  // depend on which one the landing falls in, and past the bound the row stays live.
-  if (slice === null || slice.length - 1 > MAX_GATED_BREAK_SPAN) {
-    return suggesting && settled !== null && settled !== breakType ? SUGGESTED_BREAK_REFUSAL : null;
-  }
+  if (slice === null || slice.length - 1 > MAX_GATED_BREAK_SPAN) return null;
   const landing = sectionBreakLanding(part, input.deleteSelectionPlan());
-  return landedBreakRefusal(part, landing.paragraphId, breakType, suggesting);
+  return landedBreakRefusal(part, landing.paragraphId, breakType);
 }

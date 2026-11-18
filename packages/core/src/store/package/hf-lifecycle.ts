@@ -35,6 +35,9 @@ import {
   type HeaderFooterVariant,
 } from './hf-references.ts';
 import { applyPackageWatermark, type PackageWatermarkWrite } from './watermark-package.ts';
+import { nextRevisionId } from '../store/tree-op-revision-ids.ts';
+import { withSectionChangeRecord } from '../store/tree-op-section-record.ts';
+import type { RevisionAttributionInput } from '../store/tree-op-types.ts';
 import {
   applyDocumentProtection,
   sectionElement,
@@ -105,6 +108,8 @@ export type HeaderFooterLifecycleOp =
       readonly evenAndOddHeaders?: boolean;
       readonly headerDistanceTwips?: number;
       readonly footerDistanceTwips?: number;
+      /** Tracked: the section records its earlier properties; the setting is untracked. */
+      readonly revision?: RevisionAttributionInput;
     }
   | {
       /**
@@ -438,11 +443,16 @@ function applyFurnitureOptions(
 
   let next = pkg;
   if (needsSection) {
-    const patched = patchSectionFurniture(next, op.sectionIndex!, {
-      titlePage: op.titlePage,
-      headerDistanceTwips: op.headerDistanceTwips,
-      footerDistanceTwips: op.footerDistanceTwips,
-    });
+    const patched = patchSectionFurniture(
+      next,
+      op.sectionIndex!,
+      {
+        titlePage: op.titlePage,
+        headerDistanceTwips: op.headerDistanceTwips,
+        footerDistanceTwips: op.footerDistanceTwips,
+      },
+      op.revision
+    );
     if (!patched) return fail('tree-invariant', 'sectPr-options');
     next = patched;
   }
@@ -675,7 +685,8 @@ function patchSectionFurniture(
     readonly titlePage?: boolean;
     readonly headerDistanceTwips?: number;
     readonly footerDistanceTwips?: number;
-  }
+  },
+  revision?: RevisionAttributionInput
 ): OoxmlPackage | null {
   const main = pkg.parts.get(pkg.mainDocumentPart);
   if (!main) return null;
@@ -697,7 +708,38 @@ function patchSectionFurniture(
     if (!target) return null;
   }
 
-  let children = [...target.children];
+  const written = sectionFurnitureChildren(target.children, options, nextId);
+  // Tracked, the section records what it was before (`w:sectPrChange`), as page setup does
+  const children = revision
+    ? withSectionChangeRecord({
+        prior: target.children,
+        next: written,
+        revision,
+        mint: nextId,
+        nextRevisionId: nextRevisionId(working),
+      })
+    : written;
+  const replaced = replaceChildren(working, target.id, children);
+  if (!replaced.ok) return null;
+  return withPart(pkg, replaced.part);
+}
+
+/**
+ * One section's children with its furniture options merged in: `w:titlePg` on or off, and the
+ * header and footer distances on `w:pgMar`. A distance write on a section with no `w:pgMar`, or
+ * one missing a side, writes the sides the schema requires. Exported so a collaboration model
+ * that runs this write again on one section writes exactly what the lifecycle op writes.
+ */
+export function sectionFurnitureChildren(
+  sectionChildren: readonly OoxmlNode[],
+  options: {
+    readonly titlePage?: boolean;
+    readonly headerDistanceTwips?: number;
+    readonly footerDistanceTwips?: number;
+  },
+  nextId: () => string
+): OoxmlNode[] {
+  let children = [...sectionChildren];
   if (options.titlePage !== undefined) {
     children = children.filter(
       (child) => child.kind === 'textValue' || child.localName !== 'titlePg'
@@ -741,9 +783,7 @@ function patchSectionFurniture(
     }
   }
 
-  const replaced = replaceChildren(working, target.id, children);
-  if (!replaced.ok) return null;
-  return withPart(pkg, replaced.part);
+  return children;
 }
 
 // ---------------------------------------------------------------------------

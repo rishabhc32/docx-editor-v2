@@ -825,7 +825,6 @@ export class PackageMaterializer {
         seen,
         isMember,
         placed,
-        incremental,
         candidates,
         loose
       );

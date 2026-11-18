@@ -7,7 +7,7 @@
 
 import { parentNodeOf } from './ooxml-edit.ts';
 import { WML_NAMESPACE_URI, XMLNS_NAMESPACE_URI, XML_NAMESPACE_URI } from './ooxml-shared.ts';
-import type { OoxmlElement, OoxmlPart } from './ooxml-tree.ts';
+import { rootBindings, type OoxmlElement, type OoxmlNode, type OoxmlPart } from './ooxml-tree.ts';
 
 export interface WmlFreshNamespaceContext {
   /** Prefix for WML element nodes. Undefined means default namespace. */
@@ -44,6 +44,21 @@ export function namespaceBindingsAt(
     }
   }
   return bindings;
+}
+
+/**
+ * The namespace bindings `node` inherits in `part`: those in scope at its parent. A subtree
+ * compared or fingerprinted apart from its part resolves an ancestor's prefixes only through
+ * these (Word declares `wps` on `w:document` and names it in an `mc:Choice` deep inside). A
+ * node the part does not hold, one built to go into it, gets the scope of the part's root.
+ */
+export function inheritedNamespaceBindings(
+  part: OoxmlPart,
+  node: OoxmlNode
+): ReadonlyMap<string, string> {
+  const parent = parentNodeOf(part, node.id);
+  if (parent) return namespaceBindingsAt(part, parent);
+  return node.id === part.root.id ? rootBindings() : namespaceBindingsAt(part, part.root);
 }
 
 function chooseFreshWmlPrefix(usedPrefixes: ReadonlySet<string>): string {

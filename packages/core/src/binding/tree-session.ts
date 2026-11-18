@@ -14,8 +14,10 @@ import { materializeGlossaryPlaceholders } from '../store/store/placeholder-mate
 import { paragraphOrderOfPart, type ReviewItem } from '@docx-editor.dev/core/store';
 import {
   canApplyLocalReviewPatch,
+  followReviewTrail,
   localReviewPatchParagraphId,
   reviewQueueKeptByStructure,
+  reviewTrailChange,
   patchLocalReviewItems,
 } from './review-patch.ts';
 import { createReviewItemsMemo } from './review-items-memo.ts';
@@ -211,8 +213,11 @@ export function openTreeSessionFromPackage(
   let reviewContentCache: { revision: number; present: boolean } | null = null;
   let lastChange: TreeModelChange | null = null;
   let lastChangePackage: OoxmlPackage | null = null;
+  /** The commits since `reviewCache` was set, which a review read patches as one. */
+  let reviewTrail: readonly TreeModelChange[] = [];
   packageStore.subscribe((change) => {
     lastChange = change;
+    reviewTrail = followReviewTrail(reviewTrail, change);
     // Capture the exact package snapshot produced by this published change. Shell-only writes do
     // not publish, so a later identity mismatch proves more package state changed after the edit
     // and the text-local header/footer promotion is no longer sound.
@@ -1050,16 +1055,17 @@ export function openTreeSessionFromPackage(
         let items: readonly ReviewItem[];
         // Null until a patch needs it: a split keeps the queue but moves the order.
         let paragraphOrder: ReadonlyMap<string, number> | null = null;
+        const change = reviewTrailChange(reviewTrail);
         if (
           reviewCache &&
-          lastChange &&
-          reviewQueueKeptByStructure(lastChange, reviewCache, reviewCache.items, inputs)
+          change &&
+          reviewQueueKeptByStructure(change, reviewCache, reviewCache.items, inputs)
         ) {
           items = reviewCache.items;
         } else {
           const patchParagraphId =
-            reviewCache && lastChange
-              ? localReviewPatchParagraphId(lastChange, reviewCache, reviewCache.items, inputs)
+            reviewCache && change
+              ? localReviewPatchParagraphId(change, reviewCache, reviewCache.items, inputs)
               : null;
           const localRevisions =
             patchParagraphId && reviewCache
@@ -1085,6 +1091,7 @@ export function openTreeSessionFromPackage(
         }
 
         reviewItemsMemo.set(memoInputs, items);
+        reviewTrail = [];
         reviewCache = {
           revisionKey,
           bodyRevision: store.revision,
@@ -1271,12 +1278,12 @@ export function openTreeSessionFromPackage(
         return packageStore.replaceImage(scope, drawingNodeId, bytes, mime, decodePort, options);
       },
 
-      deleteImage(scope, drawingNodeId) {
-        return packageStore.deleteImage(scope, drawingNodeId);
+      deleteImage(scope, drawingNodeId, gate) {
+        return packageStore.deleteImage(scope, drawingNodeId, gate);
       },
 
-      deleteImageTracked(scope, drawingNodeId, revision) {
-        return packageStore.deleteImageTracked(scope, drawingNodeId, revision);
+      deleteImageTracked(scope, drawingNodeId, revision, gate) {
+        return packageStore.deleteImageTracked(scope, drawingNodeId, revision, gate);
       },
 
       applyImageProperties(scope, input) {

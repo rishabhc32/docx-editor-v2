@@ -93,6 +93,10 @@ type HostRejectionToken =
   | 'collaboration-session-not-attached'
   | 'collaboration-session-destroyed'
   | 'collaboration-text-limit'
+  // An ordered room's gate (`CollaborationFailureCode`); its refusal report names the rule.
+  | 'ordered-unsupported-op'
+  | 'ordered-opaque-write'
+  | 'ordered-refused'
   // Automation handles whose object an edit removed. See `target-removed.ts`.
   | typeof TARGET_REMOVED
   | 'paragraph-not-in-body'
@@ -114,6 +118,7 @@ const STORE_EDIT_CODES: Readonly<
   'drawing-locked': 'edit.protected-content',
   'not-adjacent-siblings': 'edit.cross-structure-join',
   'indivisible-content': 'edit.indivisible-content',
+  'single-line-control': 'edit.single-line-control',
   'field-structure': 'edit.field-structure',
   'field-result-unsupported': 'edit.field-structure',
   'carries-section-mark': 'edit.section-mark',
@@ -131,6 +136,9 @@ const STORE_EDIT_CODES: Readonly<
   'fragment-too-deep': 'edit.resource-limit',
   'fragment-resource-budget': 'edit.resource-limit',
   'fragment-invalid-block': 'edit.unsupported-content',
+  'fragment-holds-revisions': 'edit.tracked-operation-unsupported',
+  'fragment-paragraphs-in-link': 'edit.unsupported-content',
+  'fragment-untrackable-content': 'edit.tracked-operation-unsupported',
   unsupported: 'edit.unsupported-content',
   'unsupported-property': 'edit.unsupported-content',
   'not-a-picture-drawing': 'edit.unsupported-content',
@@ -192,6 +200,9 @@ const STORE_EDIT_CODES: Readonly<
   'collaboration-session-not-attached': 'edit.collaboration-not-ready',
   'collaboration-session-destroyed': 'edit.collaboration-not-ready',
   'collaboration-text-limit': 'edit.collaboration-text-limit',
+  'ordered-unsupported-op': 'edit.collaboration-refused',
+  'ordered-opaque-write': 'edit.collaboration-refused',
+  'ordered-refused': 'edit.collaboration-refused',
   'change-tracking-unsupported-host': 'edit.tracking-unsupported-host',
   'change-tracking-mode-unsupported': 'edit.tracking-mode-unsupported',
   'change-tracking-author-required': 'edit.tracking-author-required',

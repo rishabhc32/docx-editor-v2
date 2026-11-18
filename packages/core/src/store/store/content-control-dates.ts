@@ -88,24 +88,12 @@ export function parseContentControlDate(
   century = 2000
 ): { year: number; month: number; day: number } | null {
   if (!pattern || pattern.length === 0 || pattern.length > 64) return parseIsoDate(text);
-  let year: number | null = null;
-  let month: number | null = null;
-  let day: number | null = null;
+  const fields: Record<DateField, number | null> = { y: null, M: null, d: null };
   let at = 0;
-  const digits = (min: number, max: number): number | null => {
-    let end = at;
-    while (end < text.length && end - at < max && text[end]! >= '0' && text[end]! <= '9') {
-      end += 1;
-    }
-    if (end - at < min) return null;
-    const value = Number(text.slice(at, end));
-    at = end;
-    return value;
-  };
   let index = 0;
   while (index < pattern.length) {
     const char = pattern[index]!;
-    if (char !== 'y' && char !== 'M' && char !== 'd') {
+    if (!isDateField(char)) {
       if (text[at] !== char) return null;
       at += 1;
       index += 1;
@@ -114,27 +102,57 @@ export function parseContentControlDate(
     let run = 0;
     while (index + run < pattern.length && pattern[index + run] === char) run += 1;
     index += run;
-    if (char === 'y') {
-      const value = run <= 2 ? digits(2, 2) : digits(1, 6);
-      if (value === null) return null;
-      year = run <= 2 ? century + value : value;
-    } else if (char === 'M' && run >= 3) {
-      const found = MONTH_NAMES.findIndex((name) =>
-        text.startsWith(run >= 4 ? name : name.slice(0, 3), at)
-      );
-      if (found < 0) return null;
-      at += run >= 4 ? MONTH_NAMES[found]!.length : 3;
-      month = found + 1;
-    } else {
-      const value = digits(Math.min(run, 2), 2);
-      if (value === null) return null;
-      if (char === 'M') month = value;
-      else day = value;
-    }
+    const read = readDateField(text, at, char, run, century);
+    if (!read) return null;
+    fields[char] = read.value;
+    at = read.at;
   }
+  const { y: year, M: month, d: day } = fields;
   if (at !== text.length || year === null || month === null || day === null) return null;
   const parsed = parseIsoDate(
     `${String(year).padStart(4, '0')}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`
   );
   return parsed && formatContentControlDate(parsed, pattern) === text ? parsed : null;
+}
+/** A field letter of a `w:dateFormat`: year, month or day. */
+type DateField = 'y' | 'M' | 'd';
+function isDateField(char: string): char is DateField {
+  return char === 'y' || char === 'M' || char === 'd';
+}
+/** A field's value read from the text, and the text position after it. */
+interface DateFieldRead {
+  readonly value: number;
+  readonly at: number;
+}
+/**
+ * The field of `run` pattern letters `char` in `text` at `at`, or null when the text does not
+ * hold it there. A two-digit year falls in `century`.
+ */
+function readDateField(
+  text: string,
+  at: number,
+  char: DateField,
+  run: number,
+  century: number
+): DateFieldRead | null {
+  if (char === 'M' && run >= 3) {
+    const found = MONTH_NAMES.findIndex((name) =>
+      text.startsWith(run >= 4 ? name : name.slice(0, 3), at)
+    );
+    if (found < 0) return null;
+    return { value: found + 1, at: at + (run >= 4 ? MONTH_NAMES[found]!.length : 3) };
+  }
+  if (char !== 'y') return digitsAt(text, at, Math.min(run, 2), 2);
+  if (run > 2) return digitsAt(text, at, 1, 6);
+  const twoDigits = digitsAt(text, at, 2, 2);
+  return twoDigits === null ? null : { value: century + twoDigits.value, at: twoDigits.at };
+}
+/** The number of `min` to `max` digits in `text` at `at`, or null when fewer digits stand there. */
+function digitsAt(text: string, at: number, min: number, max: number): DateFieldRead | null {
+  let end = at;
+  while (end < text.length && end - at < max && text[end]! >= '0' && text[end]! <= '9') {
+    end += 1;
+  }
+  if (end - at < min) return null;
+  return { value: Number(text.slice(at, end)), at: end };
 }

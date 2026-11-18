@@ -248,6 +248,36 @@ describe('TOC refresh editor lane', () => {
     editor.destroy();
   });
 
+  test('a refresh whose rows push a heading to the next page is still one undo step', async () => {
+    // Word's Update Table is one step. Here the page pass has work: the nine new rows push the
+    // last heading from page 2 to page 3 after the rows were planned with page 2.
+    const container = document.createElement('div');
+    document.body.append(container);
+    const editor = createDocxEditor({ container });
+    const heading = (text: string) =>
+      `<w:p><w:pPr><w:pStyle w:val="Heading1"/></w:pPr><w:r><w:t>${text}</w:t></w:r></w:p>`;
+    const lines = Array.from(
+      { length: 36 },
+      (_, k) => `<w:p><w:r><w:t>Line ${k}</w:t></w:r></w:p>`
+    );
+    editor.load(
+      docx(EMPTY_TOC + [...'ABCDEFGH'].map(heading).join('') + lines.join('') + heading('Last'))
+    );
+    const before = await documentXml(editor);
+
+    expect(editor.exec({ type: 'refreshToc', mode: 'entire' })).toEqual({
+      ok: true,
+      changed: true,
+    });
+    expect(await documentXml(editor)).toContain('<w:t>3</w:t>');
+
+    expect(editor.exec({ type: 'undo' }).ok).toBe(true);
+    expect(await documentXml(editor)).toBe(before);
+    expect(editor.exec({ type: 'redo' }).ok).toBe(true);
+    expect(await documentXml(editor)).toContain('<w:t>3</w:t>');
+    editor.destroy();
+  });
+
   test('a right-click publishes the TOC it landed on, and only that one', () => {
     const container = document.createElement('div');
     document.body.append(container);

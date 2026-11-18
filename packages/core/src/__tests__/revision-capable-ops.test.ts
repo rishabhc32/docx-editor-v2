@@ -81,17 +81,33 @@ const NOT_STAMPED = {
       'The table commands (createTrackedTableDeletion) and a range deletion over a whole table ' +
       '(planRangeDeletion) attribute it; stamping every removal would refuse paragraph joins.',
   },
-  insertDrawing: {
-    tracked: false,
+  insertFragment: {
+    tracked: true,
     reason:
-      'Suggesting mode refuses drawing ops from the editor (applyDrawingOps) and automation. ' +
-      'A suggested picture goes through insertImage, which attributes this op itself.',
+      'Rich paste attributes it itself when it opens in suggesting mode, and a fragment that ' +
+      'holds revisions or untrackable content refuses a revision, so stamping every fragment ' +
+      'would turn an automation field insertion into a refusal.',
+  },
+  insertDrawing: {
+    tracked: true,
+    reason:
+      'Its producers attribute it: insertImage for a suggested picture, and applyDrawingOps ' +
+      'for a new text box in suggesting mode, which refuses every other drawing op there. ' +
+      'Automation refuses a picture insert while tracking, so a stamp would reach nothing.',
   },
   deleteDrawing: {
     tracked: false,
     reason:
       'The store refuses its revision (trackedDrawingDeletionUnsupported). A suggested ' +
       'picture deletion is a tracked deleteText over the drawing (deleteImageTracked).',
+  },
+  setSectionFurnitureOptions: {
+    tracked: false,
+    reason:
+      'attributeTrackedOps stamps it in a branch of its own when it writes a different first ' +
+      'page or the header and footer distances alone (isSectionFurnitureFormat), as page ' +
+      'setup. Odd and even pages is a setting with no tracked form, so a write naming it is ' +
+      'not stamped, and this probe names no option.',
   },
   setRevisionAttribution: {
     tracked: false,

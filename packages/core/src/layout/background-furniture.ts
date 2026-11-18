@@ -136,5 +136,7 @@ export function createBackgroundFurnitureProjection(stylesRoot: () => OoxmlEleme
     variantPart,
     authoredStory,
     isImplicitPart: (part: OoxmlPart) => metadata.has(part) && !metadata.get(part)!.original,
+    /** A reserving copy keeps the name of the authored part it was made from. */
+    isReservePart: (part: OoxmlPart) => metadata.has(part),
   };
 }

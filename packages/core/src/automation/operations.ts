@@ -654,7 +654,7 @@ export type AutomationOperation =
   | { readonly op: 'getRevisionDate'; readonly revision: AutomationHandle }
   /**
    * `@w:id` verbatim: the file's own number for the change's first tracked mark, the one its
-   * review item's `address` names. File data, not a handle — a document can repeat it.
+   * review item's `address` names. File data, not a handle: a document can repeat it.
    */
   | { readonly op: 'getRevisionFileId'; readonly revision: AutomationHandle }
   /** The package part the change is written in, such as `/word/header1.xml`. */

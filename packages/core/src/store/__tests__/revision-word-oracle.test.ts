@@ -10,7 +10,8 @@ import oracle from './fixtures/structural-word-oracle.json';
 // Recorded from clean native Word AcceptAllChangesInDoc / RejectAllChangesInDoc output.
 // Compare content/topology, ignoring run splitting, generated IDs and explicit defaults.
 // Column widths are not compared here: Word autofits nested-table inputs on opening.
-// Empty SDT placeholder spaces normalize to an empty paragraph.
+// A control the decision empties shows Word's blank prompt: `w:showingPlcHdr` and one run of
+// five spaces (Word 16.114 samples `~$i6w-*-out.docx`), compared as recorded, not normalized.
 function child(node: OoxmlElement, name: string): OoxmlElement | undefined {
   return node.children.find(
     (n): n is OoxmlElement =>
@@ -56,7 +57,13 @@ function blocks(node: OoxmlElement): unknown[] {
             ),
         },
       ];
-    if (c.localName === 'sdt') return [{ sdt: blocks(child(c, 'sdtContent')!) }];
+    if (c.localName === 'sdt')
+      return [
+        {
+          sdt: blocks(child(c, 'sdtContent')!),
+          prompt: child(child(c, 'sdtPr')!, 'showingPlcHdr') !== undefined,
+        },
+      ];
     return [];
   });
 }

@@ -112,8 +112,10 @@ export function planRevisionBatch(
   const sites = collectRevisionSites(scopedPart);
   const movePlan = planOrdinaryMoves(root, sites, selectedSites, action);
   for (const id of movePlan.selected) selectedSites.add(id);
-  for (const id of containedOwnChangeSites(part, sites, selectedSites, action))
-    selectedSites.add(id);
+  // The author's own changes inside what the decision removes go with it; their other sites
+  // stay their own decision (`contained` below)
+  const contained = new Set(containedOwnChangeSites(part, sites, selectedSites, action));
+  for (const id of contained) selectedSites.add(id);
   for (const item of items) {
     const ids = revisionSiteNodeIdsOf(item);
     if (ids.length && ids.every((id) => selectedSites.has(id))) selected.add(reviewItemKey(item));
@@ -136,10 +138,14 @@ export function planRevisionBatch(
     for (const index of own) join(own[0]!, index);
   }
   const owners = new Map<string, number>();
+  // A card's sites are decided together. A site that goes with a removed cell or row is not
+  // tied to its card's other sites: one record of a fill over a row's cells, one of them in a
+  // deleted column, stays pending on the other cells, as Word keeps it when it accepts the
+  // cell deletion alone
   for (const item of items) {
     const own = revisionSiteNodeIdsOf(item).flatMap((id) => {
       const index = indices.get(id);
-      return index === undefined ? [] : [index];
+      return index === undefined || contained.has(id) ? [] : [index];
     });
     for (const index of own) join(own[0]!, index);
   }
@@ -192,22 +198,30 @@ export function planRevisionBatch(
       if (target && !site.refused) owners.set(target.id, index);
     }
   }
+  // A neighbour that takes a removed cell's width: the decision rewrites its properties. Its own
+  // pending property change stays its own decision, as Word keeps it (the change record keeps
+  // the width from before)
+  const neighbourProperties = new Set<string>();
   for (const [cellId, markers] of tableRevisionNeighbours(part, selectedTableSites, action)) {
     const cell = findNode(part, cellId);
     const markerIndex = indices.get(markers[0]!);
     if (cell?.kind !== 'tableCell' || markerIndex === undefined) continue;
     for (const property of cell.children) {
-      if (property.localName === 'tcPr') owners.set(property.id, markerIndex);
+      if (property.localName !== 'tcPr') continue;
+      owners.set(property.id, markerIndex);
+      neighbourProperties.add(property.id);
     }
   }
-  const visit = (node: OoxmlNode, ancestor?: number): void => {
+  const visit = (node: OoxmlNode, ancestor?: number, neighbour = false): void => {
     const site = indices.get(node.id);
     const owner = owners.get(node.id);
     if (site !== undefined && owner !== undefined) join(owner, site);
     const own = site ?? owner;
-    if (own !== undefined && ancestor !== undefined) join(ancestor, own);
+    const apart = neighbour && site !== undefined && sites[site]!.propertyChange;
+    if (own !== undefined && ancestor !== undefined && !apart) join(ancestor, own);
     const next = own ?? ancestor;
-    if (node.kind !== 'textValue') for (const child of node.children) visit(child, next);
+    const below = neighbour || neighbourProperties.has(node.id);
+    if (node.kind !== 'textValue') for (const child of node.children) visit(child, next, below);
   };
   visit(root);
   for (const range of namedMoveRanges(root).values()) {

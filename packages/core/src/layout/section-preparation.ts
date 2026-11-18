@@ -1,9 +1,30 @@
+let preparedBlocks = 0;
+
+/**
+ * @internal Deterministic work recorder: section blocks prepared again (not carried over from
+ * the previous pass by identity), counted across every layout since the last reset.
+ */
+export function preparedBlockTestRecorder(): { readonly prepared: number; reset(): void } {
+  return {
+    get prepared() {
+      return preparedBlocks;
+    },
+    reset() {
+      preparedBlocks = 0;
+    },
+  };
+}
+
 /** Reconcile section preparation while keeping dependency validation with its owner. */
 export function prepareSectionBlocks<Node extends object, Prepared>(
   bodies: readonly Node[],
   previous: { readonly bodies: readonly Node[]; readonly prepared: readonly Prepared[] } | null,
-  prepare: (body: Node) => Prepared
+  prepareBlock: (body: Node) => Prepared
 ): Prepared[] {
+  const prepare = (body: Node): Prepared => {
+    preparedBlocks += 1;
+    return prepareBlock(body);
+  };
   if (!previous) return bodies.map(prepare);
   // Match shifted tails after insert/delete without allocating a document-sized map.
   // Equal-length edits can reuse aligned entries directly. Reorders conservatively

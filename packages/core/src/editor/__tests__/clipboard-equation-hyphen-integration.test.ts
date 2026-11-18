@@ -34,19 +34,20 @@ test('whole-paragraph rich paste preserves equations, hyphens, and the paragraph
   const target = open(paragraph('AB'));
   putCaret(target, 1);
   expect(target.pasteRich(flavours.text, flavours.html)).toBe(true);
-  expect(target.session.bodyText()).toBe('Aco\u001fop\ufffcend\u001etail\nB');
+  // Word's Smart cut and paste puts a space between "A" and the pasted word
+  expect(target.session.bodyText()).toBe('A co\u001fop\ufffcend\u001etail\nB');
   target.selectAll();
-  expect(target.selectedText()).toBe('Aco\u00adop\ufffcend\u2011tail\nB');
-  expect(target.copyFlavours().text).toBe('Acoopxend\u2011tail\nB');
-  putCaret(target, 6);
+  expect(target.selectedText()).toBe('A co\u00adop\ufffcend\u2011tail\nB');
+  expect(target.copyFlavours().text).toBe('A coopxend\u2011tail\nB');
+  putCaret(target, 7);
   expect(target.equations.equationAtCaret()?.linear).toBe('x');
 
   target.undo();
   expect(target.session.bodyText()).toBe('AB');
   target.redo();
   target.selectAll();
-  expect(target.selectedText()).toBe('Aco\u00adop\ufffcend\u2011tail\nB');
-  expect(target.copyFlavours().text).toBe('Acoopxend\u2011tail\nB');
+  expect(target.selectedText()).toBe('A co\u00adop\ufffcend\u2011tail\nB');
+  expect(target.copyFlavours().text).toBe('A coopxend\u2011tail\nB');
 });
 
 test('a partial copy keeps the equation after an optional hyphen at its selected position', () => {

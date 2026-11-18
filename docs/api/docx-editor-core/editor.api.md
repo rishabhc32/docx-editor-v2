@@ -1164,6 +1164,12 @@ export interface CommentDraftChromeHandlers {
 // @public
 export type CommentMarkerStyle = 'initials' | 'icon';
 
+// @internal
+export function commitCustomNodeInsert(surface: PaginatedSurface, write: InsertCustomNodeWrite, scope: StoryScope): CustomNodeCommitResult;
+
+// @internal
+export function commitCustomNodeRemoval(surface: PaginatedSurface, controlNodeId: string, scope: StoryScope): CustomNodeCommitResult;
+
 // @public
 export function composeFontConfiguration(base: FontConfigurationBase, ...fragments: readonly FontConfigurationFragment[]): FontConfiguration;
 
@@ -1327,6 +1333,17 @@ export interface CustomFontsOptions extends Omit<LoadFontsRequest, 'signal'> {
 
 // @public
 export type CustomFontsResolver = MarkedFontResolver<(request: FontResolutionRequest) => Promise<LoadFontsResult>>;
+
+// @internal
+export type CustomNodeCommitResult = {
+    readonly changed: boolean;
+    readonly nodeId?: string;
+    readonly ok: true;
+} | {
+    readonly detail?: string;
+    readonly ok: false;
+    readonly reason: string;
+};
 
 // @public
 export const DEFAULT_FONT: FontConfiguration['defaultFont'];
@@ -2421,7 +2438,7 @@ export interface PaginatedSurface {
     commitReviewOps(run: (historyToken: symbol | undefined) => {
         readonly committed: boolean;
         readonly reason?: unknown;
-    }, intent?: ReviewWriteIntent): string | null;
+    }, intent?: ReviewWriteIntent | ReviewWrite): string | null;
     readonly contentControls: ContentControlOps;
     // (undocumented)
     convertAllNotes(fromKind: 'footnote' | 'endnote'): boolean;
@@ -3233,6 +3250,11 @@ export interface ReviewPaneOptions {
 export type ReviewPaneOverflow = 'float' | 'shrinkPage' | 'scroll';
 
 // @public
+export type ReviewWrite = CollaborationReviewWrite & {
+    readonly intent: ReviewWriteIntent;
+};
+
+// @public
 export type ReviewWriteIntent = 'revision-resolve' | 'revision-attribution' | 'comment-add' | 'comment-reply' | 'comment-resolve' | 'comment-delete' | 'package-scoped';
 
 // @public
@@ -3733,7 +3755,7 @@ export interface SurfaceHyperlink {
 }
 
 // @public
-export type SurfaceInsertImageInput = Omit<InsertImageInput, 'decodePort' | 'actorId'>;
+export type SurfaceInsertImageInput = Omit<InsertImageInput, 'decodePort' | 'actorId' | 'gate'>;
 
 // @public
 export interface SurfaceNavigation {
@@ -4108,8 +4130,8 @@ export interface TreeDocxSessionView extends HeadlessDocumentView {
         readonly commentId: string;
         readonly parentCommentId?: string;
     }[], scope?: StoryScope, noteId?: number, options?: PackageWriteOptions): boolean;
-    deleteImage(scope: StoryScope, drawingNodeId: string): ImageIntentResult;
-    deleteImageTracked(scope: StoryScope, drawingNodeId: string, revision: RevisionAttributionInput): ImageIntentResult;
+    deleteImage(scope: StoryScope, drawingNodeId: string, gate?: ImageWriteGate): ImageIntentResult;
+    deleteImageTracked(scope: StoryScope, drawingNodeId: string, revision: RevisionAttributionInput, gate?: ImageWriteGate): ImageIntentResult;
     documentFonts(): readonly string[];
     documentOutline(): readonly DocumentOutlineEntry[];
     documentProperties(): DocumentProperties;

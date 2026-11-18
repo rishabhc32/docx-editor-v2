@@ -19,6 +19,7 @@ import { readNumPr } from '../layout/list-resolve.ts';
 import { propertyElement } from '../store/store/tree-op-properties.ts';
 import type { RevisionAttributionInput } from '../store/store/tree-op-types.ts';
 import { nextRevisionId } from '../store/store/tree-op-revision-ids.ts';
+import { insertedMarkProperties } from '../store/store/tree-op-tracked-marks.ts';
 
 /** Continue Word's single blank-paragraph separator between items of an existing list. */
 export function listSeparatorEnter(
@@ -59,11 +60,14 @@ export function listSeparatorEnter(
       children,
     }) as OoxmlElement;
   const pPr = paragraph.children.find((node) => node.kind === 'paragraphProperties');
-  // The original section mark stays on the tail, just as with an ordinary split.
-  const headProperties = pPr && {
-    ...pPr,
-    children: pPr.children.filter((node) => node.localName !== 'sectPr'),
-  };
+  // The original section mark stays on the tail, just as with an ordinary split, and so does
+  // a deletion proposed on the original mark: the head ends with a mark this Enter inserts.
+  const headProperties =
+    pPr &&
+    insertedMarkProperties({
+      ...pPr,
+      children: pPr.children.filter((node) => node.localName !== 'sectPr'),
+    });
   const style = propertyElement(
     { localName: 'pStyle', attributes: { val: separatorStyleId } },
     'separator-style'

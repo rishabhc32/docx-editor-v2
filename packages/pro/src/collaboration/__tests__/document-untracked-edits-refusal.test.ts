@@ -6,7 +6,8 @@ Production use requires a commercial agreement: licensing@eigenpal.com
 // `reviewModule({ untrackedEdits: 'refuse' })` over a collaboration session. The refusal is a
 // local decision: a refused edit commits and sends nothing, a peer's direct edit still applies
 // on the refusing replica, and the suggestions the refusing peer can make converge, undo,
-// survive a reconnect and reopen.
+// survive a reconnect and reopen. The refused edit is different odd and even pages, a setting
+// Word never tracks; page setup has a tracked form (`w:sectPrChange`).
 
 import { afterEach, expect, test } from 'bun:test';
 import { GlobalRegistrator } from '@happy-dom/global-registrator';
@@ -65,6 +66,12 @@ const xml = (editor: Editor) => serializeOoxmlPart(editor.surface!.session.part(
 const fingerprint = (editor: Editor) =>
   packageFingerprint(editor.surface!.session.currentPackage());
 const leftMargin = (editor: Editor) => /<w:pgMar[^>]*w:left="(\d+)"/.exec(xml(editor))?.[1];
+const refusedEdit = { type: 'setHeaderFooterOptions', evenAndOddHeaders: true } as const;
+/** Whether the replica's settings turn different odd and even pages on. */
+const oddAndEven = (editor: Editor) => {
+  const settings = editor.surface!.session.currentPackage().parts.get('/word/settings.xml');
+  return settings !== undefined && serializeOoxmlPart(settings).includes('evenAndOddHeaders');
+};
 
 test('a refused edit sends nothing while peer edits and suggestions converge', async () => {
   const pair = await harness.pair(zipDocument(BODY));
@@ -81,7 +88,7 @@ test('a refused edit sends nothing while peer edits and suggestions converge', a
 
   // Refused locally: nothing is committed, so nothing reaches the room.
   const before = fingerprint(bob);
-  expect(alice.exec({ type: 'setPageSetup', marginLeft: 720 }).ok).toBe(false);
+  expect(alice.exec(refusedEdit).ok).toBe(false);
   converge();
   expect(fingerprint(bob)).toBe(before);
   expect(fingerprint(alice)).toBe(before);
@@ -96,7 +103,7 @@ test('a refused edit sends nothing while peer edits and suggestions converge', a
   pair.pause();
   select(alice, 1, 4);
   alice.surface!.type(' new');
-  expect(alice.exec({ type: 'setPageSetup', orientation: 'landscape' }).ok).toBe(false);
+  expect(alice.exec(refusedEdit).ok).toBe(false);
   select(bob, 1, 11, 16);
   bob.surface!.deleteBackward();
   select(bob, 0, 0);
@@ -105,7 +112,7 @@ test('a refused edit sends nothing while peer edits and suggestions converge', a
   pair.resume();
   converge();
   expect(xml(bob)).toContain('w:author="Alice"');
-  expect(xml(bob)).not.toContain('w:orient="landscape"');
+  expect(oddAndEven(bob)).toBe(false);
   expect(bob.surface!.session.bodyText()).toContain('Beta new clause');
   expect(bob.surface!.session.bodyText()).toContain('B Alpha clause');
 
@@ -120,7 +127,7 @@ test('a refused edit sends nothing while peer edits and suggestions converge', a
   // A replica that rejoins sees the same document, and refuses for itself.
   const rejoined = mount(await harness.join(pair.alice, 'rejoined'), 'Carol', true);
   expect(fingerprint(rejoined)).toBe(fingerprint(alice));
-  expect(rejoined.exec({ type: 'setPageSetup', marginLeft: 720 }).ok).toBe(false);
+  expect(rejoined.exec(refusedEdit).ok).toBe(false);
   expect(fingerprint(rejoined)).toBe(fingerprint(alice));
 
   // Save and reopen keep the suggestion and the peer's direct edit.

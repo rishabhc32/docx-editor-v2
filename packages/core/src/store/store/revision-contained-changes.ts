@@ -1,18 +1,4 @@
-// Pending changes a structural decision takes with it.
-//
-// Rejecting a proposed row, cell or table — or accepting a proposed deletion of one — removes it
-// and everything inside it. A change pending INSIDE then has nothing left to decide, and
-// `planRevisionBatch` refused the whole decision while it stayed open: rejecting a table its
-// author had proposed and typed into was refused until the typing's own card was answered first.
-// Word resolves the two together.
-//
-// Only the SAME author's changes go along. Another reviewer's pending change inside is theirs to
-// answer, so the decision stays refused until it is — with a reason that says so
-// (`holdsPendingChange`). And only changes whose effect ends with the structure go along: text
-// insertions and deletions, paragraph marks and formatting records. A move has a half outside,
-// and a row or cell marker is a structural decision of its own, so neither ever does. Nor does
-// anything in a nested table: Word reviews a nested table's changes apart from the rows around
-// it (`review-table-groups.ts`), so those stay a dependency the reviewer answers first.
+// Pending changes a structural decision takes with it, as Word resolves the two together.
 
 import { parentNodeOf } from '../package/ooxml-edit.ts';
 import type { OoxmlElement, OoxmlNode, OoxmlPart } from '../package/ooxml-tree.ts';
@@ -29,7 +15,7 @@ function inNestedTable(part: OoxmlPart, target: OoxmlElement): boolean {
 }
 
 /**
- * Node id inside a structure the decision removes → the author whose marker removes it.
+ * Node id inside a structure the decision removes, to the author whose marker removes it.
  *
  * `nested` includes nested tables. Without it the scope stops at them: Word reviews a nested
  * table's changes apart from the rows around it, so an outer decision never takes them along,
@@ -46,7 +32,10 @@ function removedScope(
   const visit = (node: OoxmlNode, author: string): void => {
     if (!nested && node.kind === 'table') return;
     scope.set(node.id, author);
-    if (node.kind !== 'textValue') for (const child of node.children) visit(child, author);
+    if (node.kind === 'textValue') return;
+    for (const child of node.children) {
+      visit(child, author);
+    }
   };
   for (const site of sites) {
     if (!selected.has(site.node.id)) continue;
@@ -55,17 +44,26 @@ function removedScope(
     if (!target || author === undefined || (!nested && inNestedTable(part, target))) continue;
     visit(target, author);
   }
+
   return scope;
 }
 
-/** A change whose whole effect lies where it sits, so it can vanish with its structure. */
+/**
+ * A change whose whole effect lies where it sits, so it can vanish with its structure: text
+ * insertions and deletions, paragraph marks and formatting records, and a cell's `w:cellIns` or
+ * `w:cellDel` in a row that goes (the cell goes with the row, and the marker's other cells stay
+ * pending: a column deleted through its author's own new row). A move has a half outside, and a
+ * row marker is a structural decision of its own, so neither ever goes along.
+ */
 function endsWithStructure(site: RevisionSite): boolean {
   return (
     !site.refused &&
     (site.paragraphMark ||
       site.propertyChange ||
       site.node.kind === 'revisionInsert' ||
-      site.node.kind === 'revisionDelete')
+      site.node.kind === 'revisionDelete' ||
+      site.node.localName === 'cellIns' ||
+      site.node.localName === 'cellDel')
   );
 }
 
@@ -73,6 +71,12 @@ function endsWithStructure(site: RevisionSite): boolean {
  * The sites of the selected decisions' authors' own changes inside what those decisions remove.
  * `planRevisionBatch` selects them too, so the decision and the changes it removes resolve in
  * one transaction.
+ *
+ * Rejecting a proposed row, cell or table, or accepting a proposed deletion of one, removes it
+ * and everything inside it. Only the SAME author's changes go along: another reviewer's pending
+ * change inside is theirs to answer, so the decision stays refused until it is
+ * (`holdsPendingChange`). Nothing in a nested table goes along: Word reviews a nested table's
+ * changes apart from the rows around it (`review-table-groups.ts`).
  */
 export function containedOwnChangeSites(
   part: OoxmlPart,
@@ -93,7 +97,7 @@ export function containedOwnChangeSites(
 }
 
 /**
- * Whether resolving `item` this way is held up by a change pending inside what it removes — one
+ * Whether resolving `item` this way is held up by a change pending inside what it removes, one
  * that does not go along with it: another reviewer's, a move, or one in a nested table.
  */
 export function holdsPendingChange(

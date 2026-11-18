@@ -1,6 +1,12 @@
 import { parentNodeOf } from '../package/ooxml-edit.ts';
 import { ooxmlTreesEqual } from '../package/ooxml-serialize.ts';
 import { WML_NAMESPACE_URI, type OoxmlElement, type OoxmlPart } from '../package/ooxml-tree.ts';
+import {
+  sameActor,
+  tableHeightAnchor,
+  tableOf,
+  wordHeightRows,
+} from './revision-table-implicit-height.ts';
 import type { RevisionSite } from './tree-op-revisions.ts';
 function children(node: OoxmlElement, name: string): OoxmlElement[] {
   const found: OoxmlElement[] = [];
@@ -92,5 +98,40 @@ export function unboundTableHistories(
     if (identities.get(identity(site)) !== 1 || tableRecords.get(table.id) !== 1) continue;
     result.add(site.node.id);
   }
+  for (const id of strayHeightAnchors(part, sites)) result.add(id);
   return result;
+}
+
+/**
+ * A row height's table anchor as the engine writes it (`tableHeightAnchor`, the grid's record
+ * with the same id) with no height leaning on it and no other record of its author and date in
+ * the table: what is left when the row went while its height was proposed, or another person's
+ * change took the row in a shared room. It decides nothing, so it is unused history too.
+ */
+function strayHeightAnchors(part: OoxmlPart, sites: readonly RevisionSite[]): string[] {
+  const stray: string[] = [];
+  // Each site's table, read once and only when a site can be a stray anchor
+  let tableOfSite: Map<RevisionSite, OoxmlElement | undefined> | undefined;
+  for (const site of sites) {
+    if (site.refused || site.node.localName !== 'tblPrChange' || !site.parent) continue;
+    const table = parentNodeOf(part, site.parent.id);
+    if (table?.kind !== 'table' || tableHeightAnchor(table)?.id !== site.node.id) continue;
+    if (wordHeightRows(table).some((row) => row.anchor.id === site.node.id)) continue;
+    tableOfSite ??= new Map(sites.map((other) => [other, tableOf(part, other.node)]));
+    const inTable = sites.filter(
+      (other) => other !== site && tableOfSite!.get(other)?.id === table.id
+    );
+    const grids = inTable.filter(
+      (other) =>
+        other.node.localName === 'tblGridChange' && attr(other.node, 'id') === attr(site.node, 'id')
+    );
+    // The engine's own anchor: one op's id on the table's and the grid's record
+    if (grids.length !== 1) continue;
+    const ownOtherRecord = inTable.some(
+      (other) => other.node.localName !== 'tblGridChange' && sameActor(other.node, site.node)
+    );
+    if (ownOtherRecord) continue;
+    stray.push(site.node.id, ...grids.map((grid) => grid.node.id));
+  }
+  return stray;
 }

@@ -79,6 +79,17 @@ const SDT =
   '<w:sdtContent><w:r><w:t>Hi</w:t></w:r></w:sdtContent></w:sdt></w:p>' +
   '<w:p><w:r><w:t>after</w:t></w:r></w:p><w:sectPr/>';
 
+const W15_BINDING = 'xmlns:w15="http://schemas.microsoft.com/office/word/2012/wordml"';
+/** One repeating section item that holds a plain text control. */
+const ITEM = (id: number) =>
+  `<w:sdt><w:sdtPr><w:id w:val="${id}"/><w15:repeatingSectionItem ${W15_BINDING}/></w:sdtPr><w:sdtContent>` +
+  `<w:p><w:r><w:t xml:space="preserve">Party: </w:t></w:r><w:sdt><w:sdtPr><w:id w:val="${id + 1}"/><w:text/></w:sdtPr>` +
+  '<w:sdtContent><w:r><w:t>Acme</w:t></w:r></w:sdtContent></w:sdt></w:p></w:sdtContent></w:sdt>';
+/** A repeating section of `items`. */
+const REPEATING = (items: string) =>
+  `<w:sdt><w:sdtPr><w:id w:val="20"/><w15:repeatingSection ${W15_BINDING}/></w:sdtPr><w:sdtContent>` +
+  `${items}</w:sdtContent></w:sdt><w:p><w:r><w:t>after</w:t></w:r></w:p><w:sectPr/>`;
+
 const TOC_BODY =
   '<w:p><w:r><w:fldChar w:fldCharType="begin"/>' +
   '<w:instrText xml:space="preserve"> TOC \\o "1-2" \\h </w:instrText>' +
@@ -400,6 +411,15 @@ export function authorableCoverageFixtures(): JournalCoverageFixture[] {
       controlId: controlId(store),
       value: 'Yo',
     })),
+    story('addRepeatingSectionItem', zipDoc({ body: REPEATING(ITEM(21)) }), (store) => ({
+      op: 'addRepeatingSectionItem',
+      controlId: controlId(store),
+    })),
+    story(
+      'removeRepeatingSectionItem',
+      zipDoc({ body: REPEATING(ITEM(21) + ITEM(31)) }),
+      (store) => ({ op: 'removeRepeatingSectionItem', controlId: controlId(store), index: 0 })
+    ),
     story('removeContentControl', zipDoc({ body: SDT }), (store) => ({
       op: 'removeContentControl',
       controlId: controlId(store),

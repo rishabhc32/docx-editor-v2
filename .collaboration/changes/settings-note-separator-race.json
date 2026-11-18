@@ -1,0 +1,10 @@
+{
+  "impact": "migration-required",
+  "fields": ["repairVersion"],
+  "before": "In a Yjs room on a file with a settings part, two people who each added the first footnote or endnote at once each wrote a w:footnotePr or w:endnotePr into the settings. Every replica showed both, which CT_Settings allows once. A full materializer pass also took the separator references of a hidden copy for lost notes and adopted them into the notes part, where an incremental pass did not.",
+  "after": "Every replica shows the first live copy of w:footnotePr and w:endnotePr in the settings and hides the others, which stay in shared state for undo. Member adoption skips an element a live parent still lists on every pass, so the separator references of a hidden copy stay where they are.",
+  "reason": "The rule that decides which conflicting node a replica shows gains the settings' note properties, which is repair semantics. No stored field or update meaning changes, and every replica of this format computes the rule from shared state alone. A replica of format 1.4.3.1 shows both copies for the same shared state, so the two would show and save different settings. repairVersion increases to 4, and saved rooms are exported and reseeded.",
+  "tests": ["packages/pro/src/collaboration/__tests__/document-part-races.test.ts"],
+  "changeset": "settings-note-separator-race",
+  "migration": "upgrade-rooms-to-format-1442"
+}

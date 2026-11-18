@@ -3,7 +3,8 @@
 // A replica installs one already-validated package as one revision. Collaborative undo
 // lives in the replication layer, so this path records no legacy history and emits no
 // primitive journal — the incoming package is the result of a remote journal, not new
-// local intent.
+// local intent. It drops the legacy history the replica has: no entry from before a remote
+// package can be undone without putting back a package that lacks the remote change.
 //
 // It installs the package VERBATIM, through `installAuthoritativePackageSnapshot`. The shell
 // merge the local path performs exists for LOCAL history, where a snapshot can predate a
@@ -15,7 +16,10 @@
 import { runObservedStoreTransaction } from '../package/canonical-primitive-capture.ts';
 import { validatePackageInvariants } from '../package/package-edit.ts';
 import type { OoxmlExternalTarget, OoxmlPackage } from '../package/ooxml-package.ts';
-import { canonicalTreeDifference } from '../package/ooxml-serialize.ts';
+import {
+  canonicalTreeDifference,
+  type CanonicalTreeDifference,
+} from '../package/ooxml-difference.ts';
 import {
   ooxmlTreesEqual,
   validateOoxmlPart,
@@ -139,6 +143,47 @@ function contentTypesEqual(left: OoxmlPackage, right: OoxmlPackage): boolean {
   );
 }
 
+/** Each owner's relationship list of `next` that says what `current`'s says, as `current`'s. */
+function keptRelationships(
+  next: ReadonlyMap<string, readonly RelationshipRecord[]>,
+  current: ReadonlyMap<string, readonly RelationshipRecord[]>
+): ReadonlyMap<string, readonly RelationshipRecord[]> {
+  if (relationshipsEqual(next, current)) return current;
+  let kept: Map<string, readonly RelationshipRecord[]> | null = null;
+  for (const [owner, records] of next) {
+    const earlier = current.get(owner);
+    if (!earlier || earlier === records || earlier.length !== records.length) continue;
+    if (records.some((record, index) => !relationshipEqual(record, earlier[index]!))) continue;
+    (kept ??= new Map(next)).set(owner, earlier);
+  }
+  return kept ?? next;
+}
+
+/**
+ * `next` with each package-level collection that says what `current`'s says taken from
+ * `current`: relationships (per owner), external targets, content types and part bytes. A
+ * publisher that writes the same resources again then hands the store the objects it holds, so
+ * caches keyed on them, such as a header's occurrence under the main part's relationships, stay.
+ */
+export function withPackageShellOf(next: OoxmlPackage, current: OoxmlPackage): OoxmlPackage {
+  const relationships = keptRelationships(next.relationships, current.relationships);
+  const externalTargets = externalTargetsEqual(next.externalTargets, current.externalTargets)
+    ? current.externalTargets
+    : next.externalTargets;
+  const contentTypes = contentTypesEqual(next, current) ? current.contentTypes : next.contentTypes;
+  const partBytes = partBytesEqual(next.partBytes, current.partBytes)
+    ? current.partBytes
+    : next.partBytes;
+  if (
+    relationships === next.relationships &&
+    externalTargets === next.externalTargets &&
+    contentTypes === next.contentTypes &&
+    partBytes === next.partBytes
+  )
+    return next;
+  return Object.freeze({ ...next, relationships, externalTargets, contentTypes, partBytes });
+}
+
 /**
  * What one incoming package changes relative to the installed one.
  *
@@ -149,6 +194,9 @@ function contentTypesEqual(left: OoxmlPackage, right: OoxmlPackage): boolean {
 export interface RemotePackageDelta {
   readonly equal: boolean;
   readonly dirty: readonly string[];
+  /** Paragraphs the package adds and drops, where a split or a join changed a block list. */
+  readonly created: readonly string[];
+  readonly deleted: readonly string[];
   readonly dependencyKeys: readonly string[];
   readonly impact: ImpactClass;
 }
@@ -156,6 +204,8 @@ export interface RemotePackageDelta {
 const EQUAL_DELTA: RemotePackageDelta = Object.freeze({
   equal: true,
   dirty: Object.freeze([]),
+  created: Object.freeze([]),
+  deleted: Object.freeze([]),
   dependencyKeys: Object.freeze([]),
   impact: 'global',
 });
@@ -163,6 +213,8 @@ const EQUAL_DELTA: RemotePackageDelta = Object.freeze({
 const WHOLESALE_DELTA: RemotePackageDelta = Object.freeze({
   equal: false,
   dirty: Object.freeze([]),
+  created: Object.freeze([]),
+  deleted: Object.freeze([]),
   dependencyKeys: Object.freeze([]),
   impact: 'global',
 });
@@ -212,34 +264,48 @@ export function remotePackageDelta(next: OoxmlPackage, current: OoxmlPackage): R
   const difference = canonicalTreeDifference(other.root, part.root);
   if (difference.undecided) return wholesaleVerdict(changed);
   if (difference.equal && difference.idsPreserved) return EQUAL_DELTA;
-  // Equal content under other ids still installs: the ids are how a collaboration journal
-  // names the nodes the next edit touches. Only the renamed paragraphs need new layout.
-  if (difference.equal) {
-    if (difference.renamedOutsideParagraphs || difference.renamedParagraphIds.length === 0) {
-      return WHOLESALE_DELTA;
-    }
-    return {
-      equal: false,
-      dirty: difference.renamedParagraphIds,
-      dependencyKeys: [DEPENDENCY_KEY_IDS.story],
-      impact: 'text-local',
-    };
-  }
-  // A narrowed impact tells layout it may keep what it has for every paragraph outside
-  // `dirty`. That is only true when the paragraphs still exist under the same ids and no
-  // block moved, so anything else falls back to the wholesale answer.
-  if (
-    !difference.idsPreserved ||
-    difference.reach === 'outside-paragraph' ||
-    difference.paragraphIds.length === 0
-  ) {
+  return narrowedDelta(difference);
+}
+
+/**
+ * The paragraphs a main-part difference reaches, or the wholesale answer.
+ *
+ * A narrowed impact tells layout it may keep what it has for every paragraph outside
+ * `dirty`, `created` and `deleted`. That holds when every difference sits inside paragraphs
+ * that keep their ids, or in a block list where paragraphs were added or dropped between
+ * blocks that kept theirs. Equal content under other ids still installs: the ids are how a
+ * collaboration journal names the nodes the next edit touches, so a paragraph whose inner
+ * nodes were renamed is laid out again with them.
+ *
+ * The impact is `text-local` only when the paragraphs kept their place and every difference
+ * and every renamed node is text flow (runs, their text, revision wrappers, run properties):
+ * what a local keystroke publishes. A renamed control, link or field inside a paragraph is
+ * `flow-structural`, so the caches keyed on those ids (content-control lists, link
+ * projections) are built again.
+ */
+function narrowedDelta(difference: CanonicalTreeDifference): RemotePackageDelta {
+  if (difference.reach === 'outside-paragraph' || difference.renamedOutsideParagraphs) {
     return WHOLESALE_DELTA;
   }
+  const created = difference.createdParagraphIds;
+  const deleted = difference.deletedParagraphIds;
+  const fresh = new Set(created);
+  const dirty = [
+    ...new Set([...difference.paragraphIds, ...difference.renamedParagraphIds]),
+  ].filter((id) => !fresh.has(id));
+  if (dirty.length === 0 && created.length === 0 && deleted.length === 0) return WHOLESALE_DELTA;
+  const textOnly =
+    created.length === 0 &&
+    deleted.length === 0 &&
+    (difference.reach === 'equal' || difference.reach === 'paragraph-text') &&
+    difference.renamedReach !== 'paragraph-content';
   return {
     equal: false,
-    dirty: difference.paragraphIds,
+    dirty,
+    created,
+    deleted,
     dependencyKeys: [DEPENDENCY_KEY_IDS.story],
-    impact: difference.reach === 'paragraph-text' ? 'text-local' : 'flow-structural',
+    impact: textOnly ? 'text-local' : 'flow-structural',
   };
 }
 
@@ -339,8 +405,8 @@ export function publishRemoteCanonicalPackage(
         ...(attribution.actorId ? { actorId: attribution.actorId } : {}),
         ...(attribution.operationId ? { operationId: attribution.operationId } : {}),
         dirty: narrowed ? delta.dirty : [],
-        created: [],
-        deleted: [],
+        created: narrowed ? delta.created : [],
+        deleted: narrowed ? delta.deleted : [],
         splitJoin: [],
         dependencyKeys: narrowed ? delta.dependencyKeys : [],
         impact: narrowed ? delta.impact : 'global',

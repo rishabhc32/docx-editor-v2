@@ -181,8 +181,16 @@ function appendHfBand(
   return container;
 }
 
+/** The nodes one header and footer layer put on a sheet, kept so a story edit can replace them. */
+export interface HeaderFooterLayer {
+  /** The layer's own nodes on the sheet, in paint order. */
+  readonly nodes: readonly Element[];
+  /** The edit pills, which the page painter puts on top of the sheet. */
+  readonly hints: readonly HTMLElement[];
+}
+
 /**
- * Paint the header and footer layer onto `sheet`, and return the edit pills.
+ * Paint the header and footer layer onto `sheet`, and return its nodes and the edit pills.
  *
  * The caller appends the pills after the body, so a hover invitation is never covered by the
  * body text it sits beside.
@@ -192,7 +200,8 @@ export function paintHeaderFooterLayer(
   sheet: HTMLElement,
   page: PageRecord,
   painter: HeaderFooterLayerPainter
-): HTMLElement[] {
+): HeaderFooterLayer {
+  const before = sheet.lastElementChild;
   const pageOrigin = Object.freeze({
     x: page.box.x,
     y: page.box.y,
@@ -219,5 +228,42 @@ export function paintHeaderFooterLayer(
       .map((drawing) => hfAnchorOnPageSheet(story, drawing, pageOrigin));
     painter.appendDrawings(sheet, pageRelative, pageOrigin, 'inFront', active, story.kind);
   }
-  return hints;
+  const nodes: Element[] = [];
+  for (let node = before ? before.nextElementSibling : sheet.firstElementChild; node; ) {
+    nodes.push(node);
+    node = node.nextElementSibling;
+  }
+  return { nodes, hints };
+}
+
+/**
+ * Paint the layer of `page` again in place of `previous` on a kept sheet, or `null` when it
+ * cannot take the old one's place.
+ *
+ * A header or footer edit changes the story on every page that shows it. Only this layer
+ * reads the story, so the sheet, its body and everything over it stay. The new layer takes
+ * the old one's place in the sheet's child order, which is its paint order. A layer with no
+ * nodes, or pills that come or go, has no place to take: the caller paints the sheet in full.
+ */
+export function repaintHeaderFooterLayer(
+  document: Document,
+  sheet: HTMLElement,
+  page: PageRecord,
+  painter: HeaderFooterLayerPainter,
+  previous: HeaderFooterLayer
+): HeaderFooterLayer | null {
+  const [first] = previous.nodes;
+  if (!first || first.parentElement !== sheet) return null;
+  const scratch = document.createElement('div');
+  const next = paintHeaderFooterLayer(document, scratch, page, painter);
+  const [firstHint] = previous.hints;
+  if ((firstHint === undefined) !== (next.hints.length === 0)) return null;
+  if (firstHint && firstHint.parentElement !== sheet) return null;
+  for (const node of next.nodes) sheet.insertBefore(node, first);
+  for (const node of previous.nodes) node.remove();
+  if (firstHint) {
+    for (const hint of next.hints) sheet.insertBefore(hint, firstHint);
+    for (const hint of previous.hints) hint.remove();
+  }
+  return next;
 }

@@ -18,6 +18,7 @@ import {
   type EditOptions,
 } from '../package/ooxml-edit.ts';
 import { isFldSimple } from '../package/field-nodes.ts';
+import { isOmmlEquationAtom } from '../package/omml-display.ts';
 import { nextRevisionId } from './tree-op-revision-ids.ts';
 import { TEXT_DEPS, fromEdit } from './tree-op-nodes.ts';
 import { paragraphOffsetIndex, type ParagraphOffsetIndex } from './tree-op-segments.ts';
@@ -42,6 +43,8 @@ import {
  *
  * Content already inside a `w:del` is left alone, and content inside the caller's OWN `w:ins`
  * is removed outright — it was never proposed to anybody else, so there is nothing to strike.
+ * `strikeOwn` strikes that too: a deletion the user did not make by hand (a deleted note's body,
+ * `note-body-strike.ts`) must give everything back when its cause is rejected.
  */
 export function applyDeleteTracked(
   part: OoxmlPart,
@@ -49,8 +52,12 @@ export function applyDeleteTracked(
   start: number,
   end: number,
   revision: RevisionAttributionInput,
-  options?: EditOptions
+  options?: EditOptions,
+  mode: { readonly strikeOwn?: boolean } = {}
 ): TreeOpResult {
+  /** Whether the content under `stack` is this author's own pending insertion, to remove. */
+  const own = (stack: readonly OoxmlNode[]): boolean =>
+    mode.strikeOwn !== true && insertionAuthor(stack) === revision.author;
   const mint = createNodeIdAllocator(part);
   // The transaction's bookkeeping when it lends any: the insertion half of a replacement
   // draws its own id from the same walk, and asks whether this strike is the one it replaces.
@@ -197,11 +204,25 @@ export function applyDeleteTracked(
         const structural =
           node.kind === 'contentControl' ||
           node.kind === 'contentControlContent' ||
-          (node.kind === 'generic' &&
-            isInlineRunContainer(node) &&
-            insertionAuthor(stack) !== revision.author);
+          (node.kind === 'generic' && isInlineRunContainer(node) && !own(stack));
         if (structural || rebuilt.some((child) => !isInlineContainerProperty(node, child))) {
           out.push({ ...node, children: rebuilt } as OoxmlNode);
+        }
+        continue;
+      }
+
+      // An equation is one unit with no `w:r` of its own, so the run surgery below never sees
+      // it. Passing it through struck the words around it and left it standing, with no
+      // refusal: Accept then removed the words and kept the equation. `w:del` may hold one
+      // whole (`CT_RunTrackChange` → `EG_ContentRunContent` → `EG_RunLevelElts` →
+      // `EG_MathContent`), the same unit a direct delete removes, so accepting removes it and
+      // rejecting unwraps it untouched. Math text has no `delText` form; `m:t` stays.
+      if (struck.has(node.id) && isOmmlEquationAtom(node)) {
+        cursor.offset = to;
+        if (insideDeletion(stack)) {
+          out.push(node);
+        } else if (!own(stack)) {
+          out.push(strike([node], containerDepth));
         }
         continue;
       }
@@ -219,14 +240,14 @@ export function applyDeleteTracked(
         out.push(node);
         continue;
       }
-      const own = insertionAuthor(stack) === revision.author;
+      const ownInsertion = own(stack);
       const covered = { from: Math.max(start, from) - from, to: Math.min(end, to) - from };
       const pieces = splitRunThree(mint, offsets, node, covered.from, covered.to, struck);
       if (pieces.before) out.push(pieces.before);
       if (pieces.covered) {
         // Our own pending insertion: remove rather than strike. The words were never anyone
         // else's to see, so there is no proposal to make about taking them away.
-        if (!own) out.push(strike([toDeleted(mint, pieces.covered)], containerDepth));
+        if (!ownInsertion) out.push(strike([toDeleted(mint, pieces.covered)], containerDepth));
       }
       if (pieces.after) out.push(pieces.after);
     }

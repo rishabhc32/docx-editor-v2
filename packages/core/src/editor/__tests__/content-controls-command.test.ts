@@ -10,6 +10,7 @@ import {
   contentControlPropertiesOf,
   contentControlTextOf,
   findNode,
+  serializeOoxmlPart,
 } from '@docx-editor.dev/core/store';
 import { createDocxEditor } from '../docx-editor.ts';
 
@@ -318,6 +319,50 @@ describe('insertContentControl command', () => {
     expect(editor.query({ type: 'paragraphs' })[0]?.text).toBe('Between ACME CORP and BUYER LTD');
   });
 
+  // Suggesting proposes the control as the editing API does: the words struck, and a copy of
+  // them inside the new control as an insertion. Untracked, it was a change nobody could reject,
+  // and an ordered room refused a party's wrap as a direct edit.
+  test('in suggesting mode, a control around words is a proposal that accept and reject decide', () => {
+    const body = p('Between ACME CORP and BUYER LTD');
+    for (const decision of ['acceptAllRevisions', 'rejectAllRevisions'] as const) {
+      const editor = mount(body);
+      const surface = editor.surface!;
+      surface.setEditingMode('suggest');
+      surface.setAuthor('Ana');
+      selectRange(surface, 8, 17);
+      expect(
+        editor.can({ type: 'insertContentControl', subtype: 'plainText', tag: 'party_name' })
+      ).toEqual({ ok: true });
+      expect(
+        editor.exec({ type: 'insertContentControl', subtype: 'plainText', tag: 'party_name' })
+      ).toEqual({ ok: true, changed: true });
+      const xml = serializeOoxmlPart(surface.session.part());
+      expect(xml).toMatch(/<w:del [^>]*w:author="Ana"[^>]*><w:r><w:delText>ACME CORP<\/w:delText>/);
+      expect(xml).toMatch(/<w:ins [^>]*w:author="Ana"[^>]*><w:sdt>/);
+      surface.session.applyTreeOps([{ op: decision }]);
+      const decided = serializeOoxmlPart(surface.session.part());
+      expect(decided).not.toMatch(/<w:(ins|del) /);
+      expect(editor.query({ type: 'paragraphs' })[0]?.text).toBe('Between ACME CORP and BUYER LTD');
+      expect(editor.query({ type: 'contentControls' })).toHaveLength(
+        decision === 'acceptAllRevisions' ? 1 : 0
+      );
+      editor.destroy();
+    }
+  });
+
+  test('in suggesting mode, a control at a caret still lands untracked: it holds only its prompt', () => {
+    const editor = mount(p('Between  and BUYER LTD'));
+    const surface = editor.surface!;
+    surface.setEditingMode('suggest');
+    surface.setAuthor('Ana');
+    caretAt(surface, 8);
+    expect(
+      editor.exec({ type: 'insertContentControl', subtype: 'plainText', tag: 'party' })
+    ).toEqual({ ok: true, changed: true });
+    expect(serializeOoxmlPart(surface.session.part())).not.toMatch(/<w:(ins|del) /);
+    editor.destroy();
+  });
+
   // The reason the command exists. `save()` → headless insert → `load()` reaches the same
   // document and discards the history with it, so an insertion nobody can undo is the bug.
   test('is one undo step, and undo puts the document back', () => {
@@ -343,7 +388,7 @@ describe('insertContentControl command', () => {
     ).toEqual({ ok: true, changed: true });
     expect(editor.query({ type: 'contentControls' })).toMatchObject([{ tag: 'party' }]);
     expect(editor.query({ type: 'paragraphs' })[0]?.text).toBe(
-      'Between Click here to enter text. and BUYER LTD'
+      'Between Click or tap here to enter text. and BUYER LTD'
     );
   });
 

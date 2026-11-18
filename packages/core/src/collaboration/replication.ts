@@ -65,6 +65,13 @@ export interface CollaborationDocumentPort {
    */
   paragraphTextOf?(nodeId: string): string | null;
   /**
+   * The address of an external link relationship (`TargetMode="External"`, hyperlink type) that
+   * the part `partName` holds under `relationshipId`, as the editor's package has it now, or null.
+   * The editor mints a new link's relationship on its package before the ops that name it, so a
+   * session that translates those ops reads the address here. Optional.
+   */
+  hyperlinkTarget?(partName: string, relationshipId: string): string | null;
+  /**
    * Resolve a stable `w14:paraId` in any story this replica holds.
    *
    * `paragraphs()` stays body-only because text publication transacts against the body
@@ -141,7 +148,7 @@ export { registerUndoHistoryPosition } from '../store/store/undo-history-positio
 export {
   compareRowRecordOwners,
   recordsTableFormatting,
-  ROW_PROPERTY_CONTAINERS,
   rowRecordOwnerOf,
   type RowRecordOwner,
 } from '../store/store/table-row-owner.ts';
+export { ROW_PROPERTY_CONTAINERS } from '../store/store/tree-op-tracked-table-records.ts';

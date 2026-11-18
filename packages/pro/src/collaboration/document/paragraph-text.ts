@@ -670,6 +670,20 @@ function needsText(item: LinearItem): boolean {
   return item.kind === 'char';
 }
 
+/** Whether `item` is the low half of a surrogate pair that `previous` starts, with its shells. */
+function continuesPair(previous: LinearItem | undefined, item: LinearItem): boolean {
+  if (item.kind !== 'char' || previous?.kind !== 'char') return false;
+  const high = previous.value.charCodeAt(0);
+  const low = item.value.charCodeAt(0);
+  return (
+    high >= 0xd800 &&
+    high <= 0xdbff &&
+    low >= 0xdc00 &&
+    low <= 0xdfff &&
+    previous.attributes === item.attributes
+  );
+}
+
 function withoutRun(attributes: LinearAttributes): LinearAttributes {
   return Object.freeze({
     run: null,
@@ -734,6 +748,13 @@ function repairItems(
   items.forEach((item, at) => {
     if (!broken(item, at)) {
       repaired.push(item);
+      return;
+    }
+    // A surrogate pair is one character, so its low half takes the shells its high half took.
+    // Each half finding its own nearest neighbor put the halves in two runs, between two
+    // neighbors that lend different runs, and each run's text was not valid XML.
+    if (continuesPair(items[at - 1], item)) {
+      repaired.push({ ...item, attributes: repaired[at - 1]!.attributes } as LinearItem);
       return;
     }
     let attributes = item.attributes;

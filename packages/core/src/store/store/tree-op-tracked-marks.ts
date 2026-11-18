@@ -23,7 +23,7 @@ import { nextRevisionId } from './tree-op-revision-ids.ts';
 import { TEXT_DEPS, fromEdit } from './tree-op-nodes.ts';
 import { build, childrenOf, isWmlNamed, revisionAttributes } from './tree-op-tracked.ts';
 import { sameEditingMoment } from './tree-op-tracked-adjacency.ts';
-import { isInertMarker } from './revision-marker-content.ts';
+import { isInertMarker, isMarkStampContainer } from './revision-marker-content.ts';
 import type { RevisionAttributionInput, TreeOpEffect, TreeOpResult } from './tree-op-validate.ts';
 
 /**
@@ -189,6 +189,36 @@ export function paragraphMarkRevisionOf(
     (attribute) => attribute.namespaceUri === WML_NAMESPACE_URI && attribute.localName === 'author'
   );
   return { localName: mark.localName, author: author?.value ?? '' };
+}
+
+/**
+ * The `w:pPr` for the mark a split INSERTS: the original's, without the deletion a reviewer
+ * proposed on the original mark.
+ *
+ * A `w:pPr/w:rPr/w:del` deletes the mark that ENDS the paragraph (§17.13.5). Word splits by
+ * inserting a fresh mark before that one, so the struck mark stays at the end of the tail, and
+ * the new mark did not exist when somebody proposed removing it. Copying the `w:del` made
+ * Accept remove the new mark too: an Enter inside a paragraph that another reviewer proposed
+ * joining to the next one went away with their join. A pending `w:ins` stays, as new text
+ * inside an insertion does, and so does a move, which follows its move range.
+ *
+ * A container that a mark stamp created goes too when the deletion was all it held, which is
+ * what resolving the deletion would do. `undefined` when nothing of the `w:pPr` is left.
+ */
+export function insertedMarkProperties(pPr: OoxmlNode): OoxmlNode | undefined {
+  if (pPr.kind === 'textValue') return pPr;
+  const rPr = pPr.children.find((child) => isWmlNamed(child, 'rPr'));
+  if (!rPr || rPr.kind === 'textValue') return pPr;
+  const kept = rPr.children.filter((child) => !isMarkRevisionOfKind(child, 'del'));
+  if (kept.length === rPr.children.length) return pPr;
+  const children =
+    kept.length === 0 && isMarkStampContainer(rPr)
+      ? pPr.children.filter((child) => child !== rPr)
+      : pPr.children.map((child) =>
+          child === rPr ? ({ ...rPr, children: kept } as OoxmlNode) : child
+        );
+  if (children.length === 0 && isMarkStampContainer(pPr)) return undefined;
+  return { ...pPr, children } as OoxmlNode;
 }
 
 /** The only two `CT_PPr` children that may follow `w:rPr`. */

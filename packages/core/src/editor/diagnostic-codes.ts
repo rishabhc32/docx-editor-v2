@@ -31,7 +31,6 @@ import { PREVIEW_WRITE_REFUSAL, REFRESH_WRITE_REFUSAL } from './refresh-write-gu
 import {
   LOCKED_CONTENT_BREAK_REFUSAL,
   LOCKED_SECTION_BREAK_REFUSAL,
-  SUGGESTED_BREAK_REFUSAL,
   TABLE_CELL_BREAK_REFUSAL,
 } from './surface-section-breaks.ts';
 import { UNTRACKED_EDIT_REFUSAL } from './surface-untracked-edits.ts';
@@ -80,7 +79,6 @@ const EDIT_SENTENCES: ReadonlyMap<string, EditDiagnosticCode> = new Map([
   [PRO_COLLABORATION_REASON, 'edit.unsupported-content'],
   [COLLABORATION_FIELD_RESULTS_REFUSAL, 'edit.unsupported-story'],
   [FIELD_CODE_INPUT_REFUSAL, 'edit.field-structure'],
-  [SUGGESTED_BREAK_REFUSAL, 'edit.tracked-structure-unsupported'],
   [UNTRACKED_EDIT_REFUSAL, 'edit.tracked-structure-unsupported'],
   [LINK_SUGGESTION_REFUSAL, 'edit.tracked-structure-unsupported'],
   [NEW_LINK_REFUSAL, 'edit.tracked-structure-unsupported'],

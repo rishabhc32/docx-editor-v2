@@ -1,4 +1,4 @@
-import type { OoxmlTableCellNode } from '../package/ooxml-tree.ts';
+import type { OoxmlElement, OoxmlTableCellNode } from '../package/ooxml-tree.ts';
 import { readTwipsMeasure } from '../units.ts';
 import type { EditableTableTopology } from './tree-op-table-topology.ts';
 import type { TreeOpRejection } from './tree-op-types.ts';
@@ -12,30 +12,37 @@ function spanOf(cell: OoxmlTableCellNode): number {
   return value && /^\d{1,4}$/.test(value) ? Number(value) : 0;
 }
 
-/** Resizing changes grid widths without adding or removing merged cells. */
+/** The grid columns a row skips before or after its cells (`w:gridBefore`, `w:gridAfter`). */
+function skipOf(row: OoxmlElement, name: 'gridBefore' | 'gridAfter'): number {
+  const properties = wmlChildNamed(row, 'trPr');
+  const skip = properties && wmlChildNamed(properties, name);
+  if (!skip) return 0;
+  const value = wmlAttributeValue(skip, 'val');
+  return value && /^\d{1,4}$/.test(value) ? Number(value) : -1;
+}
+
+/**
+ * Resizing changes grid widths without adding or removing merged cells. A merge keeps its cells:
+ * a horizontal one (`w:gridSpan`) takes the sum of its columns, a vertical one (`w:vMerge`) is
+ * one cell per row. A row may skip columns before or after its cells. The legacy `w:hMerge`
+ * stays refused.
+ */
 export function validateTableResizeGrid(topology: EditableTableTopology): TreeOpRejection | null {
   if (!topology.grid || topology.gridColumns.length === 0) return 'unknown-grid-column';
   if (topology.rows.length === 0) return 'tree-invariant';
   for (const { row, cells } of topology.rows) {
-    const properties = wmlChildNamed(row, 'trPr');
-    if (
-      properties &&
-      (wmlChildNamed(properties, 'gridBefore') || wmlChildNamed(properties, 'gridAfter'))
-    )
-      return 'tree-invariant';
-    let columns = 0;
+    const before = skipOf(row, 'gridBefore');
+    const after = skipOf(row, 'gridAfter');
+    if (before < 0 || after < 0) return 'tree-invariant';
+    let columns = before;
     for (const cell of cells) {
       const properties = wmlChildNamed(cell, 'tcPr');
-      if (
-        properties &&
-        (wmlChildNamed(properties, 'hMerge') || wmlChildNamed(properties, 'vMerge'))
-      )
-        return 'table-has-merge';
+      if (properties && wmlChildNamed(properties, 'hMerge')) return 'table-has-merge';
       const span = spanOf(cell);
       if (span < 1 || span > topology.gridColumns.length - columns) return 'tree-invariant';
       columns += span;
     }
-    if (columns !== topology.gridColumns.length) return 'tree-invariant';
+    if (columns + after !== topology.gridColumns.length) return 'tree-invariant';
   }
   return null;
 }
@@ -45,8 +52,8 @@ export function* resizedGridCells(
   topology: EditableTableTopology,
   widths: ReadonlyMap<number, number>
 ): Generator<{ cell: OoxmlTableCellNode; width: number }> {
-  for (const { cells } of topology.rows) {
-    let column = 0;
+  for (const { row, cells } of topology.rows) {
+    let column = skipOf(row, 'gridBefore');
     for (const cell of cells) {
       const end = column + spanOf(cell);
       let affected = false;

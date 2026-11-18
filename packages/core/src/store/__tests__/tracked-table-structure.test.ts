@@ -174,10 +174,10 @@ describe('a tracked column deletion marks the column', () => {
     const theirs = '<w:cellIns w:id="7" w:author="Ada"/>';
     const pending = load(BODY().replace(CELL('b2', 3000), CELL('b2', 3000, theirs)));
     expect(validateTreeOp(pending, deleteColumn(pending, 1))).toBe('unsupported-revision');
-    // Merged cells, which the untracked column ops refuse too.
+    // Merged cells are proposed as Word deletes them: `table-merged-columns.test.ts`.
     const merged = '<w:tc><w:tcPr><w:gridSpan w:val="2"/></w:tcPr><w:p/></w:tc>';
     const spanned = load(BODY().replace(CELL('b1', 2000) + CELL('b2', 3000), merged));
-    expect(validateTreeOp(spanned, deleteColumn(spanned, 1))).toBe('table-has-merge');
+    expect(validateTreeOp(spanned, deleteColumn(spanned, 1))).toBeNull();
   });
 
   test('a row another author proposed inserting or deleting is refused, not held', () => {
@@ -290,10 +290,54 @@ describe('a tracked column insertion lends the new column its width', () => {
     expect(validateTreeOp(typed, deleteColumn(typed, 2))).toBe('unsupported-revision');
   });
 
+  test("a row's formatting record lends the same width and goes on the new cell", () => {
+    // Ada's pending row height, as Word records it: one record on the row and on every cell,
+    // each holding the cell's properties as they show
+    const ada = 'w:id="7" w:author="Ada" w:date="2026-10-01T00:00:00Z"';
+    const recorded = (text: string, width: number) =>
+      CELL(
+        text,
+        width,
+        `<w:tcPrChange ${ada}><w:tcPr><w:tcW w:w="${width}" w:type="dxa"/></w:tcPr></w:tcPrChange>`
+      );
+    const row =
+      `<w:tr><w:trPr><w:trHeight w:val="480"/><w:trPrChange ${ada}><w:trPr/></w:trPrChange></w:trPr>` +
+      `${recorded('a1', 2000)}${recorded('a2', 3000)}${recorded('a3', 4000)}</w:tr>`;
+    const part = load(BODY().replace(/<w:tr>(?:(?!<w:tr>).)*a1.*?<\/w:tr>/, row));
+    const next = apply(part, insertColumn(part, 1, 'right'));
+    const first = tableXml(next).match(/<w:tr>.*?<\/w:tr>/)![0];
+    // Shown and recorded widths alike: 2000, 1500, 1500 (new), 4000
+    expect(widths(first.replace(/<w:tcPrChange\b.*?<\/w:tcPrChange>/g, ''), 'tcW')).toEqual([
+      2000, 1500, 1500, 4000,
+    ]);
+    expect(
+      first.match(/<w:tcPrChange\b.*?<\/w:tcPrChange>/g)!.map((r) => widths(r, 'tcW')[0])
+    ).toEqual([2000, 1500, 1500, 4000]);
+    expect(first.match(/<w:tcPrChange w:author="Ada" [^>]*w:id="7">/g)).toHaveLength(4);
+    expectRoundTrip(next);
+    // Reject All gives the table back, the lent width included
+    expect(serializeOoxmlPart(resolveAll(next, 'reject'))).toBe(
+      serializeOoxmlPart(resolveAll(part, 'reject'))
+    );
+    // A reject of the row's formatting alone keeps the new column whole
+    const adas = revisionItemsOf(next).filter((item) => item.author === 'Ada');
+    const plan = planRevisionBatch(next, 'reject', adas.map(reviewItemKey));
+    expect(plan.result.skipped).toEqual([]);
+    let rejected = next;
+    for (const op of plan.ops) rejected = apply(rejected, op);
+    const row1 = tableXml(rejected).match(/<w:tr>.*?<\/w:tr>/)![0];
+    expect(widths(row1, 'tcW')).toEqual([2000, 1500, 1500, 4000]);
+    expect(row1).toContain('<w:cellIns ');
+    // Then the column's reject gives the table back as Ada's reject alone leaves it
+    expect(serializeOoxmlPart(resolveAll(rejected, 'reject'))).toBe(
+      serializeOoxmlPart(resolveAll(part, 'reject'))
+    );
+  });
+
   test.each([
     ['a table without w:tblGrid', BODY().replace(/<w:tblGrid>.*<\/w:tblGrid>/, '')],
     [
-      'a lender with a cell-property record',
+      'a lender whose cell-property record holds no width',
       BODY().replace(
         CELL('a2', 3000),
         CELL('a2', 3000, `<w:tcPrChange w:id="7" w:author="Ada"><w:tcPr/></w:tcPrChange>`)

@@ -82,6 +82,16 @@ const PAYLOAD_RELATIONSHIP_TYPES: ReadonlySet<string> = new Set([
 /** MIME types read into canonical trees. Anything else stays bytes (media, fonts, ...). */
 const XML_CONTENT_TYPE_RE = /(?:\/xml|\+xml)$/i;
 
+/**
+ * Whether {@link readOoxmlPackage} reads a part of this content type into a canonical tree.
+ * Media SVG stays raw bytes: tree parsing would break D9 byte identity for parts.
+ *
+ * @internal
+ */
+export function readsAsXmlPart(contentType: string): boolean {
+  return contentType.toLowerCase() !== 'image/svg+xml' && XML_CONTENT_TYPE_RE.test(contentType);
+}
+
 type XmlBytesResult =
   | { readonly ok: true; readonly xml: string }
   | { readonly ok: false; readonly reason: XmlRejection };
@@ -563,9 +573,10 @@ export function* readOoxmlPackageSteps(
   for (const [partName, data] of zip.entries) {
     if (partName === CONTENT_TYPES_PART) continue;
     const contentType = contentTypeFor(partName, contentTypes);
-    // Media SVG stays raw bytes — tree parsing would break D9 byte identity for parts.
-    if (contentType.toLowerCase() === 'image/svg+xml') continue;
-    if (!XML_CONTENT_TYPE_RE.test(contentType)) continue;
+    if (!readsAsXmlPart(contentType)) {
+      continue;
+    }
+
     if (parts.size >= maxXmlParts) return { ok: false, reason: 'too-many-xml-parts' };
     // Re-normalize even though `readZip` already did: this is the name that becomes a node
     // identity prefix, and it must not be reachable through a second, unchecked route.
@@ -637,6 +648,18 @@ export function writeOoxmlPackage(pkg: OoxmlPackage): Uint8Array {
  * @internal
  */
 export function* writeOoxmlPackageSteps(pkg: OoxmlPackage): Generator<void, Uint8Array> {
+  return yield* writeZipSteps(yield* ooxmlPackageEntriesSteps(pkg));
+}
+
+/**
+ * The bytes of every part that {@link writeOoxmlPackage} writes, by part name, in the order
+ * of the archive's entries, yielding between paragraphs of a long part.
+ *
+ * @internal
+ */
+export function* ooxmlPackageEntriesSteps(
+  pkg: OoxmlPackage
+): Generator<void, Map<string, Uint8Array>> {
   const exported = yield* textboxFallbackExportPackageSteps(commentExportPackage(pkg));
   yield;
   const entries = new Map<string, Uint8Array>(exported.partBytes);
@@ -644,7 +667,8 @@ export function* writeOoxmlPackageSteps(pkg: OoxmlPackage): Generator<void, Uint
     entries.set(name, yield* serializeOoxmlPartSteps(part));
     yield;
   }
-  return yield* writeZipSteps(entries);
+
+  return entries;
 }
 
 /** A package holding exactly one part, for callers that never open a real one. */

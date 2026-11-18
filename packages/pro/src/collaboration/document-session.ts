@@ -62,6 +62,7 @@ import { observeSeedRecords, initializeSharedState } from './document-bootstrap.
 import { LogicalIdentityMap } from './document-identity.ts';
 import { CaretAnchors } from './document-caret-anchors.ts';
 import { EditWait } from './document-edit-wait.ts';
+import { textLimitFailure } from './document-text-limit.ts';
 import { resourceUsageOf, type CollaborationResourceUsage } from './resource-usage.ts';
 import {
   AWARENESS_FIELD,
@@ -342,6 +343,12 @@ class DocumentSession implements DocumentCollaborationSession {
     return status === 'ready' || (this.offlineEditing && status === 'disconnected');
   }
 
+  /** Why the session takes no write now; see `EditorCollaborationSession.writeRefusal`. */
+  writeRefusal(): CollaborationFailureCode | null {
+    if (this.destroyed) return 'collaboration-session-destroyed';
+    return this.canWriteSharedState() ? null : 'collaboration-session-not-ready';
+  }
+
   /** Every authorable mutation replicates, so only session readiness gates a write. */
   gateOperations(ops: readonly TreeDocOp[], _scope: StoryScope): CollaborationFailureCode | null {
     if (this.destroyed) return 'collaboration-session-destroyed';
@@ -350,23 +357,10 @@ class DocumentSession implements DocumentCollaborationSession {
     // An edit that a held-back update would refuse after the commit waits for it instead. So does
     // a table format suggestion offline: only an online one can be taken back if it loses its row.
     if (this.editWait.refuses(ops)) return 'collaboration-session-not-ready';
-    if (this.statusState.status() === 'disconnected' && ops.some(recordsTableFormatting))
+    if (this.statusState.status() === 'disconnected' && ops.some(recordsTableFormatting)) {
       return 'collaboration-session-not-ready';
-    return this.textLimitFailure(ops);
-  }
-
-  /**
-   * Refuse an insert longer than one shared text admits, before the editor commits it.
-   * Shared state refuses it too, but after the commit, where the edit only disappears in the
-   * realign and its caller never learns why. Reads the operations alone, so a keystroke costs
-   * nothing more.
-   */
-  private textLimitFailure(ops: readonly TreeDocOp[]): CollaborationFailureCode | null {
-    const limit = this.registry.limits.maxTextLength;
-    for (const op of ops) {
-      if (op.op === 'insertText' && op.text.length > limit) return 'collaboration-text-limit';
     }
-    return null;
+    return textLimitFailure(ops, this.registry.limits.maxTextLength);
   }
 
   // Undo and redo write shared state exactly as a keystroke does — Y.UndoManager reverses the

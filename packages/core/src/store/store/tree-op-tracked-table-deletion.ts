@@ -1,19 +1,13 @@
-// A TRACKED table deletion — `deleteBlock` on a `w:tbl`, with revision attribution.
+// A TRACKED table deletion: `deleteBlock` on a `w:tbl`, with revision attribution.
 //
 // Word records a whole table deleted under track changes as every row deleted: `w:trPr/w:del`
 // with a `w:cellDel` in each cell, the form a tracked `deleteTableRow` writes for one row. The
 // table stays until it is reviewed. Accepting removes every row and the table with them
 // (`tableRevisionRemovals`); rejecting drops the markers and the table is back.
-//
-// ONE op rather than a tracked `deleteTableRow` per row, because that op refuses the last row
-// without a pending deletion: pending deletions cannot keep a table alive for another row
-// suggestion, so a row-by-row proposal of the whole table was refused at its last row.
-//
-// A row this author proposed inserting is WITHDRAWN instead — the same edit as rejecting it —
-// rather than proposed for deletion, as a tracked column deletion withdraws a proposed cell.
 
 import {
   applyEdits,
+  createMarkContainerIdAllocator,
   createNodeIdAllocator,
   findNode,
   replaceNode,
@@ -41,7 +35,7 @@ import type { TreeDocOp, TreeOpEffect, TreeOpRejection, TreeOpResult } from './t
 type DeleteBlockOp = Extract<TreeDocOp, { op: 'deleteBlock' }>;
 
 /** The row's own `w:ins` or `w:del` marker, when it carries one. */
-function rowMarker(row: OoxmlElement, localName: 'ins' | 'del'): OoxmlElement | undefined {
+export function rowMarker(row: OoxmlElement, localName: 'ins' | 'del'): OoxmlElement | undefined {
   const properties = wmlChildNamed(row, 'trPr');
   return properties && wmlChildNamed(properties, localName);
 }
@@ -64,9 +58,10 @@ function isOwnInsertedRow(row: OoxmlElement, author: string): boolean {
 /**
  * Whether the deletion WITHDRAWS this author's own proposal instead of making one.
  *
- * A table whose every row is the author's pending insertion — a table they proposed — never
+ * A table whose every row is the author's pending insertion (a table they proposed) never
  * existed for anyone else. Deleting it removes it outright, as Word does, rather than
- * proposing to delete a proposal.
+ * proposing to delete a proposal. One such row in another table is withdrawn too: the same edit
+ * as rejecting it, as a tracked column deletion withdraws a proposed cell.
  */
 function withdrawsOwnTable(topology: EditableTableTopology, author: string): boolean {
   return topology.rows.every(({ row }) => isOwnInsertedRow(row, author));
@@ -93,20 +88,24 @@ export function validateTrackedTableDeletion(
   const result = readEditableTableTopology(part.root, op.blockId);
   if (!result.ok) return result.reason === 'duplicate-node-id' ? 'unknown-table' : result.reason;
   const { topology } = result;
+
   // A row inside a content control is not one the topology lists, so it would be left
   // standing by an Accept that took every other row.
   if (tableChildren(topology.table, 'tableRow').length !== topology.rows.length) {
     return 'unsupported-revision';
   }
+
   if (withdrawsOwnTable(topology, revision.author)) return null;
   for (const { row, cells } of topology.rows) {
     // Already proposed for deletion: that decision stands and needs no second one.
     if (rowMarker(row, 'del')) continue;
+
     // Withdrawing removes the row, so it must not take someone else's pending change along.
     if (isOwnInsertedRow(row, revision.author)) {
       if (holdsOtherAuthorsRevision(row, revision.author)) return 'unsupported-revision';
       continue;
     }
+
     // Otherwise the subset a tracked `deleteTableRow` supports: no pending row or cell revision.
     if (rowMarker(row, 'ins')) return 'unsupported-revision';
     for (const cell of cells) {
@@ -116,14 +115,22 @@ export function validateTrackedTableDeletion(
         (wmlChildNamed(tcPr, 'cellIns') ||
           wmlChildNamed(tcPr, 'cellDel') ||
           wmlChildNamed(tcPr, 'cellMerge'))
-      )
+      ) {
         return 'unsupported-revision';
+      }
     }
   }
+
   return null;
 }
 
-/** Mark every row of the table deleted. Runs after `validateTrackedTableDeletion` admitted it. */
+/**
+ * Mark every row of the table deleted. Runs after `validateTrackedTableDeletion` admitted it.
+ *
+ * ONE op rather than a tracked `deleteTableRow` per row: that op refuses the last row without
+ * a pending deletion, because pending deletions cannot keep a table alive for another row
+ * suggestion, so a row-by-row proposal of the whole table would be refused at its last row.
+ */
 export function applyTrackedTableDeletion(
   part: OoxmlPart,
   op: DeleteBlockOp,
@@ -132,12 +139,15 @@ export function applyTrackedTableDeletion(
   const result = readEditableTableTopology(part.root, op.blockId);
   if (!result.ok || op.revision === undefined) return { ok: false, reason: 'unknown-table' };
   const { topology } = result;
+
   // The caret leaves the struck table for the paragraph an outright removal would give it.
   const caretParagraphId = survivingCaretAfterBlockRemoval(part, op.blockId);
   if (!caretParagraphId) return { ok: false, reason: 'block-required' };
+
   // ONE id for every row, as a tracked `insertTable` writes: one gesture is one decision.
   const revisionId = options?.revisionIds?.() ?? nextRevisionId(part)();
   const nextId = createNodeIdAllocator(part);
+  const markId = createMarkContainerIdAllocator(part);
   const wml = wmlFreshNamespaceContextAt(part, topology.table);
   const revision = op.revision;
   const withdrawn = topology.rows
@@ -145,7 +155,7 @@ export function applyTrackedTableDeletion(
     .filter((row) => isOwnInsertedRow(row, revision.author));
   const marked = topology.rows
     .filter(({ row }) => !rowMarker(row, 'del') && !withdrawn.includes(row))
-    .map(({ row }) => withTrackedRowMarker(row, 'del', revisionId, revision, nextId, wml));
+    .map(({ row }) => withTrackedRowMarker(row, 'del', revisionId, revision, nextId, markId, wml));
   const effect: TreeOpEffect = {
     dirty: [topology.table.id, ...marked.map((row) => row.id)],
     created: [],
@@ -158,13 +168,28 @@ export function applyTrackedTableDeletion(
     (row) => (current: OoxmlPart) => replaceNode(current, row.id, row, options)
   );
   const proposed = fromEdit(applyEdits(part, edits, options), effect);
-  if (!proposed.ok || withdrawn.length === 0) return proposed;
+  const markers = withdrawn.map((row) => rowMarker(row, 'ins')!.id);
+  return afterWithdrawal(proposed, markers, effect, options);
+}
+
+/**
+ * `proposed` with this author's own proposals withdrawn: their insertion markers, `markerIds`,
+ * rejected, which hands back what they took.
+ */
+export function afterWithdrawal(
+  proposed: TreeOpResult,
+  markerIds: readonly string[],
+  effect: TreeOpEffect,
+  options?: EditOptions
+): TreeOpResult {
+  if (!proposed.ok || markerIds.length === 0) return proposed;
   const withdrawal = resolveRevisions(proposed.part, 'reject', undefined, {
     ...options,
-    siteNodeIds: withdrawn.map((row) => rowMarker(row, 'ins')!.id),
+    siteNodeIds: markerIds,
   });
   if (!withdrawal.ok || !withdrawal.part) {
     return { ok: false, reason: withdrawal.reason ?? 'unsupported-revision' };
   }
+
   return { ok: true, part: withdrawal.part, effect };
 }

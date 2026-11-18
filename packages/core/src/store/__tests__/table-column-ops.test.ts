@@ -492,7 +492,7 @@ describe('insertTableColumn', () => {
     expect(collectByKind(result.part.root, 'table')).toHaveLength(2);
   });
 
-  test('refuses merged tables with gridSpan', () => {
+  test('takes a column in a table with a cell over the grid, as Word does', () => {
     const part = load(
       `<w:tbl><w:tblGrid><w:gridCol w:w="2400"/><w:gridCol w:w="3600"/></w:tblGrid>` +
         `<w:tr><w:tc><w:tcPr><w:gridSpan w:val="2"/></w:tcPr><w:p/></w:tc></w:tr></w:tbl>`
@@ -506,32 +506,35 @@ describe('insertTableColumn', () => {
         gridColumnId: col1!,
         where: 'left',
       })
-    ).toBe('table-has-merge');
+    ).toBeNull();
   });
 
   test.each([
-    ['absent val', '<w:gridSpan/>'],
-    ['val=1', '<w:gridSpan w:val="1"/>'],
-    ['val=0', '<w:gridSpan w:val="0"/>'],
-    ['malformed val', '<w:gridSpan w:val="bogus"/>'],
-  ] as const)('refuses gridSpan presence (%s)', (_label, gridSpanMarkup) => {
-    const part = load(
-      `<w:tbl><w:tblGrid><w:gridCol w:w="2400"/><w:gridCol w:w="3600"/></w:tblGrid>` +
-        `<w:tr><w:tc><w:tcPr>${gridSpanMarkup}</w:tcPr><w:p/></w:tc><w:tc><w:p/></w:tc></w:tr></w:tbl>`
-    );
-    const table = firstTable(part);
-    const [col1] = gridColIds(part, table.id);
-    expect(
-      validateTableColumnOp(part, {
-        op: 'insertTableColumn',
-        tableId: table.id,
-        gridColumnId: col1!,
-        where: 'left',
-      })
-    ).toBe('table-has-merge');
-  });
+    ['absent val', '<w:gridSpan/>', 'tree-invariant'],
+    ['val=1', '<w:gridSpan w:val="1"/>', null],
+    ['val=0', '<w:gridSpan w:val="0"/>', 'tree-invariant'],
+    ['malformed val', '<w:gridSpan w:val="bogus"/>', 'tree-invariant'],
+  ] as const)(
+    'reads gridSpan as a span, refusing one it cannot read (%s)',
+    (_label, gridSpanMarkup, expected) => {
+      const part = load(
+        `<w:tbl><w:tblGrid><w:gridCol w:w="2400"/><w:gridCol w:w="3600"/></w:tblGrid>` +
+          `<w:tr><w:tc><w:tcPr>${gridSpanMarkup}</w:tcPr><w:p/></w:tc><w:tc><w:p/></w:tc></w:tr></w:tbl>`
+      );
+      const table = firstTable(part);
+      const [col1] = gridColIds(part, table.id);
+      expect(
+        validateTableColumnOp(part, {
+          op: 'insertTableColumn',
+          tableId: table.id,
+          gridColumnId: col1!,
+          where: 'left',
+        })
+      ).toBe(expected);
+    }
+  );
 
-  test('refuses merged tables with hMerge and vMerge', () => {
+  test('refuses the legacy hMerge; takes a column beside a vertical merge', () => {
     const partH = load(
       `<w:tbl><w:tblGrid><w:gridCol w:w="2400"/></w:tblGrid>` +
         `<w:tr><w:tc><w:tcPr><w:hMerge w:val="1"/></w:tcPr><w:p/></w:tc></w:tr></w:tbl>`
@@ -561,7 +564,7 @@ describe('insertTableColumn', () => {
         gridColumnId: colV!,
         where: 'left',
       })
-    ).toBe('table-has-merge');
+    ).toBeNull();
   });
 
   test('refuses irregular rows and grid/cell count mismatch', () => {
@@ -732,7 +735,7 @@ describe('deleteTableColumn', () => {
     ).toBe('unknown-grid-column');
   });
 
-  test('refuses merged tables and irregular rows', () => {
+  test('a column that empties every row is the table; irregular rows are refused', () => {
     const merged = load(
       `<w:tbl><w:tblGrid><w:gridCol w:w="2400"/><w:gridCol w:w="3600"/></w:tblGrid>` +
         `<w:tr><w:tc><w:tcPr><w:gridSpan w:val="2"/></w:tcPr><w:p/></w:tc></w:tr></w:tbl>`
@@ -745,7 +748,7 @@ describe('deleteTableColumn', () => {
         tableId: tableM.id,
         gridColumnId: colM!,
       })
-    ).toBe('table-has-merge');
+    ).toBe('block-required');
 
     const irregular = load(
       `<w:tbl><w:tblGrid><w:gridCol w:w="2400"/><w:gridCol w:w="3600"/></w:tblGrid>` +

@@ -58,6 +58,7 @@ export type EditDiagnosticCode =
   | 'edit.picture-selected'
   | 'edit.cross-structure-join'
   | 'edit.indivisible-content'
+  | 'edit.single-line-control'
   | 'edit.field-structure'
   | 'edit.section-mark'
   | 'edit.table-structure-unsupported'
@@ -77,6 +78,7 @@ export type EditDiagnosticCode =
   | 'edit.preview-diverged'
   | 'edit.collaboration-not-ready'
   | 'edit.collaboration-text-limit'
+  | 'edit.collaboration-refused'
   | 'edit.internal-invariant'
   | 'edit.refused';
 

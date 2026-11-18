@@ -112,9 +112,50 @@ describe('untrackedEditOf', () => {
     expect(untrackedEditOf([], true, partOf)).toBeNull();
   });
 
-  test('formatting left untracked on purpose passes; other properties still do not', () => {
+  test('formatting left untracked on purpose passes; other edits still do not', () => {
+    const split: TreeDocOp = { op: 'splitParagraph', paragraphId: 'p1', offset: 2 };
     expect(untrackedEditOf([bold], false, partOf)).toBeNull();
-    expect(untrackedEditOf([bold, margins], false, partOf)).toBe(margins);
+    // Page setup is section formatting, which Word's formatting tracking covers too
+    expect(untrackedEditOf([bold, margins], false, partOf)).toBeNull();
+    expect(untrackedEditOf([bold, split], false, partOf)).toBe(split);
+  });
+
+  test("page setup with a revision is a suggestion, Word's w:sectPrChange; without one it is not", () => {
+    expect(untrackedEditOf([{ ...margins, revision }], true, partOf)).toBeNull();
+    expect(untrackedEditOf([margins], true, partOf)).toBe(margins);
+  });
+
+  test('a different first page and the header and footer distances are section formatting too', () => {
+    const firstPage: TreeDocOp = {
+      op: 'setSectionFurnitureOptions',
+      sectionIndex: 0,
+      titlePage: true,
+    };
+    const distance: TreeDocOp = {
+      op: 'setSectionFurnitureOptions',
+      sectionIndex: 0,
+      headerDistanceTwips: 1080,
+    };
+    expect(untrackedEditOf([{ ...firstPage, revision }], true, partOf)).toBeNull();
+    expect(untrackedEditOf([{ ...distance, revision }], true, partOf)).toBeNull();
+    expect(untrackedEditOf([firstPage], true, partOf)).toBe(firstPage);
+    expect(untrackedEditOf([firstPage], false, partOf)).toBeNull();
+    // Odd and even pages is a setting: no tracked form, with a revision or without one
+    const oddEven: TreeDocOp = { op: 'setSectionFurnitureOptions', evenAndOddHeaders: true };
+    expect(untrackedEditOf([{ ...oddEven, revision }], true, partOf)).toEqual({
+      ...oddEven,
+      revision,
+    });
+    expect(untrackedEditOf([oddEven], false, partOf)).toBe(oddEven);
+  });
+
+  test('a section break that retypes the next section writes that type untracked, as Word does', () => {
+    const mark: TreeDocOp = { op: 'setParagraphMarkRevision', paragraphId, kind: 'ins', revision };
+    // The document states no section: the next one starts a page
+    const nextPage: TreeDocOp = { op: 'setSectionMark', paragraphId, breakType: 'nextPage' };
+    const continuous: TreeDocOp = { op: 'setSectionMark', paragraphId, breakType: 'continuous' };
+    expect(untrackedEditOf([mark, nextPage], true, partOf)).toBeNull();
+    expect(untrackedEditOf([mark, continuous], true, partOf)).toBe(continuous);
   });
 
   test('a split and a section mark ride on the paragraph mark the batch proposes', () => {

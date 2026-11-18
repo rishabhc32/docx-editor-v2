@@ -1,20 +1,5 @@
 // Links proposed while suggesting: a new link over existing words, a new target, tooltip or
 // words for an existing link, or the removal of a link.
-//
-// Each strikes the words and inserts a copy right after them, in a link unless the link is
-// being removed: the struck-then-replacement order the review queue pairs into one card. A new
-// target or a removal needs this because OOXML has no revision element for either; done in
-// place, neither could be reviewed or rejected. A new link needs it because a bare wrap of
-// words is no reviewable change. New words need it to keep the link's format: inserted into
-// the link beside the struck words, they take none, and only the op that makes a link writes
-// its character style.
-//
-// The copy is plain text given the words' own format, so only words a copy reproduces
-// exactly are proposed: text characters in one format an op can write, held by the paragraph
-// or the link (or by a pending insertion there, as another author's proposed link holds its
-// words), and for an existing link no target frame or document location. Anything else is
-// refused rather than copied with something missing, except new words alone, which the lane
-// still writes into the link itself.
 
 import type { TreeApplyResult, TreeDocxSessionView } from '@docx-editor.dev/core/binding';
 import {
@@ -42,7 +27,7 @@ import {
   unlinkedStyleId,
   type HyperlinkStyleWrite,
 } from './hyperlink-style.ts';
-import type { HyperlinkOpsDeps, SurfaceHyperlink } from './surface-hyperlinks.ts';
+import type { HyperlinkOps, HyperlinkOpsDeps, SurfaceHyperlink } from './surface-hyperlinks.ts';
 
 /** Proofing marks: they change no glyph, so a copy may go without them. */
 const PROOFING_PROPERTIES: ReadonlySet<string> = new Set(['lang', 'noProof']);
@@ -58,12 +43,10 @@ export const FRESH_STRIKE_REFUSAL =
   'this link cannot change while your deletion right beside it is under a minute old; wait a minute, or accept or reject that deletion first';
 
 /** What a link's requested target, text and tooltip are. */
-interface LinkInput {
-  readonly url?: string;
-  readonly anchor?: string;
-  readonly text?: string;
-  readonly tooltip?: string;
-}
+export type HyperlinkInput = Parameters<HyperlinkOps['applyHyperlink']>[0];
+
+/** A selected range of text, `from` before `to`. */
+type LinkRange = { readonly from: SemanticPosition; readonly to: SemanticPosition };
 
 /** A run's own format: its character style and the properties an op can write. */
 interface RunFormat {
@@ -73,13 +56,10 @@ interface RunFormat {
 }
 
 /** What the hyperlink lane lends this proposal. */
-export interface LinkSuggestionLane {
+export interface LinkAccess {
   readonly linkAtCaret: () => SurfaceHyperlink | null;
   readonly storyPart: () => OoxmlPart | null;
-  readonly withinLink: (
-    link: SurfaceHyperlink,
-    range: { from: SemanticPosition; to: SemanticPosition }
-  ) => boolean;
+  readonly withinLink: (link: SurfaceHyperlink, range: LinkRange) => boolean;
   readonly applyOps: (
     ops: Parameters<TreeDocxSessionView['applyTreeOps']>[0],
     before?: Parameters<TreeDocxSessionView['applyTreeOps']>[1],
@@ -104,10 +84,10 @@ type Proposal = { readonly refusal: string } | { readonly commit: () => boolean 
  */
 export function suggestLink(
   deps: HyperlinkOpsDeps,
-  lane: LinkSuggestionLane,
-  input: LinkInput
+  linkAccess: LinkAccess,
+  input: HyperlinkInput
 ): boolean | null {
-  return settle(deps, linkProposal(deps, lane, input, deps.orderedRange()));
+  return settle(deps, linkProposal(deps, linkAccess, input, deps.orderedRange()));
 }
 
 /**
@@ -116,11 +96,11 @@ export function suggestLink(
  */
 export function linkSuggestionRefusal(
   deps: HyperlinkOpsDeps,
-  lane: LinkSuggestionLane,
-  input: LinkInput,
-  range: { from: SemanticPosition; to: SemanticPosition }
+  linkAccess: LinkAccess,
+  input: HyperlinkInput,
+  range: LinkRange
 ): string | null {
-  return refusalOf(linkProposal(deps, lane, input, range));
+  return refusalOf(linkProposal(deps, linkAccess, input, range));
 }
 
 /**
@@ -133,25 +113,25 @@ export function linkSuggestionRefusal(
  */
 export function suggestUnlink(
   deps: HyperlinkOpsDeps,
-  lane: LinkSuggestionLane,
+  linkAccess: LinkAccess,
   link: SurfaceHyperlink
 ): boolean | null {
-  return settle(deps, unlinkProposal(deps, lane, link));
+  return settle(deps, unlinkProposal(deps, linkAccess, link));
 }
 
 /** Why suggesting would refuse to propose removing `link`, or null. Writes nothing. */
 export function unlinkSuggestionRefusal(
   deps: HyperlinkOpsDeps,
-  lane: LinkSuggestionLane,
+  linkAccess: LinkAccess,
   link: SurfaceHyperlink
 ): string | null {
-  return refusalOf(unlinkProposal(deps, lane, link));
+  return refusalOf(unlinkProposal(deps, linkAccess, link));
 }
 
 /** Commit `proposal`, or refuse it with its reason; null when there is none. */
 function settle(deps: HyperlinkOpsDeps, proposal: Proposal): boolean | null {
   if (proposal === null) return null;
-  return 'refusal' in proposal ? refuse(deps, proposal.refusal) : proposal.commit();
+  return 'refusal' in proposal ? refuseLinkEdit(deps, proposal.refusal) : proposal.commit();
 }
 
 function refusalOf(proposal: Proposal): string | null {
@@ -161,16 +141,18 @@ function refusalOf(proposal: Proposal): string | null {
 /** The lane's own split: the caret in a link changes it, anything else makes a new one. */
 function linkProposal(
   deps: HyperlinkOpsDeps,
-  lane: LinkSuggestionLane,
-  input: LinkInput,
-  range: { from: SemanticPosition; to: SemanticPosition }
+  linkAccess: LinkAccess,
+  input: HyperlinkInput,
+  range: LinkRange
 ): Proposal {
-  const link = lane.linkAtCaret();
+  const link = linkAccess.linkAtCaret();
   const collapsed =
     range.from.paragraphId === range.to.paragraphId && range.from.offset === range.to.offset;
-  if (link && (collapsed || lane.withinLink(link, range)))
-    return linkChangeProposal(deps, lane, link, input);
-  return collapsed ? null : newLinkProposal(deps, lane, range, input);
+  if (link && (collapsed || linkAccess.withinLink(link, range))) {
+    return linkChangeProposal(deps, linkAccess, link, input);
+  }
+
+  return collapsed ? null : newLinkProposal(deps, linkAccess, range, input);
 }
 
 /**
@@ -181,16 +163,16 @@ function linkProposal(
  */
 function linkChangeProposal(
   deps: HyperlinkOpsDeps,
-  lane: LinkSuggestionLane,
+  linkAccess: LinkAccess,
   link: SurfaceHyperlink,
-  input: LinkInput
+  input: HyperlinkInput
 ): Proposal {
   if (landingAfterStrike(deps, link) === null) return null;
   const retargets = changesTarget(link, input);
   if (!retargets && !changesText(link, input)) return null;
 
   const text = input.text ?? fromHyphenGlyphs(link.text);
-  const part = lane.storyPart();
+  const part = linkAccess.storyPart();
   const format = part ? linkFormat(part, link.id) : null;
   if (!format || text.length === 0) return retargets ? { refusal: LINK_SUGGESTION_REFUSAL } : null;
   return {
@@ -198,6 +180,7 @@ function linkChangeProposal(
       const relationshipId = mintFor(deps, input);
       if (relationshipId === null) return false;
       const tooltip = input.tooltip ?? link.tooltip;
+
       // The link's own character style, or Word's `Hyperlink` for a link that had none.
       const style =
         format.styleId === undefined
@@ -212,7 +195,7 @@ function linkChangeProposal(
         { op: 'removeHyperlink', linkId: link.id, range: { start: link.end, end } },
         ...linkedCopyOps(paragraphId, link.end, end, format, target, style.styleId),
       ];
-      return commitProposal(deps, lane, ops, style.packageEdits);
+      return commitProposal(deps, linkAccess, ops, style.packageEdits);
     },
   };
 }
@@ -220,20 +203,22 @@ function linkChangeProposal(
 /** A new link over the selected words, which stay struck before the linked copy. */
 function newLinkProposal(
   deps: HyperlinkOpsDeps,
-  lane: LinkSuggestionLane,
-  range: { from: SemanticPosition; to: SemanticPosition },
-  input: LinkInput
+  linkAccess: LinkAccess,
+  range: LinkRange,
+  input: HyperlinkInput
 ): Proposal {
   const paragraphId = range.from.paragraphId;
+
   // A link cannot span paragraphs; the lane says so itself.
   if (range.to.paragraphId !== paragraphId) return null;
   const { offset: start } = range.from;
   const { offset: end } = range.to;
+
   // Non-null exactly when suggesting: where the copy lands once the words are struck.
-  const landing = deps.replacementLanding?.(paragraphId, start, end);
-  if (landing === null || landing === undefined) return null;
+  const landing = landingOf(deps, paragraphId, start, end);
+  if (landing === null) return null;
   const text = input.text ?? deps.textOf(paragraphId).slice(start, end);
-  const part = lane.storyPart();
+  const part = linkAccess.storyPart();
   const format = part ? selectionFormat(part, paragraphId, start, end) : null;
   if (!format || text.length === 0) return { refusal: NEW_LINK_REFUSAL };
   return {
@@ -247,9 +232,10 @@ function newLinkProposal(
         ...replacementOps(paragraphId, start, end, text),
         ...linkedCopyOps(paragraphId, landing, copyEnd, format, target, style.styleId),
       ];
+
       // The caret lands after the linked copy, where the next keystroke belongs.
       const after = { paragraphId, offset: copyEnd };
-      return commitProposal(deps, lane, ops, style.packageEdits, after);
+      return commitProposal(deps, linkAccess, ops, style.packageEdits, after);
     },
   };
 }
@@ -257,12 +243,12 @@ function newLinkProposal(
 /** Removing `link`: null when not suggesting, or for this author's own pending link. */
 function unlinkProposal(
   deps: HyperlinkOpsDeps,
-  lane: LinkSuggestionLane,
+  linkAccess: LinkAccess,
   link: SurfaceHyperlink
 ): Proposal {
   const landing = landingAfterStrike(deps, link);
-  if (landing === null) return withdrawalProposal(deps, lane, link);
-  const part = lane.storyPart();
+  if (landing === null) return withdrawalProposal(deps, linkAccess, link);
+  const part = linkAccess.storyPart();
   if (!part || !linkFormat(part, link.id)) return { refusal: UNLINK_REFUSAL };
   return {
     commit: () => {
@@ -282,8 +268,9 @@ function unlinkProposal(
           styleId: unlinkedStyleId(deps.session.documentStyles()),
         },
       ];
+
       // The caret lands after the copy, where the next keystroke belongs.
-      return commitProposal(deps, lane, ops, [], { paragraphId, offset: end });
+      return commitProposal(deps, linkAccess, ops, [], { paragraphId, offset: end });
     },
   };
 }
@@ -297,12 +284,12 @@ function unlinkProposal(
  */
 function withdrawalProposal(
   deps: HyperlinkOpsDeps,
-  lane: LinkSuggestionLane,
+  linkAccess: LinkAccess,
   link: SurfaceHyperlink
 ): Proposal {
-  const landing = deps.replacementLanding?.(link.paragraphId, link.start, link.end);
-  const part = lane.storyPart();
-  const pair = landing === null || landing === undefined || !part ? null : copiedWords(part, link);
+  const landing = landingOf(deps, link.paragraphId, link.start, link.end);
+  const part = linkAccess.storyPart();
+  const pair = landing === null || !part ? null : copiedWords(part, link);
   if (!pair) return null;
   const ops: TreeDocOp[] = pair.map((node) => ({
     op: 'rejectRevision',
@@ -310,10 +297,14 @@ function withdrawalProposal(
     localName: node.kind === 'revisionInsert' ? 'ins' : 'del',
     siteNodeIds: [node.id],
   }));
+
   // The struck words come back right before where the link began, and the caret follows them.
   return {
     commit: () =>
-      commitProposal(deps, lane, ops, [], { paragraphId: link.paragraphId, offset: link.start }),
+      commitProposal(deps, linkAccess, ops, [], {
+        paragraphId: link.paragraphId,
+        offset: link.start,
+      }),
   };
 }
 
@@ -335,6 +326,7 @@ function copiedWords(part: OoxmlPart, link: SurfaceHyperlink): readonly OoxmlNod
   ) {
     return null;
   }
+
   const sameEdit = ['author', 'date'].every(
     (name) => attributeValueOf(insertion, name) === attributeValueOf(deletion, name)
   );
@@ -355,17 +347,31 @@ function textUnder(node: OoxmlNode): string {
   return node.children.map(textUnder).join('');
 }
 
+/** Where a copy of `[start, end)` lands once the words are struck; null when not suggesting. */
+function landingOf(
+  deps: HyperlinkOpsDeps,
+  paragraphId: string,
+  start: number,
+  end: number
+): number | null {
+  return deps.replacementLanding?.(paragraphId, start, end) ?? null;
+}
+
 /**
  * Where a copy of `link`'s words lands once they are struck. Null when not suggesting, or when
  * the strike would retract the whole link as this author's own insertion: nothing to review.
  */
 function landingAfterStrike(deps: HyperlinkOpsDeps, link: SurfaceHyperlink): number | null {
-  const landing = deps.replacementLanding?.(link.paragraphId, link.start, link.end);
-  return landing === null || landing === undefined || landing <= link.start ? null : landing;
+  const landing = landingOf(deps, link.paragraphId, link.start, link.end);
+  return landing === null || landing <= link.start ? null : landing;
 }
 
 /**
- * Strike `[start, end)` and insert `text` right after the struck words.
+ * Strike `[start, end)` and insert `text` right after the struck words, the order the review
+ * queue pairs into one card. OOXML has no revision element for a new target or a link's
+ * removal, and a bare wrap of words is no reviewable change, so each proposal is a struck
+ * copy. New words keep the link's format this way too, because only the op that makes a link
+ * writes its character style.
  *
  * The insertion aims at `aim`, the strike's front edge unless a caller names a point inside the
  * struck words. The store moves an insertion at the front edge past the words the same
@@ -396,6 +402,7 @@ function replacementOps(
  */
 function lastCharacterAim(deps: HyperlinkOpsDeps, link: SurfaceHyperlink): number {
   const last = deps.textOf(link.paragraphId).charCodeAt(link.end - 1);
+
   // A low surrogate ends a pair, which an offset must not split.
   const aim = link.end - (last >= 0xdc00 && last <= 0xdfff ? 2 : 1);
   return Math.max(link.start, aim);
@@ -431,8 +438,8 @@ function linkedCopyOps(
   ];
 }
 
-/** Refuse with `reason`, as the lane's other refusals do, and write nothing. */
-function refuse(deps: HyperlinkOpsDeps, reason: string): false {
+/** Refuse a link edit with `reason`, committing nothing; the surface reports the reason. */
+export function refuseLinkEdit(deps: HyperlinkOpsDeps, reason: string): false {
   deps.commit(() => ({ committed: false, rejected: true, opCount: 0, reason }));
   return false;
 }
@@ -441,7 +448,7 @@ function refuse(deps: HyperlinkOpsDeps, reason: string): false {
  * The relationship for an external target, minted only once the proposal is allowed, so a
  * refusal leaves none behind. Undefined for a bookmark target, null when the URL is refused.
  */
-function mintFor(deps: HyperlinkOpsDeps, input: LinkInput): string | undefined | null {
+function mintFor(deps: HyperlinkOpsDeps, input: HyperlinkInput): string | undefined | null {
   if (input.url === undefined || input.url.length === 0) return undefined;
   const url = input.url;
   const mint = (): string | null =>
@@ -452,7 +459,7 @@ function mintFor(deps: HyperlinkOpsDeps, input: LinkInput): string | undefined |
 /** Commit the proposal as one undo step, the caret moving to `after` when given. */
 function commitProposal(
   deps: HyperlinkOpsDeps,
-  lane: LinkSuggestionLane,
+  linkAccess: LinkAccess,
   ops: readonly TreeDocOp[],
   packageEdits: HyperlinkStyleWrite['packageEdits'],
   after?: SemanticPosition
@@ -460,7 +467,7 @@ function commitProposal(
   let committed = false;
   deps.commit(
     () => {
-      const result = lane.applyOps(
+      const result = linkAccess.applyOps(
         ops,
         deps.selectionMark(),
         after
@@ -469,6 +476,7 @@ function commitProposal(
         { packageEdits }
       );
       committed = result.committed;
+
       // A deletion of the author's own from the last minute merges with the strike and carries
       // the copy out of the link, so the store refuses the range; say why instead of its code.
       return result.committed || result.reason !== 'invalid-range'
@@ -481,18 +489,21 @@ function commitProposal(
 }
 
 /** Whether the requested target or tooltip differs from the link's, compared as written. */
-function changesTarget(link: SurfaceHyperlink, input: LinkInput): boolean {
+function changesTarget(link: SurfaceHyperlink, input: HyperlinkInput): boolean {
   if (input.tooltip !== undefined && input.tooltip !== link.tooltip) return true;
   if (input.anchor) return link.kind !== 'internal' || link.anchor !== input.anchor;
   return link.kind !== 'external' || authorableHyperlinkTarget(input.url ?? '') !== link.authored;
 }
 
 /** Whether the requested words differ from the link's live words. */
-function changesText(link: SurfaceHyperlink, input: LinkInput): boolean {
+function changesText(link: SurfaceHyperlink, input: HyperlinkInput): boolean {
   return input.text !== undefined && input.text !== fromHyphenGlyphs(link.text);
 }
 
 /**
+ * The copy is plain text given the words' own format, so only words a copy reproduces exactly
+ * are proposed; anything else is refused rather than copied with something missing.
+ *
  * The format a copy of the link must carry, or null when a copy would lose something: the link
  * sits in a wrapper, holds anything but text runs, mixes formats, or has a target frame or
  * document location the new link cannot take. Runs in a pending insertion count: another
@@ -503,9 +514,11 @@ function linkFormat(part: OoxmlPart, linkId: string): RunFormat | null {
   if (!link || link.kind !== 'hyperlink' || parentOf(part, linkId)?.kind !== 'paragraph') {
     return null;
   }
+
   if (link.attributes.some((a) => a.localName === 'tgtFrame' || a.localName === 'docLocation')) {
     return null;
   }
+
   const runs = link.children.flatMap((child): readonly OoxmlNode[] =>
     child.kind === 'revisionInsert' ? child.children : [child]
   );
@@ -538,6 +551,7 @@ function selectionFormat(
     if (!run || !held) return null;
     runs.push(run);
   }
+
   return commonFormat(runs);
 }
 
@@ -549,6 +563,7 @@ function commonFormat(runs: readonly OoxmlNode[]): RunFormat | null {
     if (!next || (format && format.key !== next.key)) return null;
     format = next;
   }
+
   return format;
 }
 
@@ -568,6 +583,7 @@ function runFormat(run: OoxmlNode): RunFormat | null {
       return null;
     }
   }
+
   const properties = authoredProperties(container, AUTHORABLE_RUN_PROPERTIES);
   return {
     key: JSON.stringify([styleId ?? null, properties]),

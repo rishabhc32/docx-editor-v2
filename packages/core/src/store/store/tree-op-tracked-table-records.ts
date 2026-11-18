@@ -1,22 +1,26 @@
-// The TABLE containers of a tracked format change, beside the run's and the paragraph's in
-// `withPropertyChangeRecord`, which records all of them by the same two rules: the record is
-// the original, and a write back at the original leaves none.
-//
-//   w:tcPr    → w:tcPrChange/w:tcPr       (CT_TcPrChange over CT_TcPrInner, §17.13.5.37)
-//   w:trPr    → w:trPrChange/w:trPr       (CT_TrPrChange over CT_TrPrBase)
-//   w:tblPr   → w:tblPrChange/w:tblPr     (CT_TblPrChange over CT_TblPrBase)
-//   w:tblGrid → w:tblGridChange/w:tblGrid (CT_TblGridChange over CT_TblGridBase)
-//
-// Each change wrapper is the last member of its container's sequence, as `w:rPrChange` and
-// `w:pPrChange` are, so the record engine's tail slot is the legal one here too.
+// The TABLE containers of a tracked format change. `withPropertyChangeRecord` records them by
+// the run's and the paragraph's two rules: the record is the original, and a write back at the
+// original leaves none.
 
 import type { OoxmlElement, OoxmlNode } from '../package/ooxml-tree.ts';
 import { preservedRevisionProperty } from './revision-property-records.ts';
+import { tableChildren } from './revision-table-children.ts';
+import {
+  CT_TBLPR_SEQUENCE,
+  CT_TCPR_SEQUENCE,
+  CT_TRPR_SEQUENCE,
+} from './tree-op-table-properties.ts';
+import { isWmlElement, wmlChildNamed } from './tree-op-table-shared.ts';
 
 /** A table container that records its tracked format changes. */
 export type TableContainer = 'cellProperties' | 'rowProperties' | 'tableProperties' | 'tableGrid';
 
-/** How one table container records. */
+/**
+ * How one table container records. Each change wrapper is the last member of its container's
+ * sequence, as `w:rPrChange` and `w:pPrChange` are, so the record engine's tail slot is legal:
+ * `w:tcPrChange/w:tcPr` (`CT_TcPrInner`), `w:trPrChange/w:trPr`, `w:tblPrChange/w:tblPr` and
+ * `w:tblGridChange/w:tblGrid`.
+ */
 interface TableRecord {
   /** The change wrapper. */
   readonly changeName: 'tcPrChange' | 'trPrChange' | 'tblPrChange' | 'tblGridChange';
@@ -73,3 +77,59 @@ export const TABLE_CHANGE_WRAPPER_OF_OP: readonly (readonly [string, string])[] 
   ['setTableColumnWidths', 'tblGridChange'],
   ['setTableRightEdgeWidth', 'tblGridChange'],
 ];
+
+/** `CT_TblPrExBase`: the table properties a row's `w:tblPrEx` can hold, in schema order. */
+export const ROW_EXCEPTION_MEMBERS: ReadonlySet<string> = new Set([
+  'tblW',
+  'jc',
+  'tblCellSpacing',
+  'tblInd',
+  'tblBorders',
+  'shd',
+  'tblLayout',
+  'tblCellMar',
+  'tblLook',
+]);
+
+/**
+ * The property containers of a table row and of its cells, each with its ECMA-376 child order
+ * and the revision record that ends it.
+ *
+ * @internal
+ */
+export const ROW_PROPERTY_CONTAINERS: Readonly<
+  Record<string, { readonly sequence: readonly string[]; readonly record: string }>
+> = Object.freeze({
+  trPr: { sequence: CT_TRPR_SEQUENCE, record: 'trPrChange' },
+  tblPrEx: {
+    sequence: [
+      ...CT_TBLPR_SEQUENCE.filter((name) => ROW_EXCEPTION_MEMBERS.has(name)),
+      'tblPrExChange',
+    ],
+    record: 'tblPrExChange',
+  },
+  tcPr: { sequence: CT_TCPR_SEQUENCE, record: 'tcPrChange' },
+});
+
+/**
+ * The pending property records of a row and its cells, in document order. Word reads them all
+ * as one formatting decision of the row.
+ */
+export function rowPropertyRecords(row: OoxmlElement): OoxmlElement[] {
+  const records: OoxmlElement[] = [];
+  const collect = (owner: OoxmlElement, name: string): void => {
+    const container = wmlChildNamed(owner, name);
+    for (const child of container?.children ?? []) {
+      if (isWmlElement(child, ROW_PROPERTY_CONTAINERS[name]!.record)) {
+        records.push(child);
+      }
+    }
+  };
+  collect(row, 'tblPrEx');
+  collect(row, 'trPr');
+  for (const cell of tableChildren(row, 'tableCell')) {
+    collect(cell, 'tcPr');
+  }
+
+  return records;
+}

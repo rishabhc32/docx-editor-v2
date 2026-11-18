@@ -28,6 +28,7 @@ const CT_NS = 'http://schemas.openxmlformats.org/package/2006/content-types';
 const REL_NS = 'http://schemas.openxmlformats.org/package/2006/relationships';
 const OFFICE_DOC =
   'http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument';
+const REL_TYPES = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships';
 const STORY = '/word/document.xml';
 const NS = 'https://example.test/nodes';
 const ROOT = 'nodes';
@@ -59,6 +60,41 @@ function fixture(): OoxmlPackage {
         `<w:document xmlns:w="${W}"><w:body><w:p><w:r><w:t>Before after</w:t></w:r></w:p></w:body></w:document>`
       ),
       'word/_rels/document.xml.rels': strToU8(`<Relationships xmlns="${REL_NS}"></Relationships>`),
+    })
+  );
+  if (!loaded.ok) throw new Error(loaded.reason);
+  return loaded.package;
+}
+
+/** `fixture`, with a header reading `Before after` that the section names. */
+function headerFixture(): OoxmlPackage {
+  const loaded = readOoxmlPackage(
+    zipSync({
+      '[Content_Types].xml': strToU8(
+        `<Types xmlns="${CT_NS}">` +
+          '<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>' +
+          '<Default Extension="xml" ContentType="application/xml"/>' +
+          '<Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/>' +
+          '<Override PartName="/word/header1.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.header+xml"/>' +
+          '</Types>'
+      ),
+      '_rels/.rels': strToU8(
+        `<Relationships xmlns="${REL_NS}">` +
+          `<Relationship Id="rId1" Type="${OFFICE_DOC}" Target="word/document.xml"/>` +
+          '</Relationships>'
+      ),
+      'word/document.xml': strToU8(
+        `<w:document xmlns:w="${W}" xmlns:r="${REL_TYPES}"><w:body><w:p><w:r><w:t>Body</w:t></w:r></w:p>` +
+          '<w:sectPr><w:headerReference w:type="default" r:id="rId9"/></w:sectPr></w:body></w:document>'
+      ),
+      'word/_rels/document.xml.rels': strToU8(
+        `<Relationships xmlns="${REL_NS}">` +
+          `<Relationship Id="rId9" Type="${REL_TYPES}/header" Target="header1.xml"/>` +
+          '</Relationships>'
+      ),
+      'word/header1.xml': strToU8(
+        `<w:hdr xmlns:w="${W}"><w:p><w:r><w:t>Before after</w:t></w:r></w:p></w:hdr>`
+      ),
     })
   );
   if (!loaded.ok) throw new Error(loaded.reason);
@@ -346,6 +382,49 @@ describe('a payload does not outlive the control that bound it', () => {
     expect(removed.ok).toBe(true);
     expect(controls(store.part)).toHaveLength(0);
     expect(customXmlNodes(store.package, dataPart.partName)).toEqual([]);
+  });
+
+  test("a chip in a header loses its node from the main part's store", () => {
+    // A header chip's store hangs off the main part, where Word reads it
+    const pkg = headerFixture();
+    const store = new TreeDocumentStore(pkg, '/word/header1.xml');
+    const paragraphId = store.part.root.children.find((child) => child.kind === 'paragraph')!.id;
+    const first = insertCustomNodeWrite(
+      store,
+      {
+        paragraphId,
+        offset: 6,
+        tag: 'acme:c',
+        text: '(S)',
+        payload: { namespaceUri: NS, rootLocalName: ROOT, nodeId: 'cx1', label: '(S)', data: '{}' },
+      },
+      STORY
+    );
+    if (!first.ok) throw new Error(first.reason);
+    const dataPart = findCustomXmlDataPart(store.package, STORY, NS);
+    if (!dataPart) throw new Error('no store');
+    const nodes = () => customXmlNodes(store.package, dataPart.partName).map((node) => node.id);
+
+    // A rewrite takes the old node with the old control
+    const rewritten = insertCustomNodeWrite(
+      store,
+      {
+        paragraphId,
+        offset: 6,
+        tag: 'acme:c',
+        text: '(T)',
+        replaceControlId: first.nodeId,
+        payload: { namespaceUri: NS, rootLocalName: ROOT, nodeId: 'cx2', label: '(T)', data: '{}' },
+      },
+      STORY
+    );
+    if (!rewritten.ok) throw new Error(rewritten.reason);
+    expect(nodes()).toEqual(['cx2']);
+
+    const removed = removeCustomNodeWrite(store, rewritten.nodeId!);
+    expect(removed.ok).toBe(true);
+    expect(controls(store.part)).toHaveLength(0);
+    expect(nodes()).toEqual([]);
   });
 
   test('the sweep collects a node whose control was deleted in Word, and nothing else', () => {

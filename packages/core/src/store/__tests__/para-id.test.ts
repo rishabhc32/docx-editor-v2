@@ -28,6 +28,7 @@ import {
 const W = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main';
 const W14 = 'http://schemas.microsoft.com/office/word/2010/wordml';
 const MC = 'http://schemas.openxmlformats.org/markup-compatibility/2006';
+const WPS = 'http://schemas.microsoft.com/office/word/2010/wordprocessingShape';
 
 const FIXTURES = join(import.meta.dir, '../../../../../e2e/fixtures');
 
@@ -174,6 +175,49 @@ describe('normalizeParagraphIdentity', () => {
     expect(new Set(ids.map((id) => id.toUpperCase())).size).toBe(5);
     // The stale textId of a re-minted paragraph is replaced along with its paraId.
     expect(serializeOoxmlPart(normalized)).not.toContain('FFFFFFFF');
+  });
+
+  test("a text box's fallback copy keeps its live copy's ids, as Word writes both", () => {
+    // Word writes a text box's story in its DrawingML copy and in its VML fallback copy with the
+    // same paragraph ids (e2e/fixtures/list-pagination-break.docx, word/header3.xml): the copy
+    // is no duplicate to mint anew, or every open of a saved file would give it new ids
+    const story = (id: string) =>
+      `<w:txbxContent><w:p w14:paraId="${id}" w14:textId="${id}"><w:r><w:t>Box</w:t></w:r></w:p></w:txbxContent>`;
+    const part = loadDocument(
+      `<w:document xmlns:w="${W}" xmlns:w14="${W14}" xmlns:mc="${MC}" xmlns:wps="${WPS}">` +
+        '<w:body><w:p w14:paraId="1A2B3C4D">' +
+        `<w:r><mc:AlternateContent><mc:Choice Requires="wps"><w:drawing>${story('5E6F7A8B')}</w:drawing></mc:Choice>` +
+        `<mc:Fallback><w:pict>${story('5E6F7A8B')}</w:pict></mc:Fallback></mc:AlternateContent></w:r></w:p>` +
+        '</w:body></w:document>'
+    );
+    expect(normalizeParagraphIdentity(part)).toBe(part);
+    // A repeat outside a text box's two copies is still minted anew
+    const twice = loadDocument(
+      `<w:document xmlns:w="${W}" xmlns:w14="${W14}"><w:body><w:p w14:paraId="1A2B3C4D"/>` +
+        '<w:p w14:paraId="1A2B3C4D"/></w:body></w:document>'
+    );
+    const ids = [
+      ...serializeOoxmlPart(normalizeParagraphIdentity(twice)).matchAll(/paraId="([0-9A-F]+)"/g),
+    ];
+    expect(new Set(ids.map((m) => m[1])).size).toBe(2);
+  });
+
+  test("a text box's fallback copy follows its live copy when that one is minted anew", () => {
+    // The live copy repeats a body paragraph's id, so it is minted; its copy must not keep
+    // the id the body paragraph holds
+    const story = (id: string) =>
+      `<w:txbxContent><w:p w14:paraId="${id}" w14:textId="${id}"><w:r><w:t>Box</w:t></w:r></w:p></w:txbxContent>`;
+    const part = loadDocument(
+      `<w:document xmlns:w="${W}" xmlns:w14="${W14}" xmlns:mc="${MC}" xmlns:wps="${WPS}">` +
+        '<w:body><w:p w14:paraId="1A2B3C4D"/><w:p w14:paraId="00000002">' +
+        `<w:r><mc:AlternateContent><mc:Choice Requires="wps"><w:drawing>${story('1A2B3C4D')}</w:drawing></mc:Choice>` +
+        `<mc:Fallback><w:pict>${story('1A2B3C4D')}</w:pict></mc:Fallback></mc:AlternateContent></w:r></w:p>` +
+        '</w:body></w:document>'
+    );
+    const [body, , live, copy] = wmlParagraphs(normalizeParagraphIdentity(part)).map(paraIdOf);
+    expect(body).toBe('1A2B3C4D');
+    expect(live).not.toBe('1A2B3C4D');
+    expect(copy).toBe(live);
   });
 
   test('a kept paraId without a root binding still gains the root binding', () => {

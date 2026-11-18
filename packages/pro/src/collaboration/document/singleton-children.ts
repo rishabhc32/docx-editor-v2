@@ -75,6 +75,9 @@ const SINGLETON_KINDS: ReadonlyMap<string, readonly string[]> = new Map(
       'drawingGraphicFramePr',
       'drawingGraphic',
     ],
+    // ECMA-376 `CT_Settings`: the first note of a kind lists its part's separators in the
+    // settings, and two peers who each add a first note at once each write the element.
+    'wml:settings': ['wml:footnotePr', 'wml:endnotePr'],
     ...TABLE_RULES.singletonKinds,
   })
 );
@@ -268,7 +271,7 @@ export function singletonLayout<Id extends string>(
   }
   if (hidden.size === 0 && !moveLeading && trailAfter < 0) {
     const sorted = inPropertyOrder(kind, null, children, shells);
-    return sorted && { order: sorted, companions };
+    return sorted === null ? null : { order: sorted, companions };
   }
   // Two undos that restore one child can list it twice: a hidden copy hides at each listing.
   const hiddenIds = new Set([...hidden].map((index) => children[index]!));

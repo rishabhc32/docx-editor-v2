@@ -314,8 +314,12 @@ describe('a reader-chosen suggesting whose author leaves', () => {
     editor.setAuthor('');
     expect(editor.getEditingMode()).toBe('suggesting');
     expect(editor.snapshot().lastRejection).toBe(SUGGESTING_AUTHOR_REASON);
-    // The surface's own guard refuses the write (a void op, so `exec` reports no change).
-    expect(editor.exec({ type: 'insertText', text: 'x' })).toEqual({ ok: true, changed: false });
+    // The surface's own guard refuses the write, and `exec` reports the refusal by name.
+    expect(editor.exec({ type: 'insertText', text: 'x' })).toMatchObject({
+      ok: false,
+      code: 'unsupported',
+      reason: expect.stringContaining('author'),
+    });
     expect(editor.surface!.session.bodyText()).toBe('');
     expect(editor.surface!.state().lastRejection).toContain('author');
     // The pill is still the way out.

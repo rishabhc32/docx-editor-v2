@@ -28,13 +28,10 @@ import {
 import type { OoxmlPackage } from './ooxml-package.ts';
 import { withPart } from './ooxml-package.ts';
 import { WML_NAMESPACE_URI } from './ooxml-shared.ts';
+import { convertedNoteCopy, rewriteRunBuiltinNoteReferenceStyle } from './note-convert-copy.ts';
 import {
   allocateNoteId,
   findNoteById,
-  noteIdOf,
-  noteKindOf,
-  noteRefKindOf,
-  noteReferenceKindOf,
   noteTypeOf,
   type NoteKind,
   NOTE_ID_MAX,
@@ -43,12 +40,18 @@ import {
 import {
   canHoldNoteCitation,
   citationSplitParent,
+  emptyNotesPart,
   freeRelationshipId,
   withContentTypeOverride,
   withFreshIds,
+  withNewNoteIdentity,
   withNotesRelationship,
 } from './note-lifecycle-shell.ts';
-import { writeDocumentNoteProperties, writeSectionNoteProperties } from './note-lifecycle-props.ts';
+import {
+  writeDocumentNoteProperties,
+  writeNoteSeparatorReferences,
+  writeSectionNoteProperties,
+} from './note-lifecycle-props.ts';
 import {
   ancestorPathHolding,
   citationBesideControlAt,
@@ -71,6 +74,7 @@ import {
   type NoteReferenceScanBudget,
 } from './note-references.ts';
 import { isValidXmlText } from './sinks.ts';
+import { markNewNoteBody } from '../store/note-body-insert.ts';
 import { applyInsertTrackedRun } from '../store/tree-op-tracked.ts';
 import { paragraphOffsetIndex } from '../store/tree-op-segments.ts';
 import {
@@ -85,79 +89,6 @@ const ENDNOTES_REL = 'http://schemas.openxmlformats.org/officeDocument/2006/rela
 const FOOTNOTES_CT = 'application/vnd.openxmlformats-officedocument.wordprocessingml.footnotes+xml';
 const ENDNOTES_CT = 'application/vnd.openxmlformats-officedocument.wordprocessingml.endnotes+xml';
 const MAX_SECTIONS = 4_096;
-
-/** Built-in Word character styles for note marks — not user theme aliases. */
-const BUILTIN_NOTE_REFERENCE_STYLE: Readonly<Record<NoteKind, string>> = {
-  footnote: 'FootnoteReference',
-  endnote: 'EndnoteReference',
-};
-
-function isWmlValAttribute(attr: {
-  readonly localName: string;
-  readonly namespaceUri: string;
-}): boolean {
-  return (
-    attr.localName === 'val' &&
-    (attr.namespaceUri === WML_NAMESPACE_URI || attr.namespaceUri === '')
-  );
-}
-
-/**
- * Rewrite `w:rStyle/@w:val` on a run that directly holds a note citation or body mark.
- *
- * Matching rule (bounded): only when the run contains a `noteReference` / `noteRef` atom
- * (typed or generic `w:footnoteReference`, `w:endnoteReference`, `w:footnoteRef`,
- * `w:endnoteRef`) AND a WML-namespaced `w:rPr/w:rStyle` whose WML `@w:val` exactly equals
- * the source kind's built-in style (`FootnoteReference` / `EndnoteReference`). Foreign
- * namespace `rStyle` / `val` attributes are preserved byte-for-byte. Custom style ids,
- * absent `rPr`, and absent `rStyle` are left unchanged — Word does not require a character
- * style on note marks for validity; layout resolves marks through element type + cascade
- * defaults.
- */
-function rewriteRunBuiltinNoteReferenceStyle(
-  run: OoxmlNode,
-  fromKind: NoteKind,
-  toKind: NoteKind
-): OoxmlNode {
-  if (run.kind !== 'run' || fromKind === toKind) return run;
-  if (!run.children.some((child) => isNoteRefAtomInRun(child))) return run;
-
-  const fromStyle = BUILTIN_NOTE_REFERENCE_STYLE[fromKind];
-  const toStyle = BUILTIN_NOTE_REFERENCE_STYLE[toKind];
-
-  let changed = false;
-  const children = run.children.map((child) => {
-    if (child.kind !== 'runProperties') return child;
-    let propsChanged = false;
-    const props = child.children.map((prop) => {
-      if (
-        prop.kind !== 'generic' ||
-        prop.namespaceUri !== WML_NAMESPACE_URI ||
-        prop.localName !== 'rStyle'
-      ) {
-        return prop;
-      }
-      const hasFromVal = prop.attributes.some(
-        (attr) => isWmlValAttribute(attr) && attr.value === fromStyle
-      );
-      if (!hasFromVal) return prop;
-      propsChanged = true;
-      changed = true;
-      return {
-        ...prop,
-        attributes: prop.attributes.map((attr) =>
-          isWmlValAttribute(attr) && attr.value === fromStyle ? { ...attr, value: toStyle } : attr
-        ),
-      };
-    });
-    return propsChanged ? { ...child, children: props } : child;
-  });
-  return changed ? ({ ...run, children } as OoxmlNode) : run;
-}
-
-function isNoteRefAtomInRun(node: OoxmlNode): boolean {
-  return noteReferenceKindOf(node) !== null || noteRefKindOf(node) !== null;
-}
 
 /** How far a note lifecycle op reaches — which parts a caller must expect to have changed. */
 export type NoteLifecycleImpact = 'flow-structural' | 'global';
@@ -175,10 +106,9 @@ export type NoteLifecycleOp =
       readonly paragraphId: string;
       readonly offset: number;
       /**
-       * Write the citing reference as a TRACKED insertion: the reference run goes inside a
-       * `w:ins` carrying this attribution. The note body stays plain — rejecting the
-       * reference removes it, and the orphaned body is swept by the same cascade an
-       * untracked reference deletion triggers.
+       * Write the note as a TRACKED insertion, as Word does: the reference run in a `w:ins`
+       * with this attribution, the note's runs in one of their own (`markNewNoteBody`).
+       * Accepting the reference accepts the body; rejecting it removes the note.
        */
       readonly revision?: RevisionAttributionInput;
     }
@@ -356,8 +286,8 @@ function applyInsertNote(
   const noteNode = bodyRead.part.root.children.find((child) => child.kind === 'note');
   if (!noteNode) return fail('tree-invariant', 'note-body-missing');
 
-  const notesNextId = createNodeIdAllocator(notesPart);
-  const freshNote = withFreshIds(noteNode, notesNextId);
+  const fresh = withFreshIds(noteNode, createNodeIdAllocator(notesPart));
+  const freshNote = withNewNoteIdentity(notesPart, fresh, noteId);
   const appended = insertChildren(notesPart, notesPart.root.id, notesPart.root.children.length, [
     freshNote,
   ]);
@@ -380,15 +310,19 @@ function applyInsertNote(
   // Suggesting proposes the CITATION: the reference run goes through the tracked-insert
   // core, which owns every placement rule typed text follows — the `w:ins` wrapper,
   // extending the author's own pending insertion, adopting the adjacent deletion of a
-  // replaced selection, relocating past struck words. The note body stays plain —
-  // rejecting the reference sweeps the orphaned body through the same cascade an
-  // untracked reference deletion takes.
+  // replaced selection, relocating past struck words. The note's runs then take the
+  // reference's attribution; rejecting the reference sweeps the orphaned body away.
   if (op.revision) {
+    let referenceRunId = '';
     const tracked = applyInsertTrackedRun(
       storyPart,
       storyParagraph as OoxmlParagraphNode,
       op.offset,
-      (mint) => noteReferenceRun(mint, refLocal, noteId, styleVal),
+      (mint) => {
+        const run = noteReferenceRun(mint, refLocal, noteId, styleVal);
+        referenceRunId = run.id;
+        return run;
+      },
       op.revision
     );
     if (!tracked.ok || !tracked.part) {
@@ -396,7 +330,16 @@ function applyInsertNote(
       // tree-invariant hides the actionable cause from the surface and automation hosts.
       return fail('tree-invariant', (!tracked.ok && tracked.reason) || 'reference-insert');
     }
-    next = withPart(next, tracked.part);
+    const marked = markNewNoteBody(
+      withPart(next, tracked.part),
+      op.noteKind,
+      noteId,
+      tracked.part,
+      op.paragraphId,
+      referenceRunId
+    );
+    if (!marked) return fail('tree-invariant', 'note-body-revision');
+    next = marked;
   } else {
     const storyNextId = createNodeIdAllocator(storyPart);
     const refRun = noteReferenceRun(storyNextId, refLocal, noteId, styleVal);
@@ -566,9 +509,8 @@ function applyConvertNote(
   const newId = allocateNoteId(targetPart.root);
   if (newId === null) return fail('invalidArgs', 'note-id-exhausted');
 
-  // Fresh copy into target part with rewritten localName + id.
-  const targetNextId = createNodeIdAllocator(targetPart);
-  const moved = rewriteNoteNode(sourceNote, op.fromKind, toKind, newId, targetNextId);
+  // Fresh copy into target part with rewritten localName + id and new paragraph ids.
+  const moved = convertedNoteCopy(targetPart, sourceNote, op.fromKind, toKind, newId);
   const appended = insertChildren(targetPart, targetPart.root.id, targetPart.root.children.length, [
     moved,
   ]);
@@ -736,7 +678,7 @@ function applySetNoteProperties(
 // part creation
 // ---------------------------------------------------------------------------
 
-/** Provision a notes part (separator shell, content type, relationship) when absent. */
+/** Provision a notes part (separators, their settings list, content type, relation) if absent. */
 export function ensureNotesPart(
   pkg: OoxmlPackage,
   noteKind: NoteKind
@@ -763,6 +705,9 @@ export function ensureNotesPart(
   const typed = withContentTypeOverride(next, partName, contentType);
   if (!typed) return fail('tree-invariant', 'content-type');
   next = typed;
+  const listed = writeNoteSeparatorReferences(next, noteKind);
+  if (!listed) return fail('tree-invariant', 'settings-write');
+  next = listed;
 
   return {
     ok: true,
@@ -770,26 +715,6 @@ export function ensureNotesPart(
     impact: 'global',
     createdPartName: partName,
   };
-}
-
-function emptyNotesPart(
-  partName: string,
-  contentType: string,
-  noteKind: NoteKind
-): OoxmlPart | null {
-  const root = noteKind === 'footnote' ? 'footnotes' : 'endnotes';
-  const el = noteKind === 'footnote' ? 'footnote' : 'endnote';
-  const xml =
-    `<w:${root} xmlns:w="${W}">` +
-    `<w:${el} w:type="separator" w:id="-1">` +
-    `<w:p><w:r><w:separator/></w:r></w:p>` +
-    `</w:${el}>` +
-    `<w:${el} w:type="continuationSeparator" w:id="0">` +
-    `<w:p><w:r><w:continuationSeparator/></w:r></w:p>` +
-    `</w:${el}>` +
-    `</w:${root}>`;
-  const read = readOoxmlPart(xml, { name: partName, contentType });
-  return read.ok ? read.part : null;
 }
 
 function emptyNoteXml(noteKind: NoteKind, noteId: number): string {
@@ -815,9 +740,10 @@ function emptyNoteXml(noteKind: NoteKind, noteId: number): string {
 // ---------------------------------------------------------------------------
 
 /**
- * insertNote may only target a paragraph under the main document's `w:body`.
- * Existing references in headers/footers/notes remain deletable/convertible elsewhere;
- * authoring new citations into those stories is refused atomically.
+ * insertNote may only target a paragraph under the main document's `w:body`, outside text
+ * boxes: Word ignores a note reference in a text box or a comment ([MS-OI29500] 17.11.14(a),
+ * 17.11.7(b)). Existing references in headers/footers/notes remain deletable/convertible
+ * elsewhere; authoring new citations into those stories is refused atomically.
  */
 function locateInsertParagraph(
   pkg: OoxmlPackage,
@@ -884,6 +810,8 @@ function findParagraphInSubtree(
   if (depth > 64) return null;
   if (node.kind === 'paragraph' && node.id === paragraphId) return node;
   if (node.kind === 'textValue') return null;
+  // A text box's paragraphs are no place for a note (see `locateInsertParagraph`)
+  if (node.namespaceUri === WML_NAMESPACE_URI && node.localName === 'txbxContent') return null;
   for (const child of node.children) {
     const found = findParagraphInSubtree(child, paragraphId, depth + 1);
     if (found) return found;
@@ -1255,61 +1183,4 @@ function rewriteReferencesEverywhere(
 
   // Defensive: plannedHits may be empty when the note body exists without citations.
   return next;
-}
-
-function rewriteNoteNode(
-  source: OoxmlNode,
-  fromKind: NoteKind,
-  toKind: NoteKind,
-  newId: number,
-  nextId: () => string
-): OoxmlNode {
-  const localName = toKind === 'footnote' ? 'footnote' : 'endnote';
-  const refLocal = toKind === 'footnote' ? 'footnoteRef' : 'endnoteRef';
-  const mapNode = (node: OoxmlNode): OoxmlNode => {
-    if (node.kind === 'textValue') return { ...node, id: nextId() };
-    let kind = node.kind;
-    let name = node.localName;
-    let attributes = node.attributes;
-    if (node.id === source.id || (node.kind === 'note' && noteIdOf(node) === noteIdOf(source))) {
-      kind = 'note';
-      name = localName;
-      attributes = node.attributes.map((attr) =>
-        attr.localName === 'id' ? { ...attr, value: String(newId) } : attr
-      );
-      if (!attributes.some((attr) => attr.localName === 'id')) {
-        attributes = [
-          ...attributes,
-          {
-            kind: 'genericExtension',
-            namespaceUri: W,
-            localName: 'id',
-            prefix: 'w',
-            value: String(newId),
-          },
-        ];
-      }
-    } else if (
-      node.kind === 'noteRef' ||
-      (noteKindOf(node) === null &&
-        (node.localName === 'footnoteRef' || node.localName === 'endnoteRef'))
-    ) {
-      kind = 'noteRef';
-      name = refLocal;
-    }
-    const mappedChildren = node.children.map(mapNode);
-    let result = {
-      ...node,
-      id: nextId(),
-      kind,
-      localName: name,
-      attributes,
-      children: mappedChildren,
-    } as OoxmlNode;
-    if (node.kind === 'run') {
-      result = rewriteRunBuiltinNoteReferenceStyle(result, fromKind, toKind);
-    }
-    return result;
-  };
-  return mapNode(source);
 }

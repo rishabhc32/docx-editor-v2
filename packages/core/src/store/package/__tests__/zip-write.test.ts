@@ -3,7 +3,7 @@
 // bounded reader and an independent one.
 import { describe, expect, test } from 'bun:test';
 import { deflateSync, unzipSync, zipSync } from 'fflate';
-import { readZip, writeZip, writeZipSteps } from '../zip.ts';
+import { readZip, writeZip, writeZipSteps, zipPartWriter } from '../zip.ts';
 import { ZIP_WRITE_SLICE_BYTES, writeZipEntriesSteps } from '../zip-write.ts';
 
 const MTIME = new Date(Date.UTC(1980, 0, 2, 12));
@@ -54,6 +54,34 @@ describe('ZIP writer', () => {
     const bounded = readZip(value);
     if (!bounded.ok) throw new Error(bounded.reason);
     expect(bounded.entries.get('/word/document.xml')).toEqual(long);
+  });
+
+  test('writes part by part the same archive, each part when it is added', () => {
+    const entries = new Map<string, Uint8Array>([
+      ['/[Content_Types].xml', new TextEncoder().encode('<Types/>')],
+      ['/word/document.xml', longEntry(ZIP_WRITE_SLICE_BYTES * 2 + 7)],
+      ['/word/media/émpty.bin', new Uint8Array(0)],
+    ]);
+    const writer = zipPartWriter();
+    const chunks: Uint8Array[] = [];
+    for (const [partName, data] of entries) {
+      const part = drain(writer.part(partName, data)).value;
+      expect(part.reduce((sum, chunk) => sum + chunk.length, 0)).toBeGreaterThan(30);
+      chunks.push(...part);
+    }
+
+    chunks.push(writer.end());
+    const whole = new Uint8Array(chunks.reduce((sum, chunk) => sum + chunk.length, 0));
+    let at = 0;
+    for (const chunk of chunks) {
+      whole.set(chunk, at);
+      at += chunk.length;
+    }
+
+    expect([...whole]).toEqual([...writeZip(entries)]);
+    expect(() => drain(writer.part('/[content_types].xml', new Uint8Array(1)))).toThrow(
+      /OPC-equivalent duplicate/
+    );
   });
 
   test('refuses unsafe part names before writing anything', () => {

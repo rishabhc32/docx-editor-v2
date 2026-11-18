@@ -117,7 +117,8 @@ function elementChildren(node: OoxmlNode): readonly OoxmlElement[] {
     : (node.children.filter((c) => c.kind !== 'textValue') as OoxmlElement[]);
 }
 
-function watermarkShape(node: OoxmlElement): OoxmlElement | null {
+/** The node itself when it is a watermark's shape (by its id's prefix), else null. */
+export function watermarkShape(node: OoxmlElement): OoxmlElement | null {
   if (node.namespaceUri !== VML || node.localName !== 'shape') return null;
   const id = a(node, 'id') ?? '';
   return id.startsWith(TEXT_PREFIX) || id.startsWith(PICTURE_PREFIX) ? node : null;
@@ -287,8 +288,8 @@ function runXml(
   );
 }
 
-/** The watermark run, parsed from engine markup and given ids from `part`. */
-function watermarkRun(
+/** The watermark run, parsed from engine markup and given ids from `nextId`. */
+export function watermarkRun(
   part: OoxmlPart,
   watermark: PackageWatermark,
   ordinal: number,
@@ -347,9 +348,8 @@ function withoutWatermarks(pkg: OoxmlPackage, partName: string): OoxmlPackage | 
     const first = watermarkRuns(part)[0];
     if (!first) break;
     const reading = readShape(part, first.shape, next);
-    // A run or pict can also hold text, fields, and unrelated pictures.
-    // Remove only the identified shape; preserve its containers and siblings.
-    const removed = removeNode(part, first.shape.id);
+    // A run or pict can also hold text, fields, and unrelated pictures: those stay.
+    const removed = removeNode(part, removalTarget(first.run, first.shape));
     if (!removed.ok) return null;
     next = withPart(next, removed.part);
     if (
@@ -364,6 +364,22 @@ function withoutWatermarks(pkg: OoxmlPackage, partName: string): OoxmlPackage | 
   }
   for (const name of media) next = withoutUnreferencedImagePart(next, name);
   return next;
+}
+
+/**
+ * What a watermark's removal takes: its shape, or the `w:pict` that holds nothing else but
+ * shape types, and then the run when nothing but its properties is left: Word removes a
+ * watermark's own run whole, so no empty picture container stays behind.
+ */
+function removalTarget(run: OoxmlElement, shape: OoxmlElement): string {
+  const pict = elementChildren(run).find(
+    (n) => named(n, WML_NAMESPACE_URI, 'pict') && elementChildren(n).includes(shape)
+  );
+  if (!pict || elementChildren(pict).some((n) => n !== shape && !named(n, VML, 'shapetype'))) {
+    return shape.id;
+  }
+  const alone = elementChildren(run).every((n) => n === pict || named(n, WML_NAMESPACE_URI, 'rPr'));
+  return alone ? run.id : pict.id;
 }
 
 function referencesRelationship(part: OoxmlPart, relationshipId: string): boolean {

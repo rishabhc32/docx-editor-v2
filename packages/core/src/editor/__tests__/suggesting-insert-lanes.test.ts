@@ -307,16 +307,32 @@ describe('insert lanes in suggesting mode', () => {
     );
   });
 
-  test('suggesting refuses to delete a note outright', () => {
+  test("suggesting deletes a note as Word does: its reference struck, one's own taken back", () => {
     withSurface(plainParagraph('Alpha one'), (surface) => {
+      // A note the document holds: suggesting strikes its reference, a reviewable proposal
+      surface.setEditingMode('edit');
       caretTo(surface, 0, 'Alpha'.length);
       expect(surface.insertNote('footnote')).toBe(true);
-      const before = serializeOoxmlPart(surface.session.part());
-      const noteId = Number(/footnoteReference w:id="(\d+)"/.exec(before)![1]);
-      // Outright removal has no tracked form: the reference and body would go with no
-      // `w:del` and no card. Striking the reference is the proposal lane.
-      expect(surface.deleteNote('footnote', noteId)).toBe(false);
-      expect(serializeOoxmlPart(surface.session.part())).toMatch(/footnoteReference/);
+      surface.exitNote();
+      const held = serializeOoxmlPart(surface.session.part());
+      const noteId = Number(/footnoteReference w:id="(\d+)"/.exec(held)![1]);
+      surface.setEditingMode('suggest');
+      expect(surface.deleteNote('footnote', noteId)).toBe(true);
+      const struck = serializeOoxmlPart(surface.session.part());
+      expect(struck).toMatch(
+        /<w:del [^>]*w:author="[^"]+"[^>]*><w:r><w:rPr><w:rStyle w:val="FootnoteReference"\/><\/w:rPr><w:footnoteReference w:id="\d+"\/><\/w:r><\/w:del>/
+      );
+      // A note the person suggested: deleting it takes the suggestion back, as Backspace does
+      caretTo(surface, 0, 'Alpha one'.length + 1);
+      expect(surface.insertNote('footnote')).toBe(true);
+      surface.exitNote();
+      const own = serializeOoxmlPart(surface.session.part());
+      const ids = [...own.matchAll(/footnoteReference w:id="(\d+)"/g)].map((m) => Number(m[1]));
+      const newest = Math.max(...ids);
+      expect(surface.deleteNote('footnote', newest)).toBe(true);
+      expect(serializeOoxmlPart(surface.session.part())).not.toContain(
+        `footnoteReference w:id="${newest}"`
+      );
     });
   });
 

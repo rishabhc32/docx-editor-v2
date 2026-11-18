@@ -2,7 +2,12 @@ import { GlobalRegistrator } from '@happy-dom/global-registrator';
 if (!GlobalRegistrator.isRegistered) GlobalRegistrator.register();
 
 import { afterEach, describe, expect, test } from 'bun:test';
-import { paragraphTextOf, directParagraphProperties, findNode } from '@docx-editor.dev/core/store';
+import {
+  paragraphTextOf,
+  directParagraphProperties,
+  findNode,
+  type OoxmlNode,
+} from '@docx-editor.dev/core/store';
 import { strToU8, zipSync, unzipSync } from 'fflate';
 import { createDocxEditor, type DocxEditorInstance } from '../docx-editor.ts';
 import { ensureSeparatorStyle } from '../list-separator-style.ts';
@@ -216,6 +221,37 @@ describe('Enter continues a single blank separator between list items', () => {
     editor.surface!.session.applyTreeOps([{ op: 'acceptAllRevisions' }]);
     expect(texts(editor)).toEqual(['First', '', 'Second', '', '', 'Third']);
     expect(markers(editor)).toEqual(['1.', null, '2.', null, '3.', '4.']);
+  });
+
+  test("another author's proposed join stays on the tail's original mark", () => {
+    // The head ends with a mark this Enter inserts. Copying the struck original mark onto it
+    // made Accept all run the head into the separator as well as the tail into the next item.
+    const editor = mount(docx(sequence()), 'Ben');
+    const surface = editor.surface!;
+    surface.setEditingMode('suggest');
+    const point = { paragraphId: surface.session.paragraphIds()[3]!, offset: 0 };
+    surface.setSelection({ anchor: point, head: point });
+    surface.deleteBackward();
+    surface.setAuthor('Cy');
+    enter(editor, 2, 3);
+    expect(texts(editor)).toEqual(['First', '', 'Sec', '', 'ond', 'Third']);
+    // Each paragraph's own mark revisions, as `kind:author`.
+    const marks = (index: number) => {
+      const id = surface.session.paragraphIds()[index]!;
+      const children = (node: OoxmlNode | undefined) =>
+        node && node.kind !== 'textValue' ? node.children : [];
+      const named = (node: OoxmlNode | undefined, localName: string) =>
+        children(node).find((child) => child.kind !== 'textValue' && child.localName === localName);
+      const rPr = named(named(findNode(surface.session.part(), id) ?? undefined, 'pPr'), 'rPr');
+      return children(rPr).flatMap((mark) =>
+        mark.kind !== 'textValue' && (mark.localName === 'ins' || mark.localName === 'del')
+          ? [`${mark.localName}:${mark.attributes.find((a) => a.localName === 'author')?.value}`]
+          : []
+      );
+    };
+    expect([marks(2), marks(3), marks(4)]).toEqual([['ins:Cy'], ['ins:Cy'], ['del:Ben']]);
+    surface.session.applyTreeOps([{ op: 'acceptAllRevisions' }]);
+    expect(texts(editor)).toEqual(['First', '', 'Sec', '', 'ondThird']);
   });
 
   test('style-based numbering stays off on the separator', () => {

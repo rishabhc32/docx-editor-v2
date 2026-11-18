@@ -92,6 +92,61 @@ export function paintContentControlChrome(
   }
 }
 
+/**
+ * The content-control part of the paint-reuse key.
+ *
+ * `hoverIds` and `activeIds` are absent ON PURPOSE: both move as attributes on the painted
+ * chrome. With the hover in the key, a pointer entering a TOC rebuilt every page, which
+ * detached the node the gesture started on; for the caret, see
+ * {@link applyContentControlCaretChrome}. No chrome object keys the same as one that holds
+ * only those two sets, because the sheets it paints are the same.
+ */
+export function contentControlChromeKey(chrome: PaintOptions['contentControlChrome']): string {
+  const ids = (set: ReadonlySet<string> | undefined) => (set ? [...set].sort().join(',') : '');
+  return [
+    chrome?.showAll === true ? '1' : '0',
+    ids(chrome?.checkedIds),
+    ids(chrome?.tocControlIds),
+    ids(chrome?.suppressedIds),
+    chrome?.readOnly === true ? 'ro' : '',
+  ].join(':');
+}
+
+/**
+ * Mark the control the caret is in on sheets that are already painted.
+ *
+ * The caret's control is OUTSIDE the paint-reuse key. In the key, the caret leaving a body
+ * control for a header or footer, and coming back, rebuilt every sheet twice; a caller that
+ * opens several stories in one task repainted the whole document dozens of times. So the
+ * state moves as attributes instead, the same way header/footer occurrence and TOC hover do.
+ * Newly painted sheets go through the same path, and every write is skipped when the value is
+ * already in place. TOC chrome is never caret-active, and its own hover owns its visibility.
+ */
+export function applyContentControlCaretChrome(
+  pages: readonly { readonly element: HTMLElement; readonly materialized: boolean }[],
+  chrome: PaintOptions['contentControlChrome']
+): void {
+  const showAll = chrome?.showAll === true;
+  for (const { element, materialized } of pages) {
+    if (!materialized) continue;
+    for (const layer of element.querySelectorAll<HTMLElement>(
+      ':scope > .docx-content-control-chrome:not([data-docx-toc])'
+    )) {
+      const id = layer.dataset.docxContentControl;
+      const active = id !== undefined && chrome?.activeIds?.has(id) === true;
+      setFlag(layer, 'data-active', active);
+      setFlag(layer, 'data-boundary-visible', showAll || active);
+    }
+  }
+}
+
+/** Set or remove an empty-valued attribute, only when that changes it. */
+function setFlag(element: Element, name: string, on: boolean): void {
+  if (element.hasAttribute(name) === on) return;
+  if (on) element.setAttribute(name, '');
+  else element.removeAttribute(name);
+}
+
 /** Where a control's widget lands, in sheet pixels. */
 export interface ContentControlWidgetBox {
   readonly left: number;

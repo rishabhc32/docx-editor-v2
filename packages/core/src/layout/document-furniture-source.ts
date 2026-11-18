@@ -143,7 +143,12 @@ export function createDocumentFurnitureSource(
   // landscape share their header and footer parts, and a single slot per part evicted the
   // other geometry's story on every section, so each keystroke re-laid the shared header and
   // footer once per section.
-  const memo = new WeakMap<object, StoryMemoEntry[]>();
+  // Keyed by part name, for the latest revision of each part only. The undo history keeps old
+  // part objects alive, and an entry for each kept that revision's story and the numbering
+  // index it was laid out with: a room that rebuilds `numbering.xml` on every publish then
+  // kept one whole index per header or footer edit, up to the history limit. A page
+  // background's reserving copy keeps the authored name, so it has a slot of its own.
+  const memo = new Map<string, { readonly part: OoxmlPart; readonly entries: StoryMemoEntry[] }>();
   // Occurrence identity belongs on a cheap wrapper, but that wrapper must itself stay stable:
   // header/footer list and drawing-resource tokens are memoized by story object identity on the
   // editor keystroke path. Partition by the immutable main-relationship snapshot: body-only
@@ -208,7 +213,9 @@ export function createDocumentFurnitureSource(
     const numbering = numberingIndex?.();
     const styles = styleCascade?.();
     const projectLink = linkProjectors.projectLinkForPart(part.name);
-    const entries = memo.get(part);
+    const memoKey = background.isReservePart(part) ? `${part.name}|reserve` : part.name;
+    const slot = memo.get(memoKey);
+    const entries = slot?.part === part ? slot.entries : undefined;
     const cached = entries?.find(
       (entry) =>
         entry.width === width &&
@@ -300,7 +307,7 @@ export function createDocumentFurnitureSource(
     for (const other of entries ?? []) if (other !== cached) kept.push(other);
     kept.push(entry);
     if (kept.length > MAX_STORY_GEOMETRIES_PER_PART) kept.shift();
-    memo.set(part, kept);
+    memo.set(memoKey, { part, entries: kept });
     return baseline;
   };
 

@@ -276,11 +276,6 @@ export function withCustomXmlDataPart(
     return { pkg, part: existing };
   }
 
-  // An element name is not an attribute value: escaping cannot rescue a bad one, because the
-  // injection lands in NAME position where `evil xmlns:q="urn:q" q:attr="1"` is markup and not
-  // text. Only an NCName may be templated in.
-  if (!isValidNCName(rootLocalName)) return { pkg, part: null };
-
   // First free index, so a document that already carries Word's own stores (the Cover Page
   // Properties one is in most templates) gains a sibling rather than overwriting one.
   //
@@ -318,6 +313,27 @@ export function withCustomXmlDataPart(
   }
   if (used.has(itemId.toUpperCase())) return { pkg, part: null };
 
+  return withNamedCustomXmlDataPart(pkg, storyPartName, names, itemId, namespaceUri, rootLocalName);
+}
+
+/**
+ * A new data part under the names and the `ds:itemID` given: the item, its properties, their
+ * content type and relationships, related from `storyPartName`. The part, or `part: null` with
+ * the package unchanged when any of it cannot be written. {@link withCustomXmlDataPart} chooses
+ * the names and the id; a collaboration room names them from its own keys.
+ */
+export function withNamedCustomXmlDataPart(
+  pkg: OoxmlPackage,
+  storyPartName: string,
+  names: { readonly item: string; readonly props: string },
+  itemId: string,
+  namespaceUri: string,
+  rootLocalName: string
+): CustomXmlDataPartResult {
+  // An element name is not an attribute value: escaping cannot rescue a bad one, because the
+  // injection lands in NAME position where `evil xmlns:q="urn:q" q:attr="1"` is markup and not
+  // text. Only an NCName may be templated in.
+  if (!isValidNCName(rootLocalName)) return { pkg, part: null };
   const namespaceAttr = attributeValue(namespaceUri);
   const itemIdAttr = attributeValue(itemId);
   if (namespaceAttr === null || itemIdAttr === null) return { pkg, part: null };
@@ -356,7 +372,7 @@ export function withCustomXmlDataPart(
     withRelationshipsPartFor(stored.pkg, names.item),
     names.item,
     CUSTOM_XML_PROPS_REL,
-    `itemProps${String(index)}.xml`
+    relativeTarget(names.item, names.props)
   );
   if (!propsRelated.ok) return { pkg, part: null };
 

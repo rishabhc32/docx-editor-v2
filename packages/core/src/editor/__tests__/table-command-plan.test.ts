@@ -491,7 +491,7 @@ describe('table command planner and editor parity', () => {
     expect(editor.exec(cmd)).toEqual(can);
   });
 
-  test('merged table insertColumn refuses at the editor seam', () => {
+  test('insertColumn refuses a row that overflows the grid at the editor seam', () => {
     const merged =
       '<w:tbl><w:tblGrid><w:gridCol w:w="2400"/><w:gridCol w:w="3600"/></w:tblGrid>' +
       `<w:tr><w:tc>${p('A1')}</w:tc><w:tc><w:tcPr><w:gridSpan w:val="2"/></w:tcPr>${p('span')}</w:tc></w:tr>` +
@@ -501,8 +501,9 @@ describe('table command planner and editor parity', () => {
     caret(surface, paragraphByText('A1', surface));
     const cmd = { type: 'insertColumn' as const, where: 'right' as const };
     const can = editor.can(cmd);
+    // Merged cells take a column as Word does; this row spans past the table's grid
     expect(can.ok).toBe(false);
-    expect(can.reason).toBe('this table has merged cells');
+    expect(can.reason).toBe('the table operation was refused (tree-invariant)');
     expect(editor.exec(cmd)).toEqual(can);
   });
 
@@ -799,7 +800,7 @@ describe('occurrence targets and provenance', () => {
 describe('merge and resource refusals at editor seam', () => {
   const mergeReason = 'this table has merged cells';
 
-  test('column insertion refuses merges and resizing refuses an overflowing span', () => {
+  test('column insertion and resizing refuse an overflowing span', () => {
     const merged =
       '<w:tbl><w:tblGrid><w:gridCol w:w="2400"/><w:gridCol w:w="3600"/></w:tblGrid>' +
       `<w:tr><w:tc>${p('A1')}</w:tc><w:tc><w:tcPr><w:gridSpan w:val="2"/></w:tcPr>${p('span')}</w:tc></w:tr>` +
@@ -809,7 +810,7 @@ describe('merge and resource refusals at editor seam', () => {
     caret(surface, paragraphByText('A1', surface));
     const insertCan = editor.can({ type: 'insertColumn', where: 'right' });
     expect(insertCan.ok).toBe(false);
-    expect(insertCan.reason).toBe(mergeReason);
+    expect(insertCan.reason).toBe('the table operation was refused (tree-invariant)');
     const table = tableFragment(surface);
     const topo = readEditableTableTopology(surface.session.part().root, table.tableId);
     expect(topo.ok).toBe(true);
@@ -835,12 +836,18 @@ describe('merge and resource refusals at editor seam', () => {
     });
   });
 
-  test('hMerge and vMerge column ops refuse with merge reason', () => {
-    for (const extra of [
-      `<w:tr><w:tc><w:tcPr><w:hMerge w:val="restart"/></w:tcPr>${p('h')}</w:tc><w:tc>${p('x')}</w:tc></w:tr>`,
-      `<w:tr><w:tc><w:tcPr><w:vMerge w:val="restart"/></w:tcPr>${p('v')}</w:tc><w:tc>${p('x')}</w:tc></w:tr>` +
-        `<w:tr><w:tc><w:tcPr><w:vMerge/></w:tcPr>${p('v2')}</w:tc><w:tc>${p('y')}</w:tc></w:tr>`,
-    ]) {
+  test('a vMerge column deletion works, as in Word; an hMerge one refuses with merge reason', () => {
+    for (const [extra, ok] of [
+      [
+        `<w:tr><w:tc><w:tcPr><w:hMerge w:val="restart"/></w:tcPr>${p('h')}</w:tc><w:tc>${p('x')}</w:tc></w:tr>`,
+        false,
+      ],
+      [
+        `<w:tr><w:tc><w:tcPr><w:vMerge w:val="restart"/></w:tcPr>${p('v')}</w:tc><w:tc>${p('x')}</w:tc></w:tr>` +
+          `<w:tr><w:tc><w:tcPr><w:vMerge/></w:tcPr>${p('v2')}</w:tc><w:tc>${p('y')}</w:tc></w:tr>`,
+        true,
+      ],
+    ] as const) {
       const editor = mount(
         '<w:tbl><w:tblGrid><w:gridCol w:w="2400"/><w:gridCol w:w="3600"/></w:tblGrid>' +
           extra +
@@ -850,8 +857,9 @@ describe('merge and resource refusals at editor seam', () => {
       const first = surface.session.paragraphIds()[0]!;
       caret(surface, first);
       const can = editor.can({ type: 'deleteColumn' });
-      expect(can.ok).toBe(false);
-      expect(can.reason).toBe(mergeReason);
+      expect(can.ok).toBe(ok);
+      if (!ok) expect(can.reason).toBe(mergeReason);
+      else expect(editor.exec({ type: 'deleteColumn' }).ok).toBe(true);
     }
   });
 

@@ -16,6 +16,7 @@ import { afterEach, describe, expect, test } from 'bun:test';
 import {
   WML_NAMESPACE_URI,
   type OoxmlElement,
+  type OoxmlNode,
   type OoxmlPackage,
   type TreeDocOp,
 } from '@docx-editor.dev/core/store';
@@ -37,6 +38,45 @@ function threeParagraphs(): Uint8Array {
       '<w:p><w:r><w:t>Second paragraph here</w:t></w:r></w:p>' +
       '<w:p><w:r><w:t>Third paragraph here</w:t></w:r></w:p>' +
       '<w:sectPr/>'
+  );
+}
+
+const SETTINGS_PART = '/word/settings.xml';
+const SETTINGS_TYPE = 'application/vnd.openxmlformats-officedocument.wordprocessingml.settings+xml';
+const SETTINGS_REL = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/settings';
+const PACKAGE_RELS = 'http://schemas.openxmlformats.org/package/2006/relationships';
+
+/** `threeParagraphs`, with a settings part that lists no note separators yet. */
+function threeParagraphsWithSettings(): Uint8Array {
+  return zipDocument(
+    '<w:p><w:r><w:t>First paragraph here</w:t></w:r></w:p>' +
+      '<w:p><w:r><w:t>Second paragraph here</w:t></w:r></w:p>' +
+      '<w:p><w:r><w:t>Third paragraph here</w:t></w:r></w:p>' +
+      '<w:sectPr/>',
+    {
+      overrides: `<Override PartName="${SETTINGS_PART}" ContentType="${SETTINGS_TYPE}"/>`,
+      documentRels:
+        `<Relationships xmlns="${PACKAGE_RELS}">` +
+        `<Relationship Id="rIdSettings" Type="${SETTINGS_REL}" Target="settings.xml"/>` +
+        '</Relationships>',
+      extraXml: {
+        'word/settings.xml':
+          `<w:settings xmlns:w="${W}"><w:defaultTabStop w:val="720"/>` +
+          '<w:characterSpacingControl w:val="doNotCompress"/></w:settings>',
+      },
+    }
+  );
+}
+
+/** The `w:id` of each separator a settings `w:footnotePr` or `w:endnotePr` lists. */
+function separatorIds(listed: OoxmlNode): string[] {
+  if (listed.kind === 'textValue') return [];
+  return listed.children.flatMap((child) =>
+    child.kind === 'textValue'
+      ? []
+      : child.attributes
+          .filter((attribute) => attribute.localName === 'id')
+          .map((attribute) => attribute.value)
   );
 }
 
@@ -104,6 +144,24 @@ const CASES: readonly RaceCase[] = [
     referenceName: 'endnoteReference',
   },
 ];
+
+/** Each replica's settings list the separators once, and it holds `notes` authored notes. */
+function expectOneSeparatorList(alice: Peer, bob: Peer, testCase: RaceCase, notes: number): void {
+  for (const peer of [alice, bob] as const) {
+    expect(peer.room.session.status()).toBe('ready');
+    const settings = peer.store.currentPackage().parts.get(SETTINGS_PART);
+    const listed = (settings?.root.children ?? []).filter(
+      (child) =>
+        child.kind !== 'textValue' &&
+        child.namespaceUri === W &&
+        child.localName === `${testCase.noteKind}Pr`
+    );
+    expect(listed).toHaveLength(1);
+    expect(separatorIds(listed[0]!)).toEqual(['-1', '0']);
+    expect(authoredIds(peer, testCase)).toHaveLength(notes);
+  }
+  harness.expectConverged(alice, bob);
+}
 
 describe('concurrent first-create of a notes part', () => {
   for (const testCase of CASES) {
@@ -179,6 +237,45 @@ describe('concurrent first-create of a notes part', () => {
         expect(peer.room.session.status()).toBe('ready');
         expect(authoredIds(peer, testCase)).toHaveLength(1);
         expect(referenceCount(peer.store.currentPackage(), testCase.referenceName)).toBe(1);
+      }
+      harness.expectConverged(alice, bob);
+    });
+  }
+
+  for (const testCase of CASES) {
+    test(`settings the file has list the ${testCase.label}' separators once after two first ${testCase.label}`, async () => {
+      // A first note lists its part's separators in `w:footnotePr` (or `w:endnotePr`) of the
+      // settings part. Two authors who each add the first note at once each give the settings
+      // one, and `CT_Settings` allows it once.
+      const { alice, bob, pause, resume } = await harness.pair(threeParagraphsWithSettings());
+      pause();
+      applyLifecycle(alice, {
+        op: 'insertNote',
+        noteKind: testCase.noteKind,
+        paragraphId: harness.paragraphIdAt(alice, 0),
+        offset: 5,
+      });
+      applyLifecycle(bob, {
+        op: 'insertNote',
+        noteKind: testCase.noteKind,
+        paragraphId: harness.paragraphIdAt(bob, 2),
+        offset: 5,
+      });
+      resume();
+      alice.port.flushPendingJournals();
+      bob.port.flushPendingJournals();
+      expectOneSeparatorList(alice, bob, testCase, 2);
+      // Each author's undo takes back their own note. The settings keep one list while either
+      // note is left, so the copy an undo removes may be the one every replica showed.
+      for (const peer of [alice, bob] as const) {
+        expect(peer.room.session.undo()).toBe(true);
+        alice.port.flushPendingJournals();
+        bob.port.flushPendingJournals();
+        if (peer === alice) expectOneSeparatorList(alice, bob, testCase, 1);
+      }
+      for (const peer of [alice, bob] as const) {
+        expect(peer.room.session.status()).toBe('ready');
+        expect(authoredIds(peer, testCase)).toHaveLength(0);
       }
       harness.expectConverged(alice, bob);
     });

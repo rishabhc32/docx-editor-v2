@@ -64,7 +64,8 @@ describe('equations through editor copy and paste', () => {
     const target = mount(paragraph('XY'));
     putCaret(target.surface, 1);
     target.surface.pasteRich(flavours.text, flavours.html);
-    expect(target.surface.session.bodyText()).toBe('Xne ￼ afY');
+    // Word's Smart cut and paste puts a space on each side between two words
+    expect(target.surface.session.bodyText()).toBe('X ne ￼ af Y');
     expect(count(target.surface, 'oMath')).toBe(1);
   });
 

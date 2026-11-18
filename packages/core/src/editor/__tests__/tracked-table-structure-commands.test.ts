@@ -20,7 +20,6 @@ import {
 import type { EditorModule } from '../../contracts/modules.ts';
 import type { EditorCommand } from '../../contracts/editor.ts';
 import { paragraphTextFromLayout } from '@docx-editor.dev/core/layout';
-import { HELD_CHANGE_REASON } from '../review-held-changes.ts';
 import { docx, selectCellRectangle } from './paginated-surface-fixtures.ts';
 
 const p = (t: string) => `<w:p><w:r><w:t xml:space="preserve">${t}</w:t></w:r></w:p>`;
@@ -226,6 +225,43 @@ test('deleting a proposed column withdraws it', () => {
   expect(xmlOf(editor)).toBe(original);
 });
 
+test("a column deleted through the author's own new row: each card decides alone", () => {
+  for (const order of [
+    ['accept', 'accept'],
+    ['reject', 'reject'],
+    ['accept', 'reject'],
+    ['reject', 'accept'],
+  ] as const)
+    for (const first of [0, 1]) {
+      const editor = mount(docx(BODY), 'suggesting');
+      caret(editor, A2);
+      expect(editor.exec({ type: 'insertRow', where: 'below' }).ok).toBe(true);
+      caret(editor, A2);
+      expect(editor.exec({ type: 'deleteColumn' }).ok).toBe(true);
+      expect(cards(editor)).toEqual(['structural', 'structural']);
+      for (const [k, action] of order.entries()) {
+        const items = editor.getReviewItems();
+        const item = items[k === 0 ? first : 0]!;
+        const decided =
+          action === 'accept'
+            ? editor.acceptReviewItem(item.key)
+            : editor.rejectReviewItem(item.key);
+        expect({ order, first, k, decided }).toMatchObject({
+          order,
+          first,
+          k,
+          decided: { ok: true },
+        });
+      }
+      expect(cards(editor)).toEqual([]);
+      const cellsPerRow = [...xmlOf(editor).matchAll(/<w:tr>(.*?)<\/w:tr>/g)].map(
+        (m) => m[1]!.match(/<w:tc>/g)?.length ?? 0
+      );
+      expect(new Set(cellsPerRow).size).toBe(1);
+      editors.pop()!.destroy();
+    }
+});
+
 test('two Delete Column presses in one second are two cards', () => {
   // Both presses take the same revision date, as two presses within a wall-clock second do.
   setSystemTime(new Date('2026-10-01T12:00:00Z'));
@@ -239,6 +275,32 @@ test('two Delete Column presses in one second are two cards', () => {
   } finally {
     setSystemTime();
   }
+});
+
+test("accepting a proposed column beside the same author's pending fill keeps the fill pending", () => {
+  // The fill is one record over the row's cells, one of them in the deleted column. Word
+  // accepts the cell deletion alone: the deleted cells go, the neighbour takes their width, and
+  // the fill stays pending on the other cells with the width from before in its record
+  // (Word for Mac 16, 2026-10-29: `/tmp/word-evidence-tables/~$word-fill-coldel-accept.docx`)
+  const editor = mount(docx(BODY), 'suggesting');
+  caret(editor, A2 - 1);
+  const fill = { type: 'setCellFill', color: { kind: 'hex', value: 'FFFF00' } };
+  expect(editor.exec(fill as EditorCommand).ok).toBe(true);
+  caret(editor, A2);
+  expect(editor.exec({ type: 'deleteColumn' }).ok).toBe(true);
+  expect(cards(editor)).toEqual(['format', 'structural']);
+  const column = editor
+    .getReviewItems()
+    .find((item) => item.kind === 'revision' && item.revisionKind === 'structural')!;
+  expect(editor.acceptReviewItem(column.key)).toEqual({ ok: true, changed: true });
+  expect(cards(editor)).toEqual(['format']);
+  expect(texts(editor)).toEqual(['before', 'a1', 'a3', 'b1', 'b3', 'after']);
+  const xml = xmlOf(editor);
+  expect(xml).toContain('w:fill="FFFF00"');
+  expect(xml.match(/<w:tcPrChange /g)).toHaveLength(2);
+  expect(xml).toContain('<w:tcW w:type="dxa" w:w="5000"/>');
+  resolveAll(editor, 'reject');
+  expect(xmlOf(editor)).not.toContain('w:fill="FFFF00"');
 });
 
 describe('a range deletion over a whole table proposes the table', () => {
@@ -295,45 +357,54 @@ describe('a range deletion over a whole table proposes the table', () => {
   });
 });
 
-describe('rejecting a proposed table its author typed into', () => {
+describe('rejecting a proposed table or row with typing in it', () => {
+  // A new table is Word's form: inserted rows and cell paragraph marks, no cell markers. Word
+  // reviews such rows as one fragment with the text typed in them, by any author
+  // (`review-table-groups.ts`), so the table's card holds the typing.
   function proposeTableAndType(typist: string): DocxEditorInstance {
     const editor = mount(docx(p('before')), 'suggesting');
     caret(editor, 0, 6);
     expect(editor.exec({ type: 'insertTable', rows: 2, cols: 2 }).ok).toBe(true);
+    expect(xmlOf(editor)).not.toContain('<w:cellIns ');
     editor.setAuthor(typist);
     editor.surface!.type('hi');
-    expect(cards(editor)).toEqual(['structural', 'insert']);
+    expect(cards(editor)).toEqual(['structural']);
     return editor;
   }
 
-  test('takes the typing with it, in one undo step', () => {
-    const editor = mount(docx(p('before')), 'suggesting');
-    const original = xmlOf(editor);
-    editors.pop()!.destroy();
-    const proposed = proposeTableAndType('Grace Hopper');
-    const table = proposed
-      .getReviewItems()
-      .find((item) => item.kind === 'revision' && item.revisionKind === 'structural')!;
-    expect(proposed.rejectReviewItem(table.key)).toEqual({ ok: true, changed: true });
-    expect(cards(proposed)).toEqual([]);
-    expect(xmlOf(proposed)).toBe(original);
-    expect(proposed.exec({ type: 'undo' }).ok).toBe(true);
-    expect(cards(proposed)).toEqual(['structural', 'insert']);
-  });
+  for (const typist of ['Grace Hopper', 'Ada Lovelace'])
+    test(`a table takes ${typist}'s typing with it, in one undo step`, () => {
+      const editor = mount(docx(p('before')), 'suggesting');
+      const original = xmlOf(editor);
+      editors.pop()!.destroy();
+      const proposed = proposeTableAndType(typist);
+      const table = proposed
+        .getReviewItems()
+        .find((item) => item.kind === 'revision' && item.revisionKind === 'structural')!;
+      expect(proposed.rejectReviewItem(table.key)).toEqual({ ok: true, changed: true });
+      expect(cards(proposed)).toEqual([]);
+      expect(xmlOf(proposed)).toBe(original);
+      expect(proposed.exec({ type: 'undo' }).ok).toBe(true);
+      expect(cards(proposed)).toEqual(['structural']);
+    });
 
-  test("is refused while another author's typing is pending, and says why", () => {
-    const editor = proposeTableAndType('Ada Lovelace');
-    const table = editor
+  test("a new row is Word's form too, and takes another author's typing with it", () => {
+    const editor = mount(docx(BODY), 'suggesting');
+    const original = xmlOf(editor);
+    caret(editor, A2);
+    expect(editor.exec({ type: 'insertRow', where: 'below' }).ok).toBe(true);
+    // As Word writes a row it inserts (a file Word saved: `e2e/fixtures/list-pagination-break.docx`)
+    expect(xmlOf(editor)).not.toContain('<w:cellIns ');
+    expect(xmlOf(editor).match(/<w:pPr><w:rPr><w:ins /g)).toHaveLength(3);
+    editor.setAuthor('Ada Lovelace');
+    editor.surface!.type('hi');
+    expect(cards(editor)).toEqual(['structural']);
+    const row = editor
       .getReviewItems()
       .find((item) => item.kind === 'revision' && item.revisionKind === 'structural')!;
-    const refused = editor.rejectReviewItem(table.key);
-    expect(refused).toEqual({ ok: false, code: 'unsupported', reason: HELD_CHANGE_REASON });
-    // Answering the typing first clears the way.
-    const typing = editor
-      .getReviewItems()
-      .find((item) => item.kind === 'revision' && item.revisionKind === 'insert')!;
-    expect(editor.rejectReviewItem(typing.key).ok).toBe(true);
-    expect(editor.rejectReviewItem(editor.getReviewItems()[0]!.key).ok).toBe(true);
-    expect(xmlOf(editor)).not.toContain('<w:tbl>');
+    expect(editor.rejectReviewItem(row.key)).toEqual({ ok: true, changed: true });
+    expect(xmlOf(editor)).toBe(original);
+    expect(editor.exec({ type: 'undo' }).ok).toBe(true);
+    expect(cards(editor)).toEqual(['structural']);
   });
 });

@@ -13,7 +13,10 @@ import {
   runObservedStoreTransaction,
 } from '../package/canonical-primitive-capture.ts';
 import { readOoxmlPackage, type OoxmlPackage } from '../package/ooxml-package.ts';
+import { createNodeIdAllocator, findNode } from '../package/ooxml-edit.ts';
 import { mergeFragmentIntoPackage, type FragmentMergeResult } from './clipboard-fragment-merge.ts';
+import { smartSpacedBlocks, spacingNeighbours } from './fragment-smart-spacing.ts';
+import { placeholderControlForInsertion } from './tree-op-content-controls.ts';
 import {
   MAX_FRAGMENT_DEPTH,
   MAX_FRAGMENT_INSERT_BLOCKS,
@@ -21,7 +24,8 @@ import {
 } from './tree-op-fragment.ts';
 import type { OoxmlNode } from '../package/ooxml-tree.ts';
 import type { PackageTransactResult, StoryScope, TreePackageStore } from './tree-package-store.ts';
-import type { TreeDocOp } from './tree-op-types.ts';
+import type { RevisionAttributionInput, TreeDocOp } from './tree-op-types.ts';
+import type { InsertFragmentOp } from './fragment-op-types.ts';
 
 /** Decoded fragment payloads above this cap are refused before any package work. */
 export const MAX_FRAGMENT_DECODED_BYTES = 16 * 1024 * 1024;
@@ -32,6 +36,12 @@ export interface FragmentPasteInput {
   /** The fragment package zip (from the clipboard codec or the HTML projection). */
   readonly fragmentBytes: Uint8Array;
   readonly lastMarkCovered: boolean;
+  /**
+   * Word's Smart cut and paste ("Adjust sentence and word spacing automatically", on by
+   * default in Word): a paste between two words gets a space on each side, as runs of the
+   * paste. The editor's clipboard sets it; a caller that lands exact content leaves it out.
+   */
+  readonly smartSpacing?: boolean;
   /** Ops that clear the current selection first (the surface's deleteSelectionPlan). */
   readonly priorOps?: readonly TreeDocOp[];
   /**
@@ -43,6 +53,21 @@ export interface FragmentPasteInput {
    * merged document shows it. Omitted (solo) keeps Word's dense sequences.
    */
   readonly actorId?: string;
+  /**
+   * Land the fragment as ONE tracked insertion by this author and date, the way Word pastes
+   * with Track Changes on. The `priorOps` that clear the selection carry their own revisions.
+   */
+  readonly revision?: RevisionAttributionInput;
+  /**
+   * Asked inside the transaction, once the store has accepted the blocks, with every op the
+   * paste commits (`priorOps`, then the exact `insertFragment`) and the transaction's working
+   * package as it stood before the blocks landed: `priorOps` already applied, and the merged
+   * styles, numbering, media, relationships and notes the blocks name already in it. A
+   * non-null answer refuses the whole paste with that code as the detail, and nothing
+   * commits. A paste the store itself refuses never reaches the gate. A collaboration
+   * session judges the write here, because only here does the write exist whole.
+   */
+  readonly gate?: (ops: readonly TreeDocOp[], pkg: OoxmlPackage) => string | null;
 }
 
 export type FragmentPasteResult =
@@ -86,6 +111,26 @@ function withinFragmentBudget(fragment: OoxmlPackage): boolean {
     if (!walk(part.root, 1, MAX_FRAGMENT_DEPTH * 4)) return false;
   }
   return true;
+}
+
+/** Pasted blocks with Word's spaces added around them. */
+type BlockSpacing = (blocks: readonly OoxmlNode[]) => readonly OoxmlNode[];
+/**
+ * Word's spaces for a paste at the input's place in the working part (`smartSpacing`): none at
+ * a control's prompt, whose text the paste replaces.
+ */
+function smartSpacing(
+  pkg: OoxmlPackage,
+  partName: string,
+  input: FragmentPasteInput
+): BlockSpacing | null {
+  const part = pkg.parts.get(partName);
+  const host = part ? findNode(part, input.paragraphId) : null;
+  if (!part || !host || host.kind !== 'paragraph') return null;
+  if (placeholderControlForInsertion(part, input.paragraphId, input.offset)) return null;
+  const { before, after } = spacingNeighbours(host, input.offset);
+  const nextId = createNodeIdAllocator(part);
+  return (blocks) => smartSpacedBlocks(blocks, input.lastMarkCovered, before, after, nextId);
 }
 
 /**
@@ -135,6 +180,11 @@ export function applyFragmentPaste(
   storyStore.graftPackage(() => store.currentPackage());
   let blockCount = 0;
   let refusalDetail = '';
+  // Poison the transaction so nothing commits.
+  const abort = (detail: string, ctx: { apply(op: TreeDocOp): boolean }): void => {
+    refusalDetail = detail;
+    ctx.apply({ op: 'insertText', paragraphId: '\0fragment-abort', offset: 0, text: 'x' });
+  };
 
   return runObservedStoreTransaction(
     store,
@@ -149,26 +199,34 @@ export function applyFragmentPaste(
           // (the pre-transaction snapshot) and replacing the working package wholesale threw
           // those deletions away, so a rich paste over a selection kept the old content.
           let merged: FragmentMergeResult | null = null;
+          let spaced: BlockSpacing | null = null;
           const packageApplied = ctx.applyPackage((current) => {
+            if (input.smartSpacing) spaced = smartSpacing(current, story.partName, input);
             merged = mergeFragmentIntoPackage(current, fragment, story.partName);
             return merged.ok ? merged.pkg : current;
           });
           const landed = merged as FragmentMergeResult | null;
           if (!landed || !landed.ok) {
-            refusalDetail = `fragment-merge:${landed ? landed.reason : 'no-merge'}`;
-            // Poison the transaction so nothing commits.
-            ctx.apply({ op: 'insertText', paragraphId: '\0fragment-abort', offset: 0, text: 'x' });
+            abort(`fragment-merge:${landed ? landed.reason : 'no-merge'}`, ctx);
             return;
           }
           if (!packageApplied) return;
           blockCount = landed.blocks.length;
-          ctx.apply({
+          const space = spaced as BlockSpacing | null;
+          const insert: InsertFragmentOp = {
             op: 'insertFragment',
             paragraphId: input.paragraphId,
             offset: input.offset,
-            blocks: landed.blocks,
+            blocks: space ? space(landed.blocks) : landed.blocks,
             lastMarkCovered: input.lastMarkCovered,
-          });
+            ...(input.revision ? { revision: input.revision } : {}),
+          };
+          // The store judges the blocks first: a fragment it refuses (inside a link or an
+          // inline control) is a refusal the editor recovers from with plain text, so the
+          // gate must never answer for it, or a session refuses what the editor alone pastes.
+          if (!ctx.apply(insert)) return;
+          const refused = input.gate?.([...(input.priorOps ?? []), insert], landed.pkg);
+          if (refused) abort(refused, ctx);
         },
         {
           story,

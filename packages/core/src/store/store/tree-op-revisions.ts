@@ -7,7 +7,9 @@ import {
 } from './revision-marker-content.ts';
 import { retainedNestedRowSites } from './revision-table-preserve-nested.ts';
 import { unboundTableHistories } from './revision-table-unbound-history.ts';
+import { gestureGridSites } from './revision-table-gesture.ts';
 import { implicitTableRowProperties } from './revision-table-implicit-height.ts';
+import { rowsLosingTableAnchor, withRowHeightAnchors } from './revision-table-row-anchor.ts';
 import { ordinaryMoveRanges, planOrdinaryMoves } from './revision-move-ranges.ts';
 import {
   applyCellMerge,
@@ -64,14 +66,17 @@ import {
   type Resolution,
 } from './revision-rebuild-helpers.ts';
 import { holdsMoveNode } from './revision-container-presence.ts';
+import { emptiedByDecision, isMathRunRevision } from './revision-math-runs.ts';
 import {
   REVISION_PROPERTY_CONTAINERS,
   preservedRevisionProperty,
   validRevisionPropertyRecord,
   restoredSectionProperties,
+  numberingChangeSite,
   validNumberingRevision,
 } from './revision-property-records.ts';
 import { recordedProperties } from './tree-op-tracked-properties.ts';
+import { endAcceptedPrompts } from './content-control-prompt-accept.ts';
 import { scopedRevisionRoot } from './tree-op-revision-scope.ts';
 import type { RevisionAddress } from './tree-op-types.ts';
 import type { TreeOpEffect, TreeOpRejection } from './tree-op-validate.ts';
@@ -245,7 +250,8 @@ function collectRevisionSitesIn(
         CELL_REVISION_NAMES.has(node.localName) ||
         PROPERTY_CHANGE_NAMES.has(node.localName) ||
         node.localName === 'ins' ||
-        node.localName === 'del';
+        node.localName === 'del' ||
+        numberingChangeSite(node, parent, grandparentName);
       if (
         isNamedRevision &&
         (wmlAttribute(node, 'id') !== undefined || part.root.localName === 'styles')
@@ -277,11 +283,14 @@ function collectRevisionSitesIn(
           !paragraphMark &&
           !tableRevision &&
           !numberingRevision;
+        // A mark around a math run's content is a content wrapper Word writes
+        const mathRun = isMathRunRevision(node, parent);
         const refusal = revisionSiteRefusal({
           unaddressed: addressOf(node) === null,
-          misplacedMarker: unsupportedContent,
+          misplacedMarker: unsupportedContent && !mathRun,
           nestedMarker:
             !isContent &&
+            !mathRun &&
             !PROPERTY_CHANGE_NAMES.has(node.localName) &&
             hasRevisionMarkerContent(node),
           unsupportedStructure: structural && !tableRevision && !numberingRevision,
@@ -602,15 +611,15 @@ function rebuildChildren(children: readonly OoxmlNode[], plan: RebuildPlan): Oox
     // `CT_RunTrackChange` takes `EG_ContentRunContent` and that has no `fldSimple` in it, so
     // accepting leaves a hollow one still occupying the model position the reviewer agreed to
     // remove. A `w:hyperlink` with no runs is a link to nowhere holding a relationship alive.
-    // Word drops both, and an untracked delete over the same range already does.
+    // Word drops both, and an untracked delete over the same range already does. So do a math
+    // run, an equation and a math paragraph a decision emptied (`revision-math-runs.ts`).
     //
     const survivor = rebuilt[0];
     const hollow =
       rebuilt.length === 1 && survivor !== undefined && survivor.kind !== 'textValue'
         ? survivor
         : null;
-    if ((child.kind === 'fldSimple' || child.kind === 'hyperlink') && hollow?.children.length === 0)
-      continue;
+    if (emptiedByDecision(child, hollow)) continue;
     if (hollow?.children.length === 0 && heldOnlyResolvedMarks(child, plan.dropMarks)) continue;
     // A revision wrapper the resolution emptied goes the same way. Accepting one author's
     // deletion of another author's insertion removes the deleted runs and leaves the `w:ins`
@@ -750,12 +759,15 @@ export function resolveRevisionOperation(
   operation: RevisionResolutionOperation,
   options?: EditOptions
 ): RevisionResolveResult {
-  return resolveRevisions(part, action, operation.revision, {
+  const resolved = resolveRevisions(part, action, operation.revision, {
     ...options,
     ...(operation.localName === undefined ? {} : { localName: operation.localName }),
     ...(operation.siteNodeIds === undefined ? {} : { siteNodeIds: operation.siteNodeIds }),
     ...(operation.scopeRootId === undefined ? {} : { scopeRootId: operation.scopeRootId }),
   });
+  // An accepted replacement of a control's prompt leaves the control holding real content.
+  if (action !== 'accept' || !resolved.ok || !resolved.part) return resolved;
+  return { ...resolved, part: endAcceptedPrompts(part, resolved.part, options) };
 }
 
 /** Resolve the selected canonical sites atomically; refuse unsupported sites without mutation. */
@@ -791,6 +803,8 @@ export function resolveRevisions(
     action
   );
   const selected = movePlan.selected;
+  const decided = sites.filter((site) => selected.has(site.node.id));
+  for (const grid of gestureGridSites(part, sites, decided)) selected.add(grid.node.id);
   matched = sites.filter((site) => selected.has(site.node.id));
   const mergeIds = new Set(
     sites.filter((site) => site.node.localName === 'cellMerge').map((site) => site.node.id)
@@ -954,12 +968,16 @@ export function resolveRevisions(
     return { ok: false, reason: 'tree-invariant' };
   }
   const replaced = replaceChildren(part, part.root.id, root.children, options);
-  if (!replaced.ok) {
+  // Another author's row height leaning on a decided table record moves onto its row
+  const anchored = replaced.ok
+    ? withRowHeightAnchors(replaced.part, rowsLosingTableAnchor(part, matched), options)
+    : null;
+  if (!anchored) {
     return { ok: false, reason: 'tree-invariant' };
   }
   return {
     ok: true,
-    part: replaced.part,
+    part: anchored,
     effect: {
       dirty: [],
       created: [],
