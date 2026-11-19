@@ -106,10 +106,14 @@ export function checkpointFacts(
   const place = new Map(sorted.map(({ k }, n) => [k, n]));
   const at = (k: number): number => place.get(k) ?? k;
   return {
-    suggestions: sorted.map(({ id }) => ({
-      attribution: doc.suggestions.get(id)?.attribution ?? { author: '', person: null },
-      revisions: writtenOf(id),
-    })),
+    suggestions: sorted.map(({ id }) => {
+      const suggestion = doc.suggestions.get(id);
+      return {
+        attribution: suggestion?.attribution ?? { author: '', person: null },
+        revisions: writtenOf(id),
+        status: suggestion?.status ?? 'pending',
+      };
+    }),
     comments: commentPersons(doc),
     takeovers: takeovers.map((t) => ({
       ...t,
@@ -137,8 +141,8 @@ function commentPersons(doc: OrderedDocument): Map<string, OrderedPerson> {
 
 /**
  * For each properties element of a container the file writes that a pending record changes with
- * no change record: the container's own properties, and every pending record of them that no
- * takeover holds (a takeover's records are kept by their change record).
+ * no change record: the container's own properties, and every record of them, decided or not,
+ * that no takeover holds (a takeover's records are kept by their change record).
  */
 function checkpointUntracked(
   doc: OrderedDocument,
@@ -156,14 +160,14 @@ function checkpointUntracked(
 
       const byTarget = new Map<OrderedPropertyTarget, OrderedElementRecord[]>();
       for (const record of open.props) {
-        const pending = doc.suggestions.get(record.suggestion)?.status === 'pending';
-        if (record.kind === 'element' && record.replaced === undefined && pending) {
+        if (record.kind === 'element' && record.replaced === undefined) {
           byTarget.set(record.target, [...(byTarget.get(record.target) ?? []), record]);
         }
       }
 
       for (const [target, records] of byTarget) {
-        if (!records.some((record) => record.untracked === true)) {
+        const pending = (id: string) => doc.suggestions.get(id)?.status === 'pending';
+        if (!records.some((record) => record.untracked === true && pending(record.suggestion))) {
           continue;
         }
 

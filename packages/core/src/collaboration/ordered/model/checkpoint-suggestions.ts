@@ -2,18 +2,30 @@
 
 import { WML_NAMESPACE_URI, type OoxmlAttribute } from '../../../store/package/ooxml-tree.ts';
 import { ORDERED_NAMESPACE_PATTERN } from '../change/ids.ts';
-import { at, fieldsOf, int, Invalid, list, plainText, required, str } from '../change/read.ts';
+import {
+  at,
+  fieldsOf,
+  int,
+  Invalid,
+  list,
+  oneOf,
+  plainText,
+  required,
+  str,
+} from '../change/read.ts';
 import { ORDERED_CHANGE_LIMITS } from '../change/types.ts';
 import { readPerson } from './person.ts';
-import type { OrderedAttribution } from './types.ts';
+import type { OrderedAttribution, OrderedSuggestionStatus } from './types.ts';
 
 /**
- * A pending suggestion: who made it, and the `w:id`s the file writes for its marks, every role. A
- * load makes it once and reads each of those marks as it.
+ * A suggestion: who made it, and the `w:id`s the file writes for its marks, every role. A load
+ * makes it once and reads each of those marks as it. Pending, but for one whose records another
+ * section keeps (a decided record of properties an untracked record changes).
  */
 export interface CheckpointSuggestion {
   readonly attribution: OrderedAttribution;
   readonly revisions: readonly string[];
+  readonly status?: OrderedSuggestionStatus;
 }
 
 /**
@@ -39,10 +51,11 @@ const NAME = /^[A-Za-z_][A-Za-z0-9._-]{0,63}$/;
 /** A revision's or a comment's `w:id`, as a checkpoint names it. */
 export const WORD_ID = /^[\x21-\x7E]{1,64}$/;
 const TRIPLE = new Set(['id', 'author', 'date']);
+const DECIDED: readonly OrderedSuggestionStatus[] = ['accepted', 'rejected'];
 
 /** The suggestions as the manifest lists them. */
 export function suggestionsJson(suggestions: readonly CheckpointSuggestion[]): unknown[] {
-  return suggestions.map(({ attribution, revisions }) => ({
+  return suggestions.map(({ attribution, revisions, status }) => ({
     author: attribution.author,
     ...(attribution.date === undefined ? {} : { date: attribution.date }),
     attributes: (attribution.attributes ?? []).map(
@@ -55,6 +68,7 @@ export function suggestionsJson(suggestions: readonly CheckpointSuggestion[]): u
     ),
     person: attribution.person,
     revisions,
+    ...(status === undefined || status === 'pending' ? {} : { status }),
   }));
 }
 
@@ -71,7 +85,11 @@ export function readSuggestions(value: unknown): CheckpointSuggestion[] {
 }
 
 function readSuggestion(value: unknown, path: string): CheckpointSuggestion {
-  const f = fieldsOf(value, path, new Set(['author', 'date', 'attributes', 'person', 'revisions']));
+  const f = fieldsOf(
+    value,
+    path,
+    new Set(['author', 'date', 'attributes', 'person', 'revisions', 'status'])
+  );
   const person = required(f, 'person');
   const attributes = list(required(f, 'attributes'), at(path, 'attributes'), 0, MAX_ATTRIBUTES);
   const revisions = list(required(f, 'revisions'), at(path, 'revisions'), 0, MAX_LISTED);
@@ -92,6 +110,7 @@ function readSuggestion(value: unknown, path: string): CheckpointSuggestion {
     revisions: revisions.map((id, k) =>
       matching(id, at(at(path, 'revisions'), k), WORD_ID, 'a revision id')
     ),
+    ...(f.has('status') ? { status: oneOf(f.get('status'), at(path, 'status'), DECIDED) } : {}),
   };
 }
 

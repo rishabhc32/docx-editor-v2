@@ -16,6 +16,7 @@ import {
   type OrderedAttribution,
   type OrderedDocument,
   type OrderedItem,
+  type OrderedSuggestionStatus,
 } from '../model/types.ts';
 import { attributeOf, isWml } from '../ooxml-nodes.ts';
 import { loadBlocks } from './blocks.ts';
@@ -60,6 +61,8 @@ export interface OrderedLoadOptions {
   readonly suggestions?: readonly {
     readonly attribution: OrderedAttribution;
     readonly revisions: readonly string[];
+    /** Pending when absent. */
+    readonly status?: OrderedSuggestionStatus;
   }[];
   /**
    * The persons of a room checkpoint's comments by comment `w:id` (`openOrderedCheckpoint` reads

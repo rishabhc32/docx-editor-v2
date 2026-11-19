@@ -11,7 +11,7 @@ import { MAX_XML_DEPTH } from '../../../store/package/xml-reader.ts';
 import type { CheckpointSuggestion } from '../model/checkpoint-suggestions.ts';
 import { noteCommentMarker } from '../model/comments.ts';
 import { createOrderedItem, NOT_WITHIN, type OrderedItemInit } from '../model/document.ts';
-import { newSuggestion } from '../model/mutations.ts';
+import { newSuggestion, setStatus } from '../model/mutations.ts';
 import { OrderedRefusal } from '../model/refusal.ts';
 import { REVISION_ROLE, seedRevisionId } from '../model/revision-ids.ts';
 import { recordUndo } from '../model/undo-record.ts';
@@ -96,8 +96,12 @@ export class RevisionReader {
   constructor(doc: OrderedDocument, fixed?: string, listed: readonly CheckpointSuggestion[] = []) {
     this.doc = doc;
     this.fixed = fixed;
-    for (const { attribution, revisions } of listed) {
+    for (const { attribution, revisions, status } of listed) {
       const { id } = newSuggestion(doc, attribution);
+      if (status !== undefined) {
+        setStatus(doc, id, status);
+      }
+
       for (const revision of revisions) {
         // An id names one suggestion: two share one only when two minted ids meet
         const triple = revisionTriple(revision, attribution.author, attribution.date);
