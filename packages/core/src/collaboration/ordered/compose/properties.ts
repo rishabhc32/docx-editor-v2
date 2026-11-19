@@ -291,7 +291,9 @@ function inSequence(
   return out;
 }
 
-/** The children of `element` that `merge` names over the ones before them, in the schema's order. */
+/**
+ * The children of `element` that `merge` names over the ones before them, in the schema's order.
+ */
 export function withMergedChildren(
   target: OrderedPropertyTarget,
   element: OoxmlElement | null,
@@ -304,7 +306,10 @@ export function withMergedChildren(
     (c) => c.kind !== 'textValue' && keys.has(propertyKey(c))
   );
   const sequence = SEQUENCES[target];
-  if (sequence) return inSequence(kept, given, sequence);
+  if (sequence) {
+    return inSequence(kept, given, sequence);
+  }
+
   const merged = [...kept, ...given];
   return target === 'sdtPr' ? orderedContentControlProperties(merged) : merged;
 }
