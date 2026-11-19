@@ -299,15 +299,6 @@ export const KNOWN: readonly KnownDifference[] = [
     edits: ['delete from the paragraph before'],
   },
   {
-    cause:
-      "The engine formats a check box form field's separator run (its result is empty); a format reaches a field's result only (rule 9)",
-    owner: 'engine',
-    codes: 'VD',
-    sets: ['single', 'pairs'],
-    kinds: ['formcheck'],
-    edits: ['bold across', 'italic it', 'Ana bolds, Ben italics it', 'Ana bolds, Olive italics it'],
-  },
-  {
     cause: 'The engine: a decision in a table with cells merged down rows rewrites the table grid',
     owner: 'engine',
     codes: 'DW',

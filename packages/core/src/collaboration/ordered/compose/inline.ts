@@ -361,8 +361,9 @@ function drawBare(ctx: ComposeContext, item: OrderedItem, into: OoxmlNode[]): vo
 }
 
 /**
- * A whole complex field: its own runs as the file had them; a format reaches the result. The
- * markers between its pieces draw in their places.
+ * A whole complex field: its own runs as the file had them; a format reaches the result, or with
+ * no result run, the run that separates the field, else the run that begins it (the engine's
+ * `formatRunIds`). The markers between its pieces draw in their places.
  */
 function drawField(
   ctx: ComposeContext,
@@ -379,15 +380,29 @@ function drawField(
     }
   };
   let result = false;
+  const formatted = pieces.map((piece) => {
+    const ends = hasFieldChar(piece.node, 'end');
+    const inResult = result && !ends && piece.node.kind === 'run';
+    if (hasFieldChar(piece.node, 'separate')) {
+      result = true;
+    }
+
+    if (ends) {
+      result = false;
+    }
+
+    return inResult;
+  });
+  if (!formatted.includes(true)) {
+    const separate = pieces.findIndex((piece) => hasFieldChar(piece.node, 'separate'));
+    formatted[Math.max(separate, 0)] = true;
+  }
+
   for (const [k, piece] of pieces.entries()) {
     ride((slot) => slot === k);
-    const separates = hasFieldChar(piece.node, 'separate');
-    const ends = hasFieldChar(piece.node, 'end');
     let node = piece.node;
     if (node.kind === 'run') node = withId(node, ctx.runId(node.id));
-    place(ctx, into, fieldRun(ctx, item, piece, node, result && !ends), item);
-    if (separates) result = true;
-    if (ends) result = false;
+    place(ctx, into, fieldRun(ctx, item, piece, node, formatted[k] === true), item);
   }
 
   ride((slot) => slot >= pieces.length);
@@ -396,14 +411,14 @@ function drawField(
 /**
  * A field's run as the field's state draws it: struck text as deleted text, and formats. A
  * file's format record reaches the runs that had it, each with its own face; an edit's format
- * reaches the result runs only.
+ * reaches the run when it is `formatted`.
  */
 function fieldRun(
   ctx: ComposeContext,
   item: OrderedItem,
   piece: OrderedFieldPiece,
   run: OoxmlNode,
-  result: boolean
+  formatted: boolean
 ): OoxmlNode {
   if (run.kind !== 'run') return run;
   const faces = piece.recordFaces;
@@ -411,7 +426,10 @@ function fieldRun(
   const fmts: OrderedFormatRecord[] = [];
   for (const record of item.fmts) {
     if (record.kind === 'properties') {
-      if (result) fmts.push(record);
+      if (formatted) {
+        fmts.push(record);
+      }
+
       continue;
     }
 
