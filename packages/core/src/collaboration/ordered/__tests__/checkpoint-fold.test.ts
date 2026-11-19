@@ -103,6 +103,26 @@ describe('a fold of a hidden prompt', () => {
   }
 });
 
+describe('a fold of a link inside an insertion', () => {
+  // Ana's link on the end of her own insertion, and Bob's words typed before the link: the room
+  // labels the link's edges with her insertion, a Word file holds no insertion on a link
+  test("another person's words before the link stay on the insertion's card", async () => {
+    const { document: doc, base } = openOrderedWordFile(docx(p(t('Cloud and serverless.'))), {
+      file: 1,
+    });
+    apply(doc, 'ana:1', { kind: 'insert', ...EDIT, place: at(doc, 0, 6), text: 'net ' });
+    apply(doc, 'ana:2', {
+      kind: 'insert-link',
+      ...EDIT,
+      from: at(doc, 0, 9),
+      to: at(doc, 0, 10),
+      href: 'https://a.example/',
+    });
+    apply(doc, 'bob:1', { kind: 'insert', ...EDIT, place: at(doc, 0, 9), text: 'émigré ' }, 'Bob');
+    await checkFold(doc, base, mediaStore(base), 'a link inside an insertion');
+  });
+});
+
 const W16DU = 'http://schemas.microsoft.com/office/word/2023/wordml/word16du';
 
 describe('a fold of a long list', () => {

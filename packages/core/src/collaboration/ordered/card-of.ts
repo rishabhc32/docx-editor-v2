@@ -70,9 +70,16 @@ export function changers(doc: OrderedDocument, item: OrderedItem): string[] {
 export const authorOf = (doc: OrderedDocument, id: string): string =>
   doc.suggestions.get(id)?.attribution.author ?? '';
 
-/** A unit a card can sit on: what shows, with a width or a paragraph's or container's edge. */
+/**
+ * A unit a card can sit on: what shows, with a width or a paragraph's or container's edge. A
+ * link's edge is none: Word and the editor mark a link's words, never the link (no `w:ins` holds
+ * one), so a card reads the same live, where the room labels the edges, and after a reopen.
+ */
 export const isCardUnit = (doc: OrderedDocument, item: OrderedItem): boolean =>
-  item.kind !== 'zero' && !isHidden(doc, item) && !hiddenPrompt(doc, item);
+  item.kind !== 'zero' &&
+  item.token !== 'hyperlink' &&
+  !isHidden(doc, item) &&
+  !hiddenPrompt(doc, item);
 
 /**
  * A unit of a prompt that content took the place of. Word and the engine drop a prompt's runs,
