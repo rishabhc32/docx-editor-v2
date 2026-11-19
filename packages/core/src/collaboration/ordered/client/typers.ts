@@ -1,51 +1,33 @@
 // A checkpoint's typers back in the document (design D14).
 
-import type { CheckpointTyperRuns } from '../model/checkpoint-suggestions.ts';
+import type { CheckpointTyperRun } from '../model/checkpoint-suggestions.ts';
 import type { OrderedDocument } from '../model/types.ts';
-import { eachInsertedUnit, keepLoadedTypers, type TypedRun } from '../model/typers.ts';
+import { eachFileUnit, keepLoadedTypers, type TypedRun } from '../model/typers.ts';
 
 /**
- * Keep who typed each unit of an insertion a checkpoint names, for `orderedUnitTyper`: the runs
- * of the listed suggestion's units, in the order the file writes them. False when the runs do
- * not fit the units the file holds for the suggestion.
+ * Keep who typed each unit a checkpoint names, for `orderedUnitTyper`: runs over the units the
+ * file writes, in the order a load reads them. False when the runs name more units than the file
+ * holds.
  */
 export function withCheckpointTypers(
   doc: OrderedDocument,
-  typers: readonly CheckpointTyperRuns[],
-  listedIds: readonly string[]
+  typers: readonly CheckpointTyperRun[]
 ): boolean {
   if (typers.length === 0) {
     return true;
   }
 
-  // Each suggestion's runs, and how far into them its units are
-  const cursors = new Map<
-    string,
-    { units: CheckpointTyperRuns['units']; index: number; left: number }
-  >();
-  for (const { suggestion, units } of typers) {
-    const id = listedIds[suggestion];
-    if (id === undefined) {
-      return false;
-    }
-
-    cursors.set(id, { units, index: 0, left: units[0]?.[0] ?? 0 });
-  }
-
+  // The run the next unit is in, and how many of its units are left
+  let index = 0;
+  let left = typers[0]?.[0] ?? 0;
   const kept = new Map<string, TypedRun[]>();
-  let fits = true;
-  eachInsertedUnit(doc, (suggestion, item, offset) => {
-    const cursor = cursors.get(suggestion);
-    if (cursor === undefined || !fits) {
+  eachFileUnit(doc, (item, offset) => {
+    const run = typers[index];
+    if (run === undefined) {
       return;
     }
 
-    const typer = cursor.units[cursor.index]?.[1];
-    if (typer === undefined) {
-      fits = false;
-      return;
-    }
-
+    const typer = run[1];
     if (typer !== null) {
       const runs = kept.get(item.space) ?? [];
       const last = runs[runs.length - 1];
@@ -58,13 +40,13 @@ export function withCheckpointTypers(
       kept.set(item.space, runs);
     }
 
-    cursor.left -= 1;
-    if (cursor.left === 0) {
-      cursor.index += 1;
-      cursor.left = cursor.units[cursor.index]?.[0] ?? 0;
+    left -= 1;
+    if (left === 0) {
+      index += 1;
+      left = typers[index]?.[0] ?? 0;
     }
   });
-  if (!fits || [...cursors.values()].some((cursor) => cursor.index < cursor.units.length)) {
+  if (index < typers.length) {
     return false;
   }
 

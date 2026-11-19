@@ -1,4 +1,5 @@
-// The pending suggestions a checkpoint's manifest lists, and who typed their units (design D14).
+// The pending suggestions a checkpoint's manifest lists, and who typed the units of insertions
+// (design D14).
 
 import type { OoxmlAttribute } from '../../../store/package/ooxml-tree.ts';
 import { isXmlNCName } from '../../../store/package/qname.ts';
@@ -21,14 +22,10 @@ export interface CheckpointSuggestion {
 }
 
 /**
- * Who typed the units a suggestion inserted, in the order the file writes them: runs of a count
- * and the namespace of the room change that typed them, or null for units no room change typed.
+ * Who typed a run of the units the file writes, in the order a load reads them: their count, and
+ * the namespace of the room change that typed them inside a pending insertion, or null.
  */
-export interface CheckpointTyperRuns {
-  /** The suggestion, by its place in the manifest's list. */
-  readonly suggestion: number;
-  readonly units: readonly (readonly [number, string | null])[];
-}
+export type CheckpointTyperRun = readonly [number, string | null];
 
 /** A list of the manifest, of at least `min` entries: the manifest's byte cap bounds it. */
 export const manifestList = (value: unknown, path: string, min = 0): readonly unknown[] =>
@@ -174,29 +171,17 @@ function xmlName(value: unknown, path: string): string {
 }
 
 /**
- * The listed typers, each checked: a suggestion of the list, named once, and runs of at least one
- * unit, each typed by a namespace or by none.
+ * The listed typers, each checked: runs of at least one unit, each typed by a namespace or by
+ * none.
  *
  * @throws Invalid when one does not read.
  */
-export function readTypers(value: unknown, suggestions: number): CheckpointTyperRuns[] {
-  return readNamedOnce(
-    value,
-    'typers',
-    (entry, path) => {
-      const f = fieldsOf(entry, path, new Set(['suggestion', 'units']));
-      const units = manifestList(required(f, 'units'), at(path, 'units'), 1);
-      return {
-        suggestion: int(required(f, 'suggestion'), at(path, 'suggestion'), 0, suggestions - 1),
-        units: units.map((run, j) => readRun(run, at(at(path, 'units'), j))),
-      };
-    },
-    (typer) => typer.suggestion
-  );
+export function readTypers(value: unknown): CheckpointTyperRun[] {
+  return manifestList(value, 'typers').map((run, k) => readRun(run, at('typers', k)));
 }
 
 /** One run of units: its count, and the namespace that typed them or null. */
-function readRun(value: unknown, path: string): readonly [number, string | null] {
+function readRun(value: unknown, path: string): CheckpointTyperRun {
   const [count, namespace] = list(value, path, 2, 2);
   const typer = namespace === null ? null : str(namespace, at(path, 1), 64);
   if (typer !== null && !ORDERED_NAMESPACE_PATTERN.test(typer)) {

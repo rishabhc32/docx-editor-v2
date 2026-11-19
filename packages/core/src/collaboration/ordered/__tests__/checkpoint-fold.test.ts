@@ -8,8 +8,21 @@ import { applyOrderedChange } from '../change/apply.ts';
 import { openOrderedWordFile } from '../client/open.ts';
 import { orderedIdMinter } from '../change/ids.ts';
 import type { OrderedDocument } from '../model/types.ts';
+import { orderedUnitTyper } from '../model/typers.ts';
 import { withUndoRecord } from '../model/undo-record.ts';
-import { apply, at, DATE, DIRECT, EDIT, textOf } from './change-apply-fixture.ts';
+import {
+  addressOf,
+  apply,
+  APPLY_FILE,
+  at,
+  BODY,
+  DATE,
+  DIRECT,
+  EDIT,
+  FOOTNOTES,
+  opens,
+  textOf,
+} from './change-apply-fixture.ts';
 import { checkFold, folded, mediaStore } from './fold-check.ts';
 import { SESSION_FILE } from './sessions/fixture.ts';
 import { runSession } from './sessions/session.ts';
@@ -139,6 +152,66 @@ describe('a fold of a move with words inside it', () => {
     apply(doc, 'bob:1', { kind: 'insert', ...EDIT, place: at(doc, 1, 7), text: 'X' }, 'Bob');
     await checkFold(doc, base, mediaStore(base), 'a move with words inside it');
   });
+});
+
+describe('who typed inside a new row or note', () => {
+  // The typer of each unit Olive typed (`XY`) in a part
+  const typersOf = (doc: OrderedDocument, part: string) =>
+    [...(doc.stories.get(part)?.tree.items() ?? [])].flatMap((item) =>
+      [...item.text].flatMap((ch, k) =>
+        ch === 'X' || ch === 'Y' ? [orderedUnitTyper(doc, item, item.offset + k)] : []
+      )
+    );
+
+  // Ana's new row or note, and Olive's direct typing in it: the row's or the note's mark covers
+  // the words, and the read names Olive in the room and after each fold
+  for (const [label, part, insert] of [
+    [
+      'a new row',
+      BODY,
+      (doc: OrderedDocument) => {
+        apply(doc, 'ana:1', {
+          kind: 'insert-row',
+          ...EDIT,
+          row: addressOf(opens(doc, 'tr')[0]!),
+          where: 'below',
+        });
+
+        // The new row's first cell
+        return at(doc, 6, 0);
+      },
+    ],
+    [
+      'a new note',
+      FOOTNOTES,
+      (doc: OrderedDocument) => {
+        apply(doc, 'ana:1', {
+          kind: 'insert-note',
+          ...EDIT,
+          place: at(doc, 0, 3),
+          note: 'footnote',
+          text: '',
+        });
+
+        // After the new note's reference mark
+        return at(doc, 3, 1, FOOTNOTES);
+      },
+    ],
+  ] as const) {
+    test(`${label}: the read names the organiser who typed in it`, async () => {
+      const { document: doc, base } = openOrderedWordFile(APPLY_FILE, { file: 1 });
+      const place = insert(doc);
+      apply(doc, 'olive:2', { kind: 'insert', part, mode: 'edit', place, text: 'XY' }, 'Olive');
+      const blobs = mediaStore(base);
+      const once = await folded(doc, base, 2, blobs);
+      const twice = await folded(once.document, once.base, 3, blobs);
+      const copies = [doc, once.document, twice.document];
+      expect(copies.map((copy) => typersOf(copy, part))).toEqual(
+        copies.map(() => ['olive', 'olive'])
+      );
+      await checkFold(doc, base, blobs, label);
+    });
+  }
 });
 
 const W16DU = 'http://schemas.microsoft.com/office/word/2023/wordml/word16du';

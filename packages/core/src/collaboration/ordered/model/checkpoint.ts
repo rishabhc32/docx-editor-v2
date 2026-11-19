@@ -14,7 +14,7 @@ import {
   suggestionsJson,
   xmlText,
   type CheckpointSuggestion,
-  type CheckpointTyperRuns,
+  type CheckpointTyperRun,
 } from './checkpoint-suggestions.ts';
 import { readTakeovers, takeoversJson, type CheckpointTakeover } from './checkpoint-takeovers.ts';
 import { readUntracked, untrackedJson, type CheckpointUntracked } from './checkpoint-untracked.ts';
@@ -40,7 +40,7 @@ export interface CheckpointFacts {
   readonly suggestions: readonly CheckpointSuggestion[];
   readonly commentPersons: ReadonlyMap<string, OrderedPerson>;
   readonly takeovers: readonly CheckpointTakeover[];
-  readonly typers: readonly CheckpointTyperRuns[];
+  readonly typers: readonly CheckpointTyperRun[];
   readonly untracked: readonly CheckpointUntracked[];
 }
 
@@ -167,7 +167,7 @@ function factsOf(manifest: Record<string, unknown>): CheckpointFacts {
     suggestions,
     commentPersons: readComments(manifest.comments),
     takeovers: readTakeovers(manifest.takeovers, count),
-    typers: readTypers(manifest.typers, count),
+    typers: readTypers(manifest.typers),
     untracked: readUntracked(manifest.untracked, count),
   };
 }

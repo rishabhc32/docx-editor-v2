@@ -29,11 +29,18 @@ function pendingInsertion(ctx: Ctx, char: OrderedViewChar | undefined): OrderedS
   return ctx.doc.suggestions.get(char.item.by) ?? null;
 }
 
-/** The pending row a paragraph sits in, if any. */
-function pendingRowOf(ctx: Ctx, p: OrderedViewParagraph): OrderedSuggestion | null {
+/**
+ * The pending new row, note or text box a paragraph sits in, if any: a new note's or text box's
+ * paragraph mark carries its insertion unmarked (`quiet`), a new row's paragraphs sit in its row.
+ */
+function pendingContainerOf(ctx: Ctx, p: OrderedViewParagraph): OrderedSuggestion | null {
   const row = [...p.blocks].reverse().find((block) => block.token === 'tr');
-  if (!row || row.by === null || !insertedPending(ctx.doc, row)) return null;
-  return ctx.doc.suggestions.get(row.by) ?? null;
+  const container = p.mark.quiet ? p.mark : row;
+  if (!container || container.by === null || !insertedPending(ctx.doc, container)) {
+    return null;
+  }
+
+  return ctx.doc.suggestions.get(container.by) ?? null;
 }
 
 /** Type text (or one object, `pieces`) directly at a view offset. */
@@ -56,13 +63,14 @@ export function directInsert(
     return;
   }
 
-  // In a paragraph of a pending row: the text is part of the row (no marker of its own)
-  const row = pendingRowOf(ctx, p);
+  // In a paragraph of a pending row, note or text box: the text is part of it (no marker of its
+  // own), as Word writes it there and a load reads it back
+  const container = pendingContainerOf(ctx, p);
   if (
-    row &&
-    !map.some((c) => pendingInsertion(ctx, c) !== null && pendingInsertion(ctx, c) !== row)
+    container &&
+    !map.some((c) => pendingInsertion(ctx, c) !== null && pendingInsertion(ctx, c) !== container)
   ) {
-    insertText(asAuthor(ctx, row), p, offset, text, { quiet: true, ...what });
+    insertText(asAuthor(ctx, container), p, offset, text, { quiet: true, ...what });
     return;
   }
 

@@ -161,7 +161,7 @@ function openCheckpointRead(pkg: OoxmlPackage, options: OrderedWordFileOptions):
   if (
     !withCheckpointTakeovers(doc, places, facts.takeovers, listedIds) ||
     !withCheckpointUntracked(doc, places, facts.untracked, listedIds) ||
-    !withCheckpointTypers(doc, facts.typers, listedIds) ||
+    !withCheckpointTypers(doc, facts.typers) ||
     !personsFit(doc)
   ) {
     throw new OrderedWordFileError('checkpoint-manifest');

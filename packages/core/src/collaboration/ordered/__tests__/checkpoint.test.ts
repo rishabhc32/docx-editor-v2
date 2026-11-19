@@ -497,23 +497,12 @@ describe('a file of another kind is refused by name', () => {
         ],
       }),
       (m) => ({ ...m, takeovers: [{ part: '/word/document.xml', record: 'rPrChange' }] }),
-      (m) => ({ ...m, suggestions: [ANA_SUGGESTION], typers: [{ suggestion: 1, units: [] }] }),
-      (m) => ({
-        ...m,
-        suggestions: [ANA_SUGGESTION],
-        typers: [{ suggestion: 0, units: [[0, null]] }],
-      }),
-      (m) => ({
-        ...m,
-        suggestions: [ANA_SUGGESTION],
-        typers: [{ suggestion: 0, units: [[1, 'a b']] }],
-      }),
-      // Runs past the units the file holds for the suggestion
-      (m) => ({
-        ...m,
-        suggestions: [ANA_SUGGESTION],
-        typers: [{ suggestion: 0, units: [[1, 'ana']] }],
-      }),
+      (m) => ({ ...m, typers: [{ suggestion: 0, units: [[1, 'ana']] }] }),
+      (m) => ({ ...m, typers: [[1, 'ana', 2]] }),
+      (m) => ({ ...m, typers: [[0, null]] }),
+      (m) => ({ ...m, typers: [[1, 'a b']] }),
+      // Runs past the units the file holds
+      (m) => ({ ...m, typers: [[1_000_000, 'ana']] }),
       (m) => ({ ...m, untracked: [{ part: '/word/document.xml', container: 'p' }] }),
       (m) => ({
         ...m,

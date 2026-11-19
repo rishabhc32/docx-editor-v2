@@ -7,7 +7,7 @@ import type { OoxmlElement } from '../../../store/package/ooxml-tree.ts';
 import { textboxFallbackExportPackage } from '../../../store/package/textbox-fallback-export.ts';
 import { orderedStoryParts } from '../load/load.ts';
 import type { CheckpointFacts } from '../model/checkpoint.ts';
-import type { CheckpointTyperRuns } from '../model/checkpoint-suggestions.ts';
+import type { CheckpointTyperRun } from '../model/checkpoint-suggestions.ts';
 import {
   checkpointPlacesOf,
   isCheckpointContainer,
@@ -28,7 +28,7 @@ import type {
   OrderedStory,
   OrderedSuggestion,
 } from '../model/types.ts';
-import { eachInsertedUnit, orderedUnitTyper } from '../model/typers.ts';
+import { eachFileUnit, orderedUnitTyper } from '../model/typers.ts';
 import { attributeOf, eachElement, isWml } from '../ooxml-nodes.ts';
 import type { OrderedPartTakeovers } from './package.ts';
 
@@ -66,11 +66,6 @@ class SuggestionList {
     }
 
     return k;
-  }
-
-  /** The place of a listed suggestion, or undefined for one not listed. */
-  placeOf(id: string): number | undefined {
-    return this.indexOfId.get(id);
   }
 
   /** The `w:id`s the file writes for a suggestion's marks, every role. */
@@ -120,7 +115,7 @@ export function checkpointFacts(
   return inRoomOrder(list, {
     commentPersons: commentPersons(doc),
     takeovers,
-    typers: checkpointTypers(doc, list),
+    typers: checkpointTypers(doc),
     untracked: checkpointUntracked(doc, opens, containers, list),
   });
 }
@@ -190,7 +185,7 @@ function inRoomOrder(
       ...t,
       taken: t.taken.map((taken) => ({ ...taken, suggestion: renumbered(taken.suggestion) })),
     })),
-    typers: facts.typers.map((t) => ({ ...t, suggestion: renumbered(t.suggestion) })),
+    typers: facts.typers,
     untracked: facts.untracked.map((u) => ({
       ...u,
       records: u.records.map((r) => ({ ...r, suggestion: renumbered(r.suggestion) })),
@@ -313,34 +308,27 @@ function cellPlaces(
 }
 
 /**
- * Who typed the units of each listed suggestion's insertion, as runs in the order the file
- * writes them; none for a suggestion no room change typed in.
+ * Who typed the units the file writes, as runs in the order a load reads them, up to the last
+ * unit a room change typed inside a pending insertion: none when no such unit is left.
  */
-function checkpointTypers(doc: OrderedDocument, list: SuggestionList): CheckpointTyperRuns[] {
-  const runs = new Map<number, [number, string | null][]>();
-  eachInsertedUnit(doc, (suggestion, item, offset) => {
-    const k = list.placeOf(suggestion);
-    if (k === undefined) {
-      return;
-    }
-
+function checkpointTypers(doc: OrderedDocument): CheckpointTyperRun[] {
+  const runs: [number, string | null][] = [];
+  eachFileUnit(doc, (item, offset) => {
     const typer = orderedUnitTyper(doc, item, offset);
-    let units = runs.get(k);
-    if (units === undefined) {
-      units = [];
-      runs.set(k, units);
-    }
-
-    const last = units[units.length - 1];
+    const last = runs[runs.length - 1];
     if (last !== undefined && last[1] === typer) {
       last[0] += 1;
     } else {
-      units.push([1, typer]);
+      runs.push([1, typer]);
     }
   });
-  return [...runs]
-    .filter(([, units]) => units.some(([, typer]) => typer !== null))
-    .map(([suggestion, units]) => ({ suggestion, units }));
+
+  // The units after the last typed one read as typed by none
+  if (runs[runs.length - 1]?.[1] === null) {
+    runs.pop();
+  }
+
+  return runs;
 }
 
 /**

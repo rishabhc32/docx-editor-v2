@@ -1,6 +1,6 @@
 // Who typed the units of a pending insertion: the namespace of the room change that typed them.
 
-import { CardRead } from '../card-of.ts';
+import { CardRead, inserter } from '../card-of.ts';
 import { parseOrderedChangeId } from '../change/ids.ts';
 import { byStoryOrder } from '../load/load.ts';
 import { itemAt, mainStory } from './document.ts';
@@ -20,9 +20,9 @@ const LOADED = new WeakMap<OrderedDocument, ReadonlyMap<string, readonly TypedRu
 /**
  * The namespace of the room change that typed the unit at `offset` (in the item's space) of an
  * item a pending suggestion inserted, such as an organiser's words typed directly inside a
- * party's insertion. A copy of the room and a copy opened from its checkpoint give the same
- * answer. Null for a unit of any other item, for one inside a new row or note (its container's
- * mark covers it), and for one no room change typed (a file's own).
+ * party's insertion, new row, new note or new text box. A copy of the room and a copy opened
+ * from its checkpoint give the same answer. Null for a unit of any other item, and for one no
+ * room change typed (a file's own).
  *
  * @public
  */
@@ -32,11 +32,7 @@ export function orderedUnitTyper(
   offset: number
 ): string | null {
   const inside = offset >= item.offset && offset < item.offset + item.length;
-  if (!isUnit(item) || !inside || item.by === null || item.quiet) {
-    return null;
-  }
-
-  if (doc.suggestions.get(item.by)?.status !== 'pending') {
+  if (!isUnit(item) || !inside || inserter(doc, item) === null) {
     return null;
   }
 
@@ -54,23 +50,22 @@ export function orderedUnitTyper(
 }
 
 /**
- * Visit each unit a pending insertion holds that the file writes inside its revision mark, in the
- * order a load of the file reads them, with its suggestion: units hidden for good, in a note left
- * out, or covered by their container's mark (`quiet`) are passed over.
+ * Visit each unit the file writes, in the order a load of the file reads them: units hidden for
+ * good or in a note left out are passed over.
  */
-export function eachInsertedUnit(
+export function eachFileUnit(
   doc: OrderedDocument,
-  visit: (suggestion: string, item: OrderedItem, offset: number) => void
+  visit: (item: OrderedItem, offset: number) => void
 ): void {
   const read = new CardRead(doc);
   for (const story of storiesInFileOrder(doc)) {
     for (const item of story.tree.items()) {
-      if (item.by === null || item.quiet || !isUnit(item) || !read.isUnit(item, story)) {
+      if (!isUnit(item) || !read.isUnit(item, story)) {
         continue;
       }
 
       for (let k = 0; k < item.length; k += 1) {
-        visit(item.by, item, item.offset + k);
+        visit(item, item.offset + k);
       }
     }
   }
