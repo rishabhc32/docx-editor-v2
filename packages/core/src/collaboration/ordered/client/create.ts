@@ -187,8 +187,8 @@ export interface OrderedCollaborationSession extends EditorCollaborationSession 
   addSelectionComment(text: string): string | null;
   /**
    * Reply with `text` to the thread of comment `comment` (its `w:id`), as `addComment` does: the
-   * reply answers the thread's first comment, and its range sits beside that comment's. Returns
-   * the reply's id, or null.
+   * reply answers the thread's first comment, and its range sits on that comment's, after the
+   * thread's earlier replies. Returns the reply's id, or null.
    */
   replyToComment(comment: string, text: string): string | null;
   /**

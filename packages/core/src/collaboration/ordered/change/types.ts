@@ -388,7 +388,8 @@ export interface OrderedCommentChange extends OrderedChangeBase {
 
 /**
  * A reply with `text` to the thread of comment `comment` (its `w:id`). A reply answers the
- * thread's first comment, as Word's threads are flat, and its range sits beside that comment's.
+ * thread's first comment, as Word's threads are flat, and its range sits on that comment's,
+ * after the thread's earlier replies.
  *
  * @public
  */
