@@ -25,6 +25,7 @@ import { orderedViewParagraph } from '../compose/compose.ts';
 import { orderedPackageBytes } from '../compose/package.ts';
 import { orderedReplacedSuggestions } from '../compose/replaced.ts';
 import { orderedCards } from '../decide.ts';
+import { MOVE_RANGE } from '../load/moves.ts';
 import { isHidden } from '../model/document.ts';
 import { setStatus } from '../model/mutations.ts';
 import { isTextBoxStoryName } from '../model/text-boxes.ts';
@@ -80,15 +81,15 @@ const xmlOf = (face: OoxmlElement | null): string =>
 
 /**
  * Whether an item shows: a prompt's units that content took the place of are the glossary's
- * placeholder after a fold, and show nowhere either way.
+ * placeholder after a fold, and show nowhere either way; a link's edges are no unit, as the room
+ * labels them and a reopened link has no label.
  */
 const showsOn = (doc: OrderedDocument, item: OrderedItem): boolean =>
   item.kind === 'zero' ? !isHidden(doc, item) && !isMoveRange(item) : isCardUnit(doc, item);
 
 /** A move's range marker: a fold writes the file's own, which the room draws from the move. */
 const isMoveRange = (item: OrderedItem): boolean =>
-  item.node?.kind !== 'textValue' &&
-  /^move(From|To)Range(Start|End)$/.test(item.node?.localName ?? '');
+  item.node?.kind !== 'textValue' && MOVE_RANGE.test(item.node?.localName ?? '');
 
 /** Pending suggestions that show something: one taken back by its author shows nothing. */
 function shownPending(doc: OrderedDocument): OrderedSuggestion[] {
@@ -128,9 +129,9 @@ export function foldPrint(doc: OrderedDocument, base: OoxmlPackage, blobs: FoldB
   const units = (story: OrderedStory, item: OrderedItem): string[] => {
     const node = item.node?.kind === 'textValue' ? '' : (item.node?.localName ?? '');
 
-    // A suggested link's edges lose their label: a reject still leaves no empty link. A unit in
-    // a new row or note keeps its label in the room, where a load reads it from the container
-    const by = item.token === 'hyperlink' || item.quiet ? null : item.by;
+    // A unit in a new row or note keeps its label in the room, where a load reads it from the
+    // container
+    const by = item.quiet ? null : item.by;
     const roles = {
       by: [by],
       del: item.dels,
