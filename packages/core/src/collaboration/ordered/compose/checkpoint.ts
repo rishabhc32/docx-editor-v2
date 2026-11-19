@@ -57,7 +57,9 @@ export function orderedPackageMedia(pkg: OoxmlPackage): OrderedPackageMedia[] {
  * that stays inside (an ink part), never for a picture. Word does not open a checkpoint;
  * {@link openOrderedCheckpoint} does.
  *
- * @throws OrderedRefusal as `writeOrderedPackage` does.
+ * @throws OrderedRefusal as `writeOrderedPackage` does, and `too-many-items` when the manifest is
+ *   past the engine's limit of one part (64 MiB), which no open reads. The bytes written before a
+ *   refusal are not a whole file: the host keeps its last checkpoint and the room's log.
  * @public
  */
 export async function writeOrderedCheckpoint(

@@ -3,6 +3,7 @@
 import type { OoxmlPackage } from '../../../store/package/ooxml-package.ts';
 import { normalizePartName, partNameKey } from '../../../store/package/opc-names.ts';
 import { resolveContentTypeOf } from '../../../store/package/package-edit.ts';
+import { XML_HARD_MAX_BYTES } from '../../../store/package/xml-reader.ts';
 import { DEFAULT_ZIP_LIMITS } from '../../../store/package/zip.ts';
 import { at, attempt, fieldsOf, Invalid, required } from '../change/read.ts';
 import { sha256 } from '../change/resources.ts';
@@ -20,6 +21,7 @@ import { readTakeovers, takeoversJson, type CheckpointTakeover } from './checkpo
 import { readUntracked, untrackedJson, type CheckpointUntracked } from './checkpoint-untracked.ts';
 import { referencedMediaType } from './file-media.ts';
 import { readPerson, type OrderedPerson } from './person.ts';
+import { OrderedRefusal } from './refusal.ts';
 import type { OrderedFileMedia } from './resources.ts';
 
 /** The manifest's part name. A Word file that holds this part is not opened as one. */
@@ -27,7 +29,6 @@ export const CHECKPOINT_MANIFEST = '/ordered-checkpoint.json';
 
 const FORMAT = 'docx-editor.dev/ordered-checkpoint';
 const VERSION = 4;
-const MAX_MANIFEST_BYTES = 4 * 1024 * 1024;
 
 /**
  * The room facts a checkpoint's manifest keeps, which Word has no place for: each pending
@@ -60,6 +61,9 @@ export type CheckpointRefusal =
 /**
  * The manifest's bytes: one JSON part with the format, its version, each media part the
  * checkpoint holds by reference, and the room's facts.
+ *
+ * @throws OrderedRefusal `too-many-items` when they are past the engine's limit of one part,
+ *   which a read refuses.
  */
 export function checkpointManifestBytes(
   media: readonly OrderedFileMedia[],
@@ -72,7 +76,7 @@ export function checkpointManifestBytes(
     size,
     entry,
   }));
-  return new TextEncoder().encode(
+  const bytes = new TextEncoder().encode(
     JSON.stringify({
       format: FORMAT,
       version: VERSION,
@@ -84,6 +88,14 @@ export function checkpointManifestBytes(
       untracked: untrackedJson(facts.untracked),
     })
   );
+  if (bytes.byteLength > XML_HARD_MAX_BYTES) {
+    throw new OrderedRefusal(
+      'too-many-items',
+      `checkpoint manifest over ${XML_HARD_MAX_BYTES} bytes`
+    );
+  }
+
+  return bytes;
 }
 
 /** The part under the manifest's name, in any case as OPC compares names, and its bytes. */
@@ -170,7 +182,7 @@ type Manifest =
 
 /** The manifest's lists, after its format and version. */
 function manifestOf(bytes: Uint8Array): Manifest {
-  if (bytes.byteLength > MAX_MANIFEST_BYTES) {
+  if (bytes.byteLength > XML_HARD_MAX_BYTES) {
     return { ok: false, reason: 'checkpoint-manifest' };
   }
 

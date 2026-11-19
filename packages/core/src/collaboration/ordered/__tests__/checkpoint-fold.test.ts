@@ -107,6 +107,8 @@ describe('a fold of a hidden prompt', () => {
   }
 });
 
+const W16DU = 'http://schemas.microsoft.com/office/word/2023/wordml/word16du';
+
 describe('a fold of a long list', () => {
   test('one suggested deletion over 300 paragraphs', async () => {
     const paragraphs = Array.from({ length: 300 }, (_, k) => p(t(`Paragraph ${k}.`))).join('');
@@ -118,6 +120,18 @@ describe('a fold of a long list', () => {
       to: at(doc, 299, textOf(doc, 299).length),
     });
     await checkFold(doc, base, mediaStore(base), 'a deletion over 300 paragraphs');
+  });
+
+  test("a Word file's 20,000 own tracked changes", async () => {
+    const mark = (id: number) =>
+      `<w:ins w:id="${id}" w:author="Reviewer" w:date="${DATE}" xmlns:w16du="${W16DU}" ` +
+      `w16du:dateUtc="${DATE}">${t('x')}</w:ins>`;
+    const body = Array.from({ length: 1000 }, (_, k) =>
+      p(Array.from({ length: 20 }, (_, j) => mark(k * 20 + j)).join(''))
+    ).join('');
+    const { document: doc, base } = openOrderedWordFile(docx(body), { file: 1 });
+    const again = await folded(doc, base, 2, mediaStore(base));
+    expect(again.document.suggestions.size).toBe(20_000);
   });
 });
 
