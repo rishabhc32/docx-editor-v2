@@ -88,11 +88,13 @@ describe('text boxes (group 9.9)', () => {
     const box = boxOf(doc);
     expect(text(doc, box)).toBe('Box text');
     expect(textBoxHostOf(doc, box)?.host).toBe(BODY);
+
     // The body's paragraph keeps the object as one unit
     expect(text(doc, BODY, 1)).toBe('Alpha ￼ Omega.');
     const xml = body(doc);
     expect(boxXml(xml)).toContain('Box text');
     expect(xml).toBe(serializeOoxmlPart(base.parts.get(BODY)!));
+
     // No part is written for the text box's story
     expect([...composeOrderedPackage(doc, base).parts.keys()].some(isTextBoxStoryName)).toBe(false);
   });
@@ -157,6 +159,7 @@ describe('text boxes (group 9.9)', () => {
     expect(xml).toContain('<w:delText xml:space="preserve">Box </w:delText>');
     expect(xml).toContain('<w:rPrChange');
     expect(xml.match(/<w:p[ >]/g)).toHaveLength(2);
+
     // The saved file holds the text box's suggestions, in both of its copies, and opens again
     const bytes = orderedPackageBytes(doc, base);
     const read = readOoxmlPackage(bytes, {});
@@ -208,6 +211,7 @@ describe('text boxes (group 9.9)', () => {
   test("another person's new text box: typing inside it is inside their suggestion", () => {
     const { doc, base } = open();
     const box = boxOf(doc);
+
     // Ana's copy of the text box is her insertion, and its text box a story of its own
     const view = orderedViewParagraph(doc, BODY, 1);
     const object = view?.chars.find((c) => c.item.kind === 'atom');
@@ -249,6 +253,7 @@ describe('text boxes (group 9.9)', () => {
       touched: targets.touched,
     });
     expect(verdict).toMatchObject({ ok: false, code: 'policy-nested' });
+
     // Ana's own typing there joins her insertion; a reject of it takes the copy and its text box
     const [sid = ''] = apply(doc, 'ana-1:2', {
       kind: 'insert',
@@ -303,9 +308,11 @@ describe('text boxes (group 9.9)', () => {
         if (error instanceof OrderedRefusal) return error.reason;
         throw error;
       }
+
       return 'applied';
     };
     expect(refusal(at(doc, box, 0, 1), box)).toBe('note-outside-body');
+
     // The paragraph that holds the text box takes one
     expect(refusal(at(doc, BODY, 0, 1), BODY)).toBe('applied');
   });
@@ -320,6 +327,7 @@ describe('text boxes (group 9.9)', () => {
         if (error instanceof OrderedRefusal) return error.reason;
         throw error;
       }
+
       return 'applied';
     };
     const typing = (): Body => ({
@@ -346,6 +354,7 @@ describe('text boxes (group 9.9)', () => {
       from: at(doc, BODY, 1, k),
       to: at(doc, BODY, 1, k + 1),
     });
+
     // Struck, the text box still shows, as Word shows it: a change in it is a suggestion
     expect(reason('ana-1:2', typing())).toBe('applied');
     expect(text(doc, box)).toBe('Box xtext');
@@ -366,6 +375,7 @@ describe('text boxes (group 9.9)', () => {
       } as Body,
       'Olive'
     );
+
     // Gone with its object: nothing a change made there would show. The changes name places
     // from before the decision, as a copy that has not seen it yet sends them
     const before = JSON.stringify(snapshot(doc, false));
@@ -384,8 +394,10 @@ describe('text boxes (group 9.9)', () => {
         if (error instanceof OrderedRefusal) return error.reason;
         throw error;
       }
+
       return 'applied';
     };
+
     // A link around "Box" and a second paragraph, so that each edit would apply in a shown box
     const from = at(doc, box, 0, 0);
     const to = at(doc, box, 0, 3);
@@ -412,6 +424,7 @@ describe('text boxes (group 9.9)', () => {
       mode: 'edit',
       mark: { space: mark.space, offset: mark.offset },
     };
+
     // The text box object goes, with the deletion accepted
     const view = orderedViewParagraph(doc, BODY, 1);
     const k = view?.chars.findIndex((c) => c.item.kind === 'atom') ?? -1;
