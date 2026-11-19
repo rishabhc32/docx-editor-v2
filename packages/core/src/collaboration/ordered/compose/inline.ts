@@ -393,6 +393,8 @@ function drawField(
 
     return inResult;
   });
+
+  // No result run: the separator's run, else the begin run
   if (!formatted.includes(true)) {
     const separate = pieces.findIndex((piece) => hasFieldChar(piece.node, 'separate'));
     formatted[Math.max(separate, 0)] = true;
