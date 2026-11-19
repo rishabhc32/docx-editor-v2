@@ -41,14 +41,15 @@ interface ItemTakeovers {
 /**
  * Put each takeover a checkpoint names back in the document loaded from it: each item whose
  * change record holds it has the taken record again, with `replaced` (a suggestion of the
- * manifest's list, `listed`), in front of the holder's own. False when a takeover does not fit
- * the file: no change record at its place, or none loaded as a record of the properties it names.
+ * manifest's list, by `listedIds`), in front of the holder's own. False when a takeover does not
+ * fit the file: no change record at its place, or none loaded as a record of the properties it
+ * names.
  */
 export function withCheckpointTakeovers(
   doc: OrderedDocument,
   places: ReadonlyMap<string, OoxmlElement>,
   takeovers: readonly CheckpointTakeover[],
-  listed: readonly string[]
+  listedIds: readonly string[]
 ): boolean {
   if (takeovers.length === 0) {
     return true;
@@ -62,7 +63,7 @@ export function withCheckpointTakeovers(
     const holdersAt = element === undefined ? [] : (holders.get(element) ?? []);
     if (
       holdersAt.length === 0 ||
-      !holdersAt.every((holder) => noteTaken(items, holder, takeover, listed))
+      !holdersAt.every((holder) => noteTaken(items, holder, takeover, listedIds))
     ) {
       return false;
     }
@@ -125,7 +126,7 @@ function noteTaken(
   items: Map<OrderedItem, ItemTakeovers>,
   { story, item, record, piece }: Holder,
   takeover: CheckpointTakeover,
-  listed: readonly string[]
+  listedIds: readonly string[]
 ): boolean {
   const target = recordedProperties(takeover.record);
   if (record.kind === 'face' ? target !== 'rPr' : record.target !== target) {
@@ -134,7 +135,7 @@ function noteTaken(
 
   const replaced: { readonly id: string; readonly properties: OoxmlElement }[] = [];
   for (const { suggestion, properties } of takeover.taken) {
-    const id = listed[suggestion];
+    const id = listedIds[suggestion];
     if (id === undefined || id === record.suggestion) {
       return false;
     }

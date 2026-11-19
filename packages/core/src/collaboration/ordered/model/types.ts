@@ -514,7 +514,7 @@ export interface OrderedRevisionIds {
   readonly fileIds: Set<string>;
   /**
    * The `w:id`s a room checkpoint lists for each suggestion it makes, those of a part the room
-   * does not load among them: a prompt's records in the glossary.
+   * does not load among them (a prompt's records in the glossary), in the checkpoint's order.
    */
   readonly listed: Map<string, readonly string[]>;
 }

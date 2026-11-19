@@ -28,7 +28,7 @@ export function withCheckpointUntracked(
   doc: OrderedDocument,
   places: ReadonlyMap<string, OoxmlElement>,
   untracked: readonly CheckpointUntracked[],
-  listed: readonly string[]
+  listedIds: readonly string[]
 ): boolean {
   const opened = (part: string, container: string, occurrence: number) => {
     const element = places.get(containerKey(part, container, occurrence));
@@ -43,7 +43,7 @@ export function withCheckpointUntracked(
 
     const restored: OrderedElementRecord[] = [];
     for (const { suggestion, element, untracked, merge, recordUnchanged, tableCells } of records) {
-      const id = listed[suggestion];
+      const id = listedIds[suggestion];
       const cells = (tableCells ?? []).map((cell) => opened(part, 'tc', cell)?.open.space);
       const seq = id === undefined ? undefined : doc.suggestions.get(id)?.seq;
       if (id === undefined || seq === undefined || cells.includes(undefined)) {

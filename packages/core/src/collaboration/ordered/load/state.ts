@@ -92,7 +92,7 @@ export class RevisionReader {
 
   /**
    * A reader of a document's revisions. The suggestions a room checkpoint lists are made first,
-   * in its order, so the k-th suggestion of the document is the k-th listed.
+   * in its order, and `doc.revisionIds.listed` keeps their ids in that order.
    */
   constructor(doc: OrderedDocument, fixed?: string, listed: readonly CheckpointSuggestion[] = []) {
     this.doc = doc;

@@ -142,7 +142,7 @@ function readPackage(bytes: Uint8Array, options: OrderedWordFileOptions): OoxmlP
 
 /**
  * A read checkpoint package, opened without its manifest and with the media and the room facts it
- * names: each by the suggestions the manifest lists, which the load makes first, in its order.
+ * names: each by the suggestions the manifest lists, whose ids the load keeps in its order.
  */
 function openCheckpointRead(pkg: OoxmlPackage, options: OrderedWordFileOptions): OrderedWordFile {
   const checkpoint = readCheckpoint(pkg);
@@ -153,12 +153,12 @@ function openCheckpointRead(pkg: OoxmlPackage, options: OrderedWordFileOptions):
   const { facts } = checkpoint;
   const opened = openRead(checkpoint.base, checkpoint.media, options, facts);
   const doc = opened.document;
-  const listed = [...doc.suggestions.keys()].slice(0, facts.suggestions.length);
+  const listedIds = [...doc.revisionIds.listed.keys()];
   const places = placesOf(opened.base);
   if (
-    !withCheckpointTakeovers(doc, places, facts.takeovers, listed) ||
-    !withCheckpointUntracked(doc, places, facts.untracked, listed) ||
-    !withCheckpointTypers(doc, facts.typers, listed) ||
+    !withCheckpointTakeovers(doc, places, facts.takeovers, listedIds) ||
+    !withCheckpointUntracked(doc, places, facts.untracked, listedIds) ||
+    !withCheckpointTypers(doc, facts.typers, listedIds) ||
     !personsFit(doc)
   ) {
     throw new OrderedWordFileError('checkpoint-manifest');

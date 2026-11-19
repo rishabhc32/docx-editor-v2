@@ -12,7 +12,7 @@ import { eachInsertedUnit, keepLoadedTypers, typedUnitKey } from '../model/typer
 export function withCheckpointTypers(
   doc: OrderedDocument,
   typers: readonly CheckpointTypers[],
-  listed: readonly string[]
+  listedIds: readonly string[]
 ): boolean {
   if (typers.length === 0) {
     return true;
@@ -21,7 +21,7 @@ export function withCheckpointTypers(
   // Each suggestion's runs, and how far into them its units are
   const runs = new Map<string, { units: CheckpointTypers['units']; run: number; left: number }>();
   for (const { suggestion, units } of typers) {
-    const id = listed[suggestion];
+    const id = listedIds[suggestion];
     if (id === undefined) {
       return false;
     }
