@@ -108,15 +108,40 @@ export function foldPrint(doc: OrderedDocument, base: OoxmlPackage, blobs: FoldB
   };
   const keys = (ids: readonly string[]) => ids.map(key).filter((k) => k !== null);
 
+  // Each pending suggestion's own units, so two suggestions of one maker cannot trade them
+  const owned = new Map<string, string[]>();
+  const own = (roles: Record<string, readonly (string | null)[]>, unit: string) => {
+    for (const [role, ids] of Object.entries(roles)) {
+      for (const id of ids) {
+        if (id === null || key(id) === null) {
+          continue;
+        }
+
+        const list = owned.get(id) ?? [];
+        list.push(`${role}:${unit}`);
+        owned.set(id, list);
+      }
+    }
+  };
+
   // Each unit of an item on its own: a load joins units of one face into one item
   const units = (story: OrderedStory, item: OrderedItem): string[] => {
     const node = item.node?.kind === 'textValue' ? '' : (item.node?.localName ?? '');
+
+    // A suggested link's edges lose their label: a reject still leaves no empty link. A unit in
+    // a new row or note keeps its label in the room, where a load reads it from the container
+    const by = item.token === 'hyperlink' || item.quiet ? null : item.by;
+    const roles = {
+      by: [by],
+      del: item.dels,
+      fmt: item.fmts.map((f) => f.suggestion),
+      prop: item.props.map((r) => r.suggestion),
+      within: [...item.within.by, ...item.within.dels],
+    };
     const labels = {
       kind: item.kind,
       node,
-      // A suggested link's edges lose their label: a reject still leaves no empty link. A unit in
-      // a new row or note keeps its label in the room, where a load reads it from the container
-      by: item.token === 'hyperlink' || item.quiet ? null : key(item.by),
+      by: key(by),
       dels: keys(item.dels),
       fmts: keys(item.fmts.map((f) => f.suggestion)),
       replaced: keys(item.fmts.flatMap((f) => (f.replaced === undefined ? [] : [f.replaced]))),
@@ -125,14 +150,15 @@ export function foldPrint(doc: OrderedDocument, base: OoxmlPackage, blobs: FoldB
       move: item.move !== null && (key(item.by) !== null || keys(item.dels).length > 0),
       within: [keys(item.within.by), keys(item.within.dels)],
     };
-    return Array.from({ length: Math.max(item.text.length, 1) }, (_, k) =>
-      JSON.stringify({
+    return Array.from({ length: Math.max(item.text.length, 1) }, (_, k) => {
+      own(roles, `${storyLabel(story.name)}:${node}:${item.text[k] ?? ''}`);
+      return JSON.stringify({
         ...labels,
         text: item.text[k] ?? '',
         face: xmlOf(currentFace(doc, story, item)),
         typer: orderedUnitTyper(doc, item, item.offset + k),
-      })
-    );
+      });
+    });
   };
   const pending = shownPending(doc);
   return {
@@ -140,10 +166,11 @@ export function foldPrint(doc: OrderedDocument, base: OoxmlPackage, blobs: FoldB
       .map(([name, story]) => {
         const shown = story.tree.toArray().filter((item) => showsOn(doc, item));
         const listed = shown.flatMap((item) => units(story, item));
-        return [isTextBoxStoryName(name) ? 'text box' : name, ...listed].join('\n');
+        return [storyLabel(name), ...listed].join('\n');
       })
       .sort(),
     suggestions: pending.map(makerKey).sort(),
+    owned: [...owned].map(([id, list]) => [key(id), ...list.sort()].join('|')).sort(),
     cards: orderedCards(doc)
       .map((card) => keys(card.suggestions).join('|'))
       .sort(),
@@ -174,6 +201,9 @@ export function foldPrint(doc: OrderedDocument, base: OoxmlPackage, blobs: FoldB
 }
 
 type FoldBlobs = (sha256: string) => Uint8Array | undefined;
+
+/** A story by its name: a text box's names its object, whose id a fold mints again. */
+const storyLabel = (name: string): string => (isTextBoxStoryName(name) ? 'text box' : name);
 
 /**
  * What each story's page shows: every character and its strike. A character's own face is left
@@ -226,27 +256,50 @@ function decidedFile(
     throw new Error(`the decided file does not read: ${read.reason}`);
   }
 
-  const parts = [...read.package.parts].map(([name, part]) => [
-    name,
-    semanticBody(normalizedBody(part, (id) => id)),
-  ]);
-  const said = parts.map(([, xml]) => xml).join('');
-
-  // A rejected suggested link leaves its relationship, which nothing names, in a folded copy
   return Object.fromEntries(
-    parts.map(([name, xml]) => [
+    [...read.package.parts].map(([name, part]) => [
       name,
-      xml.replace(/<Relationship Id="([^"]+)"[^>]*TargetMode="External"[^>]*\/>/g, (link, id) =>
-        said.includes(`r:id="${id}"`) ? link : ''
-      ),
+      semanticBody(normalizedBody(part, (id) => id)),
     ])
   );
 }
 
+/** A link's relationship in a relationships part. */
+const LINK_RELATIONSHIP = /<Relationship [^>]*Type="[^"]*\/hyperlink"[^>]*\/>/g;
+
 /**
- * Fold `doc` and check that the folded copy gives back everything `foldPrint` reads, and the same
- * Word file after an accept and after a reject of each pending suggestion. `then`, when given, is
- * an edit made on both copies after the fold.
+ * A folded copy's decided file without the link relationships that the room's own decided file
+ * does not hold. A known difference: a reject of a suggested link in a folded copy keeps the
+ * link's relationship, which nothing names.
+ */
+function withoutFoldedLinks(
+  file: Record<string, string>,
+  live: Record<string, string>
+): Record<string, string> {
+  return Object.fromEntries(
+    Object.entries(file).map(([name, xml]) => [
+      name,
+      xml.replace(LINK_RELATIONSHIP, (link) => (live[name]?.includes(link) ? link : '')),
+    ])
+  );
+}
+
+/** The ids of each maker's pending suggestions that show something. */
+function byMaker(doc: OrderedDocument): Map<string, string[]> {
+  const out = new Map<string, string[]>();
+  for (const s of shownPending(doc)) {
+    out.set(makerKey(s), [...(out.get(makerKey(s)) ?? []), s.id]);
+  }
+
+  return out;
+}
+
+const DECISIONS = ['accepted', 'rejected'] as const;
+
+/**
+ * Fold `doc`, and fold the folded copy again: check that each copy gives back everything
+ * `foldPrint` reads, and the same Word file after an accept and after a reject of each maker's
+ * pending suggestions. `then`, when given, is an edit made on every copy after the folds.
  */
 export async function checkFold(
   doc: OrderedDocument,
@@ -255,31 +308,34 @@ export async function checkFold(
   label: string,
   then?: (doc: OrderedDocument) => void
 ): Promise<void> {
-  const again = await folded(doc, base, doc.file + 1, blobs);
+  const once = await folded(doc, base, doc.file + 1, blobs);
+  const twice = await folded(once.document, once.base, doc.file + 2, blobs);
   then?.(doc);
-  then?.(again.document);
-  expect({ label, print: foldPrint(again.document, again.base, blobs) }).toEqual({
-    label,
-    print: foldPrint(doc, base, blobs),
-  });
-  const byMaker = (d: OrderedDocument) => {
-    const out = new Map<string, string[]>();
-    for (const s of shownPending(d)) {
-      out.set(makerKey(s), [...(out.get(makerKey(s)) ?? []), s.id]);
-    }
-
-    return out;
-  };
-  const live = byMaker(doc);
-  const reopened = byMaker(again.document);
-  for (const [maker, ids] of live) {
-    for (const status of ['accepted', 'rejected'] as const) {
-      expect({
+  const print = foldPrint(doc, base, blobs);
+  const live = [...byMaker(doc)].flatMap(([maker, ids]) =>
+    DECISIONS.map((status) => ({ maker, status, file: decidedFile(doc, base, blobs, ids, status) }))
+  );
+  for (const [fold, copy] of [
+    ['once', once],
+    ['twice', twice],
+  ] as const) {
+    then?.(copy.document);
+    expect({ label, fold, print: foldPrint(copy.document, copy.base, blobs) }).toEqual({
+      label,
+      fold,
+      print,
+    });
+    const reopened = byMaker(copy.document);
+    for (const { maker, status, file } of live) {
+      const ids = reopened.get(maker) ?? [];
+      const decided = decidedFile(copy.document, copy.base, blobs, ids, status);
+      expect({ label, fold, maker, status, file: withoutFoldedLinks(decided, file) }).toEqual({
         label,
+        fold,
         maker,
         status,
-        file: decidedFile(again.document, again.base, blobs, reopened.get(maker) ?? [], status),
-      }).toEqual({ label, maker, status, file: decidedFile(doc, base, blobs, ids, status) });
+        file,
+      });
     }
   }
 }

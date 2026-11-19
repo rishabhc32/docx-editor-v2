@@ -89,20 +89,16 @@ describe('a fold of a hidden prompt', () => {
         { kind: 'insert', ...DIRECT, place: at(doc, 1, start), text: 'Q' },
         'Olive'
       );
-      const blobs = mediaStore(base);
-      const once = await folded(doc, base, doc.file + 1, blobs);
-      const empty = (copy: OrderedDocument) => {
+
+      // Folded once, and twice, before the control empties
+      await checkFold(doc, base, mediaStore(base), key, (copy) => {
         apply(
           copy,
           'olive:3',
           { kind: 'delete', ...DIRECT, from: at(copy, 1, start), to: at(copy, 1, start + 1) },
           'Olive'
         );
-      };
-
-      // Folded once, and twice, before the control empties
-      await checkFold(doc, base, blobs, key, empty);
-      await checkFold(once.document, once.base, blobs, `${key} folded twice`, empty);
+      });
     });
   }
 });
