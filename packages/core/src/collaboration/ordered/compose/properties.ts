@@ -253,8 +253,10 @@ function applyProperties(
   children: readonly OoxmlNode[],
   keep: (c: OoxmlNode) => boolean
 ): readonly OoxmlNode[] {
-  if (record.merge !== undefined)
+  if (record.merge !== undefined) {
     return withMergedChildren(record.target, record.element, record.merge, children);
+  }
+
   const given = (record.element?.children ?? []).filter(
     (c) => !keep(c) && !(c.kind !== 'textValue' && c.localName.endsWith('Change'))
   );

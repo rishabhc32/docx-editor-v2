@@ -424,7 +424,10 @@ function drawField(
   for (const [k, piece] of pieces.entries()) {
     ride((slot) => slot === k);
     let node = piece.node;
-    if (node.kind === 'run') node = withId(node, ctx.runId(node.id));
+    if (node.kind === 'run') {
+      node = withId(node, ctx.runId(node.id));
+    }
+
     place(ctx, into, fieldRun(ctx, item, piece, node, formatted[k] === true), item);
   }
 
