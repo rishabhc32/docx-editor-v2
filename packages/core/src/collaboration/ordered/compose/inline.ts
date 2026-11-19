@@ -274,7 +274,10 @@ export function composeInline(ctx: ComposeContext, buffer: readonly OrderedItem[
     }
 
     if (isUnit(item)) noteUnit(ctx, boxes, item);
-    if (ctx.gone(item) || joined.has(item)) continue;
+    if (ctx.gone(item) || joined.has(item)) {
+      continue;
+    }
+
     if (item.kind === 'zero' && !item.inRun) {
       flush();
       if (item.node && item.moveRange) box().children.push(item.node);
