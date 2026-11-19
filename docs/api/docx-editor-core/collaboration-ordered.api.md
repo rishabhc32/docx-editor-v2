@@ -2450,6 +2450,7 @@ export interface OrderedRevisionIds {
     readonly attributesByRole: Map<string, readonly OoxmlAttribute[]>;
     readonly byRole: Map<string, string>;
     readonly fileIds: Set<string>;
+    readonly listed: Map<string, readonly string[]>;
 }
 
 // @public
