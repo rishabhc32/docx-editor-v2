@@ -8,7 +8,8 @@ import { REVISION_ROLE } from '../model/revision-ids.ts';
 import { attributeOf } from '../ooxml-nodes.ts';
 import { moveName, pushZero, type Labels, type LoadState, type MoveRange } from './state.ts';
 
-const MOVE_RANGE = /^move(From|To)Range(Start|End)$/;
+/** A move range marker's local name: its half (`From`, `To`) and its edge (`Start`, `End`). */
+export const MOVE_RANGE = /^move(From|To)Range(Start|End)$/;
 
 /** Labels that keep an item while `suggestion` is pending, and hide it once it is decided. */
 const whilePending = (suggestion: string, outer: Labels): Labels => ({

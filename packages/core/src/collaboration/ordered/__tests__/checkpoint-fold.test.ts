@@ -123,6 +123,24 @@ describe('a fold of a link inside an insertion', () => {
   });
 });
 
+describe('a fold of a move with words inside it', () => {
+  // Bob's words inside Ana's moved words split the move into two ranges, which a fold keeps as
+  // the file's own markers: once his words are rejected, the move is one range again
+  test('a reject of the words inside gives one move range', async () => {
+    const file = docx(p(t('Rich text here.')) + p(t('Other words.')));
+    const { document: doc, base } = openOrderedWordFile(file, { file: 1 });
+    apply(doc, 'ana:1', {
+      kind: 'move',
+      ...EDIT,
+      from: at(doc, 0, 0),
+      to: at(doc, 0, 2),
+      place: at(doc, 1, 6),
+    });
+    apply(doc, 'bob:1', { kind: 'insert', ...EDIT, place: at(doc, 1, 7), text: 'X' }, 'Bob');
+    await checkFold(doc, base, mediaStore(base), 'a move with words inside it');
+  });
+});
+
 const W16DU = 'http://schemas.microsoft.com/office/word/2023/wordml/word16du';
 
 describe('a fold of a long list', () => {

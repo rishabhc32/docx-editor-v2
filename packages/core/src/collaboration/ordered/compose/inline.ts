@@ -9,6 +9,7 @@ import {
 } from '../../../store/package/ooxml-tree.ts';
 import { withDeletedTextRestored } from '../../../store/store/revision-rebuild-helpers.ts';
 import { build, textNode } from '../../../store/store/tree-op-tracked.ts';
+import { MOVE_RANGE } from '../load/moves.ts';
 import { isSplitEdge, movedAwayBy, statusOf } from '../model/document.ts';
 import { REVISION_ROLE } from '../model/revision-ids.ts';
 import {
@@ -19,6 +20,7 @@ import {
   type OrderedPropertyRecord,
 } from '../model/types.ts';
 import {
+  attributeOf,
   childWhere,
   fieldCharBalance,
   isRunProperties,
@@ -160,6 +162,52 @@ function fieldPassengers(buffer: readonly OrderedItem[]): Map<string, OrderedIte
   return passengers;
 }
 
+/** A file's move range marker: its range (its half and `w:id`) and whether it starts it. */
+function moveRangeEdge(
+  item: OrderedItem
+): { readonly range: string; readonly start: boolean } | null {
+  const node = item.moveRange ? item.node : undefined;
+  if (!node || node.kind === 'textValue') {
+    return null;
+  }
+
+  const match = MOVE_RANGE.exec(node.localName);
+  if (!match) {
+    return null;
+  }
+
+  return { range: `${match[1]}:${attributeOf(node, 'id') ?? ''}`, start: match[2] === 'Start' };
+}
+
+/**
+ * The markers where two ranges of one move of the file meet with nothing drawn between them, as
+ * when a decision took out the words that split the move. They are passed over, so the move is
+ * one range again, as the room draws a move it made (`withMoveRanges`).
+ */
+function joinedMoveRanges(ctx: ComposeContext, buffer: readonly OrderedItem[]): Set<OrderedItem> {
+  const joined = new Set<OrderedItem>();
+  if (ctx.doc.movesWithRanges.size === 0) {
+    return joined;
+  }
+
+  let before: OrderedItem | null = null;
+  for (const item of buffer) {
+    if (item.kind === 'mark' || ctx.gone(item)) {
+      continue;
+    }
+
+    const edge = moveRangeEdge(item);
+    const end = before === null ? null : moveRangeEdge(before);
+    if (before !== null && edge?.start && end?.start === false && end.range === edge.range) {
+      joined.add(before).add(item);
+    }
+
+    before = item;
+  }
+
+  return joined;
+}
+
 /** A unit in the boxes: the innermost held it; each one it shows in, reached or struck. */
 function noteUnit(ctx: ComposeContext, boxes: readonly Box[], item: OrderedItem): void {
   const innermost = boxes[boxes.length - 1];
@@ -187,6 +235,7 @@ export function composeInline(ctx: ComposeContext, buffer: readonly OrderedItem[
   let current: RunBuild | null = null;
   const passengers = fieldPassengers(buffer);
   const carried = new Set<OrderedItem>();
+  const joined = joinedMoveRanges(ctx, buffer);
 
   // A rejected new link that still holds something stays, as in Word
   const kept = keptLinkEdges(ctx, buffer);
@@ -225,7 +274,7 @@ export function composeInline(ctx: ComposeContext, buffer: readonly OrderedItem[
     }
 
     if (isUnit(item)) noteUnit(ctx, boxes, item);
-    if (ctx.gone(item)) continue;
+    if (ctx.gone(item) || joined.has(item)) continue;
     if (item.kind === 'zero' && !item.inRun) {
       flush();
       if (item.node && item.moveRange) box().children.push(item.node);
