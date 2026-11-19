@@ -1,0 +1,271 @@
+// What a fold keeps (design D14): a room writes its document as a checkpoint and the next opening
+// reads it back under another file number. Everything the room and its pages read must come back
+// the same. Ids and addresses are new after a fold, so suggestions compare by who made them and
+// when, and items by what they show.
+//
+// Left out, as the same file and the same decisions follow from them:
+//  - internal shapes: format records come back as `face` records with the file's record, paragraph
+//    and section ops as `element` records, a control's prompt as the glossary's placeholder;
+//  - a suggestion's `version`, which counts the writes since it was loaded;
+//  - a suggestion its author took back (`retracted`): nothing shows it, and only its redo needs it,
+//    as the undo history, which a fold does not keep.
+
+import { expect } from 'bun:test';
+import { strFromU8, unzipSync } from 'fflate';
+import { readOoxmlPackage, type OoxmlPackage } from '../../../store/package/ooxml-package.ts';
+import { serializeOoxmlPart, type OoxmlElement } from '../../../store/package/ooxml-tree.ts';
+import { isCardUnit } from '../card-of.ts';
+import { orderedCardSeen } from '../change/apply-decide.ts';
+import { openOrderedCheckpoint, type OrderedWordFile } from '../client/open.ts';
+import { orderedPackageMedia, writeOrderedCheckpoint } from '../compose/checkpoint.ts';
+import { orderedViewParagraph } from '../compose/compose.ts';
+import { orderedPackageBytes } from '../compose/package.ts';
+import { orderedReplacedSuggestions } from '../compose/replaced.ts';
+import { orderedCards } from '../decide.ts';
+import { isHidden } from '../model/document.ts';
+import { setStatus } from '../model/mutations.ts';
+import { isTextBoxStoryName } from '../model/text-boxes.ts';
+import { orderedUnitTyper } from '../model/typers.ts';
+import type { OrderedDocument, OrderedItem, OrderedSuggestion } from '../model/types.ts';
+import { takeBack, withUndoRecord } from '../model/undo-record.ts';
+import { normalizedBody, semanticBody } from './matrix/compare.ts';
+
+/** The media bytes of a room's Word file, by SHA-256: the room's storage. */
+export function mediaStore(base: OoxmlPackage): (sha256: string) => Uint8Array | undefined {
+  const bytes = new Map(orderedPackageMedia(base).map((m) => [m.sha256, m.bytes]));
+  return (sha256) => bytes.get(sha256);
+}
+
+/** The document folded: its checkpoint written, and opened as file `file`. */
+export async function folded(
+  doc: OrderedDocument,
+  base: OoxmlPackage,
+  file: number,
+  blobs: (sha256: string) => Uint8Array | undefined
+): Promise<OrderedWordFile> {
+  const chunks: Uint8Array[] = [];
+  await writeOrderedCheckpoint(doc, base, {
+    media: async (sha256) => {
+      const bytes = blobs(sha256);
+      if (bytes === undefined) {
+        throw new Error(`no media ${sha256}`);
+      }
+
+      return bytes;
+    },
+    write: async (chunk) => {
+      chunks.push(chunk);
+    },
+  });
+  return openOrderedCheckpoint(new Uint8Array(Buffer.concat(chunks)), { file });
+}
+
+/** A suggestion by who made it and when: a fold keeps these, not its id. */
+const makerKey = ({ attribution }: OrderedSuggestion): string =>
+  JSON.stringify([attribution.person, attribution.author, attribution.date ?? null]);
+
+/** An element as XML: none and an empty one (a face with no properties) read alike. */
+const xmlOf = (face: OoxmlElement | null): string =>
+  face === null || face.children.length === 0
+    ? ''
+    : serializeOoxmlPart({ id: 'x', name: '/x', contentType: 'application/xml', root: face });
+
+/**
+ * Whether an item shows: a prompt's units that content took the place of are the glossary's
+ * placeholder after a fold, and show nowhere either way.
+ */
+const showsOn = (doc: OrderedDocument, item: OrderedItem): boolean =>
+  item.kind === 'zero' ? !isHidden(doc, item) && !isMoveRange(item) : isCardUnit(doc, item);
+
+/** A move's range marker: a fold writes the file's own, which the room draws from the move. */
+const isMoveRange = (item: OrderedItem): boolean =>
+  item.node?.kind !== 'textValue' &&
+  /^move(From|To)Range(Start|End)$/.test(item.node?.localName ?? '');
+
+/** Pending suggestions that show something: one taken back by its author shows nothing. */
+function shownPending(doc: OrderedDocument): OrderedSuggestion[] {
+  return [...doc.suggestions.values()].filter(
+    (s) =>
+      s.status === 'pending' &&
+      (doc.partRevisions.has(s.id) ||
+        [...(doc.labelled.get(s.id) ?? [])].some((item) => !isHidden(doc, item)))
+  );
+}
+
+/** Everything a fold must keep, as plain data with no ids or addresses. */
+export function foldPrint(doc: OrderedDocument, base: OoxmlPackage, blobs: FoldBlobs): unknown {
+  const key = (id: string | null): string | null => {
+    const suggestion = id === null ? undefined : doc.suggestions.get(id);
+    return suggestion?.status === 'pending' ? makerKey(suggestion) : null;
+  };
+  const keys = (ids: readonly string[]) => ids.map(key).filter((k) => k !== null);
+
+  // Each unit of an item on its own: a load joins units of one face into one item
+  const units = (item: OrderedItem): string[] => {
+    const node = item.node?.kind === 'textValue' ? '' : (item.node?.localName ?? '');
+    const labels = {
+      kind: item.kind,
+      node,
+      // A suggested link's edges lose their label: a reject still leaves no empty link. A unit in
+      // a new row or note keeps its label in the room, where a load reads it from the container
+      by: item.token === 'hyperlink' || item.quiet ? null : key(item.by),
+      dels: keys(item.dels),
+      fmts: keys(item.fmts.map((f) => f.suggestion)),
+      replaced: keys(item.fmts.flatMap((f) => (f.replaced === undefined ? [] : [f.replaced]))),
+      // Records apply in their order of creation, whatever their place in the list
+      props: keys(item.props.map((r) => r.suggestion)).sort(),
+      move: item.move !== null && (key(item.by) !== null || keys(item.dels).length > 0),
+      within: [keys(item.within.by), keys(item.within.dels)],
+    };
+    return Array.from({ length: Math.max(item.text.length, 1) }, (_, k) =>
+      JSON.stringify({
+        ...labels,
+        text: item.text[k] ?? '',
+        typer: orderedUnitTyper(doc, item, item.offset + k),
+      })
+    );
+  };
+  const pending = shownPending(doc);
+  return {
+    stories: [...doc.stories]
+      .map(([name, story]) => {
+        const shown = story.tree.toArray().filter((item) => showsOn(doc, item));
+        return [isTextBoxStoryName(name) ? 'text box' : name, ...shown.flatMap(units)].join('\n');
+      })
+      .sort(),
+    suggestions: pending.map(makerKey).sort(),
+    cards: orderedCards(doc)
+      .map((card) => keys(card.suggestions).join('|'))
+      .sort(),
+    seen: pending
+      .map((s) =>
+        (orderedCardSeen(doc, s.id) ?? [])
+          .map((seen) => key(seen.suggestion))
+          .sort()
+          .join('|')
+      )
+      .sort(),
+    replaced: pending
+      .flatMap((s) =>
+        orderedReplacedSuggestions(doc, s.id).map((r) =>
+          JSON.stringify([makerKey(s), key(r.suggestion), r.formattingKind, r.formattingChanges])
+        )
+      )
+      .sort(),
+    comments: [...doc.comments.values()].map(({ element, ...comment }) =>
+      JSON.stringify({ ...comment, element: xmlOf(element) })
+    ),
+    partRevisions: [...doc.partRevisions]
+      .filter(([id]) => key(id) !== null)
+      .map(([id, r]) => JSON.stringify([key(id), r.part, r.element, r.styleId ?? null])),
+    view: viewOf(doc),
+    file: partsOf(orderedPackageBytes(doc, base, { blobs })),
+  };
+}
+
+type FoldBlobs = (sha256: string) => Uint8Array | undefined;
+
+/**
+ * What each story's page shows: every character and its strike. A character's own face is left
+ * out: a fold writes the decided formats into it, which the room keeps as records.
+ */
+function viewOf(doc: OrderedDocument): string[] {
+  const out: string[] = [];
+  for (const [name, story] of doc.stories) {
+    for (let k = 0; k < story.tree.summary.marks; k += 1) {
+      const view = orderedViewParagraph(doc, name, k);
+      if (view !== null) {
+        out.push(view.chars.map((c) => `${c.ch}${c.deleted ? '-' : ''}`).join(''));
+      }
+    }
+  }
+
+  return out.sort();
+}
+
+/** A Word file's XML parts by name, and the size of each other part. */
+function partsOf(bytes: Uint8Array): Record<string, string> {
+  return Object.fromEntries(
+    Object.entries(unzipSync(bytes)).map(([name, data]) => [
+      name,
+      /\.(xml|rels)$/.test(name) ? strFromU8(data) : `${data.length} bytes`,
+    ])
+  );
+}
+
+/**
+ * The Word file after `ids` are decided as `status`, each XML part by what it says (as a reopen
+ * compares decisions: `semanticBody`); the document is restored. A decision on a folded copy may
+ * split a run where the room keeps one, or keep an empty `w:rPr`: the same meaning.
+ */
+function decidedFile(
+  doc: OrderedDocument,
+  base: OoxmlPackage,
+  blobs: FoldBlobs,
+  ids: readonly string[],
+  status: 'accepted' | 'rejected'
+): Record<string, string> {
+  const { record } = withUndoRecord(doc, () => {
+    for (const id of ids) {
+      setStatus(doc, id, status);
+    }
+  });
+  const read = readOoxmlPackage(orderedPackageBytes(doc, base, { blobs }), {});
+  takeBack(doc, record);
+  if (!read.ok) {
+    throw new Error(`the decided file does not read: ${read.reason}`);
+  }
+
+  const parts = [...read.package.parts].map(([name, part]) => [
+    name,
+    semanticBody(normalizedBody(part, (id) => id)),
+  ]);
+  const said = parts.map(([, xml]) => xml).join('');
+
+  // A rejected suggested link leaves its relationship, which nothing names, in a folded copy
+  return Object.fromEntries(
+    parts.map(([name, xml]) => [
+      name,
+      xml.replace(/<Relationship Id="([^"]+)"[^>]*TargetMode="External"[^>]*\/>/g, (link, id) =>
+        said.includes(`r:id="${id}"`) ? link : ''
+      ),
+    ])
+  );
+}
+
+/**
+ * Fold `doc` and check that the folded copy gives back everything `foldPrint` reads, and the same
+ * Word file after an accept and after a reject of each pending suggestion.
+ */
+export async function checkFold(
+  doc: OrderedDocument,
+  base: OoxmlPackage,
+  blobs: FoldBlobs,
+  label: string
+): Promise<void> {
+  const again = await folded(doc, base, doc.file + 1, blobs);
+  expect({ label, print: foldPrint(again.document, again.base, blobs) }).toEqual({
+    label,
+    print: foldPrint(doc, base, blobs),
+  });
+  const byMaker = (d: OrderedDocument) => {
+    const out = new Map<string, string[]>();
+    for (const s of shownPending(d)) {
+      out.set(makerKey(s), [...(out.get(makerKey(s)) ?? []), s.id]);
+    }
+
+    return out;
+  };
+  const live = byMaker(doc);
+  const reopened = byMaker(again.document);
+  for (const [maker, ids] of live) {
+    for (const status of ['accepted', 'rejected'] as const) {
+      expect({
+        label,
+        maker,
+        status,
+        file: decidedFile(again.document, again.base, blobs, reopened.get(maker) ?? [], status),
+      }).toEqual({ label, maker, status, file: decidedFile(doc, base, blobs, ids, status) });
+    }
+  }
+}

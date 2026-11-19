@@ -4,6 +4,7 @@ import {
   type OoxmlPackage,
   type OoxmlPackageLimits,
 } from '../../../store/package/ooxml-package.ts';
+import type { OoxmlElement } from '../../../store/package/ooxml-tree.ts';
 import { normalizeParagraphIdentity } from '../../../store/package/para-id.ts';
 import { textboxFallbackExportPackage } from '../../../store/package/textbox-fallback-export.ts';
 import { materializeGlossaryPlaceholders } from '../../../store/store/placeholder-materialize.ts';
@@ -11,13 +12,16 @@ import { loadOrderedPackage, orderedStoryParts, type OrderedLoadOptions } from '
 import {
   holdsCheckpointManifest,
   readCheckpoint,
-  type CheckpointPersons,
+  type CheckpointFacts,
 } from '../model/checkpoint.ts';
+import { checkpointPlacesOf } from '../model/checkpoint-takeovers.ts';
 import { recordFileMedia } from '../model/file-media.ts';
 import { orderedAuthorName, type OrderedPerson } from '../model/person.ts';
 import type { OrderedFileMedia } from '../model/resources.ts';
 import type { OrderedDocument } from '../model/types.ts';
 import { withCheckpointTakeovers } from './takeovers.ts';
+import { withCheckpointTypers } from './typers.ts';
+import { withCheckpointUntracked } from './untracked.ts';
 
 /** How to open a room's Word file. @public */
 export interface OrderedWordFileOptions {
@@ -26,7 +30,10 @@ export interface OrderedWordFileOptions {
   /** Caps on the package read. A caller may lower the engine's defaults. */
   readonly limits?: OoxmlPackageLimits;
   /** Caps on the load. */
-  readonly load?: Omit<OrderedLoadOptions, 'file' | 'placeholders' | 'persons' | 'commentPersons'>;
+  readonly load?: Omit<
+    OrderedLoadOptions,
+    'file' | 'placeholders' | 'suggestions' | 'commentPersons'
+  >;
 }
 
 /**
@@ -93,9 +100,12 @@ export function openOrderedWordFile(
  * Word file it stands for: the same document, under the same addresses. No media bytes are
  * read. The document's `resources.fileMedia` lists the media the checkpoint names by reference;
  * a client reads each one through its `media` reader, and `composeOrderedPackage` and
- * `writeOrderedPackage` put the bytes back in their places. Each room item has the person the
- * manifest names for its marks' `w:id`s, whatever the file number it opens under, and each
- * record a suggestion took from another (policy 2) is that record again, with `replaced`.
+ * `writeOrderedPackage` put the bytes back in their places. Whatever the file number it opens
+ * under, each pending suggestion is one suggestion again, with its person, however many Word
+ * changes its marks are; each record a suggestion took from another (policy 2) is that record
+ * again, with `replaced`; each record Word writes no change record for (a control's value, a
+ * column's lent width) is that record again, over the properties it was made over; and
+ * `orderedUnitTyper` names who typed each unit of an insertion as the room did.
  *
  * @throws OrderedWordFileError when the package does not read or has no main document, or when
  *   it is not a checkpoint of this engine's format and version (`not-checkpoint`,
@@ -131,8 +141,8 @@ function readPackage(bytes: Uint8Array, options: OrderedWordFileOptions): OoxmlP
 }
 
 /**
- * A read checkpoint package, opened without its manifest and with the media, the persons and the
- * takeovers it names.
+ * A read checkpoint package, opened without its manifest and with the media and the room facts it
+ * names: each by the suggestions the manifest lists, which the load makes first, in its order.
  */
 function openCheckpointRead(pkg: OoxmlPackage, options: OrderedWordFileOptions): OrderedWordFile {
   const checkpoint = readCheckpoint(pkg);
@@ -140,15 +150,33 @@ function openCheckpointRead(pkg: OoxmlPackage, options: OrderedWordFileOptions):
     throw new OrderedWordFileError(checkpoint.reason);
   }
 
-  const opened = openRead(checkpoint.base, checkpoint.media, options, checkpoint.persons);
+  const { facts } = checkpoint;
+  const opened = openRead(checkpoint.base, checkpoint.media, options, facts);
+  const doc = opened.document;
+  const listed = [...doc.suggestions.keys()].slice(0, facts.suggestions.length);
+  const places = placesOf(opened.base);
   if (
-    !withCheckpointTakeovers(opened.document, opened.base, checkpoint.takeovers) ||
-    !personsFit(opened.document)
+    !withCheckpointTakeovers(doc, places, facts.takeovers, listed) ||
+    !withCheckpointUntracked(doc, places, facts.untracked, listed) ||
+    !withCheckpointTypers(doc, facts.typers, listed) ||
+    !personsFit(doc)
   ) {
     throw new OrderedWordFileError('checkpoint-manifest');
   }
 
   return opened;
+}
+
+/** The places of a package's stories the manifest names records by, each by its key. */
+function placesOf(pkg: OoxmlPackage): Map<string, OoxmlElement> {
+  const places = new Map<string, OoxmlElement>();
+  for (const [name, part] of orderedStoryParts(pkg)) {
+    for (const { element, key } of checkpointPlacesOf(name, part)) {
+      places.set(key, element);
+    }
+  }
+
+  return places;
 }
 
 /** Whether every item and comment the manifest gives a person carries that person's Word name. */
@@ -170,12 +198,15 @@ function personsFit(doc: OrderedDocument): boolean {
   return true;
 }
 
-/** A read package, normalized and loaded, with the file's media and persons a checkpoint names. */
+/**
+ * A read package, normalized and loaded, with the file's media, and the suggestions and comment
+ * persons a checkpoint names.
+ */
 function openRead(
   pkg: OoxmlPackage,
   fileMedia: readonly OrderedFileMedia[],
   options: OrderedWordFileOptions,
-  persons?: CheckpointPersons
+  facts?: CheckpointFacts
 ): OrderedWordFile {
   let base = pkg;
   const main = base.parts.get(base.mainDocumentPart);
@@ -189,9 +220,9 @@ function openRead(
   const document = loadOrderedPackage(base, {
     ...options.load,
     file: options.file,
-    ...(persons === undefined
+    ...(facts === undefined
       ? {}
-      : { persons: persons.revisions, commentPersons: persons.comments }),
+      : { suggestions: facts.suggestions, commentPersons: facts.comments }),
   });
   recordFileMedia(document, fileMedia);
   return { base, document };

@@ -8,10 +8,10 @@ import {
 } from '../../../store/package/ooxml-tree.ts';
 import { DEFAULT_LIMITS } from '../../../store/runtime/limits.ts';
 import { MAX_XML_DEPTH } from '../../../store/package/xml-reader.ts';
+import type { CheckpointSuggestion } from '../model/checkpoint-suggestions.ts';
 import { noteCommentMarker } from '../model/comments.ts';
 import { createOrderedItem, NOT_WITHIN, type OrderedItemInit } from '../model/document.ts';
 import { newSuggestion } from '../model/mutations.ts';
-import type { OrderedPerson } from '../model/person.ts';
 import { OrderedRefusal } from '../model/refusal.ts';
 import { REVISION_ROLE, seedRevisionId } from '../model/revision-ids.ts';
 import { recordUndo } from '../model/undo-record.ts';
@@ -36,14 +36,18 @@ export interface Labels {
 
 export const NO_LABELS: Labels = { by: null, dels: [], move: null, within: NOT_WITHIN };
 
-/** Labels for the content of a row or cell whose own markers are `own`. */
+/**
+ * Labels for the content of a row or cell whose own markers are `own`. A suggestion is named
+ * once: a row and its cell struck by one suggestion strike its content once.
+ */
 export function contentLabels(labels: Labels, own: Labels): Labels {
   if (own.by === null && own.dels.length === 0) return labels;
+  const { by, dels } = labels.within;
   return {
     ...labels,
     within: {
-      by: own.by === null ? labels.within.by : [...labels.within.by, own.by],
-      dels: [...labels.within.dels, ...own.dels],
+      by: own.by === null || by.includes(own.by) ? by : [...by, own.by],
+      dels: [...dels, ...own.dels.filter((id) => !dels.includes(id))],
     },
   };
 }
@@ -72,8 +76,9 @@ function bounded(value: number | undefined, ceiling: number): number {
 
 /**
  * File revisions as suggestions: one suggestion for each revision triple (`w:id`, `w:author`,
- * `w:date`), the identity the engine decides a revision by. Each one keeps the file's `w:id`
- * for the role it was read in, so compose writes it back.
+ * `w:date`), the identity the engine decides a revision by, or for each suggestion a room
+ * checkpoint lists, whatever the triples of its marks. Each one keeps the file's `w:id` for the
+ * role it was read in, so compose writes it back.
  */
 export class RevisionReader {
   private readonly doc: OrderedDocument;
@@ -81,17 +86,26 @@ export class RevisionReader {
   private readonly byMove = new Map<string, string>();
   /** Every revision is this suggestion (an engine-built template), and no `w:id` is kept. */
   private readonly fixed: string | undefined;
-  /** The persons a room checkpoint names by revision `w:id`; a file's own revision has none. */
-  private readonly persons: ReadonlyMap<string, OrderedPerson>;
+  /** The suggestions a room checkpoint lists, by the triple of each of their marks. */
+  private readonly listed = new Map<string, string>();
 
-  constructor(
-    doc: OrderedDocument,
-    fixed?: string,
-    persons: ReadonlyMap<string, OrderedPerson> = new Map()
-  ) {
+  /**
+   * A reader of a document's revisions. The suggestions a room checkpoint lists are made first,
+   * in its order, so the k-th suggestion of the document is the k-th listed.
+   */
+  constructor(doc: OrderedDocument, fixed?: string, listed: readonly CheckpointSuggestion[] = []) {
     this.doc = doc;
     this.fixed = fixed;
-    this.persons = persons;
+    for (const { attribution, revisions } of listed) {
+      const { id } = newSuggestion(doc, attribution);
+      for (const revision of revisions) {
+        // An id names one suggestion: two share one only when two minted ids meet
+        const triple = revisionTriple(revision, attribution.author, attribution.date);
+        if (!this.listed.has(triple)) {
+          this.listed.set(triple, id);
+        }
+      }
+    }
   }
 
   /**
@@ -105,12 +119,14 @@ export class RevisionReader {
     const triple = tripleOf(revision);
     const moveKey = move === undefined ? undefined : `${move}\u0000${author}`;
     let suggestion =
-      this.byTriple.get(triple) ?? (moveKey === undefined ? undefined : this.byMove.get(moveKey));
+      this.byTriple.get(triple) ??
+      this.listed.get(triple) ??
+      (moveKey === undefined ? undefined : this.byMove.get(moveKey));
     if (suggestion === undefined) {
       const attributes = otherAttributes(revision);
       suggestion = newSuggestion(this.doc, {
         author,
-        person: this.persons.get(attributeOf(revision, 'id') ?? '') ?? null,
+        person: null,
         ...(date === undefined ? {} : { date }),
         ...(attributes.length > 0 ? { attributes } : {}),
       }).id;
@@ -153,10 +169,15 @@ export class RevisionReader {
 
 /** A revision mark's identity: its `w:id`, author and date. */
 function tripleOf(revision: OoxmlElement): string {
-  const id = attributeOf(revision, 'id');
-  const date = attributeOf(revision, 'date');
-  return `${id ?? ''}\u0000${attributeOf(revision, 'author') ?? ''}\u0000${date ?? '\u0001'}`;
+  return revisionTriple(
+    attributeOf(revision, 'id') ?? '',
+    attributeOf(revision, 'author') ?? '',
+    attributeOf(revision, 'date')
+  );
 }
+
+const revisionTriple = (id: string, author: string, date: string | undefined): string =>
+  `${id}\u0000${author}\u0000${date ?? '\u0001'}`;
 
 /** Most other attributes kept from one revision mark. */
 const MAX_OTHER_ATTRIBUTES = 8;

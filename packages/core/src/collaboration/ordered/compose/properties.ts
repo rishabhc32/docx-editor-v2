@@ -253,7 +253,8 @@ function applyProperties(
   children: readonly OoxmlNode[],
   keep: (c: OoxmlNode) => boolean
 ): readonly OoxmlNode[] {
-  if (record.merge !== undefined) return withMergedChildren(record, record.merge, children);
+  if (record.merge !== undefined)
+    return withMergedChildren(record.target, record.element, record.merge, children);
   const given = (record.element?.children ?? []).filter(
     (c) => !keep(c) && !(c.kind !== 'textValue' && c.localName.endsWith('Change'))
   );
@@ -288,21 +289,22 @@ function inSequence(
   return out;
 }
 
-/** A merge record's children over the ones before it, in the schema's order. */
-function withMergedChildren(
-  record: OrderedElementRecord,
+/** The children of `element` that `merge` names over the ones before them, in the schema's order. */
+export function withMergedChildren(
+  target: OrderedPropertyTarget,
+  element: OoxmlElement | null,
   merge: readonly string[],
   children: readonly OoxmlNode[]
 ): readonly OoxmlNode[] {
   const keys = new Set(merge);
   const kept = children.filter((c) => c.kind === 'textValue' || !keys.has(propertyKey(c)));
-  const given = (record.element?.children ?? []).filter(
+  const given = (element?.children ?? []).filter(
     (c) => c.kind !== 'textValue' && keys.has(propertyKey(c))
   );
-  const sequence = SEQUENCES[record.target];
+  const sequence = SEQUENCES[target];
   if (sequence) return inSequence(kept, given, sequence);
   const merged = [...kept, ...given];
-  return record.target === 'sdtPr' ? orderedContentControlProperties(merged) : merged;
+  return target === 'sdtPr' ? orderedContentControlProperties(merged) : merged;
 }
 
 /** A paragraph mark's `w:pPr` under its property records (its run properties drawn apart). */

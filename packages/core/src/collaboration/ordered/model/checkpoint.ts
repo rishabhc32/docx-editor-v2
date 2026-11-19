@@ -4,14 +4,20 @@ import type { OoxmlPackage } from '../../../store/package/ooxml-package.ts';
 import { normalizePartName, partNameKey } from '../../../store/package/opc-names.ts';
 import { resolveContentTypeOf } from '../../../store/package/package-edit.ts';
 import { DEFAULT_ZIP_LIMITS } from '../../../store/package/zip.ts';
-import { attempt } from '../change/read.ts';
+import { at, attempt, fieldsOf, Invalid, list, required } from '../change/read.ts';
 import { sha256 } from '../change/resources.ts';
 import {
-  readTakeovers,
-  takeoversJson,
+  readSuggestions,
+  readTypers,
+  suggestionsJson,
+  typersJson,
+  matching,
   WORD_ID,
-  type CheckpointTakeovers,
-} from './checkpoint-takeovers.ts';
+  type CheckpointSuggestion,
+  type CheckpointTypers,
+} from './checkpoint-suggestions.ts';
+import { readTakeovers, takeoversJson, type CheckpointTakeover } from './checkpoint-takeovers.ts';
+import { readUntracked, untrackedJson, type CheckpointUntracked } from './checkpoint-untracked.ts';
 import { referencedMediaType } from './file-media.ts';
 import { readPerson, type OrderedPerson } from './person.ts';
 import type { OrderedFileMedia } from './resources.ts';
@@ -20,23 +26,21 @@ import type { OrderedFileMedia } from './resources.ts';
 export const CHECKPOINT_MANIFEST = '/ordered-checkpoint.json';
 
 const FORMAT = 'docx-editor.dev/ordered-checkpoint';
-const VERSION = 3;
+const VERSION = 4;
 const MAX_MANIFEST_BYTES = 4 * 1024 * 1024;
 
 /**
- * A person, the revision `w:id`s of their items' marks and the `w:id`s of their comments, as the
- * manifest lists them.
+ * The room facts a checkpoint's manifest keeps, which Word has no place for: each pending
+ * suggestion whole, the person of each room comment by its `w:id`, the records each change
+ * record holds by takeover, who typed the units of each insertion, and the records Word writes
+ * no change record for. Every section names a suggestion by its place in `suggestions`.
  */
-export interface CheckpointPerson {
-  readonly person: OrderedPerson;
-  readonly revisions: readonly string[];
-  readonly comments: readonly string[];
-}
-
-/** The persons a checkpoint names: by revision `w:id`, and by comment `w:id`. */
-export interface CheckpointPersons {
-  readonly revisions: ReadonlyMap<string, OrderedPerson>;
+export interface CheckpointFacts {
+  readonly suggestions: readonly CheckpointSuggestion[];
   readonly comments: ReadonlyMap<string, OrderedPerson>;
+  readonly takeovers: readonly CheckpointTakeover[];
+  readonly typers: readonly CheckpointTypers[];
+  readonly untracked: readonly CheckpointUntracked[];
 }
 
 /**
@@ -55,13 +59,11 @@ export type CheckpointRefusal =
 
 /**
  * The manifest's bytes: one JSON part with the format, its version, each media part the
- * checkpoint holds by reference, the person of each room item by its revision `w:id`s and of
- * each room comment by its comment `w:id`, and the records each change record holds by takeover.
+ * checkpoint holds by reference, and the room's facts.
  */
 export function checkpointManifestBytes(
   media: readonly OrderedFileMedia[],
-  persons: readonly CheckpointPerson[],
-  takeovers: CheckpointTakeovers
+  facts: CheckpointFacts
 ): Uint8Array {
   const listed = media.map(({ part, sha256, contentType, size, entry }) => ({
     part,
@@ -75,8 +77,11 @@ export function checkpointManifestBytes(
       format: FORMAT,
       version: VERSION,
       media: listed,
-      persons,
-      ...takeoversJson(takeovers),
+      suggestions: suggestionsJson(facts.suggestions),
+      comments: [...facts.comments].map(([id, person]) => ({ id, person })),
+      takeovers: takeoversJson(facts.takeovers),
+      typers: typersJson(facts.typers),
+      untracked: untrackedJson(facts.untracked),
     })
   );
 }
@@ -98,17 +103,13 @@ export function holdsCheckpointManifest(pkg: OoxmlPackage): boolean {
   return manifestEntry(pkg) !== undefined;
 }
 
-/**
- * What a checkpoint's package holds: the package without the manifest, its media, the person of
- * each room item by revision `w:id` and of each room comment by comment `w:id`, and the takeovers.
- */
+/** What a checkpoint's package holds: the package without the manifest, its media and facts. */
 export type CheckpointRead =
   | {
       readonly ok: true;
       readonly base: OoxmlPackage;
       readonly media: readonly OrderedFileMedia[];
-      readonly persons: CheckpointPersons;
-      readonly takeovers: CheckpointTakeovers;
+      readonly facts: CheckpointFacts;
     }
   | { readonly ok: false; readonly reason: CheckpointRefusal };
 
@@ -134,22 +135,36 @@ export function readCheckpoint(pkg: OoxmlPackage): CheckpointRead {
   partBytes.delete(name);
   const base: OoxmlPackage = Object.freeze({ ...pkg, partBytes });
   const media = mediaIn(base, manifest.media);
-  const persons = personsIn(manifest.persons);
-  const takeovers = attempt(() => readTakeovers(manifest.takeovers, manifest.suggestions));
-  if (media === null || persons === null || !takeovers.ok) {
+  const facts = attempt(() => factsOf(manifest.value));
+  if (media === null || !facts.ok) {
     return { ok: false, reason: 'checkpoint-manifest' };
   }
 
-  return { ok: true, base, media, persons, takeovers: takeovers.value };
+  return { ok: true, base, media, facts: facts.value };
+}
+
+/**
+ * The manifest's facts, each section checked.
+ *
+ * @throws Invalid when one does not read.
+ */
+function factsOf(manifest: Record<string, unknown>): CheckpointFacts {
+  const suggestions = readSuggestions(manifest.suggestions);
+  const count = suggestions.length;
+  return {
+    suggestions,
+    comments: readComments(manifest.comments),
+    takeovers: readTakeovers(manifest.takeovers, count),
+    typers: readTypers(manifest.typers, count),
+    untracked: readUntracked(manifest.untracked, count),
+  };
 }
 
 type Manifest =
   | {
       readonly ok: true;
       readonly media: readonly unknown[];
-      readonly persons: readonly unknown[];
-      readonly takeovers: unknown;
-      readonly suggestions: unknown;
+      readonly value: Record<string, unknown>;
     }
   | { readonly ok: false; readonly reason: CheckpointRefusal };
 
@@ -178,58 +193,35 @@ function manifestOf(bytes: Uint8Array): Manifest {
     return { ok: false, reason: 'checkpoint-version' };
   }
 
-  const { media, persons } = value;
+  const { media } = value;
   if (!Array.isArray(media) || media.length > DEFAULT_ZIP_LIMITS.maxEntries) {
     return { ok: false, reason: 'checkpoint-manifest' };
   }
 
-  if (!Array.isArray(persons)) {
-    return { ok: false, reason: 'checkpoint-manifest' };
-  }
-
-  return { ok: true, media, persons, takeovers: value.takeovers, suggestions: value.suggestions };
+  return { ok: true, media, value };
 }
 
 /**
- * The listed persons by revision `w:id` and by comment `w:id`, or null when one does not read or
- * an id is named twice in its list. The manifest's byte cap bounds the lists.
+ * The person of each listed comment by its `w:id`, each id named once.
+ *
+ * @throws Invalid when one does not read.
  */
-function personsIn(listed: readonly unknown[]): CheckpointPersons | null {
-  const revisions = new Map<string, OrderedPerson>();
-  const comments = new Map<string, OrderedPerson>();
-  for (const value of listed) {
-    if (!isRecord(value)) {
-      return null;
+function readComments(value: unknown): Map<string, OrderedPerson> {
+  const persons = new Map<string, OrderedPerson>();
+
+  // The manifest's byte cap bounds the list
+  for (const [k, entry] of list(value, 'comments', 0, Number.MAX_SAFE_INTEGER).entries()) {
+    const path = at('comments', k);
+    const f = fieldsOf(entry, path, new Set(['id', 'person']));
+    const id = matching(required(f, 'id'), at(path, 'id'), WORD_ID, 'a comment id');
+    if (persons.has(id)) {
+      throw new Invalid('invalid-value', at(path, 'id'), 'named twice');
     }
 
-    const read = attempt(() => readPerson(value.person, 'person'));
-    if (
-      !read.ok ||
-      !namedIds(value.revisions, read.value, revisions) ||
-      !namedIds(value.comments, read.value, comments)
-    ) {
-      return null;
-    }
+    persons.set(id, readPerson(required(f, 'person'), at(path, 'person')));
   }
 
-  return { revisions, comments };
-}
-
-/** Name a person by each id of a list; false when the list does not read or names an id twice. */
-function namedIds(ids: unknown, person: OrderedPerson, byId: Map<string, OrderedPerson>): boolean {
-  if (!Array.isArray(ids)) {
-    return false;
-  }
-
-  for (const id of ids) {
-    if (typeof id !== 'string' || !WORD_ID.test(id) || byId.has(id)) {
-      return false;
-    }
-
-    byId.set(id, person);
-  }
-
-  return true;
+  return persons;
 }
 
 /** The listed media, each checked against `base`, or null when one does not fit. */

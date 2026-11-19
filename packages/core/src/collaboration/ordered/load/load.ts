@@ -11,7 +11,12 @@ import { addOrderedStory, createOrderedDocument } from '../model/document.ts';
 import type { OrderedPerson } from '../model/person.ts';
 import { OrderedRefusal } from '../model/refusal.ts';
 import { reserveFileRevisionId } from '../model/revision-ids.ts';
-import { BLOCK_TOKENS, type OrderedDocument, type OrderedItem } from '../model/types.ts';
+import {
+  BLOCK_TOKENS,
+  type OrderedAttribution,
+  type OrderedDocument,
+  type OrderedItem,
+} from '../model/types.ts';
 import { attributeOf, isWml } from '../ooxml-nodes.ts';
 import { loadBlocks } from './blocks.ts';
 import { loadComments } from './comments.ts';
@@ -47,11 +52,15 @@ export interface OrderedLoadOptions {
    */
   readonly placeholders?: ReadonlyMap<string, readonly OoxmlNode[]>;
   /**
-   * The persons of a room checkpoint's items by revision `w:id` (`openOrderedCheckpoint` reads
-   * them): a suggestion read from a mark with one of these ids is that person's. Default: none,
-   * so every suggestion is the file's own, with no person.
+   * A room checkpoint's pending suggestions, each with the `w:id`s the file writes for its marks
+   * (`openOrderedCheckpoint` reads them). The load makes them first, in this order, and reads
+   * each mark with one of these ids, the author and the date as that one suggestion. Default:
+   * none, so every suggestion is the file's own, one for each revision triple, with no person.
    */
-  readonly persons?: ReadonlyMap<string, OrderedPerson>;
+  readonly suggestions?: readonly {
+    readonly attribution: OrderedAttribution;
+    readonly revisions: readonly string[];
+  }[];
   /**
    * The persons of a room checkpoint's comments by comment `w:id` (`openOrderedCheckpoint` reads
    * them): a comment with one of these ids is that person's. Default: none, so every comment is
@@ -241,8 +250,8 @@ function loadStories(
   const doc = createOrderedDocument(options.file ?? 0);
   for (const [name, blocks] of options.placeholders ?? []) doc.placeholders.set(name, blocks);
 
-  // No fixed suggestion: each file revision is its own, with the person a checkpoint names
-  const revisions = new RevisionReader(doc, undefined, options.persons);
+  // No fixed suggestion: each file revision is its own, or the suggestion a checkpoint lists
+  const revisions = new RevisionReader(doc, undefined, options.suggestions);
   for (const [name, part] of parts) {
     if (!isOrderedStoryPart(part))
       throw new OrderedRefusal('malformed-story', `${name} is not a story`);

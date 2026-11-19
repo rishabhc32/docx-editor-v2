@@ -1,19 +1,13 @@
 // A checkpoint's takeovers back in the document (design D5, policy 2).
 
-import type { OoxmlPackage } from '../../../store/package/ooxml-package.ts';
 import type { OoxmlElement } from '../../../store/package/ooxml-tree.ts';
 import { createOrderedItem } from '../model/document.ts';
-import { orderedStoryParts } from '../load/load.ts';
 import {
-  changeRecordsOf,
   recordedProperties,
   takeoverKey,
-  type CheckpointSuggestion,
   type CheckpointTakeover,
-  type CheckpointTakeovers,
 } from '../model/checkpoint-takeovers.ts';
-import { newSuggestion, relabel, replaceItems } from '../model/mutations.ts';
-import { sameMaker } from '../model/person.ts';
+import { relabel, replaceItems } from '../model/mutations.ts';
 import type {
   OrderedDocument,
   OrderedElementRecord,
@@ -22,7 +16,6 @@ import type {
   OrderedPropertyRecord,
   OrderedStory,
 } from '../model/types.ts';
-import { TripleIndex } from './ops/review.ts';
 
 /** A file's format record. */
 type FaceRecord = Extract<OrderedFormatRecord, { readonly kind: 'face' }>;
@@ -46,46 +39,33 @@ interface ItemTakeovers {
 }
 
 /**
- * Put each takeover a checkpoint names back in the document loaded from it: the suggestion it
- * was taken from exists once, pending (the one loaded from its own marks, if the file writes
- * any), and each item whose change record holds it has the taken record again, with `replaced`,
- * in front of the holder's own. False when a takeover does not fit the file: no change record
- * at its place, or none loaded as a record of the properties it names.
+ * Put each takeover a checkpoint names back in the document loaded from it: each item whose
+ * change record holds it has the taken record again, with `replaced` (a suggestion of the
+ * manifest's list, `listed`), in front of the holder's own. False when a takeover does not fit
+ * the file: no change record at its place, or none loaded as a record of the properties it names.
  */
 export function withCheckpointTakeovers(
   doc: OrderedDocument,
-  base: OoxmlPackage,
-  { takeovers, suggestions }: CheckpointTakeovers
+  places: ReadonlyMap<string, OoxmlElement>,
+  takeovers: readonly CheckpointTakeover[],
+  listed: readonly string[]
 ): boolean {
   if (takeovers.length === 0) {
     return true;
   }
 
-  const wanted = wantedTakeovers(takeovers);
   const holders = holdersOf(doc);
-  const suggestionOf = replacedSuggestions(doc, suggestions);
   const items = new Map<OrderedItem, ItemTakeovers>();
-  let found = 0;
-  for (const [name, part] of orderedStoryParts(base)) {
-    for (const { element, id, occurrence } of changeRecordsOf(part)) {
-      const takeover = wanted.get(takeoverKey(name, element.localName, id, occurrence));
-      if (takeover === undefined) {
-        continue;
-      }
-
-      found += 1;
-      const holdersAt = holders.get(element) ?? [];
-      if (
-        holdersAt.length === 0 ||
-        !holdersAt.every((holder) => noteTaken(items, holder, takeover, suggestionOf))
-      ) {
-        return false;
-      }
+  for (const takeover of takeovers) {
+    const { part, record, id, occurrence } = takeover;
+    const element = places.get(takeoverKey(part, record, id, occurrence));
+    const holdersAt = element === undefined ? [] : (holders.get(element) ?? []);
+    if (
+      holdersAt.length === 0 ||
+      !holdersAt.every((holder) => noteTaken(items, holder, takeover, listed))
+    ) {
+      return false;
     }
-  }
-
-  if (found !== wanted.size) {
-    return false;
   }
 
   for (const [item, taken] of items) {
@@ -93,18 +73,6 @@ export function withCheckpointTakeovers(
   }
 
   return true;
-}
-
-/** The takeovers a checkpoint names, by the key of the change record that holds each. */
-function wantedTakeovers(
-  takeovers: readonly CheckpointTakeover[]
-): Map<string, CheckpointTakeover> {
-  return new Map(
-    takeovers.map((takeover) => {
-      const { part, record, id, occurrence } = takeover;
-      return [takeoverKey(part, record, id, occurrence), takeover];
-    })
-  );
 }
 
 /** Every loaded record that holds a file's change record, by that record. */
@@ -148,50 +116,6 @@ function holdersOf(doc: OrderedDocument): Map<OoxmlElement, Holder[]> {
 }
 
 /**
- * The suggestion of each place of a checkpoint's list, found or made the first time it is asked
- * for: null when one loaded from its marks is another maker's.
- */
-function replacedSuggestions(
-  doc: OrderedDocument,
-  suggestions: readonly CheckpointSuggestion[]
-): (k: number) => string | null {
-  const index = new TripleIndex(doc);
-  const ids = new Map<number, string | null>();
-  return (k) => {
-    let id = ids.get(k);
-    if (id === undefined) {
-      const listed = suggestions[k];
-      id = listed === undefined ? null : replacedSuggestion(doc, index, listed);
-      ids.set(k, id);
-    }
-
-    return id;
-  };
-}
-
-/**
- * The suggestion a takeover's records were taken from: the one loaded from its own marks, when
- * the file writes some and it is the same maker, else a new pending one. Null when one loaded
- * from its marks is another maker's.
- */
-function replacedSuggestion(
-  doc: OrderedDocument,
-  index: TripleIndex,
-  listed: CheckpointSuggestion
-): string | null {
-  const { author, date } = listed.attribution;
-  for (const id of listed.revisions) {
-    const [loaded] = index.suggestions({ id, author, ...(date === undefined ? {} : { date }) });
-    const suggestion = loaded === undefined ? undefined : doc.suggestions.get(loaded);
-    if (suggestion !== undefined) {
-      return sameMaker(suggestion.attribution, listed.attribution) ? suggestion.id : null;
-    }
-  }
-
-  return newSuggestion(doc, listed.attribution).id;
-}
-
-/**
  * Note in `items` the records a holder took back for its item, each held by the holder's
  * suggestion: a format as the face it gave, a property record as the properties. A field's other
  * runs give only their own faces. False when the holder is not a record of the properties the
@@ -201,7 +125,7 @@ function noteTaken(
   items: Map<OrderedItem, ItemTakeovers>,
   { story, item, record, piece }: Holder,
   takeover: CheckpointTakeover,
-  suggestionOf: (k: number) => string | null
+  listed: readonly string[]
 ): boolean {
   const target = recordedProperties(takeover.record);
   if (record.kind === 'face' ? target !== 'rPr' : record.target !== target) {
@@ -210,8 +134,8 @@ function noteTaken(
 
   const replaced: { readonly id: string; readonly properties: OoxmlElement }[] = [];
   for (const { suggestion, properties } of takeover.taken) {
-    const id = suggestionOf(suggestion);
-    if (id === null || id === record.suggestion) {
+    const id = listed[suggestion];
+    if (id === undefined || id === record.suggestion) {
       return false;
     }
 

@@ -101,14 +101,21 @@ function checkpointOf(file: OrderedWordFile, store = storeOf([])): Promise<Uint8
 const streamed = (file: OrderedWordFile, store: ReturnType<typeof storeOf>) =>
   collected((write) => writeOrderedPackage(file.document, file.base, { media: store.read, write }));
 
+const ANA = { id: 'ana', name: 'Ana', org: '' };
+
+/** A listed suggestion of Ana's that the file writes no mark for. */
+const ANA_SUGGESTION = { author: 'Ana', attributes: [], person: ANA, revisions: [] };
+
 const manifestOf = (checkpoint: Uint8Array) =>
   JSON.parse(strFromU8(unzipSync(checkpoint)[MANIFEST] ?? new Uint8Array())) as {
     format: string;
     version: number;
     media: { part: string; sha256: string; contentType: string; size: number; entry: number }[];
-    persons: unknown[];
+    suggestions: { person: unknown }[];
+    comments: unknown[];
     takeovers: unknown[];
-    suggestions: unknown[];
+    typers: unknown[];
+    untracked: unknown[];
   };
 
 function expectSameBytes(actual: Uint8Array, expected: Uint8Array): void {
@@ -221,10 +228,14 @@ describe('writeOrderedCheckpoint', () => {
       const listed = orderedPackageMedia(file.base);
       expect(store.reads).toEqual([]);
       expect(manifest.format).toBe('docx-editor.dev/ordered-checkpoint');
-      expect(manifest.version).toBe(3);
-      expect(manifest.persons).toEqual([]);
-      expect(manifest.takeovers).toEqual([]);
-      expect(manifest.suggestions).toEqual([]);
+      expect(manifest.version).toBe(4);
+      expect(manifest.suggestions.filter((s) => s.person !== null)).toEqual([]);
+      expect([manifest.comments, manifest.takeovers, manifest.typers, manifest.untracked]).toEqual([
+        [],
+        [],
+        [],
+        [],
+      ]);
       expect(manifest.media.map((media) => media.sha256).sort()).toEqual(
         listed.map((media) => media.sha256).sort()
       );
@@ -451,7 +462,7 @@ describe('a file of another kind is refused by name', () => {
     expect(reasonOf(open(await withManifest((m) => ({ ...m, format: 'other' }))))).toBe(
       'checkpoint-format'
     );
-    for (const version of [1, 2, 4]) {
+    for (const version of [1, 2, 3, 5]) {
       expect(reasonOf(open(await withManifest((m) => ({ ...m, version }))))).toBe(
         'checkpoint-version'
       );
@@ -471,16 +482,50 @@ describe('a file of another kind is refused by name', () => {
       (m) => ({ ...m, media: media(m).map((x) => ({ ...x, entry: 0 })) }),
       (m) => ({ ...m, media: media(m).map((x) => ({ ...x, entry: 10_000 })) }),
       (m) => ({ ...m, media: [...media(m), ...media(m)] }),
-      ({ persons: _, ...m }) => m,
-      (m) => ({ ...m, persons: 'all' }),
-      (m) => ({ ...m, persons: [{ person: { id: 'ana', name: 'Ana' }, revisions: ['1'] }] }),
-      (m) => ({ ...m, persons: [{ person: { id: 'ana', name: 'Ana', org: '' }, revisions: 1 }] }),
-      (m) => ({ ...m, persons: [{ person: { id: 'ana', name: 'Ana', org: '' }, revisions: [1] }] }),
+      ({ suggestions: _, ...m }) => m,
+      (m) => ({ ...m, suggestions: 'all' }),
+      (m) => ({ ...m, suggestions: [{ ...ANA_SUGGESTION, person: { id: 'ana', name: 'Ana' } }] }),
+      (m) => ({ ...m, suggestions: [{ ...ANA_SUGGESTION, revisions: 1 }] }),
+      (m) => ({ ...m, suggestions: [{ ...ANA_SUGGESTION, revisions: [1] }] }),
+      (m) => ({ ...m, suggestions: [{ ...ANA_SUGGESTION, author: 'Ben' }] }),
+      ({ comments: _, ...m }) => m,
       (m) => ({
         ...m,
-        persons: [
-          { person: { id: 'ana', name: 'Ana', org: '' }, revisions: ['7'] },
-          { person: { id: 'ben', name: 'Ben', org: '' }, revisions: ['7'] },
+        comments: [
+          { id: '7', person: ANA },
+          { id: '7', person: ANA },
+        ],
+      }),
+      (m) => ({ ...m, takeovers: [{ part: '/word/document.xml', record: 'rPrChange' }] }),
+      (m) => ({ ...m, suggestions: [ANA_SUGGESTION], typers: [{ suggestion: 1, units: [] }] }),
+      (m) => ({
+        ...m,
+        suggestions: [ANA_SUGGESTION],
+        typers: [{ suggestion: 0, units: [[0, null]] }],
+      }),
+      (m) => ({
+        ...m,
+        suggestions: [ANA_SUGGESTION],
+        typers: [{ suggestion: 0, units: [[1, 'a b']] }],
+      }),
+      // Runs past the units the file holds for the suggestion
+      (m) => ({
+        ...m,
+        suggestions: [ANA_SUGGESTION],
+        typers: [{ suggestion: 0, units: [[1, 'ana']] }],
+      }),
+      (m) => ({ ...m, untracked: [{ part: '/word/document.xml', container: 'p' }] }),
+      (m) => ({
+        ...m,
+        suggestions: [ANA_SUGGESTION],
+        untracked: [
+          {
+            part: '/word/document.xml',
+            container: 'tc',
+            occurrence: 0,
+            target: 'tcPr',
+            records: [{ suggestion: 0 }],
+          },
         ],
       }),
     ];

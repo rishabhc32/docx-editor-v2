@@ -27,6 +27,7 @@ import { setStatus } from '../../model/mutations.ts';
 import type { OrderedDocument } from '../../model/types.ts';
 import { takeBack, withUndoRecord } from '../../model/undo-record.ts';
 import { decodeOrderedClientMessage, encodeOrderedServerMessage } from '../../protocol/codec.ts';
+import type { OrderedStampedChange } from '../../change/types.ts';
 import { OrderedRoom } from '../../room/room.ts';
 import { suggestionsOnlyPolicy } from '../../room/suggestions-only.ts';
 import { normalizedBody, semanticBody } from '../matrix/compare.ts';
@@ -154,6 +155,9 @@ export interface SessionResult {
   readonly frames: number;
   /** Suggestions a documented Word-form limit kept out of the save check, over the rounds. */
   readonly limited: number;
+  /** The room's log, and its length at the end of each round. */
+  readonly log: readonly OrderedStampedChange[];
+  readonly rounds: readonly number[];
 }
 
 /**
@@ -198,6 +202,7 @@ export function runSession(
   let changes = 0;
   let decidedCount = 0;
   let limitedTotal = 0;
+  const ends: number[] = [];
 
   const reachRoom = (k: number) => {
     const frame = toRoom[k]?.shift();
@@ -283,6 +288,7 @@ export function runSession(
         expect(orderedCardOf(room.document, id)?.suggestions).toEqual(card.suggestions);
     checkDecisionOrders(room.document, rand, label);
     limitedTotal += checkSaveAndLoad(room.document, label);
+    ends.push(room.order);
   }
   const refused = { invalid: 0, local: 0, reapply: 0, room: 0 };
   for (const client of clients) {
@@ -298,5 +304,7 @@ export function runSession(
     decided: decidedCount,
     frames,
     limited: limitedTotal,
+    log: room.joinSnapshot(0),
+    rounds: ends,
   };
 }
