@@ -1,0 +1,13 @@
+{
+  "impact": "compatible",
+  "fields": [],
+  "before": "A suggested link's edges carried the insertion around it, so another person's words typed before the link joined the insertion's card live and had a card of their own after a checkpoint. A suggestion inside a text box whose object no longer showed kept a card, though the saved file has no such text box. After a checkpoint, a move that another suggestion's words split into two ranges kept two ranges once those words were rejected.",
+  "after": "Card reads pass over a link's edges, as Word and the editor mark only a link's words, and leave out a text box whose object went, as they leave out a note whose references show nowhere. Compose draws two ranges of one file move that nothing drawn separates as one range. Cards and exported files are the same live and after a checkpoint.",
+  "reason": "The Yjs document format, the ordered protocol and the checkpoint manifest do not change. Cards are read from the room's state with the same code on every copy, and every copy of a room runs the same code version. Ordered rooms are not deployed yet.",
+  "tests": [
+    "packages/core/src/collaboration/ordered/__tests__/checkpoint-fold.test.ts",
+    "packages/core/src/collaboration/ordered/__tests__/text-boxes.test.ts"
+  ],
+  "changeset": "ordered-fold-cards",
+  "migration": null
+}
