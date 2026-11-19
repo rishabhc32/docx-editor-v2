@@ -112,7 +112,10 @@ export function eachElement(root: OoxmlNode, visit: (element: OoxmlElement) => v
 
 /** Field begins less field ends in a node. */
 export function fieldCharBalance(node: OoxmlNode, depth = 0): number {
-  if (node.kind === 'textValue' || depth > 8) return 0;
+  if (node.kind === 'textValue' || depth > 8) {
+    return 0;
+  }
+
   if (node.localName === 'fldChar') {
     switch (node.attributes.find((a) => a.localName === 'fldCharType')?.value) {
       case 'begin':
@@ -125,7 +128,10 @@ export function fieldCharBalance(node: OoxmlNode, depth = 0): number {
   }
 
   let balance = 0;
-  for (const child of node.children) balance += fieldCharBalance(child, depth + 1);
+  for (const child of node.children) {
+    balance += fieldCharBalance(child, depth + 1);
+  }
+
   return balance;
 }
 
