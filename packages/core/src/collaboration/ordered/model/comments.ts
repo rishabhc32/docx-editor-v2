@@ -74,7 +74,7 @@ const MARKERS: Readonly<Record<string, OrderedCommentMarker>> = {
 };
 
 /** A node's comment id and marker kind, when it is a comment's marker. */
-function commentMarkerOf(
+export function commentMarkerOf(
   node: OoxmlNode | null
 ): { readonly id: string; readonly marker: OrderedCommentMarker } | null {
   if (node === null || node.kind === 'textValue' || node.namespaceUri !== WML_NAMESPACE_URI) {

@@ -5,7 +5,7 @@
 // stay refused (a host replies and resolves through the session).
 
 import { afterEach, describe, expect, test } from 'bun:test';
-import { strFromU8, unzipSync } from 'fflate';
+import { strFromU8, strToU8, unzipSync, zipSync } from 'fflate';
 import { createDocxEditor } from '../../../../editor/docx-editor.ts';
 import type { OoxmlNode } from '../../../../store/package/ooxml-tree.ts';
 import type { OrderedLocalRoom } from '../../client/local-room.ts';
@@ -24,6 +24,7 @@ import { p, t } from '../word-fixtures.ts';
 import {
   caretAt,
   closeAll,
+  editorTexts,
   FILE,
   join,
   localRoom,
@@ -121,8 +122,8 @@ function cardsOf(editor: Editor): string[] {
   });
 }
 
-/** The comment cards of the editor alone on a Word file. */
-function aloneCards(bytes: Uint8Array): string[] {
+/** What `read` gives from the editor alone on a Word file. */
+async function alone<T>(bytes: Uint8Array, read: (editor: Editor) => T | Promise<T>): Promise<T> {
   const container = document.createElement('div');
   document.body.append(container);
   const editor = createDocxEditor({
@@ -133,11 +134,44 @@ function aloneCards(bytes: Uint8Array): string[] {
     modules: [review],
   });
   try {
-    return cardsOf(editor);
+    return await read(editor);
   } finally {
     editor.destroy();
     container.remove();
   }
+}
+
+/** The comment cards of the editor alone on a Word file. */
+const aloneCards = (bytes: Uint8Array): Promise<string[]> => alone(bytes, cardsOf);
+
+/**
+ * The Word file the editor alone saves after it replies each of `replies` to comment 0: the
+ * file's, or `comment` when given, which it first adds on "Due" of the second paragraph.
+ */
+function aloneReplies(
+  bytes: Uint8Array,
+  replies: readonly string[],
+  comment?: string
+): Promise<Uint8Array> {
+  return alone(bytes, async (editor) => {
+    if (comment !== undefined) {
+      const paragraphId = editor.surface?.session.paragraphIds()[1] ?? '';
+      editor.surface?.setSelection({
+        anchor: { paragraphId, offset: 0 },
+        head: { paragraphId, offset: 3 },
+      });
+      expect(editor.addComment(comment).ok).toBe(true);
+    }
+
+    for (const text of replies) {
+      const card = editor
+        .getReviewItems()
+        .find((placement) => placement.kind === 'comment' && placement.item.id === '0');
+      expect(editor.replyToReviewItem(card?.key ?? '', text).ok).toBe(true);
+    }
+
+    return new Uint8Array(await editor.save());
+  });
 }
 
 /** The comments the room added, as `author person-ID parent done words`. */
@@ -174,6 +208,54 @@ const entriesWith = (bytes: Uint8Array, text: string): string[] =>
     .filter(([, data]) => strFromU8(data).includes(text))
     .map(([name]) => name);
 
+/** A Word file's comments, each named by its words. */
+function commentWords(files: Record<string, Uint8Array>): Map<string, string> {
+  const part = strFromU8(files['word/comments.xml'] ?? new Uint8Array());
+  const comments = part.matchAll(/<w:comment [^>]*w:id="(\d+)"[^>]*>(.*?)<\/w:comment>/gs);
+  return new Map(
+    [...comments].map((match) => {
+      const words = [...(match[2] ?? '').matchAll(/<w:t[^>]*>([^<]*)/g)].map((t) => t[1]);
+      return [match[1] ?? '', words.join('')];
+    })
+  );
+}
+
+/** The body's comment markers in order, as `RangeStart:words`, each comment named by its words. */
+function markersOf(word: Uint8Array): string[] {
+  const files = unzipSync(word);
+  const words = commentWords(files);
+  const body = strFromU8(files['word/document.xml'] ?? new Uint8Array());
+  return [...body.matchAll(/<w:comment(RangeStart|RangeEnd|Reference) w:id="(\d+)"/g)].map(
+    (match) => `${match[1]}:${words.get(match[2] ?? '')}`
+  );
+}
+
+/**
+ * A thread's markers on one range, as the engine writes them: the starts and the references in
+ * the thread's order, the ends the other way.
+ */
+const nested = (thread: readonly string[]): string[] => [
+  ...thread.map((words) => `RangeStart:${words}`),
+  ...[...thread].reverse().map((words) => `RangeEnd:${words}`),
+  ...thread.map((words) => `Reference:${words}`),
+];
+
+/** `word` with its comments in the order of the body's references, as Word's save writes them. */
+function inMarkerOrder(word: Uint8Array): Uint8Array {
+  const files = unzipSync(word);
+  const body = strFromU8(files['word/document.xml'] ?? new Uint8Array());
+  const order = [...body.matchAll(/<w:commentReference w:id="(\d+)"/g)].map((match) => match[1]);
+  const part = strFromU8(files['word/comments.xml'] ?? new Uint8Array());
+  const comments = [...part.matchAll(/<w:comment [^>]*w:id="(\d+)"[^>]*>.*?<\/w:comment>/gs)];
+  const from = comments[0]?.index ?? 0;
+  const last = comments.at(-1);
+  const to = last === undefined ? from : (last.index ?? 0) + last[0].length;
+  const sorted = [...comments].sort((a, b) => order.indexOf(a[1]) - order.indexOf(b[1]));
+  const xml = sorted.map((match) => match[0]).join('');
+  files['word/comments.xml'] = strToU8(part.slice(0, from) + xml + part.slice(to));
+  return zipSync(files);
+}
+
 /** Ana's comment on "Due" of the second paragraph, through her held selection. */
 async function anaComments(room: OrderedLocalRoom, ana: Person, text = 'Why 30?\nAsk legal.') {
   caretAt(ana, 1, 0, 3);
@@ -198,7 +280,7 @@ describe('a comment through the room', () => {
 
     // The saved Word file: the same card on the editor alone, under the Word name only
     const { word, checkpoint } = await saved(room);
-    expect(aloneCards(word)).toEqual(['Ana (Acme): Why 30?/Ask legal. @1:0-1:3']);
+    expect(await aloneCards(word)).toEqual(['Ana (Acme): Why 30?/Ask legal. @1:0-1:3']);
     expect(roomComments(openOrderedWordFile(word, { file: 2 }).document)).toEqual([]);
     expect(entriesWith(word, ANA.id)).toEqual([]);
 
@@ -241,7 +323,7 @@ describe('a comment through the room', () => {
     }
 
     const { word } = await saved(room);
-    expect(aloneCards(word)).toEqual(cards);
+    expect(await aloneCards(word)).toEqual(cards);
     const extended = strFromU8(unzipSync(word)['word/commentsExtended.xml'] ?? new Uint8Array());
     const entries = [...extended.matchAll(/<w15:commentEx [^>]*\/>/g)].map((match) => match[0]);
     expect(entries).toHaveLength(3);
@@ -269,7 +351,7 @@ describe('a comment through the room', () => {
       'Olive (Host): Settled at 30. re Ana (Acme) (resolved) @1:0-1:3',
     ];
     expect(cardsOf(ana.editor)).toEqual(cards);
-    expect(aloneCards((await saved(room)).word)).toEqual(cards);
+    expect(await aloneCards((await saved(room)).word)).toEqual(cards);
 
     expect(ana.handle.session.replyToComment(id, 'One more thing.')).not.toBeNull();
     await settle();
@@ -285,7 +367,7 @@ describe('a comment through the room', () => {
     const file = commentedFile();
     const { room, olive, people } = await negotiation(file);
     const [ana] = people as [Person];
-    const before = aloneCards(file);
+    const before = await aloneCards(file);
 
     // Comment 1 answers comment 0: the reply answers comment 0 too
     expect(ana.handle.session.replyToComment('1', 'Me too.')).not.toBeNull();
@@ -304,7 +386,7 @@ describe('a comment through the room', () => {
     const cards = cardsOf(ana.editor);
     expect(cards).toHaveLength(before.length + 1);
     expect(cards.filter((card) => card.includes('(resolved)'))).toHaveLength(4);
-    expect(aloneCards((await saved(room, file)).word)).toEqual(cards);
+    expect(await aloneCards((await saved(room, file)).word)).toEqual(cards);
   });
 
   test('a reply to a file thread whose reference sits in the next paragraph shows on every page', async () => {
@@ -349,7 +431,7 @@ describe("a comment's words deleted", () => {
       expect(cardsOf(person.editor)).toEqual(['Ana (Acme): Due when? @1:0-1:0']);
     }
 
-    expect(aloneCards((await saved(room)).word)).toEqual(['Ana (Acme): Due when? @1:0-1:0']);
+    expect(await aloneCards((await saved(room)).word)).toEqual(['Ana (Acme): Due when? @1:0-1:0']);
   });
 
   test('a tracked deletion keeps it over the struck words; accepted, at their place', async () => {
@@ -400,7 +482,7 @@ describe('comments at the same time, and after a restart', () => {
     converged(room, olive, ana, ben);
     const cards = ['Ana (Acme): First. @1:0-1:6', 'Ben (Bolt): Second. @1:4-1:9'];
     expect(cardsOf(olive.editor)).toEqual(cards);
-    expect(aloneCards((await saved(room)).word)).toEqual(cards);
+    expect(await aloneCards((await saved(room)).word)).toEqual(cards);
   });
 
   test('two comments on the same words stay two threads', async () => {
@@ -414,7 +496,7 @@ describe('comments at the same time, and after a restart', () => {
     converged(room, olive, ana, ben);
     const cards = ['Ana (Acme): First. @1:0-1:3', 'Ben (Bolt): Second. @1:0-1:3'];
     expect(cardsOf(olive.editor)).toEqual(cards);
-    expect(aloneCards((await saved(room)).word)).toEqual(cards);
+    expect(await aloneCards((await saved(room)).word)).toEqual(cards);
   });
 
   test('a reply the room orders after the resolve is refused, and every copy ends equal', async () => {
@@ -469,6 +551,7 @@ describe("the editor's own comment writes", () => {
     expect(olive.editor.setCommentResolved(key, true).ok).toBe(false);
     expect(olive.editor.deleteReviewItem(key).ok).toBe(false);
     await settle();
+
     // They name no comment of the room: the editor gives the gate no ops for them
     expect(refused(olive)).toEqual([
       'ordered-opaque-write/opaque-write',
@@ -477,5 +560,106 @@ describe("the editor's own comment writes", () => {
     ]);
     expect(kinds(room)).toEqual(['comment']);
     converged(room, olive, ana);
+  });
+});
+
+describe("a thread's order", () => {
+  const THREAD = ['Why 30?', 'Thirty is usual.', 'Agreed.', 'Done.'];
+
+  /** Ana's comment, Ben's and Ana's replies, and Olive's resolve with a note: one thread. */
+  async function threadOfThree() {
+    const { room, olive, people } = await negotiation(FILE, [ANA, BEN]);
+    const [ana, ben] = people as [Person, Person];
+    const id = await anaComments(room, ana, 'Why 30?');
+    expect(ben.handle.session.replyToComment(id, 'Thirty is usual.')).not.toBeNull();
+    await settle();
+    expect(ana.handle.session.replyToComment(id, 'Agreed.')).not.toBeNull();
+    await settle();
+    expect(olive.handle.session.resolveComment(id, 'Done.')).toBe(true);
+    await settle();
+    converged(room, olive, ana, ben);
+    return { room, people: [olive, ana, ben] };
+  }
+
+  test('the replies follow each other as the editor alone writes them, on every page', async () => {
+    const { room, people } = await threadOfThree();
+    const { word } = await saved(room);
+    expect(markersOf(word)).toEqual(nested(THREAD));
+
+    // A resolve's note is its last reply, and a resolve moves no marker
+    expect(markersOf(await aloneReplies(FILE, THREAD.slice(1), THREAD[0]))).toEqual(nested(THREAD));
+    for (const person of people) {
+      expect(markersOf(new Uint8Array(await person.editor.save()))).toEqual(nested(THREAD));
+    }
+
+    // Saved and opened again
+    const next = localRoom(word, { policy: suggestionsOnlyPolicy() });
+    expect(markersOf((await saved(next, word)).word)).toEqual(nested(THREAD));
+  });
+
+  test("Word's save, which writes the comments in the body's order, keeps the dates", async () => {
+    const { room } = await threadOfThree();
+    const reloaded = openOrderedWordFile(inMarkerOrder((await saved(room)).word), { file: 2 });
+    const comments = [...reloaded.document.comments.values()];
+    expect(comments.map((comment) => textOf(comment.element))).toEqual(THREAD);
+    const dates = comments.map((comment) => comment.date ?? '');
+    expect(dates).toEqual([...dates].sort());
+  });
+
+  test("a reply to the Word file's thread follows its replies, as the editor alone", async () => {
+    const file = commentedFile();
+    const { room, olive, people } = await negotiation(file);
+    const [ana] = people as [Person];
+    expect(ana.handle.session.replyToComment('0', 'Me too.')).not.toBeNull();
+    await settle();
+    converged(room, olive, ana);
+    const markers = markersOf((await saved(room, file)).word);
+    expect(markers.slice(0, 4)).toEqual([
+      'RangeStart:Remark 0.',
+      'RangeStart:Remark 1.',
+      'RangeStart:Remark 2.',
+      'RangeStart:Me too.',
+    ]);
+    expect(markers).toEqual(markersOf(await aloneReplies(file, ['Me too.'])));
+  });
+
+  test('replies from two pages at once take the room order on every page', async () => {
+    const { room, olive, people } = await negotiation(FILE, [ANA, BEN]);
+    const [ana, ben] = people as [Person, Person];
+    const id = await anaComments(room, ana, 'Why 30?');
+    expect(ben.handle.session.replyToComment(id, 'From Ben.')).not.toBeNull();
+    expect(olive.handle.session.replyToComment(id, 'From Olive.')).not.toBeNull();
+    await settle();
+    expect(kinds(room)).toEqual(['comment', 'comment-reply', 'comment-reply']);
+    converged(room, olive, ana, ben);
+    const thread = [...room.room.document.comments.values()].map((comment) =>
+      textOf(comment.element)
+    );
+    expect([...thread].sort()).toEqual(['From Ben.', 'From Olive.', 'Why 30?']);
+    expect(markersOf((await saved(room)).word)).toEqual(nested(thread));
+    for (const person of [olive, ana, ben]) {
+      expect(markersOf(new Uint8Array(await person.editor.save()))).toEqual(nested(thread));
+    }
+  });
+
+  test("a page's undo of its own typing leaves the replies as they are", async () => {
+    const { room, olive, people } = await negotiation(FILE, [ANA, BEN]);
+    const [ana, ben] = people as [Person, Person];
+    const id = await anaComments(room, ana, 'Why 30?');
+    caretAt(ben, 0, 0);
+    surface(ben).insertPlainText('Note: ');
+    await settle();
+    expect(ben.handle.session.replyToComment(id, 'From Ben.')).not.toBeNull();
+    await settle();
+    expect(olive.handle.session.replyToComment(id, 'From Olive.')).not.toBeNull();
+    await settle();
+    surface(ben).undo();
+    await settle();
+    converged(room, olive, ana, ben);
+    expect(editorTexts(ben)[0]).toBe('The fee is 100 USD.');
+    expect(ben.handle.session.canUndo()).toBe(false);
+    const thread = ['Why 30?', 'From Ben.', 'From Olive.'];
+    expect(markersOf((await saved(room)).word)).toEqual(nested(thread));
+    expect(markersOf(new Uint8Array(await ben.editor.save()))).toEqual(nested(thread));
   });
 });

@@ -7,7 +7,13 @@ import type { OoxmlElement } from '../../../store/package/ooxml-tree.ts';
 import { commentElementOf } from '../../../store/store/comment-element.ts';
 import { stampedParagraph } from '../../../store/store/comment-writes.ts';
 import type { OrderedIdMinter } from '../change/ids.ts';
-import { commentRangeItems, threadRootOf, type OrderedComment } from '../model/comments.ts';
+import {
+  commentMarkerOf,
+  commentRangeItems,
+  threadRootOf,
+  type OrderedComment,
+  type OrderedCommentMarker,
+} from '../model/comments.ts';
 import { createOrderedItem } from '../model/document.ts';
 import { insertItems } from '../model/mutations.ts';
 import { OrderedRefusal } from '../model/refusal.ts';
@@ -253,9 +259,40 @@ function withParaId(writer: OrderedCommentWriter, comment: OrderedComment): Orde
 }
 
 /**
+ * The item a reply's `marker` goes after, beside its parent's marker `at`, as the engine orders
+ * the markers at one place (`coincidentInsertIndex`): a start after the starts that follow the
+ * parent's, an end before the ends that come before it, a reference after the references that
+ * follow it. So a thread's starts and references run oldest first, and its ends the other way.
+ */
+function besideParent(
+  story: OrderedStory,
+  at: OrderedItem,
+  marker: OrderedCommentMarker
+): OrderedItem | null {
+  const { tree } = story;
+  const same = (item: OrderedItem | null): item is OrderedItem =>
+    item !== null && commentMarkerOf(item.node)?.marker === marker;
+  if (marker === 'end') {
+    let first = at;
+    for (let item = tree.prev(first); same(item); item = tree.prev(first)) {
+      first = item;
+    }
+
+    return tree.prev(first);
+  }
+
+  let last = at;
+  for (let item = tree.next(last); same(item); item = tree.next(last)) {
+    last = item;
+  }
+
+  return last;
+}
+
+/**
  * A reply of `text` to the thread of comment `id`: it answers the thread's first comment, and
- * its range sits beside that comment's, as the engine anchors a reply over its parent's range
- * (starts outer to inner, ends inner to outer, references outer to inner). Returns its id.
+ * its range sits on that comment's, after the thread's earlier replies, as the engine anchors a
+ * reply over its parent's range. Returns its id.
  */
 export function replyToComment(writer: OrderedCommentWriter, id: string, text: string): string {
   const { doc } = writer;
@@ -268,9 +305,9 @@ export function replyToComment(writer: OrderedCommentWriter, id: string, text: s
   const { story, start, end, reference } = rangeOf(doc, root.id);
   const reply = newCommentId(writer);
   const markers = rangeMarkers(writer.ids, reply, start, end);
-  insertItems(doc, story, start, [markers.start]);
-  insertItems(doc, story, story.tree.prev(end), [markers.end]);
-  insertItems(doc, story, reference ?? markers.end, [markers.reference]);
+  insertItems(doc, story, besideParent(story, start, 'start'), [markers.start]);
+  insertItems(doc, story, besideParent(story, end, 'end'), [markers.end]);
+  insertItems(doc, story, besideParent(story, reference ?? end, 'reference'), [markers.reference]);
   putRange(doc, reply, story, markers);
   addComment(writer, reply, text, root.id);
   return reply;
