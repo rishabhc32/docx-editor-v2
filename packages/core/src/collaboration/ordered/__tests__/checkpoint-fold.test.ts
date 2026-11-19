@@ -3,13 +3,13 @@
 // whole, its card, who typed its units, the takeovers, comments, part revisions, what a page
 // shows, the Word file, and the Word file after an accept and after a reject of each suggestion.
 
-import { describe, test } from 'bun:test';
+import { describe, expect, test } from 'bun:test';
 import { applyOrderedChange } from '../change/apply.ts';
 import { openOrderedWordFile } from '../client/open.ts';
 import { orderedIdMinter } from '../change/ids.ts';
 import type { OrderedDocument } from '../model/types.ts';
 import { withUndoRecord } from '../model/undo-record.ts';
-import { apply, at, DIRECT, EDIT, textOf } from './change-apply-fixture.ts';
+import { apply, at, DATE, DIRECT, EDIT, textOf } from './change-apply-fixture.ts';
 import { checkFold, folded, mediaStore } from './fold-check.ts';
 import { SESSION_FILE } from './sessions/fixture.ts';
 import { runSession } from './sessions/session.ts';
@@ -118,5 +118,25 @@ describe('a fold of a long list', () => {
       to: at(doc, 299, textOf(doc, 299).length),
     });
     await checkFold(doc, base, mediaStore(base), 'a deletion over 300 paragraphs');
+  });
+});
+
+describe("a fold of a Word file's own values", () => {
+  test('one w:id of two authors: two suggestions, each with its own units', async () => {
+    const mark = (author: string, text: string) =>
+      `<w:ins w:id="1" w:author="${author}" w:date="${DATE}">${t(text)}</w:ins>`;
+    const file = docx(p(mark('A', 'ab') + mark('B', 'cd')));
+    const { document: doc, base } = openOrderedWordFile(file, { file: 1 });
+    const again = await folded(doc, base, 2, mediaStore(base));
+    const unitsOf = (copy: OrderedDocument) =>
+      [...copy.suggestions.values()].map(({ id, attribution }) => [
+        attribution.author,
+        [...(copy.labelled.get(id) ?? [])].map((item) => item.text).join(''),
+      ]);
+    expect(unitsOf(again.document)).toEqual([
+      ['A', 'ab'],
+      ['B', 'cd'],
+    ]);
+    expect(unitsOf(again.document)).toEqual(unitsOf(doc));
   });
 });

@@ -95,7 +95,7 @@ export interface HeldTakeovers {
 export interface WrapperInfo {
   /** The whole chain of wrappers, outer first: a move's range covers one chain. */
   readonly key: string;
-  /** The outer wrapper's kind and id: neighbours with one outer wrapper share it. */
+  /** The outer wrapper's kind, id and suggestion: neighbours with one outer wrapper share it. */
   readonly outer: string;
   readonly suggestion: string;
   /** A move's name, for its range markers. */

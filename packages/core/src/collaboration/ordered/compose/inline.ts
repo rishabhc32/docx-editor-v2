@@ -523,7 +523,7 @@ function place(ctx: ComposeContext, into: OoxmlNode[], node: OoxmlNode, item: Or
       : REVISION_ROLE.deleteIn(ctx.paragraphKey);
     const id = ctx.revisionId(del, role);
     wrapped = wrapper(ctx, kind, del, role, [wrapped]);
-    key = `${kind}:${id}`;
+    key = `${kind}:${id}:${del}`;
     outer = { key, suggestion: del };
     ctx.wrappers.set(wrapped, { key, outer: key, suggestion: del, move: moved ? item.move : null });
   }
@@ -533,8 +533,8 @@ function place(ctx: ComposeContext, into: OoxmlNode[], node: OoxmlNode, item: Or
     const role = insertionRole(ctx, item);
     const id = ctx.revisionId(by, role);
     wrapped = wrapper(ctx, kind, by, role, [wrapped]);
-    key = `${kind}:${id}|${key}`;
-    outer = { key: `${kind}:${id}`, suggestion: by };
+    key = `${kind}:${id}:${by}|${key}`;
+    outer = { key: `${kind}:${id}:${by}`, suggestion: by };
   }
 
   if (outer === null || wrapped.kind === 'textValue') {
