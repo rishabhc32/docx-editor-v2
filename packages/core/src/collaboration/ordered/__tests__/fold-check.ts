@@ -245,15 +245,19 @@ function decidedFile(
 
 /**
  * Fold `doc` and check that the folded copy gives back everything `foldPrint` reads, and the same
- * Word file after an accept and after a reject of each pending suggestion.
+ * Word file after an accept and after a reject of each pending suggestion. `then`, when given, is
+ * an edit made on both copies after the fold.
  */
 export async function checkFold(
   doc: OrderedDocument,
   base: OoxmlPackage,
   blobs: FoldBlobs,
-  label: string
+  label: string,
+  then?: (doc: OrderedDocument) => void
 ): Promise<void> {
   const again = await folded(doc, base, doc.file + 1, blobs);
+  then?.(doc);
+  then?.(again.document);
   expect({ label, print: foldPrint(again.document, again.base, blobs) }).toEqual({
     label,
     print: foldPrint(doc, base, blobs),

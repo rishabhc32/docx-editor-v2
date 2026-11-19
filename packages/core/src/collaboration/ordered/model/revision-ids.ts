@@ -219,10 +219,14 @@ export function fileRecordIdsOf(doc: OrderedDocument, suggestion: string): strin
   return ids;
 }
 
-/** Every `w:id` compose writes for a suggestion's marks, and its file records' own. */
+/**
+ * Every `w:id` compose writes for a suggestion's marks, its file records' own, and those a room
+ * checkpoint listed for it.
+ */
 export function revisionIdsOf(doc: OrderedDocument, suggestion: string): Set<string> {
   const ids = new Set(WHOLE_ROLES.map((role) => revisionIdFor(doc, suggestion, role)));
-  for (const id of fileRecordIdsOf(doc, suggestion)) {
+  const listed = doc.revisionIds.listed.get(suggestion) ?? [];
+  for (const id of [...fileRecordIdsOf(doc, suggestion), ...listed]) {
     ids.add(id);
   }
 

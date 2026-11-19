@@ -18,6 +18,7 @@ import { withStoryBlocks } from '../compose/paragraph-ops.ts';
 import { containerPropertiesAfter } from '../compose/properties.ts';
 import { contextOf, withNewIds, type Ctx } from '../edits/context.ts';
 import { templateItems } from '../edits/templates.ts';
+import { RevisionReader } from '../load/state.ts';
 import { isHidden, isSplitEdge, itemAt, statusOf, storyOfItem } from '../model/document.ts';
 import { insertItems, relabel, replaceItems } from '../model/mutations.ts';
 import { personAttribution } from '../model/person.ts';
@@ -419,14 +420,18 @@ function paragraphRuns(blocks: readonly OoxmlNode[]): OoxmlNode[] {
   );
 }
 
-/** The units of the prompt in a prompted control's content, loaded as a paragraph would be. */
+/**
+ * The units of the prompt in a prompted control's content, loaded as a paragraph would be. A
+ * record a room checkpoint listed (a prompt the glossary kept with its records) is its
+ * suggestion's again.
+ */
 export function promptUnits(ctx: Ctx, control: OoxmlElement, open: OrderedItem): OrderedItem[] {
   const content = control.children.find(isControlContent);
   if (!content || content.kind === 'textValue') return [];
   const runs = open.token === 'sdt' ? content.children : paragraphRuns(content.children);
   if (runs.length === 0) return [];
   const paragraph = build(ctx.ids.node(), 'paragraph', 'p', [], runs);
-  return templateItems(ctx, paragraph, open.by ?? '')
+  return templateItems(ctx, paragraph, RevisionReader.forPrompt(ctx.doc, open.by ?? ''))
     .filter(isUnit)
     .map(
       (item): OrderedItem => ({
@@ -609,7 +614,7 @@ function unsplit(doc: OrderedDocument): void {
 }
 
 /** Set a control's original, in the undo record. */
-function setOriginal(doc: OrderedDocument, id: string, node: OoxmlNode | undefined): void {
+export function setOriginal(doc: OrderedDocument, id: string, node: OoxmlNode | undefined): void {
   const before = doc.originals.get(id);
   if (node) doc.originals.set(id, node);
   else doc.originals.delete(id);

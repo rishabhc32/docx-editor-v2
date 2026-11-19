@@ -18,6 +18,7 @@ import { recordUndo } from '../model/undo-record.ts';
 import {
   tokenSpace,
   zeroSpace,
+  type OrderedAttribution,
   type OrderedContainerToken,
   type OrderedDocument,
   type OrderedItem,
@@ -102,12 +103,38 @@ export class RevisionReader {
         setStatus(doc, id, status);
       }
 
-      for (const revision of revisions) {
-        // An id names one suggestion: two share one only when two minted ids meet
-        const triple = revisionTriple(revision, attribution.author, attribution.date);
-        if (!this.listed.has(triple)) {
-          this.listed.set(triple, id);
-        }
+      doc.revisionIds.listed.set(id, revisions);
+      this.addListed(id, attribution, revisions);
+    }
+  }
+
+  /**
+   * A reader of a prompt the glossary kept: a mark a room checkpoint listed is its suggestion's,
+   * as a reopen reads it, and every other one is `fixed`.
+   */
+  static forPrompt(doc: OrderedDocument, fixed: string): RevisionReader {
+    const reader = new RevisionReader(doc, fixed);
+    for (const [id, revisions] of doc.revisionIds.listed) {
+      const attribution = doc.suggestions.get(id)?.attribution;
+      if (attribution) {
+        reader.addListed(id, attribution, revisions);
+      }
+    }
+
+    return reader;
+  }
+
+  /** Read the marks a checkpoint listed for a suggestion as that suggestion's. */
+  private addListed(
+    id: string,
+    { author, date }: OrderedAttribution,
+    revisions: readonly string[]
+  ): void {
+    for (const revision of revisions) {
+      // An id names one suggestion: two share one only when two minted ids meet
+      const triple = revisionTriple(revision, author, date);
+      if (!this.listed.has(triple)) {
+        this.listed.set(triple, id);
       }
     }
   }
@@ -117,10 +144,13 @@ export class RevisionReader {
    * move (`move`) by one author are one suggestion: the engine decides them together.
    */
   suggestionFor(revision: OoxmlElement, role: string, move?: string): string {
-    if (this.fixed !== undefined) return this.fixed;
+    const triple = tripleOf(revision);
+    if (this.fixed !== undefined && !this.listed.has(triple)) {
+      return this.fixed;
+    }
+
     const author = attributeOf(revision, 'author') ?? '';
     const date = attributeOf(revision, 'date');
-    const triple = tripleOf(revision);
     const moveKey = move === undefined ? undefined : `${move}\u0000${author}`;
     let suggestion =
       this.byTriple.get(triple) ??

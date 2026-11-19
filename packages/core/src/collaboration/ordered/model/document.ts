@@ -37,7 +37,12 @@ export function createOrderedDocument(file = 0): OrderedDocument {
     counters: { suggestion: 0, insertion: 0, seq: 0 },
     runShells: new Map(),
     originals: new Map(),
-    revisionIds: { byRole: new Map(), attributesByRole: new Map(), fileIds: new Set() },
+    revisionIds: {
+      byRole: new Map(),
+      attributesByRole: new Map(),
+      fileIds: new Set(),
+      listed: new Map(),
+    },
     placeholders: new Map(),
     movesWithRanges: new Set(),
     composeIds: { next: 1 },

@@ -8,9 +8,16 @@ import { withRestoredPrompt } from '../../../store/store/content-control-prompt-
 import { findContentControl } from '../../../store/store/tree-op-nodes.ts';
 import { isBlockToken } from '../compose/blocks.ts';
 import { ComposeContext } from '../compose/context.ts';
+import { composeInline } from '../compose/inline.ts';
 import { ownItems } from '../compose/paragraph.ts';
 import { placeholderNameOf } from '../compose/prompts.ts';
-import { insertionTakenBack, isHidden, isSplitEdge, storyOfItem } from '../model/document.ts';
+import {
+  insertionTakenBack,
+  isHidden,
+  isLabelled,
+  isSplitEdge,
+  storyOfItem,
+} from '../model/document.ts';
 import { insertItems, relabel } from '../model/mutations.ts';
 import {
   recordFilledPrompt,
@@ -19,13 +26,14 @@ import {
 } from '../model/prompt-marks.ts';
 import type { OrderedDocument, OrderedItem, OrderedStory } from '../model/types.ts';
 import { recordUndo } from '../model/undo-record.ts';
-import { isControlContent, isWml, withChildren } from '../ooxml-nodes.ts';
+import { isControlContent, isParagraphProperties, isWml, withChildren } from '../ooxml-nodes.ts';
 import { closeOf } from '../placement.ts';
 import type { OrderedApplyContext } from '../room/room.ts';
 import {
   controlScratch,
   pending,
   promptUnits,
+  setOriginal,
   settleContext,
   shownMarkOf,
 } from './settle-emptied.ts';
@@ -56,6 +64,8 @@ interface State {
   readonly settled: WeakSet<OrderedItem>;
   /** Prompt units a replacement took away: the prompt's own rules never bring them back. */
   readonly replaced: WeakSet<OrderedItem>;
+  /** Controls whose prompt a first fill kept, by their open item's space. */
+  readonly kept: Set<string>;
 }
 
 const states = new WeakMap<OrderedDocument, State>();
@@ -63,7 +73,12 @@ const states = new WeakMap<OrderedDocument, State>();
 function stateOf(doc: OrderedDocument): State {
   let found = states.get(doc);
   if (!found) {
-    found = { swaps: new Map(), settled: new WeakSet(), replaced: new WeakSet() };
+    found = {
+      swaps: new Map(),
+      settled: new WeakSet(),
+      replaced: new WeakSet(),
+      kept: new Set(),
+    };
     states.set(doc, found);
   }
 
@@ -133,7 +148,15 @@ function settleNamedControl(
   }
 
   const scan = scanControl(doc, story, open);
-  if (!scan || scan.present) {
+  if (!scan) {
+    return;
+  }
+
+  if (scan.present) {
+    if (!blocks) {
+      keepPrompt(doc, story, open, shell, scan);
+    }
+
     return;
   }
 
@@ -161,6 +184,60 @@ function settleNamedControl(
 
     recordFilledPrompt(doc, open.space);
   }
+}
+
+/**
+ * Keep a control's prompt as content first fills it, as the engine keeps it in the glossary
+ * (`promptToRetain`). Compose keeps the prompt of the control's original: once records are on the
+ * prompt (a suggested format), the original shows it as drawn with them. A later fill keeps the
+ * first one, as the engine's control names the block it kept.
+ */
+function keepPrompt(
+  doc: OrderedDocument,
+  story: OrderedStory,
+  open: OrderedItem,
+  shell: OoxmlElement,
+  scan: Scan
+): void {
+  const { kept } = stateOf(doc);
+  if (kept.has(open.space)) {
+    return;
+  }
+
+  kept.add(open.space);
+  recordUndo(doc, () => kept.delete(open.space));
+  const original = doc.originals.get(shell.id);
+  if (!original || original.kind === 'textValue' || !scan.prompt.some(isLabelled)) {
+    return;
+  }
+
+  const content = original.children.find(isControlContent);
+  if (!content || content.kind === 'textValue') {
+    return;
+  }
+
+  const prompt = [...ownItems(story.tree.items(story.tree.next(open)), open)].filter(
+    (item) => item.prompt === true && item.kind !== 'mark'
+  );
+  const ctx = new ComposeContext(doc, story, {});
+  ctx.paragraphKey = scan.mark.space;
+  const drawn =
+    open.token === 'sdt'
+      ? composeInline(ctx, prompt)
+      : content.children.map((paragraph) => {
+          if (!isParagraph(paragraph) || paragraph.kind === 'textValue') {
+            return paragraph;
+          }
+
+          const units = prompt.filter((item) => item.home === paragraph.id);
+          const pPr = paragraph.children.filter(isParagraphProperties);
+          return withChildren(paragraph, [...pPr, ...composeInline(ctx, units)]);
+        });
+  const control = withChildren(
+    original,
+    original.children.map((child) => (child === content ? withChildren(content, drawn) : child))
+  );
+  setOriginal(doc, shell.id, control);
 }
 
 /** Mark settled the units that went and were not yet, in the undo record, and return them. */

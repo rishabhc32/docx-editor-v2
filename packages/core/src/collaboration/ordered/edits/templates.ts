@@ -72,13 +72,13 @@ export function engineScratch(
 
 /**
  * Items for a block node the engine built, with ids from the edit's id source. Every revision
- * in it is `suggestion`; the loader gives the labels a reopened file would have. `keep` selects
- * the items the edit uses.
+ * in it is `suggestion`, or as the reader given reads it; the loader gives the labels a reopened
+ * file would have. `keep` selects the items the edit uses.
  */
 export function templateItems(
   ctx: Ctx,
   node: OoxmlElement,
-  suggestion: string,
+  suggestion: string | RevisionReader,
   keep: (item: OrderedItem) => boolean = () => true
 ): OrderedItem[] {
   const template = withParagraphIds(ctx, withNewIds(ctx, node));
@@ -87,7 +87,7 @@ export function templateItems(
   const state = newLoadState(
     ctx.doc,
     ctx.story.name,
-    new RevisionReader(ctx.doc, suggestion),
+    typeof suggestion === 'string' ? new RevisionReader(ctx.doc, suggestion) : suggestion,
     budget
   );
 

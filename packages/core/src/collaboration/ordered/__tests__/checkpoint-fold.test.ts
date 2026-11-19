@@ -7,9 +7,10 @@ import { describe, test } from 'bun:test';
 import { applyOrderedChange } from '../change/apply.ts';
 import { openOrderedWordFile } from '../client/open.ts';
 import { orderedIdMinter } from '../change/ids.ts';
+import type { OrderedDocument } from '../model/types.ts';
 import { withUndoRecord } from '../model/undo-record.ts';
 import { apply, at, DIRECT, EDIT, textOf } from './change-apply-fixture.ts';
-import { checkFold, mediaStore } from './fold-check.ts';
+import { checkFold, folded, mediaStore } from './fold-check.ts';
 import { SESSION_FILE } from './sessions/fixture.ts';
 import { runSession } from './sessions/session.ts';
 import { bodyOf, docx, MATRIX_ITEMS } from './word-fixtures.ts';
@@ -60,6 +61,48 @@ describe('a fold of a formatted field', () => {
         properties: [{ localName: 'b' }],
       });
       await checkFold(doc, base, mediaStore(base), label);
+    });
+  }
+});
+
+describe('a fold of a hidden prompt', () => {
+  // A suggested format on a prompt that direct typing then filled: the glossary keeps the prompt
+  // with its record, and an emptying after the fold gives it back with that record. The prompt
+  // starts at `start` in the item's paragraph
+  for (const [key, start] of [
+    ['placeholder', 6],
+    ['blockprompt', 0],
+  ] as const) {
+    test(`${key}: the prompt comes back with its suggested format when its control empties`, async () => {
+      const item = MATRIX_ITEMS.find((candidate) => candidate.key === key);
+      const { document: doc, base } = openOrderedWordFile(docx(bodyOf(item!)), { file: 1 });
+      apply(doc, 'ana:1', {
+        kind: 'format',
+        ...EDIT,
+        from: at(doc, 1, start + 1),
+        to: at(doc, 1, start + 5),
+        properties: [{ localName: 'i' }],
+      });
+      apply(
+        doc,
+        'olive:2',
+        { kind: 'insert', ...DIRECT, place: at(doc, 1, start), text: 'Q' },
+        'Olive'
+      );
+      const blobs = mediaStore(base);
+      const once = await folded(doc, base, doc.file + 1, blobs);
+      const empty = (copy: OrderedDocument) => {
+        apply(
+          copy,
+          'olive:3',
+          { kind: 'delete', ...DIRECT, from: at(copy, 1, start), to: at(copy, 1, start + 1) },
+          'Olive'
+        );
+      };
+
+      // Folded once, and twice, before the control empties
+      await checkFold(doc, base, blobs, key, empty);
+      await checkFold(once.document, once.base, blobs, `${key} folded twice`, empty);
     });
   }
 });

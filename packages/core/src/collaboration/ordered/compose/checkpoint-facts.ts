@@ -1,6 +1,7 @@
 // The room facts a checkpoint's manifest keeps, by where the composed file writes them (design
 // D14): a model address holds the file number, so none is kept.
 
+import { glossaryPartOf } from '../../../store/package/building-blocks.ts';
 import type { OoxmlPackage } from '../../../store/package/ooxml-package.ts';
 import type { OoxmlElement } from '../../../store/package/ooxml-tree.ts';
 import { textboxFallbackExportPackage } from '../../../store/package/textbox-fallback-export.ts';
@@ -240,10 +241,14 @@ function checkpointTypers(
     .map(([suggestion, units]) => ({ suggestion, units }));
 }
 
-/** The `w:id` of every revision mark in a package's stories. */
+/**
+ * The `w:id` of every revision mark in a package's stories, and in its glossary: a prompt that
+ * content took the place of keeps its records there.
+ */
 function writtenRevisionIds(pkg: OoxmlPackage): Set<string> {
   const ids = new Set<string>();
-  for (const part of orderedStoryParts(pkg).values()) {
+  const glossary = glossaryPartOf(pkg);
+  for (const part of [...orderedStoryParts(pkg).values(), ...(glossary ? [glossary] : [])]) {
     eachElement(part.root, (element: OoxmlElement) => {
       const id = attributeOf(element, 'id');
       if (id !== undefined && attributeOf(element, 'author') !== undefined) {

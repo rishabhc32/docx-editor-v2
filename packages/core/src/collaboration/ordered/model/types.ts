@@ -512,6 +512,11 @@ export interface OrderedRevisionIds {
   readonly attributesByRole: Map<string, readonly OoxmlAttribute[]>;
   /** Every revision `w:id` the loaded parts hold. */
   readonly fileIds: Set<string>;
+  /**
+   * The `w:id`s a room checkpoint lists for each suggestion it makes, those of a part the room
+   * does not load among them: a prompt's records in the glossary.
+   */
+  readonly listed: Map<string, readonly string[]>;
 }
 
 /** One step of an undo record: how to take back one write. @public */
