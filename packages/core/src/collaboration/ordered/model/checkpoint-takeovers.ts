@@ -11,9 +11,9 @@ import {
 } from '../../../store/package/ooxml-tree.ts';
 import { normalizePartName } from '../../../store/package/opc-names.ts';
 import { build } from '../../../store/store/tree-op-tracked.ts';
-import { at, fieldsOf, int, Invalid, required, str } from '../change/read.ts';
+import { at, fieldsOf, int, Invalid, required } from '../change/read.ts';
 import { attributeOf } from '../ooxml-nodes.ts';
-import { manifestList, matching, MAX_FIELD_UNITS, WORD_ID } from './checkpoint-suggestions.ts';
+import { manifestList, manifestString, xmlText } from './checkpoint-suggestions.ts';
 
 /**
  * The change records that hold records by takeover, each of the properties element it names. Word
@@ -164,13 +164,13 @@ export function readTakeovers(takeovers: unknown, suggestions: number): Checkpoi
 
 function readTakeover(value: unknown, path: string, suggestions: number): CheckpointTakeover {
   const f = fieldsOf(value, path, new Set(['part', 'record', 'id', 'occurrence', 'taken']));
-  const part = str(required(f, 'part'), at(path, 'part'), MAX_FIELD_UNITS);
+  const part = manifestString(required(f, 'part'), at(path, 'part'));
   const name = normalizePartName(part);
   if (!name.ok || name.partName !== part) {
     throw new Invalid('invalid-value', at(path, 'part'), 'not a part name');
   }
 
-  const record = str(required(f, 'record'), at(path, 'record'), MAX_FIELD_UNITS);
+  const record = manifestString(required(f, 'record'), at(path, 'record'));
   if (!RECORDS.has(record)) {
     throw new Invalid('invalid-value', at(path, 'record'), 'not a change record');
   }
@@ -179,7 +179,7 @@ function readTakeover(value: unknown, path: string, suggestions: number): Checkp
   return {
     part,
     record,
-    id: matching(required(f, 'id'), at(path, 'id'), WORD_ID, 'a revision id'),
+    id: xmlText(required(f, 'id'), at(path, 'id')),
     occurrence: int(required(f, 'occurrence'), at(path, 'occurrence')),
     taken: taken.map((entry, k) => readTaken(entry, at(at(path, 'taken'), k), record, suggestions)),
   };
@@ -192,7 +192,7 @@ function readTaken(
   suggestions: number
 ): CheckpointTaken {
   const f = fieldsOf(value, path, new Set(['suggestion', 'properties']));
-  const xml = str(required(f, 'properties'), at(path, 'properties'), Number.MAX_SAFE_INTEGER);
+  const xml = manifestString(required(f, 'properties'), at(path, 'properties'));
   const read = readOoxmlPart(xml, propertiesPart(path));
   const root = read.ok ? read.part.root : undefined;
   if (

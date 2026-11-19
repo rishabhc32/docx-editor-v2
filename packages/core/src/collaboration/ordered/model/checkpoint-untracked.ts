@@ -7,8 +7,8 @@ import {
   type OoxmlElement,
 } from '../../../store/package/ooxml-tree.ts';
 import { normalizePartName } from '../../../store/package/opc-names.ts';
-import { at, bool, fieldsOf, int, Invalid, required, str } from '../change/read.ts';
-import { manifestList, MAX_FIELD_UNITS } from './checkpoint-suggestions.ts';
+import { at, bool, fieldsOf, int, Invalid, required } from '../change/read.ts';
+import { manifestList, manifestString } from './checkpoint-suggestions.ts';
 import { containerKey, isCheckpointContainer, propertiesPart } from './checkpoint-takeovers.ts';
 import type { OrderedPropertyTarget } from './types.ts';
 
@@ -95,14 +95,14 @@ export function readUntracked(value: unknown, suggestions: number): CheckpointUn
       path,
       new Set(['part', 'container', 'occurrence', 'target', 'properties', 'records'])
     );
-    const part = str(required(f, 'part'), at(path, 'part'), MAX_FIELD_UNITS);
+    const part = manifestString(required(f, 'part'), at(path, 'part'));
     const name = normalizePartName(part);
     if (!name.ok || name.partName !== part) {
       throw new Invalid('invalid-value', at(path, 'part'), 'not a part name');
     }
 
-    const container = str(required(f, 'container'), at(path, 'container'), MAX_FIELD_UNITS);
-    const target = str(required(f, 'target'), at(path, 'target'), MAX_FIELD_UNITS);
+    const container = manifestString(required(f, 'container'), at(path, 'container'));
+    const target = manifestString(required(f, 'target'), at(path, 'target'));
     if (!isCheckpointContainer(container) || !TARGETS.has(target)) {
       throw new Invalid('invalid-value', path, 'not a container and its properties');
     }
@@ -144,7 +144,7 @@ function readRecord(
   );
   const merge = f.has('merge')
     ? manifestList(f.get('merge'), at(path, 'merge')).map((key, k) =>
-        str(key, at(at(path, 'merge'), k), MAX_FIELD_UNITS)
+        manifestString(key, at(at(path, 'merge'), k))
       )
     : undefined;
   const cells = f.has('tableCells')
@@ -168,7 +168,7 @@ function readRecord(
 
 /** Properties of `target` read from their XML text; else they are not the properties named. */
 function readProperties(value: unknown, path: string, target: string): OoxmlElement {
-  const xml = str(value, path, Number.MAX_SAFE_INTEGER);
+  const xml = manifestString(value, path);
   const read = readOoxmlPart(xml, propertiesPart(path));
   const root = read.ok ? read.part.root : undefined;
   if (root === undefined || root.namespaceUri !== WML_NAMESPACE_URI || root.localName !== target) {

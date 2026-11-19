@@ -1,19 +1,11 @@
 // The pending suggestions a checkpoint's manifest lists, and who typed their units (design D14).
 
-import { WML_NAMESPACE_URI, type OoxmlAttribute } from '../../../store/package/ooxml-tree.ts';
+import type { OoxmlAttribute } from '../../../store/package/ooxml-tree.ts';
+import { isXmlNCName } from '../../../store/package/qname.ts';
+import { isValidXmlText } from '../../../store/package/sinks.ts';
 import { ORDERED_NAMESPACE_PATTERN } from '../change/ids.ts';
-import {
-  at,
-  fieldsOf,
-  int,
-  Invalid,
-  list,
-  oneOf,
-  plainText,
-  required,
-  str,
-} from '../change/read.ts';
-import { ORDERED_CHANGE_LIMITS } from '../change/types.ts';
+import { at, fieldsOf, int, Invalid, list, oneOf, required, str } from '../change/read.ts';
+import { isTripleAttribute, MAX_OTHER_ATTRIBUTES } from '../load/state.ts';
 import { readPerson } from './person.ts';
 import type { OrderedAttribution, OrderedSuggestionStatus } from './types.ts';
 
@@ -38,21 +30,14 @@ export interface CheckpointTypers {
   readonly units: readonly (readonly [number, string | null])[];
 }
 
-/** Most other attributes of one suggestion, as a load keeps them from a revision mark. */
-const MAX_ATTRIBUTES = 8;
-
-/** Most UTF-16 units of a string field: a date, an attribute's namespace or value, a name. */
-export const MAX_FIELD_UNITS = 256;
-
-const NAME = /^[A-Za-z_][A-Za-z0-9._-]{0,63}$/;
-
 /** A list of the manifest, of at least `min` entries: the manifest's byte cap bounds it. */
 export const manifestList = (value: unknown, path: string, min = 0): readonly unknown[] =>
   list(value, path, min, Number.MAX_SAFE_INTEGER);
 
-/** A revision's or a comment's `w:id`, as a checkpoint names it. */
-export const WORD_ID = /^[\x21-\x7E]{1,64}$/;
-const TRIPLE = new Set(['id', 'author', 'date']);
+/** A string of the manifest, not empty: the manifest's byte cap bounds it. */
+export const manifestString = (value: unknown, path: string): string =>
+  str(value, path, Number.MAX_SAFE_INTEGER);
+
 const DECIDED: readonly OrderedSuggestionStatus[] = ['accepted', 'rejected'];
 
 /** The suggestions as the manifest lists them. */
@@ -60,22 +45,25 @@ export function suggestionsJson(suggestions: readonly CheckpointSuggestion[]): u
   return suggestions.map(({ attribution, revisions, status }) => ({
     author: attribution.author,
     ...(attribution.date === undefined ? {} : { date: attribution.date }),
-    attributes: (attribution.attributes ?? []).map(
-      ({ namespaceUri, localName, prefix, value }) => ({
-        namespace: namespaceUri,
-        name: localName,
-        ...(prefix === undefined ? {} : { prefix }),
-        value,
-      })
-    ),
-    person: attribution.person,
+    ...(attribution.attributes === undefined
+      ? {}
+      : {
+          attributes: attribution.attributes.map(({ namespaceUri, localName, prefix, value }) => ({
+            namespace: namespaceUri,
+            name: localName,
+            ...(prefix === undefined ? {} : { prefix }),
+            value,
+          })),
+        }),
+    ...(attribution.person === null ? {} : { person: attribution.person }),
     revisions,
     ...(status === undefined || status === 'pending' ? {} : { status }),
   }));
 }
 
 /**
- * The listed suggestions, each checked: every value comes from storage.
+ * The listed suggestions, each checked: every value comes from storage. The author, the date and
+ * the other attributes are as a load keeps them from a revision mark: any text valid in XML.
  *
  * @throws Invalid when one does not read.
  */
@@ -91,54 +79,73 @@ function readSuggestion(value: unknown, path: string): CheckpointSuggestion {
     path,
     new Set(['author', 'date', 'attributes', 'person', 'revisions', 'status'])
   );
-  const person = required(f, 'person');
-  const attributes = list(required(f, 'attributes'), at(path, 'attributes'), 0, MAX_ATTRIBUTES);
   const revisions = manifestList(required(f, 'revisions'), at(path, 'revisions'));
-  const date = f.has('date')
-    ? plainText(f.get('date'), at(path, 'date'), 1, MAX_FIELD_UNITS)
-    : undefined;
   return {
     attribution: {
-      author: plainText(required(f, 'author'), at(path, 'author'), 0, ORDERED_CHANGE_LIMITS.author),
-      person: person === null ? null : readPerson(person, at(path, 'person')),
-      ...(date === undefined ? {} : { date }),
-      ...(attributes.length === 0
-        ? {}
-        : {
-            attributes: attributes.map((a, k) => readAttribute(a, at(at(path, 'attributes'), k))),
-          }),
+      author: xmlText(required(f, 'author'), at(path, 'author')),
+      person: f.has('person') ? readPerson(f.get('person'), at(path, 'person')) : null,
+      ...(f.has('date') ? { date: xmlText(f.get('date'), at(path, 'date')) } : {}),
+      ...(f.has('attributes')
+        ? { attributes: readAttributes(f.get('attributes'), at(path, 'attributes')) }
+        : {}),
     },
-    revisions: revisions.map((id, k) =>
-      matching(id, at(at(path, 'revisions'), k), WORD_ID, 'a revision id')
-    ),
+    revisions: revisions.map((id, k) => xmlText(id, at(at(path, 'revisions'), k))),
     ...(f.has('status') ? { status: oneOf(f.get('status'), at(path, 'status'), DECIDED) } : {}),
   };
+}
+
+/** A revision mark's attributes past its triple, as many as a load keeps, each named once. */
+function readAttributes(value: unknown, path: string): OoxmlAttribute[] {
+  const names = new Set<string>();
+  return list(value, path, 0, MAX_OTHER_ATTRIBUTES).map((entry, k) => {
+    const attribute = readAttribute(entry, at(path, k));
+    const name = `${attribute.namespaceUri} ${attribute.localName}`;
+    if (isTripleAttribute(attribute) || names.has(name)) {
+      throw new Invalid('invalid-value', at(path, k), 'a triple attribute, or one named twice');
+    }
+
+    names.add(name);
+    return attribute;
+  });
 }
 
 /** A revision mark's attribute past its triple, such as `w16du:dateUtc`. */
 function readAttribute(value: unknown, path: string): OoxmlAttribute {
   const f = fieldsOf(value, path, new Set(['namespace', 'name', 'prefix', 'value']));
-  const namespaceUri = plainText(
-    required(f, 'namespace'),
-    at(path, 'namespace'),
-    1,
-    MAX_FIELD_UNITS
-  );
-  const localName = matching(required(f, 'name'), at(path, 'name'), NAME, 'an XML name');
-  if (namespaceUri === WML_NAMESPACE_URI && TRIPLE.has(localName)) {
-    throw new Invalid('invalid-value', at(path, 'name'), 'a revision triple attribute');
-  }
-
-  const prefix = f.has('prefix')
-    ? matching(f.get('prefix'), at(path, 'prefix'), NAME, 'an XML name')
-    : undefined;
+  const prefix = f.has('prefix') ? xmlName(f.get('prefix'), at(path, 'prefix')) : undefined;
   return {
     kind: 'genericExtension',
-    namespaceUri,
-    localName,
+    namespaceUri: xmlText(required(f, 'namespace'), at(path, 'namespace')),
+    localName: xmlName(required(f, 'name'), at(path, 'name')),
     ...(prefix === undefined ? {} : { prefix }),
-    value: plainText(required(f, 'value'), at(path, 'value'), 0, MAX_FIELD_UNITS),
+    value: xmlText(required(f, 'value'), at(path, 'value')),
   };
+}
+
+/**
+ * A string valid in XML, empty or not, as the engine's XML reader gives an attribute's value: a
+ * file's `w:id`, author or date.
+ */
+export function xmlText(value: unknown, path: string): string {
+  if (typeof value !== 'string') {
+    throw new Invalid('invalid-type', path, 'not a string');
+  }
+
+  if (!isValidXmlText(value)) {
+    throw new Invalid('invalid-text', path);
+  }
+
+  return value;
+}
+
+/** An XML name with no colon, as the engine's XML reader gives a local name or a prefix. */
+function xmlName(value: unknown, path: string): string {
+  const name = xmlText(value, path);
+  if (!isXmlNCName(name)) {
+    throw new Invalid('invalid-value', path, 'not an XML name');
+  }
+
+  return name;
 }
 
 /** The typers as the manifest lists them. */
@@ -171,20 +178,10 @@ export function readTypers(value: unknown, suggestions: number): CheckpointTyper
 /** One run of units: its count, and the namespace that typed them or null. */
 function readRun(value: unknown, path: string): readonly [number, string | null] {
   const [count, namespace] = list(value, path, 2, 2);
-  return [
-    int(count, at(path, 0), 1),
-    namespace === null
-      ? null
-      : matching(namespace, at(path, 1), ORDERED_NAMESPACE_PATTERN, 'a namespace'),
-  ];
-}
-
-/** A string of at most 64 units that `pattern` matches; else it is not `what`. */
-export function matching(value: unknown, path: string, pattern: RegExp, what: string): string {
-  const text = str(value, path, 64);
-  if (!pattern.test(text)) {
-    throw new Invalid('invalid-value', path, `not ${what}`);
+  const typer = namespace === null ? null : str(namespace, at(path, 1), 64);
+  if (typer !== null && !ORDERED_NAMESPACE_PATTERN.test(typer)) {
+    throw new Invalid('invalid-namespace', at(path, 1));
   }
 
-  return text;
+  return [int(count, at(path, 0), 1), typer];
 }

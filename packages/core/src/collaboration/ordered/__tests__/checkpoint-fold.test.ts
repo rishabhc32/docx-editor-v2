@@ -122,6 +122,26 @@ describe('a fold of a long list', () => {
 });
 
 describe("a fold of a Word file's own values", () => {
+  const inserted = (attributes: string) =>
+    docx(p(`<w:ins ${attributes}>${t('x')}</w:ins>${t('y')}`));
+  const many = Array.from({ length: 10 }, (_, k) => `a${k}="1"`).join(' ');
+
+  // Every value a load keeps from a revision mark comes back
+  for (const [label, attributes] of [
+    ['an empty date', 'w:id="1" w:author="A" w:date=""'],
+    ['a long author', `w:id="1" w:author="${'a'.repeat(300)}"`],
+    ['a tab in the author', 'w:id="1" w:author="A&#9;B"'],
+    ['an attribute with no namespace', 'w:id="1" w:author="A" foo="1"'],
+    ['a long attribute value', `w:id="1" w:author="A" w:rsidR="${'0'.repeat(300)}"`],
+    ['more attributes than a load keeps', `w:id="1" w:author="A" ${many}`],
+    ['a long w:id', `w:id="${'9'.repeat(70)}" w:author="A"`],
+  ] as const) {
+    test(`an insertion with ${label}`, async () => {
+      const { document: doc, base } = openOrderedWordFile(inserted(attributes), { file: 1 });
+      await checkFold(doc, base, mediaStore(base), label);
+    });
+  }
+
   test('one w:id of two authors: two suggestions, each with its own units', async () => {
     const mark = (author: string, text: string) =>
       `<w:ins w:id="1" w:author="${author}" w:date="${DATE}">${t(text)}</w:ins>`;

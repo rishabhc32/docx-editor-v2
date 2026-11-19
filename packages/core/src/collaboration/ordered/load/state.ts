@@ -214,14 +214,16 @@ const revisionTriple = (id: string, author: string, date: string | undefined): s
   `${id}\u0000${author}\u0000${date ?? '\u0001'}`;
 
 /** Most other attributes kept from one revision mark. */
-const MAX_OTHER_ATTRIBUTES = 8;
+export const MAX_OTHER_ATTRIBUTES = 8;
 const TRIPLE = new Set(['id', 'author', 'date']);
+
+/** Whether an attribute is of a revision mark's triple: `w:id`, `w:author` or `w:date`. */
+export const isTripleAttribute = ({ namespaceUri, localName }: OoxmlAttribute): boolean =>
+  namespaceUri === WML_NAMESPACE_URI && TRIPLE.has(localName);
 
 /** A revision mark's attributes past its triple, such as `w16du:dateUtc`. */
 function otherAttributes(revision: OoxmlElement): OoxmlAttribute[] {
-  return revision.attributes
-    .filter((a) => !(a.namespaceUri === WML_NAMESPACE_URI && TRIPLE.has(a.localName)))
-    .slice(0, MAX_OTHER_ATTRIBUTES);
+  return revision.attributes.filter((a) => !isTripleAttribute(a)).slice(0, MAX_OTHER_ATTRIBUTES);
 }
 
 /** A move range a file opened and the wrappers after it belong to. */

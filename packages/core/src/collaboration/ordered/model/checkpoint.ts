@@ -12,8 +12,7 @@ import {
   readTypers,
   suggestionsJson,
   typersJson,
-  matching,
-  WORD_ID,
+  xmlText,
   type CheckpointSuggestion,
   type CheckpointTypers,
 } from './checkpoint-suggestions.ts';
@@ -212,7 +211,7 @@ function readComments(value: unknown): Map<string, OrderedPerson> {
   for (const [k, entry] of manifestList(value, 'comments').entries()) {
     const path = at('comments', k);
     const f = fieldsOf(entry, path, new Set(['id', 'person']));
-    const id = matching(required(f, 'id'), at(path, 'id'), WORD_ID, 'a comment id');
+    const id = xmlText(required(f, 'id'), at(path, 'id'));
     if (persons.has(id)) {
       throw new Invalid('invalid-value', at(path, 'id'), 'named twice');
     }
