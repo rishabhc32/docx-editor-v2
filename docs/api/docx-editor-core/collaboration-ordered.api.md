@@ -945,6 +945,7 @@ export interface OrderedDocument {
     readonly file: number;
     readonly labelled: Map<string, Set<OrderedItem>>;
     readonly movesWithRanges: Set<string>;
+    readonly namespaces: Map<string, OrderedPerson>;
     numbering: ReadonlySet<string> | null;
     readonly originals: Map<string, OoxmlNode>;
     readonly ownEdited: Map<string, Set<OrderedItem>>;
@@ -2916,6 +2917,12 @@ export interface OrderedTransport {
 }
 
 // @public
+export interface OrderedTyper {
+    readonly namespace: string;
+    readonly person: OrderedPerson;
+}
+
+// @public
 export interface OrderedUndoRecord {
     // (undocumented)
     readonly steps: readonly OrderedUndoStep[];
@@ -2941,7 +2948,7 @@ export interface OrderedUnitRange {
 }
 
 // @public
-export function orderedUnitTyper(doc: OrderedDocument, item: OrderedItem, offset: number): string | null;
+export function orderedUnitTyper(doc: OrderedDocument, item: OrderedItem, offset: number): OrderedTyper | null;
 
 // @public
 export interface OrderedValidateOptions {

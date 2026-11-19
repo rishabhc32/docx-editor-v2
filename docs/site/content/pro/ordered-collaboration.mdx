@@ -279,7 +279,7 @@ To close a room, write the document to a checkpoint with `writeOrderedCheckpoint
 The checkpoint's manifest also keeps what the room uses that a Word file has no place for. A room that opens its checkpoint, under any file number, has the same suggestions, cards, and decisions as the room that wrote it, so a checkpoint of one room can be file 1 of a new room:
 
 - Each pending suggestion stays one suggestion, with its person, even when Word writes it as several changes, such as a replacement or an insertion with a new paragraph.
-- Who typed inside another participant's pending insertion stays known. To read it, call `orderedUnitTyper(document, item, offset)`. It returns the namespace of the change that typed the unit at `offset` of an item that a pending suggestion inserted, the same before and after a close, or `null`.
+- Who typed inside another participant's pending insertion, new row, new note, or new text box stays known. To read it, call `orderedUnitTyper(document, item, offset)`. It returns an `OrderedTyper` for the unit at `offset` of an item that a pending suggestion inserted: the namespace of the change that typed it and that namespace's person, the same before and after a close, or `null`. A room that opens the checkpoint knows the person of each of those namespaces, so `namespaceOwner` answers for them and refuses them to another person.
 - A change that Word shows with no change record, such as a control's value or the width a new column takes from its neighbour, keeps its earlier value, so a rejection after a close gives the same file as before it.
 
 An exported Word file holds names only: `writeOrderedPackage`, `orderedPackageBytes`, and `composeOrderedPackage` never write a person ID or any other part of the manifest.

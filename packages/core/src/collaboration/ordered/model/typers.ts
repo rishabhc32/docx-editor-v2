@@ -21,7 +21,9 @@ const LOADED = new WeakMap<OrderedDocument, ReadonlyMap<string, readonly TypedRu
 
 /** Who typed a unit: the namespace of the room change that typed it, and its person. @public */
 export interface OrderedTyper {
+  /** The namespace of the room change that typed the unit. */
   readonly namespace: string;
+  /** The person who owns the namespace. */
   readonly person: OrderedPerson;
 }
 
