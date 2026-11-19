@@ -1,0 +1,14 @@
+{
+  "impact": "compatible",
+  "fields": [],
+  "before": "The checkpoint manifest (version 3) held the media, the persons by revision w:id, and the takeovers with their suggestions. A suggestion of several Word changes came back as several, who typed inside another person's insertion was lost, a record Word writes no change record for (a control's value, a column's lent width) lost the value a reject gives back, and a load read a field's face from its begin run.",
+  "after": "The checkpoint manifest (version 4) lists every pending suggestion once with every w:id its marks are written under (suggestions), the person of each room comment (comments), the takeovers by suggestion index, who typed each insertion's units (typers) and every record of properties an untracked record changes (untracked), keyed by Word ids, parts, element names and occurrences. A load makes the listed suggestions first, in the room's order. orderedUnitTyper reads a unit's typer the same live and after a fold. A version 3 manifest is refused (checkpoint-version). Exported Word files do not change.",
+  "reason": "The Yjs document format and the ordered protocol do not change. Only the checkpoint manifest and the order of the suggestions a checkpoint's load makes do, and every copy of a room opens the same checkpoint with the same code version, so old and new copies never read each other's manifests. Ordered rooms are not deployed yet, so no checkpoint holds version 3 and no migration is needed.",
+  "tests": [
+    "packages/core/src/collaboration/ordered/__tests__/checkpoint-fold.test.ts",
+    "packages/core/src/collaboration/ordered/__tests__/checkpoint.test.ts",
+    "packages/core/src/collaboration/ordered/__tests__/client/editor-takeovers.test.ts"
+  ],
+  "changeset": "ordered-lossless-checkpoint",
+  "migration": null
+}

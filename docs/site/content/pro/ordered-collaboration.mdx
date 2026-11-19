@@ -276,7 +276,13 @@ To restart a room, open its file and create `OrderedRoom` with the stored log. I
 
 To close a room, write the document to a checkpoint with `writeOrderedCheckpoint`. A checkpoint holds the parts of the Word file, but names each picture, workbook, and embedded file by its SHA-256 in a manifest part instead of holding its bytes, so a close never writes the pictures again. Give the checkpoint the next file number, and start a new log. A client that joins with an earlier file number receives `reload` with the reason `file`.
 
-The checkpoint's manifest also keeps the person of each pending suggestion, by the revision IDs of its marks. A checkpoint opens with every person under any file number, so a checkpoint of one room can be file 1 of a new room. An exported Word file holds names only: `writeOrderedPackage`, `orderedPackageBytes`, and `composeOrderedPackage` never write a person ID.
+The checkpoint's manifest also keeps what the room uses that a Word file has no place for. A room that opens its checkpoint, under any file number, has the same suggestions, cards, and decisions as the room that wrote it, so a checkpoint of one room can be file 1 of a new room:
+
+- Each pending suggestion stays one suggestion, with its person, even when Word writes it as several changes, such as a replacement or an insertion with a new paragraph.
+- Who typed inside another participant's pending insertion stays known. To read it, call `orderedUnitTyper(document, item, offset)`. It returns the namespace of the change that typed the unit at `offset` of an item that a pending suggestion inserted, the same before and after a close, or `null`.
+- A change that Word shows with no change record, such as a control's value or the width a new column takes from its neighbour, keeps its earlier value, so a rejection after a close gives the same file as before it.
+
+An exported Word file holds names only: `writeOrderedPackage`, `orderedPackageBytes`, and `composeOrderedPackage` never write a person ID or any other part of the manifest.
 
 When the organiser's suggestion changes formatting or properties that a participant's pending suggestion changed, Word keeps one change record, under the later author. The checkpoint's manifest keeps each record that the later suggestion took over, so the earlier suggestion stays in a reopened room: when the organiser takes the later suggestion back, the earlier change shows again. To name the earlier suggestion on the later suggestion's card, call `orderedReplacedSuggestions(document, suggestion)`. It returns each suggestion whose records the given suggestion holds, with its author, person, date, `formattingKind`, and `formattingChanges`, in the terms of the review queue's items.
 
@@ -402,7 +408,7 @@ The room sends `reload` when a client must open the room again. The reason is on
 
 After a reload, `onReload` receives the reason and the participant's unsent changes. Open the room again with a new session. Show the unsent changes to the participant, because the new session does not send them for you.
 
-If a room's file is not a checkpoint of this engine's format and version, `openOrderedCheckpoint` throws `OrderedWordFileError` with the reason `not-checkpoint`, `checkpoint-format`, `checkpoint-version`, or `checkpoint-manifest`. A manifest whose persons or takeovers do not match the file gives `checkpoint-manifest`. `openOrderedWordFile` refuses a checkpoint with the reason `checkpoint`.
+If a room's file is not a checkpoint of this engine's format and version, `openOrderedCheckpoint` throws `OrderedWordFileError` with the reason `not-checkpoint`, `checkpoint-format`, `checkpoint-version`, or `checkpoint-manifest`. A manifest whose suggestions, persons, takeovers, typers, or kept values do not match the file gives `checkpoint-manifest`. `openOrderedWordFile` refuses a checkpoint with the reason `checkpoint`.
 
 ## Limits
 

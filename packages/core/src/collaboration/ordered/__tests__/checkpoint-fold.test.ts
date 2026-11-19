@@ -50,6 +50,7 @@ describe('a fold of a formatted field', () => {
   ] as const) {
     test(`${label} on a field shows the same face after the fold`, async () => {
       const { document: doc, base } = openOrderedWordFile(docx(bodyOf(pageField!)), { file: 1 });
+
       // The field's paragraph, between the item's neighbours
       apply(doc, 'olga:1', {
         kind: 'format',
