@@ -2,7 +2,6 @@
 // suggestions are drawn as Word draws them (`w:ins`, `w:del`, `w:moveFrom`, `w:moveTo` with
 // their range markers, `w:rPrChange`); decided ones are applied.
 
-import { fldCharType } from '../../../store/package/field-nodes.ts';
 import {
   WML_NAMESPACE_URI,
   type OoxmlElement,
@@ -21,6 +20,7 @@ import {
 } from '../model/types.ts';
 import {
   childWhere,
+  fieldCharBalance,
   isRunProperties,
   isWml,
   renamed,
@@ -80,6 +80,17 @@ function withTextDeleted(node: OoxmlNode, depth = 0): OoxmlNode {
   return rebuilt;
 }
 
+/** Whether a field's run holds a `w:fldChar` of this type. */
+function hasFieldChar(node: OoxmlNode, type: string, depth = 0): boolean {
+  if (node.kind === 'textValue' || depth > 8) return false;
+  if (
+    node.localName === 'fldChar' &&
+    node.attributes.some((a) => a.localName === 'fldCharType' && a.value === type)
+  )
+    return true;
+  return node.children.some((c) => hasFieldChar(c, type, depth + 1));
+}
+
 /** The run content that makes a run part of a field's shown result, as the engine counts it. */
 const RESULT_CONTENT = new Set(['text', 'deletedText', 'tab', 'hardBreak', 'textValue']);
 
@@ -99,14 +110,14 @@ function formatRunsOf(pieces: readonly OrderedFieldPiece[]): boolean[] {
     }
 
     for (const child of piece.node.children) {
-      const type = fldCharType(child);
-      if (type === 'begin') {
-        depth += 1;
-      } else if (type === 'end') {
-        depth -= 1;
-      } else if (depth === 1 && type === 'separate' && separate < 0) {
+      depth += fieldCharBalance(child);
+      if (depth !== 1) {
+        continue;
+      }
+
+      if (separate < 0 && hasFieldChar(child, 'separate')) {
         separate = k;
-      } else if (depth === 1 && separate >= 0 && RESULT_CONTENT.has(child.kind)) {
+      } else if (separate >= 0 && RESULT_CONTENT.has(child.kind)) {
         formatted[k] = true;
       }
     }

@@ -110,6 +110,25 @@ export function eachElement(root: OoxmlNode, visit: (element: OoxmlElement) => v
   }
 }
 
+/** Field begins less field ends in a node. */
+export function fieldCharBalance(node: OoxmlNode, depth = 0): number {
+  if (node.kind === 'textValue' || depth > 8) return 0;
+  if (node.localName === 'fldChar') {
+    switch (node.attributes.find((a) => a.localName === 'fldCharType')?.value) {
+      case 'begin':
+        return 1;
+      case 'end':
+        return -1;
+      default:
+        return 0;
+    }
+  }
+
+  let balance = 0;
+  for (const child of node.children) balance += fieldCharBalance(child, depth + 1);
+  return balance;
+}
+
 /** A new `w:<localName>` attribute. */
 export const wmlAttribute = (localName: string, value: string): OoxmlAttribute => ({
   kind: 'genericExtension',

@@ -4,7 +4,14 @@ import type { OoxmlElement, OoxmlNode } from '../../../store/package/ooxml-tree.
 import { withDeletedTextRestored } from '../../../store/store/revision-rebuild-helpers.ts';
 import { REVISION_ROLE } from '../model/revision-ids.ts';
 import type { OrderedFieldPiece, OrderedFormatRecord } from '../model/types.ts';
-import { childWhere, isRunProperties, isWml, shellOf, withChildren } from '../ooxml-nodes.ts';
+import {
+  childWhere,
+  fieldCharBalance,
+  isRunProperties,
+  isWml,
+  shellOf,
+  withChildren,
+} from '../ooxml-nodes.ts';
 import { atomCharAt, fieldSlotOf, type ParagraphLoad } from './paragraph.ts';
 import { faceOf } from './properties.ts';
 import { pushItem, pushZero, type Labels, type LoadState } from './state.ts';
@@ -136,25 +143,6 @@ function addFormats(
   }
 
   return { recordFaces: faces, ...(files.size > 0 ? { recordFiles: files } : {}) };
-}
-
-/** Field begins less field ends in a node. */
-function fieldCharBalance(node: OoxmlNode, depth = 0): number {
-  if (node.kind === 'textValue' || depth > 8) return 0;
-  if (node.localName === 'fldChar') {
-    switch (node.attributes.find((a) => a.localName === 'fldCharType')?.value) {
-      case 'begin':
-        return 1;
-      case 'end':
-        return -1;
-      default:
-        return 0;
-    }
-  }
-
-  let balance = 0;
-  for (const child of node.children) balance += fieldCharBalance(child, depth + 1);
-  return balance;
 }
 
 /**
