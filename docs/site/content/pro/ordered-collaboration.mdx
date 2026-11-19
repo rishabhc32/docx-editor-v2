@@ -288,7 +288,7 @@ When the organiser's suggestion changes formatting or properties that a particip
 
 To export a Word file, write it with `writeOrderedPackage`. It gives the same bytes as `orderedPackageBytes`. It reads each picture that the checkpoint names, and each picture that the session added, through your `media` function, one at a time, so the server holds at most one picture during the write.
 
-Both writers hand the bytes to your `write` function front to back and wait for each call. If `media` rejects, or gives bytes of another size than the change or the checkpoint named, the writer stops with `OrderedRefusal` and the reason `missing-blob`. Discard the partial file in that case.
+Both writers hand the bytes to your `write` function front to back and wait for each call. If `media` rejects, or gives bytes of another size than the change or the checkpoint named, the writer stops with `OrderedRefusal` and the reason `missing-blob`. Discard the partial file in that case. If the checkpoint's manifest is larger than the engine's limit of one part, 64 MiB, `writeOrderedCheckpoint` stops with the reason `too-many-items`. Discard the partial file, and keep the room's last checkpoint and its log.
 
 The following example writes the room's next file and a Word file to download:
 
