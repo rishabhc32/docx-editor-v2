@@ -390,7 +390,7 @@ function styleUnits(
 ): void {
   const seq = nextSeq(ctx.doc);
   for (const item of items) {
-    // An equation takes no character style: it has no run
+    // A unit with no run (an equation, an element kept whole) takes no character style
     if (!holdsRunFormat(item)) {
       continue;
     }

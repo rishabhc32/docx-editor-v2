@@ -148,8 +148,11 @@ export function insertText(
     const atom = piece.content !== undefined || piece.field !== undefined;
     const length = atom ? 1 : piece.text.length;
     const itemFace = piece.face !== undefined ? piece.face : face;
-    const field = piece.field ? { pieces: fieldPiecesWithFace(ctx, piece.field, itemFace) } : {};
-    const bare = piece.bare && piece.content ? { bare: true } : {};
+    const fieldPart = piece.field
+      ? { pieces: fieldPiecesWithFace(ctx, piece.field, itemFace) }
+      : {};
+    const barePart = piece.bare && piece.content ? { bare: true } : {};
+    const takesFormat = holdsRunFormat({ ...fieldPart, ...barePart });
     const item = createOrderedItem({
       space,
       offset: at,
@@ -157,17 +160,17 @@ export function insertText(
       kind: atom ? 'atom' : 'text',
       text: atom ? piece.text || '￼' : piece.text,
       node: piece.content ?? null,
-      ...field,
+      ...fieldPart,
       face: itemFace,
       // One run per piece: pieces can differ in face
       run: at === 0 ? space : `${space}~${at}`,
       by: suggestion.id,
       // The rows and cells around the paragraph hold the new text too
       within: p.mark.within,
-      ...(options.fmts && holdsRunFormat({ ...field, ...bare }) ? { fmts: options.fmts } : {}),
+      ...(options.fmts && takesFormat ? { fmts: options.fmts } : {}),
       ...(options.move === undefined ? {} : { move: options.move }),
       ...(options.quiet ? { quiet: true } : {}),
-      ...bare,
+      ...barePart,
     });
     at += length;
     return item;
@@ -547,7 +550,7 @@ export function formatText(
   const seq = nextSeq(ctx.doc);
   for (const group of groupBySpace(chars)) {
     for (const item of isolateUnits(ctx.doc, ctx.story, group.space, group.start, group.end)) {
-      // Word leaves an equation as it is: it has no run for the format
+      // A unit with no run (an equation, an element kept whole) takes no format
       if (!holdsRunFormat(item)) {
         continue;
       }
