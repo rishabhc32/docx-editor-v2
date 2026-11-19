@@ -1,9 +1,11 @@
-// Who typed the units of a pending insertion: the namespace of the room change that typed them.
+// Who typed the units of a pending insertion: the namespace of the room change that typed them,
+// and its person.
 
 import { CardRead, inserter } from '../card-of.ts';
 import { parseOrderedChangeId } from '../change/ids.ts';
 import { byStoryOrder } from '../load/load.ts';
 import { itemAt, mainStory } from './document.ts';
+import type { OrderedPerson } from './person.ts';
 import { isTextBoxStoryName, textBoxHostOf } from './text-boxes.ts';
 import { isUnit, type OrderedDocument, type OrderedItem, type OrderedStory } from './types.ts';
 
@@ -17,12 +19,17 @@ export interface TypedRun {
 /** The typers a checkpoint kept for a document loaded from it: runs of typed units by space. */
 const LOADED = new WeakMap<OrderedDocument, ReadonlyMap<string, readonly TypedRun[]>>();
 
+/** Who typed a unit: the namespace of the room change that typed it, and its person. @public */
+export interface OrderedTyper {
+  readonly namespace: string;
+  readonly person: OrderedPerson;
+}
+
 /**
- * The namespace of the room change that typed the unit at `offset` (in the item's space) of an
- * item a pending suggestion inserted, such as an organiser's words typed directly inside a
- * party's insertion, new row, new note or new text box. A copy of the room and a copy opened
- * from its checkpoint give the same answer. Null for a unit of any other item, and for one no
- * room change typed (a file's own).
+ * Who typed the unit at `offset` (in the item's space) of an item a pending suggestion inserted,
+ * such as an organiser's words typed directly inside a party's insertion, new row, new note or
+ * new text box. A copy of the room and a copy opened from its checkpoint give the same answer.
+ * Null for a unit of any other item, and for one no room change typed (a file's own).
  *
  * @public
  */
@@ -30,23 +37,25 @@ export function orderedUnitTyper(
   doc: OrderedDocument,
   item: OrderedItem,
   offset: number
-): string | null {
+): OrderedTyper | null {
   const inside = offset >= item.offset && offset < item.offset + item.length;
   if (!isUnit(item) || !inside || inserter(doc, item) === null) {
     return null;
   }
 
+  // A checkpoint's typer, else the change's: its units live in the space `i:<change id>.<k>`
   const runs = LOADED.get(doc)?.get(item.space);
   const kept = runs?.find((run) => offset >= run.from && offset < run.to);
-  if (kept !== undefined) {
-    return kept.typer;
-  }
-
-  // A change's units live in the space `i:<change id>.<k>`
   const change = item.space.startsWith('i:')
     ? item.space.slice(2, item.space.lastIndexOf('.'))
     : '';
-  return parseOrderedChangeId(change)?.namespace ?? null;
+  const namespace = kept?.typer ?? parseOrderedChangeId(change)?.namespace;
+  const person = namespace === undefined ? undefined : doc.namespaces.get(namespace);
+  if (namespace === undefined || person === undefined) {
+    return null;
+  }
+
+  return { namespace, person };
 }
 
 /**

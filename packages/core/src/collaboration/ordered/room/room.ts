@@ -213,7 +213,10 @@ export class OrderedRoom {
   readonly #log: OrderedStampedChange[] = [];
   /** Change id to order number: answers a repeated id. Rebuilt from the log. */
   readonly #ids = new Map<string, number>();
-  /** Namespace to the ID of the person who owns it. Rebuilt from the log. */
+  /**
+   * Namespace to the ID of the person who owns it: from the document (a checkpoint names the
+   * person of each namespace that typed), then rebuilt from the log.
+   */
   readonly #namespaces = new Map<string, string>();
 
   constructor(options: OrderedRoomOptions) {
@@ -225,6 +228,10 @@ export class OrderedRoom {
     this.#blobs = options.blobs;
     this.#contentLockPolicy = contentLockPolicyOf(options.contentLockPolicy);
     if (this.#doc.undo !== null) throw new Error('The document has an open undo record.');
+    for (const [namespace, person] of this.#doc.namespaces) {
+      this.#namespaces.set(namespace, person.id);
+    }
+
     for (const [k, entry] of (options.log ?? []).entries()) this.#replay(entry, k);
   }
 
@@ -243,7 +250,10 @@ export class OrderedRoom {
     return this.#ids.get(id);
   }
 
-  /** The ID of the person who owns a namespace, if any change from it was applied. */
+  /**
+   * The ID of the person who owns a namespace, if any change from it was applied or the document
+   * names its person.
+   */
   namespaceOwner(namespace: string): string | undefined {
     return this.#namespaces.get(namespace);
   }

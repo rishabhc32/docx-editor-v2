@@ -168,7 +168,7 @@ export { decideOrdered, orderedCards, type OrderedCard } from './decide.ts';
 export { orderedCardOf } from './card-of.ts';
 export { orderedSuggestionsOfRevision, type OrderedRevisionName } from './client/ops/review.ts';
 export { orderedReplacedSuggestions, type OrderedReplacedSuggestion } from './compose/replaced.ts';
-export { orderedUnitTyper } from './model/typers.ts';
+export { orderedUnitTyper, type OrderedTyper } from './model/typers.ts';
 export { ORDERED_CHANGE_KINDS, type OrderedGroupEditChange } from './change/kinds/registry.ts';
 export type {
   OrderedInsertObjectChange,

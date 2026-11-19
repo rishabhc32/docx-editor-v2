@@ -1,18 +1,29 @@
 // A checkpoint's typers back in the document (design D14).
 
 import type { CheckpointTyperRun } from '../model/checkpoint-suggestions.ts';
+import type { OrderedPerson } from '../model/person.ts';
 import type { OrderedDocument } from '../model/types.ts';
 import { eachFileUnit, keepLoadedTypers, type TypedRun } from '../model/typers.ts';
 
 /**
  * Keep who typed each unit a checkpoint names, for `orderedUnitTyper`: runs over the units the
- * file writes, in the order a load reads them. False when the runs name more units than the file
- * holds.
+ * file writes, in the order a load reads them, and the person of each namespace they name. False
+ * when the runs name more units than the file holds, or the persons other namespaces.
  */
 export function withCheckpointTypers(
   doc: OrderedDocument,
-  typers: readonly CheckpointTyperRun[]
+  typers: readonly CheckpointTyperRun[],
+  persons: ReadonlyMap<string, OrderedPerson>
 ): boolean {
+  const named = new Set(typers.flatMap(([, namespace]) => (namespace === null ? [] : [namespace])));
+  if (named.size !== persons.size || [...named].some((namespace) => !persons.has(namespace))) {
+    return false;
+  }
+
+  for (const [namespace, person] of persons) {
+    doc.namespaces.set(namespace, person);
+  }
+
   if (typers.length === 0) {
     return true;
   }

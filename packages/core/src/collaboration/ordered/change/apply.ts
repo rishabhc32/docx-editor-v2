@@ -11,6 +11,7 @@ import { revertDirect } from '../edits/revert.ts';
 import { isHidden, itemAt, madeBy, storyNamed } from '../model/document.ts';
 import { makerOf, personAttribution, type OrderedMaker } from '../model/person.ts';
 import { OrderedRefusal } from '../model/refusal.ts';
+import { recordUndo } from '../model/undo-record.ts';
 import {
   isUnit,
   type OrderedDocument,
@@ -19,6 +20,7 @@ import {
 } from '../model/types.ts';
 import type { OrderedApplyContext } from '../room/room.ts';
 import { applyDecision } from './apply-decide.ts';
+import { parseOrderedChangeId } from './ids.ts';
 import { placeOfChange } from './change-place.ts';
 import { settleRemovedColumns } from './settle-columns.ts';
 import { settleHiddenNotes } from './settle-notes.ts';
@@ -304,6 +306,14 @@ export function applyOrderedChange(
   ctx: OrderedApplyContext
 ): OrderedChangeOutcome {
   if (doc.undo === null) throw new Error('A change applies inside an undo record.');
+
+  // The person of the change's namespace, whom the typer read names
+  const namespace = parseOrderedChangeId(change.id)?.namespace;
+  if (namespace !== undefined && !doc.namespaces.has(namespace)) {
+    doc.namespaces.set(namespace, ctx.person);
+    recordUndo(doc, () => doc.namespaces.delete(namespace));
+  }
+
   const done = applyChange(doc, change, ctx);
 
   // A control a decision emptied shows its prompt as units, so typing can replace it

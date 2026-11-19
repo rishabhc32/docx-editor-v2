@@ -3,7 +3,10 @@
 
 import { describe, expect, test } from 'bun:test';
 import { orderedCardSeen } from '../change/apply-decide.ts';
+import { openOrderedWordFile } from '../client/open.ts';
 import { OrderedRefusal } from '../model/refusal.ts';
+import type { OrderedDocument } from '../model/types.ts';
+import { orderedUnitTyper } from '../model/typers.ts';
 import { ORDERED_CHANGE_LIMITS, type OrderedStampedChange } from '../change/types.ts';
 import { allowWritersPolicy } from '../room/policy.ts';
 import {
@@ -12,7 +15,17 @@ import {
   orderedStampDate,
   type OrderedApplyChange,
 } from '../room/room.ts';
-import { actor, BODY, loadRoom, paragraphOf, snapshot, realApply } from './room-harness.ts';
+import { at } from './change-apply-fixture.ts';
+import { folded, mediaStore } from './fold-check.ts';
+import {
+  actor,
+  BODY,
+  loadRoom,
+  paragraphOf,
+  ROOM_FILE,
+  snapshot,
+  realApply,
+} from './room-harness.ts';
 import { testAttribution, testPerson } from './test-persons.ts';
 
 const ANA = actor('Ana', 'ana-1', 'organiser');
@@ -79,6 +92,7 @@ describe('the room', () => {
       { id: 'ana-1:3', n: 3 },
     ]);
     expect(again.accepted.map((c) => c.id)).toEqual(['ana-1:3']);
+
     // The same room without the repeated copies: the same document
     const once = room();
     once.submit(ANA, batch);
@@ -119,6 +133,7 @@ describe('the room', () => {
         },
       ]);
       expect(snapshot(r.document)).toEqual(before);
+
       // The same item objects, not copies
       const after = r.document.stories.get(BODY)?.tree.toArray() ?? [];
       expect(after.length).toBe(items.length);
@@ -127,6 +142,7 @@ describe('the room', () => {
       expect(r.order).toBe(0);
       expect(r.orderOf('ana-1:1')).toBeUndefined();
     }
+
     expect(errors.length).toBe(1);
   });
 
@@ -229,11 +245,54 @@ describe('the room', () => {
     expect(b.order).toBe(3);
     expect(b.orderOf('ben-1:2')).toBe(3);
     expect(b.namespaceOwner('ben-1')).toBe(testPerson('Ben').id);
+
     // A change resent after a restart is a duplicate
     expect(b.submit(BEN, [insert('ben-1:2', 0, 'A ')]).acks).toEqual([{ id: 'ben-1:2', n: 3 }]);
     expect(
       b.submit({ ...ANA, namespace: 'ben-1' }, [insert('ben-1:3', 0, 'q')]).refused[0]?.code
     ).toBe('stamp');
+  });
+
+  test('a room opened on its checkpoint knows the person of each namespace that typed', async () => {
+    const { document, base } = openOrderedWordFile(ROOM_FILE, { file: 1 });
+    const live = new OrderedRoom({
+      document,
+      applyChange: realApply,
+      policy: allowWritersPolicy,
+      now: () => T0,
+    });
+    const place = (doc: OrderedDocument, n: number) => at(doc, 0, n);
+
+    // Ana's suggestion, and Ben's direct typing inside it
+    live.submit(ANA, [{ ...insert('ana-1:1', 0, 'new '), place: place(document, 4) }]);
+    live.submit(BEN, [{ ...insert('ben-1:1', 0, 'x'), mode: 'edit', place: place(document, 6) }]);
+    const copy = (await folded(document, base, 2, mediaStore(base))).document;
+    const again = new OrderedRoom({
+      document: copy,
+      applyChange: realApply,
+      policy: allowWritersPolicy,
+      now: () => T0,
+    });
+
+    // The read names each typer's person, and the room the owner of their namespaces
+    const typers = (doc: OrderedDocument) =>
+      [...(doc.stories.get(BODY)?.tree.items() ?? [])].flatMap((item) =>
+        Array.from({ length: item.by === null ? 0 : item.length }, (_, k) =>
+          orderedUnitTyper(doc, item, item.offset + k)
+        )
+      );
+    const ana = { namespace: 'ana-1', person: testPerson('Ana') };
+    const ben = { namespace: 'ben-1', person: testPerson('Ben') };
+    expect(typers(document)).toEqual([ana, ana, ben, ana, ana]);
+    expect(typers(copy)).toEqual(typers(document));
+    expect([again.namespaceOwner('ana-1'), again.namespaceOwner('ben-1')]).toEqual([
+      ana.person.id,
+      ben.person.id,
+    ]);
+
+    // Another person under a namespace that typed is refused
+    const stolen = { ...insert('ana-1:2', 0, 'y'), place: place(copy, 0) };
+    expect(again.submit({ ...BEN, namespace: 'ana-1' }, [stolen]).refused[0]?.code).toBe('stamp');
   });
 
   test('a log that does not rebuild the room refuses to open', () => {

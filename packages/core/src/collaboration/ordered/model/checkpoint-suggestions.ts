@@ -183,10 +183,20 @@ export function readTypers(value: unknown): CheckpointTyperRun[] {
 /** One run of units: its count, and the namespace that typed them or null. */
 function readRun(value: unknown, path: string): CheckpointTyperRun {
   const [count, namespace] = list(value, path, 2, 2);
-  const typer = namespace === null ? null : str(namespace, at(path, 1), 64);
-  if (typer !== null && !ORDERED_NAMESPACE_PATTERN.test(typer)) {
-    throw new Invalid('invalid-namespace', at(path, 1));
+  const typer = namespace === null ? null : readNamespace(namespace, at(path, 1));
+  return [int(count, at(path, 0), 1), typer];
+}
+
+/**
+ * A namespace of room changes.
+ *
+ * @throws Invalid when it is not one.
+ */
+export function readNamespace(value: unknown, path: string): string {
+  const namespace = str(value, path, 64);
+  if (!ORDERED_NAMESPACE_PATTERN.test(namespace)) {
+    throw new Invalid('invalid-namespace', path);
   }
 
-  return [int(count, at(path, 0), 1), typer];
+  return namespace;
 }

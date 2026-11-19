@@ -115,6 +115,7 @@ const manifestOf = (checkpoint: Uint8Array) =>
     comments: unknown[];
     takeovers: unknown[];
     typers: unknown[];
+    namespaces: unknown[];
     untracked: unknown[];
   };
 
@@ -230,12 +231,8 @@ describe('writeOrderedCheckpoint', () => {
       expect(manifest.format).toBe('docx-editor.dev/ordered-checkpoint');
       expect(manifest.version).toBe(4);
       expect(manifest.suggestions.filter((s) => s.person !== null)).toEqual([]);
-      expect([manifest.comments, manifest.takeovers, manifest.typers, manifest.untracked]).toEqual([
-        [],
-        [],
-        [],
-        [],
-      ]);
+      const { comments, takeovers, typers, namespaces, untracked } = manifest;
+      expect([comments, takeovers, typers, namespaces, untracked]).toEqual([[], [], [], [], []]);
       expect(manifest.media.map((media) => media.sha256).sort()).toEqual(
         listed.map((media) => media.sha256).sort()
       );
@@ -502,7 +499,24 @@ describe('a file of another kind is refused by name', () => {
       (m) => ({ ...m, typers: [[0, null]] }),
       (m) => ({ ...m, typers: [[1, 'a b']] }),
       // Runs past the units the file holds
-      (m) => ({ ...m, typers: [[1_000_000, 'ana']] }),
+      (m) => ({
+        ...m,
+        typers: [[1_000_000, 'ana']],
+        namespaces: [{ namespace: 'ana', person: ANA }],
+      }),
+      ({ namespaces: _, ...m }) => m,
+      // A typer with no person, a person of no typer, a namespace twice, and no namespace
+      (m) => ({ ...m, typers: [[1, 'ana']] }),
+      (m) => ({ ...m, namespaces: [{ namespace: 'ana', person: ANA }] }),
+      (m) => ({
+        ...m,
+        typers: [[1, 'ana']],
+        namespaces: [
+          { namespace: 'ana', person: ANA },
+          { namespace: 'ana', person: ANA },
+        ],
+      }),
+      (m) => ({ ...m, typers: [[1, 'a b']], namespaces: [{ namespace: 'a b', person: ANA }] }),
       (m) => ({ ...m, untracked: [{ part: '/word/document.xml', container: 'p' }] }),
       (m) => ({
         ...m,
@@ -521,6 +535,14 @@ describe('a file of another kind is refused by name', () => {
     for (const change of cases) {
       expect(reasonOf(open(await withManifest(change)))).toBe('checkpoint-manifest');
     }
+
+    // A typer with its person opens
+    const typed = await withManifest((m) => ({
+      ...m,
+      typers: [[1, 'ana']],
+      namespaces: [{ namespace: 'ana', person: ANA }],
+    }));
+    expect(reasonOf(open(typed))).toBe('opened');
 
     const entries = unzipSync(await checkpoint());
     entries[MANIFEST] = strToU8('{"format":');

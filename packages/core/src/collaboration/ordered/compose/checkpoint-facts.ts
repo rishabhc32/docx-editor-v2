@@ -112,10 +112,12 @@ export function checkpointFacts(
   const { containers, takeovers } = named
     ? placesAndTakeovers(doc, pkg, held, list)
     : { containers: new Map<string, ContainerPlace>(), takeovers: [] };
+  const typed = checkpointTypers(doc);
   return inRoomOrder(list, {
     commentPersons: commentPersons(doc),
     takeovers,
-    typers: checkpointTypers(doc),
+    typers: typed.runs,
+    namespacePersons: typed.persons,
     untracked: checkpointUntracked(doc, opens, containers, list),
   });
 }
@@ -186,6 +188,7 @@ function inRoomOrder(
       taken: t.taken.map((taken) => ({ ...taken, suggestion: renumbered(taken.suggestion) })),
     })),
     typers: facts.typers,
+    namespacePersons: facts.namespacePersons,
     untracked: facts.untracked.map((u) => ({
       ...u,
       records: u.records.map((r) => ({ ...r, suggestion: renumbered(r.suggestion) })),
@@ -309,17 +312,27 @@ function cellPlaces(
 
 /**
  * Who typed the units the file writes, as runs in the order a load reads them, up to the last
- * unit a room change typed inside a pending insertion: none when no such unit is left.
+ * unit a room change typed inside a pending insertion (none when no such unit is left), and the
+ * person of each namespace the runs name.
  */
-function checkpointTypers(doc: OrderedDocument): CheckpointTyperRun[] {
+function checkpointTypers(doc: OrderedDocument): {
+  runs: CheckpointTyperRun[];
+  persons: Map<string, OrderedPerson>;
+} {
   const runs: [number, string | null][] = [];
+  const persons = new Map<string, OrderedPerson>();
   eachFileUnit(doc, (item, offset) => {
     const typer = orderedUnitTyper(doc, item, offset);
+    const namespace = typer?.namespace ?? null;
     const last = runs[runs.length - 1];
-    if (last !== undefined && last[1] === typer) {
+    if (last !== undefined && last[1] === namespace) {
       last[0] += 1;
     } else {
-      runs.push([1, typer]);
+      runs.push([1, namespace]);
+    }
+
+    if (typer !== null) {
+      persons.set(typer.namespace, typer.person);
     }
   });
 
@@ -328,7 +341,7 @@ function checkpointTypers(doc: OrderedDocument): CheckpointTyperRun[] {
     runs.pop();
   }
 
-  return runs;
+  return { runs, persons };
 }
 
 /**

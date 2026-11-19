@@ -26,6 +26,7 @@ import {
 import { checkFold, folded, mediaStore } from './fold-check.ts';
 import { SESSION_FILE } from './sessions/fixture.ts';
 import { runSession } from './sessions/session.ts';
+import { testPerson } from './test-persons.ts';
 import { bodyOf, docx, MATRIX_ITEMS, p, t } from './word-fixtures.ts';
 
 describe('a fold of a random session', () => {
@@ -206,9 +207,8 @@ describe('who typed inside a new row or note', () => {
       const once = await folded(doc, base, 2, blobs);
       const twice = await folded(once.document, once.base, 3, blobs);
       const copies = [doc, once.document, twice.document];
-      expect(copies.map((copy) => typersOf(copy, part))).toEqual(
-        copies.map(() => ['olive', 'olive'])
-      );
+      const olive = { namespace: 'olive', person: testPerson('Olive') };
+      expect(copies.map((copy) => typersOf(copy, part))).toEqual(copies.map(() => [olive, olive]));
       await checkFold(doc, base, blobs, label);
     });
   }

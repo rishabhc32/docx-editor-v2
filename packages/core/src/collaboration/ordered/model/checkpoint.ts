@@ -9,6 +9,7 @@ import { at, attempt, fieldsOf, required } from '../change/read.ts';
 import { sha256 } from '../change/resources.ts';
 import {
   readNamedOnce,
+  readNamespace,
   readSuggestions,
   readTypers,
   suggestionsJson,
@@ -32,15 +33,16 @@ const VERSION = 4;
 /**
  * The room facts a checkpoint's manifest keeps, which Word has no place for: each pending
  * suggestion whole, and each decided one another section names; the person of each room comment
- * by its `w:id`; the records each change record holds by takeover; who typed the units of each
- * insertion; and the records Word writes no change record for, decided or not. Every section
- * names a suggestion by its place in `suggestions`.
+ * by its `w:id`; the records each change record holds by takeover; who typed the units of the
+ * insertions, and the person of each namespace that typed; and the records Word writes no change
+ * record for, decided or not. Every section names a suggestion by its place in `suggestions`.
  */
 export interface CheckpointFacts {
   readonly suggestions: readonly CheckpointSuggestion[];
   readonly commentPersons: ReadonlyMap<string, OrderedPerson>;
   readonly takeovers: readonly CheckpointTakeover[];
   readonly typers: readonly CheckpointTyperRun[];
+  readonly namespacePersons: ReadonlyMap<string, OrderedPerson>;
   readonly untracked: readonly CheckpointUntracked[];
 }
 
@@ -85,6 +87,7 @@ export function checkpointManifestBytes(
       comments: [...facts.commentPersons].map(([id, person]) => ({ id, person })),
       takeovers: takeoversJson(facts.takeovers),
       typers: facts.typers,
+      namespaces: [...facts.namespacePersons].map(([namespace, person]) => ({ namespace, person })),
       untracked: untrackedJson(facts.untracked),
     })
   );
@@ -168,6 +171,7 @@ function factsOf(manifest: Record<string, unknown>): CheckpointFacts {
     commentPersons: readComments(manifest.comments),
     takeovers: readTakeovers(manifest.takeovers, count),
     typers: readTypers(manifest.typers),
+    namespacePersons: readNamespaces(manifest.namespaces),
     untracked: readUntracked(manifest.untracked, count),
   };
 }
@@ -232,6 +236,27 @@ function readComments(value: unknown): Map<string, OrderedPerson> {
     (comment) => comment.id
   );
   return new Map(comments.map(({ id, person }) => [id, person]));
+}
+
+/**
+ * The person of each listed namespace, each namespace named once.
+ *
+ * @throws Invalid when one does not read.
+ */
+function readNamespaces(value: unknown): Map<string, OrderedPerson> {
+  const namespaces = readNamedOnce(
+    value,
+    'namespaces',
+    (entry, path) => {
+      const f = fieldsOf(entry, path, new Set(['namespace', 'person']));
+      return {
+        namespace: readNamespace(required(f, 'namespace'), at(path, 'namespace')),
+        person: readPerson(required(f, 'person'), at(path, 'person')),
+      };
+    },
+    (entry) => entry.namespace
+  );
+  return new Map(namespaces.map(({ namespace, person }) => [namespace, person]));
 }
 
 /** The listed media, each checked against `base`, or null when one does not fit. */

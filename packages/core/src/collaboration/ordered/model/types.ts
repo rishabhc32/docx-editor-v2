@@ -604,6 +604,12 @@ export interface OrderedDocument {
    * records). Load writes it; only a decision changes their suggestions.
    */
   readonly partRevisions: Map<string, OrderedPartRevision>;
+  /**
+   * The person of each namespace whose changes the document applied, which `orderedUnitTyper`
+   * names: the apply writes it inside an undo record, a checkpoint's load for each namespace that
+   * typed.
+   */
+  readonly namespaces: Map<string, OrderedPerson>;
   /** While an edit runs inside an undo record: how to take back each write, in order. */
   undo: OrderedUndoStep[] | null;
 }
