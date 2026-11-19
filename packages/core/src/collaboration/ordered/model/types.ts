@@ -28,6 +28,14 @@ export type OrderedItemKind = 'text' | 'atom' | 'zero' | 'mark' | 'open' | 'clos
 /** Whether an item is a unit the view draws: characters or an object. */
 export const isUnit = (item: OrderedItem): boolean => item.kind === 'text' || item.kind === 'atom';
 
+/**
+ * Whether a unit can hold a run format: a unit in a run, or a bare unit with runs in it (a simple
+ * field, whose runs take the format). Any other bare unit (an equation, an element kept whole)
+ * has no run for the format's change record, so a format leaves it as it is, as Word does.
+ */
+export const holdsRunFormat = (item: Pick<OrderedItem, 'bare' | 'pieces'>): boolean =>
+  item.bare !== true || (item.pieces ?? []).some((piece) => piece.node.kind === 'run');
+
 /** A suggestion's decision state. @public */
 export type OrderedSuggestionStatus = 'pending' | 'accepted' | 'rejected';
 

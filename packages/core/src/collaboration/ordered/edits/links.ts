@@ -17,6 +17,7 @@ import { createOrderedItem, insertedPending, isHidden } from '../model/document.
 import { insertItems, isolateUnits, nextSeq, relabel, replaceItems } from '../model/mutations.ts';
 import { OrderedRefusal } from '../model/refusal.ts';
 import {
+  holdsRunFormat,
   isUnit,
   type OrderedFormatRecord,
   type OrderedItem,
@@ -389,6 +390,11 @@ function styleUnits(
 ): void {
   const seq = nextSeq(ctx.doc);
   for (const item of items) {
+    // An equation takes no character style: it has no run
+    if (!holdsRunFormat(item)) {
+      continue;
+    }
+
     if ('remove' in write && !shows(ctx, item, write.remove)) continue;
     if (ownUnit(ctx, item)) {
       replaceItems(

@@ -7,16 +7,17 @@ import type { OrderedViewChar, OrderedViewParagraph } from '../compose/context.t
 import { faceWithProperties } from '../compose/properties.ts';
 import { createOrderedItem, insertedPending, itemAt, madeBy, statusOf } from '../model/document.ts';
 import { isolateUnits, nextSeq, recordAdded, relabel, replaceItems } from '../model/mutations.ts';
-import type {
-  OrderedFieldPiece,
-  OrderedFormatRecord,
-  OrderedFormatWrite,
-  OrderedItem,
-  OrderedItemLabels,
-  OrderedPropertyRecord,
-  OrderedStory,
-  OrderedSuggestion,
-  OrderedUnitRange,
+import {
+  holdsRunFormat,
+  type OrderedFieldPiece,
+  type OrderedFormatRecord,
+  type OrderedFormatWrite,
+  type OrderedItem,
+  type OrderedItemLabels,
+  type OrderedPropertyRecord,
+  type OrderedStory,
+  type OrderedSuggestion,
+  type OrderedUnitRange,
 } from '../model/types.ts';
 import { isWml, withChildren } from '../ooxml-nodes.ts';
 import {
@@ -147,6 +148,8 @@ export function insertText(
     const atom = piece.content !== undefined || piece.field !== undefined;
     const length = atom ? 1 : piece.text.length;
     const itemFace = piece.face !== undefined ? piece.face : face;
+    const field = piece.field ? { pieces: fieldPiecesWithFace(ctx, piece.field, itemFace) } : {};
+    const bare = piece.bare && piece.content ? { bare: true } : {};
     const item = createOrderedItem({
       space,
       offset: at,
@@ -154,17 +157,17 @@ export function insertText(
       kind: atom ? 'atom' : 'text',
       text: atom ? piece.text || '￼' : piece.text,
       node: piece.content ?? null,
-      ...(piece.field ? { pieces: fieldPiecesWithFace(ctx, piece.field, itemFace) } : {}),
+      ...field,
       face: itemFace,
       // One run per piece: pieces can differ in face
       run: at === 0 ? space : `${space}~${at}`,
       by: suggestion.id,
       // The rows and cells around the paragraph hold the new text too
       within: p.mark.within,
-      ...(options.fmts ? { fmts: options.fmts } : {}),
+      ...(options.fmts && holdsRunFormat({ ...field, ...bare }) ? { fmts: options.fmts } : {}),
       ...(options.move === undefined ? {} : { move: options.move }),
       ...(options.quiet ? { quiet: true } : {}),
-      ...(piece.bare && piece.content ? { bare: true } : {}),
+      ...bare,
     });
     at += length;
     return item;
@@ -544,6 +547,11 @@ export function formatText(
   const seq = nextSeq(ctx.doc);
   for (const group of groupBySpace(chars)) {
     for (const item of isolateUnits(ctx.doc, ctx.story, group.space, group.start, group.end)) {
+      // Word leaves an equation as it is: it has no run for the format
+      if (!holdsRunFormat(item)) {
+        continue;
+      }
+
       // A right-to-left run takes the complex-script partner too (rule 10)
       const face = currentFace(ctx, item, false);
       const written = { ...write, properties: withComplexScript(face, write.properties) };
