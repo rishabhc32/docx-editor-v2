@@ -100,7 +100,7 @@ const RESULT_CONTENT = new Set(['text', 'deletedText', 'tab', 'hardBreak', 'text
  * the run of its own separator, else its begin run. The runs of the fields nested in it never
  * take it.
  */
-function formatRunsOf(pieces: readonly OrderedFieldPiece[]): boolean[] {
+export function formatRunsOf(pieces: readonly OrderedFieldPiece[]): boolean[] {
   const formatted = pieces.map(() => false);
   let depth = 0;
   let separate = -1;

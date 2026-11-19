@@ -10,6 +10,7 @@ import type {
 } from '../../../store/package/ooxml-tree.ts';
 import { paragraphModelTextOf } from '../../../store/store/paragraph-model-text.ts';
 import { paragraphOffsetIndex } from '../../../store/store/tree-op-segments.ts';
+import { formatRunsOf } from '../compose/inline.ts';
 import { REVISION_ROLE } from '../model/revision-ids.ts';
 import { equationAtom, type EquationAtom } from './equations.ts';
 import {
@@ -140,9 +141,17 @@ export function loadParagraph(
     if (!isParagraphProperties(child)) loadInline(state, child, labels, ctx, depth + 1);
   }
 
-  for (const field of ctx.fields.values()) {
-    const item = state.items[field.at];
-    if (item) state.items[field.at] = { ...item, pieces: field.pieces, fmts: field.fmts };
+  for (const { at, pieces, fmts } of ctx.fields.values()) {
+    const item = state.items[at];
+    if (item) {
+      // The field's face is that of the run a format reaches, as the engine reads it
+      const run = pieces[formatRunsOf(pieces).indexOf(true)]?.node;
+      const face =
+        run === undefined || run.kind === 'textValue'
+          ? item.face
+          : (childWhere(run, isRunProperties) ?? null);
+      state.items[at] = { ...item, face, pieces, fmts };
+    }
   }
 
   pushMark(state, ctx, labels, start);

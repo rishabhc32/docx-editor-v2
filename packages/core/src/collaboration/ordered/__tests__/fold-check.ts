@@ -17,6 +17,7 @@ import { serializeOoxmlPart, type OoxmlElement } from '../../../store/package/oo
 import { isCardUnit } from '../card-of.ts';
 import { orderedCardSeen } from '../change/apply-decide.ts';
 import { openOrderedCheckpoint, type OrderedWordFile } from '../client/open.ts';
+import { currentFace } from '../client/properties.ts';
 import { orderedPackageMedia, writeOrderedCheckpoint } from '../compose/checkpoint.ts';
 import { orderedViewParagraph } from '../compose/compose.ts';
 import { orderedPackageBytes } from '../compose/package.ts';
@@ -26,7 +27,12 @@ import { isHidden } from '../model/document.ts';
 import { setStatus } from '../model/mutations.ts';
 import { isTextBoxStoryName } from '../model/text-boxes.ts';
 import { orderedUnitTyper } from '../model/typers.ts';
-import type { OrderedDocument, OrderedItem, OrderedSuggestion } from '../model/types.ts';
+import type {
+  OrderedDocument,
+  OrderedItem,
+  OrderedStory,
+  OrderedSuggestion,
+} from '../model/types.ts';
 import { takeBack, withUndoRecord } from '../model/undo-record.ts';
 import { normalizedBody, semanticBody } from './matrix/compare.ts';
 
@@ -101,7 +107,7 @@ export function foldPrint(doc: OrderedDocument, base: OoxmlPackage, blobs: FoldB
   const keys = (ids: readonly string[]) => ids.map(key).filter((k) => k !== null);
 
   // Each unit of an item on its own: a load joins units of one face into one item
-  const units = (item: OrderedItem): string[] => {
+  const units = (story: OrderedStory, item: OrderedItem): string[] => {
     const node = item.node?.kind === 'textValue' ? '' : (item.node?.localName ?? '');
     const labels = {
       kind: item.kind,
@@ -121,6 +127,7 @@ export function foldPrint(doc: OrderedDocument, base: OoxmlPackage, blobs: FoldB
       JSON.stringify({
         ...labels,
         text: item.text[k] ?? '',
+        face: xmlOf(currentFace(doc, story, item)),
         typer: orderedUnitTyper(doc, item, item.offset + k),
       })
     );
@@ -130,7 +137,8 @@ export function foldPrint(doc: OrderedDocument, base: OoxmlPackage, blobs: FoldB
     stories: [...doc.stories]
       .map(([name, story]) => {
         const shown = story.tree.toArray().filter((item) => showsOn(doc, item));
-        return [isTextBoxStoryName(name) ? 'text box' : name, ...shown.flatMap(units)].join('\n');
+        const listed = shown.flatMap((item) => units(story, item));
+        return [isTextBoxStoryName(name) ? 'text box' : name, ...listed].join('\n');
       })
       .sort(),
     suggestions: pending.map(makerKey).sort(),
