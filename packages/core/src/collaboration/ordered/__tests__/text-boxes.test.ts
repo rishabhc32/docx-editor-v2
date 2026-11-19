@@ -6,12 +6,14 @@
 import { describe, expect, test } from 'bun:test';
 import { readOoxmlPackage, type OoxmlPackage } from '../../../store/package/ooxml-package.ts';
 import { serializeOoxmlPart } from '../../../store/package/ooxml-tree.ts';
+import { orderedCardOf } from '../card-of.ts';
 import { orderedIdMinter } from '../change/ids.ts';
 import { applyOrderedChange } from '../change/apply.ts';
 import type { OrderedChange } from '../change/types.ts';
 import { openOrderedWordFile } from '../client/open.ts';
 import { composeOrderedPart, orderedViewParagraph } from '../compose/compose.ts';
 import { composeOrderedPackage, orderedPackageBytes } from '../compose/package.ts';
+import { decideOrdered, orderedCards } from '../decide.ts';
 import { orderedPlaceAt } from '../edits/places.ts';
 import { OrderedRefusal } from '../model/refusal.ts';
 import { isTextBoxStoryName, textBoxHostOf } from '../model/text-boxes.ts';
@@ -431,5 +433,44 @@ describe('text boxes (group 9.9)', () => {
     expect(reason('olive-1:4', unlink)).toBe('hidden-target');
     expect(reason('olive-1:5', removal)).toBe('hidden-target');
     expect(JSON.stringify(snapshot(doc, false))).toBe(before);
+  });
+
+  test('a suggestion in a text box that no longer shows is on no card', () => {
+    // The object goes by an accepted deletion, or by the organiser's direct one
+    for (const mode of ['suggest', 'edit'] as const) {
+      const { doc } = open();
+      const box = boxOf(doc);
+      const [enter = ''] = apply(
+        doc,
+        'ben-1:1',
+        { kind: 'split', part: box, mode: 'suggest', place: at(doc, box, 0, 4) },
+        'Ben'
+      );
+      const view = orderedViewParagraph(doc, BODY, 1);
+      const k = view?.chars.findIndex((c) => c.item.kind === 'atom') ?? -1;
+      const removal: Body = {
+        kind: 'delete',
+        part: BODY,
+        mode,
+        from: at(doc, BODY, 1, k),
+        to: at(doc, BODY, 1, k + 1),
+      };
+      const [deletion = ''] = apply(doc, 'olive-1:1', removal, 'Olive');
+      if (mode === 'suggest') {
+        const version = doc.suggestions.get(deletion)!.version;
+        const accept = {
+          kind: 'decide',
+          status: 'accepted',
+          cards: [{ suggestions: [{ suggestion: deletion, version }] }],
+        } as Body;
+        apply(doc, 'olive-1:2', accept, 'Olive');
+      }
+
+      // Compose writes no such text box, so its Enter has no card, as a reopen of the file has
+      // none: a decision on it is refused by name
+      expect({ mode, card: orderedCardOf(doc, enter) }).toEqual({ mode, card: null });
+      expect(orderedCards(doc).flatMap((card) => card.suggestions)).not.toContain(enter);
+      expect(() => decideOrdered(doc, enter, 'reject')).toThrow('hidden-target');
+    }
   });
 });

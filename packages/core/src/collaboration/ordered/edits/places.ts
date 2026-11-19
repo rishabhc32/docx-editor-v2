@@ -12,7 +12,7 @@ import { isNotesStory, noteKeyOf, notesWithHiddenReferences } from '../compose/n
 import { isHidden, itemAt, missingAddress, storyNamed } from '../model/document.ts';
 import { promptMarksOf } from '../model/prompt-marks.ts';
 import { addressLabel, OrderedRefusal } from '../model/refusal.ts';
-import { textBoxHostOf } from '../model/text-boxes.ts';
+import { textBoxGone } from '../model/text-boxes.ts';
 import {
   loadedSpace,
   type OrderedContainerToken,
@@ -66,13 +66,8 @@ export function refuseHiddenHolder(
   story: OrderedStory,
   item: OrderedItem
 ): void {
-  const host = textBoxHostOf(doc, story.name);
-  if (host) {
-    const holder = doc.stories.get(host.host);
-    const atom = holder ? itemAt(holder, host.atom) : null;
-    if (!atom || isHidden(doc, atom))
-      throw new OrderedRefusal('hidden-target', 'the text box does not show');
-    return;
+  if (textBoxGone(doc, story.name)) {
+    throw new OrderedRefusal('hidden-target', 'the text box does not show');
   }
 
   if (!isNotesStory(story)) return;

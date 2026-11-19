@@ -1,5 +1,6 @@
 // Text box stories: their names, and the index from each one to the object that holds it.
 
+import { isHidden, itemAt } from './document.ts';
 import type { OrderedDocument, OrderedItem, OrderedItemAddress } from './types.ts';
 import { recordUndo } from './undo-record.ts';
 
@@ -75,6 +76,22 @@ export function registerTextBox(
 /** The host of a text box story, or null for any other story. */
 export function textBoxHostOf(doc: OrderedDocument, name: string): OrderedTextBoxHost | null {
   return INDEXES.get(doc)?.byName.get(name) ?? null;
+}
+
+/**
+ * Whether a story is a text box whose object no longer shows: its insertion rejected or taken
+ * back, or its deletion accepted. Compose writes no such text box, so nothing in it shows. A
+ * struck object still shows, as Word shows it.
+ */
+export function textBoxGone(doc: OrderedDocument, name: string): boolean {
+  const host = textBoxHostOf(doc, name);
+  if (host === null) {
+    return false;
+  }
+
+  const holder = doc.stories.get(host.host);
+  const object = holder ? itemAt(holder, host.atom) : null;
+  return object === null || isHidden(doc, object);
 }
 
 /** The text box stories an object holds, by name, in node order. */

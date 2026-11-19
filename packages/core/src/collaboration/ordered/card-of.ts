@@ -5,6 +5,7 @@ import { isNotesStory, leftOutNoteItems } from './compose/note-references.ts';
 import { promptControlOf, promptShows } from './compose/paragraph.ts';
 import { isHidden, isPending, oneMaker, storyOfItem } from './model/document.ts';
 import { OrderedRefusal } from './model/refusal.ts';
+import { textBoxGone } from './model/text-boxes.ts';
 import type { OrderedDocument, OrderedItem, OrderedStory } from './model/types.ts';
 
 /** One review card: the pending suggestions one decision applies to. @public */
@@ -97,33 +98,48 @@ function hiddenPrompt(doc: OrderedDocument, item: OrderedItem): boolean {
 /**
  * One read of a document's cards: the units a card sits on, the same for the list
  * (`orderedCards`) and for one card (`orderedCardOf`). A note compose leaves out (its references
- * show nowhere) holds no unit, as a saved file has no such note. Those notes are read once, and
- * only when a search reaches an item of a notes part.
+ * show nowhere) and a text box whose object went hold no unit, as a saved file has neither. Those
+ * notes are read once, and only when a search reaches an item of a notes part.
  */
 export class CardRead {
   /** The one pending insertion every unit of a suggestion sits in, by suggestion (`insideOne`). */
   readonly inside = new Map<string, string | null>();
   #leftOut: ReadonlySet<OrderedItem> | null = null;
+  /** Whether each story read so far is a text box whose object went (`textBoxGone`). */
+  readonly #boxesGone = new Map<OrderedStory, boolean>();
 
   constructor(readonly doc: OrderedDocument) {}
 
-  /** Whether an item is in a note compose leaves out (`leftOutNoteItems`). */
+  /**
+   * Whether an item is in a note compose leaves out (`leftOutNoteItems`) or in a text box whose
+   * object went (`textBoxGone`).
+   */
   isLeftOut(item: OrderedItem, story = storyOfItem(this.doc, item)): boolean {
-    if (story === null || !isNotesStory(story)) {
+    if (story === null) {
       return false;
     }
 
-    this.#leftOut ??= leftOutNoteItems(this.doc);
-    return this.#leftOut.has(item);
+    if (isNotesStory(story)) {
+      this.#leftOut ??= leftOutNoteItems(this.doc);
+      return this.#leftOut.has(item);
+    }
+
+    let gone = this.#boxesGone.get(story);
+    if (gone === undefined) {
+      gone = textBoxGone(this.doc, story.name);
+      this.#boxesGone.set(story, gone);
+    }
+
+    return gone;
   }
 
-  /** A unit a card can sit on: what shows (`isCardUnit`), outside a note compose leaves out. */
+  /** A unit a card can sit on: what shows (`isCardUnit`), outside what compose leaves out. */
   isUnit(item: OrderedItem, story?: OrderedStory | null): boolean {
     return isCardUnit(this.doc, item) && !this.isLeftOut(item, story);
   }
 
-  /** Whether a suggestion is on no unit only because its items are in a note left out. */
-  onlyInLeftOutNote(suggestion: string): boolean {
+  /** Whether a suggestion is on no unit only because its items are in what compose leaves out. */
+  onlyLeftOut(suggestion: string): boolean {
     let leftOut = false;
     for (const item of this.doc.labelled.get(suggestion) ?? []) {
       if (this.isUnit(item)) {
@@ -139,10 +155,14 @@ export class CardRead {
 
 /**
  * Why a decision on a pending suggestion that is on no card is refused: it is only in a note
- * whose references show nowhere, so neither the list nor a saved file shows it.
+ * whose references show nowhere or in a text box whose object went, so neither the list nor a
+ * saved file shows it.
  */
 export const noCardRefusal = (suggestion: string): OrderedRefusal =>
-  new OrderedRefusal('hidden-target', `${suggestion} is only in a note that shows nowhere`);
+  new OrderedRefusal(
+    'hidden-target',
+    `${suggestion} is only in a note or a text box that shows nowhere`
+  );
 
 const TABLE_CONTAINERS: ReadonlySet<string> = new Set(['tbl', 'tr', 'tc']);
 
@@ -383,15 +403,15 @@ export function cardFrom(doc: OrderedDocument, ids: readonly string[]): OrderedC
 /**
  * The review card that holds a pending suggestion: the one `orderedCards` gives, or the
  * suggestion alone when it shows nowhere. Null when the suggestion is not pending, or when it is
- * only in a note whose references show nowhere, which `orderedCards` leaves off every card too.
- * The search visits the card's own items and the units around them only (and, for a note, which
- * notes show).
+ * only in a note whose references show nowhere or in a text box whose object went, which
+ * `orderedCards` leaves off every card too. The search visits the card's own items and the units
+ * around them only (and, for a note, which notes show).
  *
  * @public
  */
 export function orderedCardOf(doc: OrderedDocument, suggestion: string): OrderedCard | null {
   const read = new CardRead(doc);
-  if (!isPending(doc, suggestion) || read.onlyInLeftOutNote(suggestion)) {
+  if (!isPending(doc, suggestion) || read.onlyLeftOut(suggestion)) {
     return null;
   }
 

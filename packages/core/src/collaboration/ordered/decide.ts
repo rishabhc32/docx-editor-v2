@@ -100,8 +100,9 @@ export function orderedCards(doc: OrderedDocument): OrderedCard[] {
 
 /**
  * The units of a story a card can sit on. Cards are read from what shows now: items hidden for
- * good, and the notes left out with their references, are passed over, as a saved and reopened
- * file has none of them, so a card is the same live and after a reopen.
+ * good, the notes left out with their references and the text boxes gone with their objects are
+ * passed over, as a saved and reopened file has none of them, so a card is the same live and
+ * after a reopen.
  */
 function cardUnits(read: CardRead, story: OrderedStory, groups: Groups): OrderedItem[] {
   const doc = read.doc;
@@ -229,10 +230,10 @@ function cardsOfGroups(doc: OrderedDocument, groups: Groups): OrderedCard[] {
 /**
  * Decide the card that holds `suggestion`: every pending suggestion in it takes the status.
  * Returns the suggestions decided. A pending suggestion that shows nowhere is its own card, but
- * one only in a note whose references show nowhere is on no card and is refused
- * (`hidden-target`). The card is found from the suggestion's own items (`orderedCardOf`), so a
- * decision costs what its card holds. Inside an open undo record, the record takes the decision
- * back.
+ * one only in a note whose references show nowhere or in a text box whose object went is on no
+ * card and is refused (`hidden-target`). The card is found from the suggestion's own items
+ * (`orderedCardOf`), so a decision costs what its card holds. Inside an open undo record, the
+ * record takes the decision back.
  *
  * @public
  */
