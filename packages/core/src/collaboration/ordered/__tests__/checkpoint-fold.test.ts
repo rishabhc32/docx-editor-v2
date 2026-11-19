@@ -13,7 +13,7 @@ import { apply, at, DIRECT, EDIT, textOf } from './change-apply-fixture.ts';
 import { checkFold, folded, mediaStore } from './fold-check.ts';
 import { SESSION_FILE } from './sessions/fixture.ts';
 import { runSession } from './sessions/session.ts';
-import { bodyOf, docx, MATRIX_ITEMS } from './word-fixtures.ts';
+import { bodyOf, docx, MATRIX_ITEMS, p, t } from './word-fixtures.ts';
 
 describe('a fold of a random session', () => {
   for (const seed of [7, 23]) {
@@ -105,4 +105,18 @@ describe('a fold of a hidden prompt', () => {
       await checkFold(once.document, once.base, blobs, `${key} folded twice`, empty);
     });
   }
+});
+
+describe('a fold of a long list', () => {
+  test('one suggested deletion over 300 paragraphs', async () => {
+    const paragraphs = Array.from({ length: 300 }, (_, k) => p(t(`Paragraph ${k}.`))).join('');
+    const { document: doc, base } = openOrderedWordFile(docx(paragraphs), { file: 1 });
+    apply(doc, 'olga:1', {
+      kind: 'delete',
+      ...EDIT,
+      from: at(doc, 0, 0),
+      to: at(doc, 299, textOf(doc, 299).length),
+    });
+    await checkFold(doc, base, mediaStore(base), 'a deletion over 300 paragraphs');
+  });
 });

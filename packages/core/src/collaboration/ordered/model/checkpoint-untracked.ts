@@ -7,8 +7,8 @@ import {
   type OoxmlElement,
 } from '../../../store/package/ooxml-tree.ts';
 import { normalizePartName } from '../../../store/package/opc-names.ts';
-import { at, bool, fieldsOf, int, Invalid, list, required, str } from '../change/read.ts';
-import { MAX_FIELD_UNITS, MAX_LISTED } from './checkpoint-suggestions.ts';
+import { at, bool, fieldsOf, int, Invalid, required, str } from '../change/read.ts';
+import { manifestList, MAX_FIELD_UNITS } from './checkpoint-suggestions.ts';
 import { containerKey, isCheckpointContainer, propertiesPart } from './checkpoint-takeovers.ts';
 import type { OrderedPropertyTarget } from './types.ts';
 
@@ -88,9 +88,7 @@ export function untrackedJson(untracked: readonly CheckpointUntracked[]): unknow
  */
 export function readUntracked(value: unknown, suggestions: number): CheckpointUntracked[] {
   const keys = new Set<string>();
-
-  // The manifest's byte cap bounds the list
-  return list(value, 'untracked', 0, Number.MAX_SAFE_INTEGER).map((entry, k) => {
+  return manifestList(value, 'untracked').map((entry, k) => {
     const path = at('untracked', k);
     const f = fieldsOf(
       entry,
@@ -116,7 +114,7 @@ export function readUntracked(value: unknown, suggestions: number): CheckpointUn
     }
 
     keys.add(key);
-    const records = list(required(f, 'records'), at(path, 'records'), 1, MAX_LISTED);
+    const records = manifestList(required(f, 'records'), at(path, 'records'), 1);
     return {
       part,
       container,
@@ -145,12 +143,12 @@ function readRecord(
     new Set(['suggestion', 'element', 'untracked', 'merge', 'recordUnchanged', 'tableCells'])
   );
   const merge = f.has('merge')
-    ? list(f.get('merge'), at(path, 'merge'), 0, MAX_LISTED).map((key, k) =>
+    ? manifestList(f.get('merge'), at(path, 'merge')).map((key, k) =>
         str(key, at(at(path, 'merge'), k), MAX_FIELD_UNITS)
       )
     : undefined;
   const cells = f.has('tableCells')
-    ? list(f.get('tableCells'), at(path, 'tableCells'), 0, Number.MAX_SAFE_INTEGER).map((cell, k) =>
+    ? manifestList(f.get('tableCells'), at(path, 'tableCells')).map((cell, k) =>
         int(cell, at(at(path, 'tableCells'), k))
       )
     : undefined;

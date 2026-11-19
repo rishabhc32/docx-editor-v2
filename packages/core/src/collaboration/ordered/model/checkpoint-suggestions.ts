@@ -44,9 +44,11 @@ const MAX_ATTRIBUTES = 8;
 /** Most UTF-16 units of a string field: a date, an attribute's namespace or value, a name. */
 export const MAX_FIELD_UNITS = 256;
 
-/** Most entries of a suggestion's revisions or a takeover's records. */
-export const MAX_LISTED = 256;
 const NAME = /^[A-Za-z_][A-Za-z0-9._-]{0,63}$/;
+
+/** A list of the manifest, of at least `min` entries: the manifest's byte cap bounds it. */
+export const manifestList = (value: unknown, path: string, min = 0): readonly unknown[] =>
+  list(value, path, min, Number.MAX_SAFE_INTEGER);
 
 /** A revision's or a comment's `w:id`, as a checkpoint names it. */
 export const WORD_ID = /^[\x21-\x7E]{1,64}$/;
@@ -78,8 +80,7 @@ export function suggestionsJson(suggestions: readonly CheckpointSuggestion[]): u
  * @throws Invalid when one does not read.
  */
 export function readSuggestions(value: unknown): CheckpointSuggestion[] {
-  // The manifest's byte cap bounds the list
-  return list(value, 'suggestions', 0, Number.MAX_SAFE_INTEGER).map((entry, k) =>
+  return manifestList(value, 'suggestions').map((entry, k) =>
     readSuggestion(entry, at('suggestions', k))
   );
 }
@@ -92,7 +93,7 @@ function readSuggestion(value: unknown, path: string): CheckpointSuggestion {
   );
   const person = required(f, 'person');
   const attributes = list(required(f, 'attributes'), at(path, 'attributes'), 0, MAX_ATTRIBUTES);
-  const revisions = list(required(f, 'revisions'), at(path, 'revisions'), 0, MAX_LISTED);
+  const revisions = manifestList(required(f, 'revisions'), at(path, 'revisions'));
   const date = f.has('date')
     ? plainText(f.get('date'), at(path, 'date'), 1, MAX_FIELD_UNITS)
     : undefined;
@@ -153,7 +154,7 @@ export function typersJson(typers: readonly CheckpointTypers[]): unknown[] {
  */
 export function readTypers(value: unknown, suggestions: number): CheckpointTypers[] {
   const named = new Set<number>();
-  return list(value, 'typers', 0, Number.MAX_SAFE_INTEGER).map((entry, k) => {
+  return manifestList(value, 'typers').map((entry, k) => {
     const path = at('typers', k);
     const f = fieldsOf(entry, path, new Set(['suggestion', 'units']));
     const suggestion = int(required(f, 'suggestion'), at(path, 'suggestion'), 0, suggestions - 1);
@@ -162,7 +163,7 @@ export function readTypers(value: unknown, suggestions: number): CheckpointTyper
     }
 
     named.add(suggestion);
-    const units = list(required(f, 'units'), at(path, 'units'), 1, Number.MAX_SAFE_INTEGER);
+    const units = manifestList(required(f, 'units'), at(path, 'units'), 1);
     return { suggestion, units: units.map((run, j) => readRun(run, at(at(path, 'units'), j))) };
   });
 }

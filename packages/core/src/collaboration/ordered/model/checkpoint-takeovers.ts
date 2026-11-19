@@ -11,9 +11,9 @@ import {
 } from '../../../store/package/ooxml-tree.ts';
 import { normalizePartName } from '../../../store/package/opc-names.ts';
 import { build } from '../../../store/store/tree-op-tracked.ts';
-import { at, fieldsOf, int, Invalid, list, required, str } from '../change/read.ts';
+import { at, fieldsOf, int, Invalid, required, str } from '../change/read.ts';
 import { attributeOf } from '../ooxml-nodes.ts';
-import { MAX_FIELD_UNITS, MAX_LISTED, matching, WORD_ID } from './checkpoint-suggestions.ts';
+import { manifestList, matching, MAX_FIELD_UNITS, WORD_ID } from './checkpoint-suggestions.ts';
 
 /**
  * The change records that hold records by takeover, each of the properties element it names. Word
@@ -149,9 +149,8 @@ export function takeoversJson(takeovers: readonly CheckpointTakeover[]): unknown
  * @throws Invalid when one does not read.
  */
 export function readTakeovers(takeovers: unknown, suggestions: number): CheckpointTakeover[] {
-  // The manifest's byte cap bounds the list
   const keys = new Set<string>();
-  return list(takeovers, 'takeovers', 0, Number.MAX_SAFE_INTEGER).map((value, k) => {
+  return manifestList(takeovers, 'takeovers').map((value, k) => {
     const takeover = readTakeover(value, at('takeovers', k), suggestions);
     const key = takeoverKey(takeover.part, takeover.record, takeover.id, takeover.occurrence);
     if (keys.has(key)) {
@@ -176,7 +175,7 @@ function readTakeover(value: unknown, path: string, suggestions: number): Checkp
     throw new Invalid('invalid-value', at(path, 'record'), 'not a change record');
   }
 
-  const taken = list(required(f, 'taken'), at(path, 'taken'), 1, MAX_LISTED);
+  const taken = manifestList(required(f, 'taken'), at(path, 'taken'), 1);
   return {
     part,
     record,

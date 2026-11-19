@@ -4,9 +4,10 @@ import type { OoxmlPackage } from '../../../store/package/ooxml-package.ts';
 import { normalizePartName, partNameKey } from '../../../store/package/opc-names.ts';
 import { resolveContentTypeOf } from '../../../store/package/package-edit.ts';
 import { DEFAULT_ZIP_LIMITS } from '../../../store/package/zip.ts';
-import { at, attempt, fieldsOf, Invalid, list, required } from '../change/read.ts';
+import { at, attempt, fieldsOf, Invalid, required } from '../change/read.ts';
 import { sha256 } from '../change/resources.ts';
 import {
+  manifestList,
   readSuggestions,
   readTypers,
   suggestionsJson,
@@ -208,9 +209,7 @@ function manifestOf(bytes: Uint8Array): Manifest {
  */
 function readComments(value: unknown): Map<string, OrderedPerson> {
   const persons = new Map<string, OrderedPerson>();
-
-  // The manifest's byte cap bounds the list
-  for (const [k, entry] of list(value, 'comments', 0, Number.MAX_SAFE_INTEGER).entries()) {
+  for (const [k, entry] of manifestList(value, 'comments').entries()) {
     const path = at('comments', k);
     const f = fieldsOf(entry, path, new Set(['id', 'person']));
     const id = matching(required(f, 'id'), at(path, 'id'), WORD_ID, 'a comment id');
