@@ -42,6 +42,8 @@ sequenceDiagram
 
 A suggestion is a label on items in the document. A decision changes only the status of a suggestion, so a set of decisions gives the same document in every order.
 
+A format change reaches the runs and the paragraph marks that its range covers, as in Word. An equation has no run, so a format change leaves it as it is. A format change whose range holds only equations is accepted and makes no suggestion.
+
 The ordered room has its own change format and message protocol, each at version 1. It does not use Yjs or the [Yjs collaboration format](/docs/2.x/pro/collaboration-versions). An ordered room cannot open a Yjs room, and a Yjs room cannot open an ordered room. To move a document between them, export it to DOCX and open the file in a new room.
 
 ## Before you begin
