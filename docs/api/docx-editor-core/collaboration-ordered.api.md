@@ -1760,8 +1760,12 @@ export interface OrderedLoadOptions {
     readonly file?: number;
     readonly maxDepth?: number;
     readonly maxItems?: number;
-    readonly persons?: ReadonlyMap<string, OrderedPerson>;
     readonly placeholders?: ReadonlyMap<string, readonly OoxmlNode[]>;
+    readonly suggestions?: readonly {
+        readonly attribution: OrderedAttribution;
+        readonly revisions: readonly string[];
+        readonly status?: OrderedSuggestionStatus;
+    }[];
 }
 
 // @public
@@ -2936,6 +2940,9 @@ export interface OrderedUnitRange {
 }
 
 // @public
+export function orderedUnitTyper(doc: OrderedDocument, item: OrderedItem, offset: number): string | null;
+
+// @public
 export interface OrderedValidateOptions {
     readonly namespace?: string;
     readonly parts?: {
@@ -3033,7 +3040,7 @@ export class OrderedWordFileError extends Error {
 export interface OrderedWordFileOptions {
     readonly file: number;
     readonly limits?: OoxmlPackageLimits;
-    readonly load?: Omit<OrderedLoadOptions, 'file' | 'placeholders' | 'persons' | 'commentPersons'>;
+    readonly load?: Omit<OrderedLoadOptions, 'file' | 'placeholders' | 'suggestions' | 'commentPersons'>;
 }
 
 // @public

@@ -8,7 +8,9 @@
 //    and section ops as `element` records, a control's prompt as the glossary's placeholder;
 //  - a suggestion's `version`, which counts the writes since it was loaded;
 //  - a suggestion its author took back (`retracted`): nothing shows it, and only its redo needs it,
-//    as the undo history, which a fold does not keep.
+//    as the undo history, which a fold does not keep;
+//  - a suggested note reference that a direct deletion removed: the room keeps its record only for
+//    that deletion's undo; the note shows nowhere and has no card.
 
 import { expect } from 'bun:test';
 import { strFromU8, unzipSync } from 'fflate';
