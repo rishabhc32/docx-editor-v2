@@ -2,6 +2,7 @@
 // suggestions are drawn as Word draws them (`w:ins`, `w:del`, `w:moveFrom`, `w:moveTo` with
 // their range markers, `w:rPrChange`); decided ones are applied.
 
+import { fldCharType } from '../../../store/package/field-nodes.ts';
 import {
   WML_NAMESPACE_URI,
   type OoxmlElement,
@@ -79,15 +80,43 @@ function withTextDeleted(node: OoxmlNode, depth = 0): OoxmlNode {
   return rebuilt;
 }
 
-/** Whether a field's run holds a `w:fldChar` of this type. */
-function hasFieldChar(node: OoxmlNode, type: string, depth = 0): boolean {
-  if (node.kind === 'textValue' || depth > 8) return false;
-  if (
-    node.localName === 'fldChar' &&
-    node.attributes.some((a) => a.localName === 'fldCharType' && a.value === type)
-  )
-    return true;
-  return node.children.some((c) => hasFieldChar(c, type, depth + 1));
+/** The run content that makes a run part of a field's shown result, as the engine counts it. */
+const RESULT_CONTENT = new Set(['text', 'deletedText', 'tab', 'hardBreak', 'textValue']);
+
+/**
+ * Which pieces of a whole complex field an edit's format reaches, as the engine's
+ * `formatRunIds`: the runs of the outer field's result that hold a text, a tab or a break, else
+ * the run of its own separator, else its begin run. The runs of the fields nested in it never
+ * take it.
+ */
+function formatRunsOf(pieces: readonly OrderedFieldPiece[]): boolean[] {
+  const formatted = pieces.map(() => false);
+  let depth = 0;
+  let separate = -1;
+  for (const [k, piece] of pieces.entries()) {
+    if (piece.node.kind !== 'run') {
+      continue;
+    }
+
+    for (const child of piece.node.children) {
+      const type = fldCharType(child);
+      if (type === 'begin') {
+        depth += 1;
+      } else if (type === 'end') {
+        depth -= 1;
+      } else if (depth === 1 && type === 'separate' && separate < 0) {
+        separate = k;
+      } else if (depth === 1 && separate >= 0 && RESULT_CONTENT.has(child.kind)) {
+        formatted[k] = true;
+      }
+    }
+  }
+
+  if (!formatted.includes(true)) {
+    formatted[Math.max(separate, 0)] = true;
+  }
+
+  return formatted;
 }
 
 /** A box for the paragraph (`open` null) or for an inline container. */
@@ -361,9 +390,8 @@ function drawBare(ctx: ComposeContext, item: OrderedItem, into: OoxmlNode[]): vo
 }
 
 /**
- * A whole complex field: its own runs as the file had them; a format reaches the result, or with
- * no result run, the run that separates the field, else the run that begins it (the engine's
- * `formatRunIds`). The markers between its pieces draw in their places.
+ * A whole complex field: its own runs as the file had them, an edit's format on the runs
+ * `formatRunsOf` names. The markers between its pieces draw in their places.
  */
 function drawField(
   ctx: ComposeContext,
@@ -379,27 +407,9 @@ function drawField(
         place(ctx, into, passenger.node, passenger);
     }
   };
-  let result = false;
-  const formatted = pieces.map((piece) => {
-    const ends = hasFieldChar(piece.node, 'end');
-    const inResult = result && !ends && piece.node.kind === 'run';
-    if (hasFieldChar(piece.node, 'separate')) {
-      result = true;
-    }
-
-    if (ends) {
-      result = false;
-    }
-
-    return inResult;
-  });
-
-  // No result run: the separator's run, else the begin run
-  if (!formatted.includes(true)) {
-    const separate = pieces.findIndex((piece) => hasFieldChar(piece.node, 'separate'));
-    formatted[Math.max(separate, 0)] = true;
-  }
-
+  const formatted = item.fmts.some((record) => record.kind === 'properties')
+    ? formatRunsOf(pieces)
+    : [];
   for (const [k, piece] of pieces.entries()) {
     ride((slot) => slot === k);
     let node = piece.node;

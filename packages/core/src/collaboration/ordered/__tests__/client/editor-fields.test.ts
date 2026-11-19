@@ -293,4 +293,33 @@ describe("a format of a field's result", () => {
     );
     await sameAsAlone(BOLD_FIELD, 'suggesting', [(e) => (select(e, 0, 5, 6), bold(e))]);
   });
+
+  // `{ IF { MERGEFIELD Name } = "" "Dear" "" }`: the outer field's result takes the format, else
+  // its own separator's run, never a run of the field in its code
+  const ifField = (inner: string, result: string) =>
+    docx(
+      p(
+        t('Page ') +
+          '<w:r><w:fldChar w:fldCharType="begin"/></w:r>' +
+          '<w:r><w:instrText xml:space="preserve"> IF </w:instrText></w:r>' +
+          inner +
+          '<w:r><w:instrText xml:space="preserve"> = "" "Dear" "" </w:instrText></w:r>' +
+          '<w:r><w:fldChar w:fldCharType="separate"/></w:r>' +
+          result +
+          '<w:r><w:fldChar w:fldCharType="end"/></w:r>' +
+          t(' here.')
+      )
+    );
+  const mergeWithoutResult =
+    '<w:r><w:fldChar w:fldCharType="begin"/></w:r>' +
+    '<w:r><w:instrText xml:space="preserve"> MERGEFIELD Name </w:instrText></w:r>' +
+    '<w:r><w:fldChar w:fldCharType="separate"/></w:r>' +
+    '<w:r><w:fldChar w:fldCharType="end"/></w:r>';
+  const boldField: Act = (e) => (select(e, 0, 5, 6), bold(e));
+
+  test('bold over a field with a field in its code reaches the outer field only', async () => {
+    await sameAsAlone(ifField(mergeWithoutResult, ''), 'suggesting', [boldField]);
+    const withResults = ifField(fieldRuns('MERGEFIELD Name', '«Name»'), t('Dear'));
+    await sameAsAlone(withResults, 'suggesting', [boldField]);
+  });
 });
