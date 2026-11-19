@@ -88,7 +88,7 @@ export class RevisionReader {
   /** Every revision is this suggestion (an engine-built template), and no `w:id` is kept. */
   private readonly fixed: string | undefined;
   /** The suggestions a room checkpoint lists, by the triple of each of their marks. */
-  private readonly listed = new Map<string, string>();
+  private readonly listedByTriple = new Map<string, string>();
 
   /**
    * A reader of a document's revisions. The suggestions a room checkpoint lists are made first,
@@ -133,8 +133,8 @@ export class RevisionReader {
     for (const revision of revisions) {
       // An id names one suggestion: two share one only when two minted ids meet
       const triple = revisionTriple(revision, author, date);
-      if (!this.listed.has(triple)) {
-        this.listed.set(triple, id);
+      if (!this.listedByTriple.has(triple)) {
+        this.listedByTriple.set(triple, id);
       }
     }
   }
@@ -145,7 +145,7 @@ export class RevisionReader {
    */
   suggestionFor(revision: OoxmlElement, role: string, move?: string): string {
     const triple = tripleOf(revision);
-    if (this.fixed !== undefined && !this.listed.has(triple)) {
+    if (this.fixed !== undefined && !this.listedByTriple.has(triple)) {
       return this.fixed;
     }
 
@@ -154,7 +154,7 @@ export class RevisionReader {
     const moveKey = move === undefined ? undefined : `${move}\u0000${author}`;
     let suggestion =
       this.byTriple.get(triple) ??
-      this.listed.get(triple) ??
+      this.listedByTriple.get(triple) ??
       (moveKey === undefined ? undefined : this.byMove.get(moveKey));
     if (suggestion === undefined) {
       const attributes = otherAttributes(revision);

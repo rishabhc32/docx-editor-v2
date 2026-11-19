@@ -1,30 +1,24 @@
 // The records a checkpoint's manifest keeps that Word writes no change record for (design D14).
 
-import { serializeOoxmlPart } from '../../../store/package/ooxml-serialize.ts';
-import {
-  readOoxmlPart,
-  WML_NAMESPACE_URI,
-  type OoxmlElement,
-} from '../../../store/package/ooxml-tree.ts';
+import type { OoxmlElement } from '../../../store/package/ooxml-tree.ts';
 import { normalizePartName } from '../../../store/package/opc-names.ts';
-import { at, bool, fieldsOf, int, Invalid, required } from '../change/read.ts';
-import { manifestList, manifestString } from './checkpoint-suggestions.ts';
-import { containerKey, isCheckpointContainer, propertiesPart } from './checkpoint-takeovers.ts';
+import { at, bool, fieldsOf, int, Invalid, oneOf, required } from '../change/read.ts';
+import { manifestList, manifestString, readNamedOnce } from './checkpoint-suggestions.ts';
+import {
+  containerKey,
+  isCheckpointContainer,
+  propertiesXml,
+  readPropertiesXml,
+} from './checkpoint-takeovers.ts';
 import type { OrderedPropertyTarget } from './types.ts';
 
 /** The properties a container's records with no change record give. */
-const TARGETS: ReadonlySet<string> = new Set<OrderedPropertyTarget>([
-  'tblPr',
-  'tblGrid',
-  'trPr',
-  'tcPr',
-  'sdtPr',
-]);
+const TARGETS: readonly OrderedPropertyTarget[] = ['tblPr', 'tblGrid', 'trPr', 'tcPr', 'sdtPr'];
 
 /**
- * A pending record of properties some record changes with no change record (`untracked`: a
- * control's value, a column's lent width). The file holds only what they give, so the manifest
- * keeps each record of those properties as the room has it.
+ * A record, decided or not, of properties some record changes with no change record
+ * (`untracked`: a control's value, a column's lent width). The file holds only what they give, so
+ * the manifest keeps each record of those properties as the room has it.
  */
 export interface CheckpointUntrackedRecord {
   /** The suggestion, by its place in the manifest's list. */
@@ -39,10 +33,10 @@ export interface CheckpointUntrackedRecord {
 }
 
 /**
- * A container's properties that a record changes with no change record, by where the file writes
- * the container: its story part, its local name and its place among the part's containers of that
- * name. The file holds the properties the records give; the manifest keeps the container's own
- * and every pending record of them.
+ * A container's properties that a pending record changes with no change record, by where the
+ * file writes the container: its story part, its local name and its place among the part's
+ * containers of that name. The file holds the properties the records give; the manifest keeps the
+ * container's own and every record of them, decided or not.
  */
 export interface CheckpointUntracked {
   readonly part: string;
@@ -55,28 +49,15 @@ export interface CheckpointUntracked {
   readonly records: readonly CheckpointUntrackedRecord[];
 }
 
-/** Properties as XML text, read back with the engine's bounded reader under their own name. */
-const xmlOf = (root: OoxmlElement): string =>
-  serializeOoxmlPart({ id: 'properties', ...propertiesPart(''), root });
-
-/** The untracked records as the manifest lists them. */
+/** The untracked records as the manifest lists them: JSON leaves out a field with no value. */
 export function untrackedJson(untracked: readonly CheckpointUntracked[]): unknown[] {
-  return untracked.map(({ part, container, occurrence, target, properties, records }) => ({
-    part,
-    container,
-    occurrence,
-    target,
-    ...(properties === undefined ? {} : { properties: xmlOf(properties) }),
-    records: records.map(
-      ({ suggestion, element, untracked, merge, recordUnchanged, tableCells }) => ({
-        suggestion,
-        ...(element === null ? {} : { element: xmlOf(element) }),
-        ...(untracked === undefined ? {} : { untracked }),
-        ...(merge === undefined ? {} : { merge }),
-        ...(recordUnchanged === undefined ? {} : { recordUnchanged }),
-        ...(tableCells === undefined ? {} : { tableCells }),
-      })
-    ),
+  return untracked.map(({ properties, records, ...container }) => ({
+    ...container,
+    properties: properties === undefined ? undefined : propertiesXml(properties),
+    records: records.map(({ element, ...record }) => ({
+      ...record,
+      element: element === null ? undefined : propertiesXml(element),
+    })),
   }));
 }
 
@@ -87,48 +68,46 @@ export function untrackedJson(untracked: readonly CheckpointUntracked[]): unknow
  * @throws Invalid when one does not read.
  */
 export function readUntracked(value: unknown, suggestions: number): CheckpointUntracked[] {
-  const keys = new Set<string>();
-  return manifestList(value, 'untracked').map((entry, k) => {
-    const path = at('untracked', k);
-    const f = fieldsOf(
-      entry,
-      path,
-      new Set(['part', 'container', 'occurrence', 'target', 'properties', 'records'])
-    );
-    const part = manifestString(required(f, 'part'), at(path, 'part'));
-    const name = normalizePartName(part);
-    if (!name.ok || name.partName !== part) {
-      throw new Invalid('invalid-value', at(path, 'part'), 'not a part name');
-    }
+  return readNamedOnce(
+    value,
+    'untracked',
+    (entry, path) => readEntry(entry, path, suggestions),
+    ({ part, container, occurrence, target }) =>
+      `${containerKey(part, container, occurrence)}\u0000${target}`
+  );
+}
 
-    const container = manifestString(required(f, 'container'), at(path, 'container'));
-    const target = manifestString(required(f, 'target'), at(path, 'target'));
-    if (!isCheckpointContainer(container) || !TARGETS.has(target)) {
-      throw new Invalid('invalid-value', path, 'not a container and its properties');
-    }
+function readEntry(value: unknown, path: string, suggestions: number): CheckpointUntracked {
+  const f = fieldsOf(
+    value,
+    path,
+    new Set(['part', 'container', 'occurrence', 'target', 'properties', 'records'])
+  );
+  const part = manifestString(required(f, 'part'), at(path, 'part'));
+  const name = normalizePartName(part);
+  if (!name.ok || name.partName !== part) {
+    throw new Invalid('invalid-value', at(path, 'part'), 'not a part name');
+  }
 
-    const occurrence = int(required(f, 'occurrence'), at(path, 'occurrence'));
-    const key = `${containerKey(part, container, occurrence)}\u0000${target}`;
-    if (keys.has(key)) {
-      throw new Invalid('invalid-value', path, 'named twice');
-    }
+  const container = manifestString(required(f, 'container'), at(path, 'container'));
+  if (!isCheckpointContainer(container)) {
+    throw new Invalid('invalid-value', at(path, 'container'), 'not a container');
+  }
 
-    keys.add(key);
-    const records = manifestList(required(f, 'records'), at(path, 'records'), 1);
-    return {
-      part,
-      container,
-      occurrence,
-      // A name of the set above
-      target: target as OrderedPropertyTarget,
-      ...(f.has('properties')
-        ? { properties: readProperties(f.get('properties'), at(path, 'properties'), target) }
-        : {}),
-      records: records.map((record, j) =>
-        readRecord(record, at(at(path, 'records'), j), target, suggestions)
-      ),
-    };
-  });
+  const target = oneOf(required(f, 'target'), at(path, 'target'), TARGETS);
+  const records = manifestList(required(f, 'records'), at(path, 'records'), 1);
+  return {
+    part,
+    container,
+    occurrence: int(required(f, 'occurrence'), at(path, 'occurrence')),
+    target,
+    properties: f.has('properties')
+      ? readPropertiesXml(f.get('properties'), at(path, 'properties'), target)
+      : undefined,
+    records: records.map((record, j) =>
+      readRecord(record, at(at(path, 'records'), j), target, suggestions)
+    ),
+  };
 }
 
 function readRecord(
@@ -142,39 +121,20 @@ function readRecord(
     path,
     new Set(['suggestion', 'element', 'untracked', 'merge', 'recordUnchanged', 'tableCells'])
   );
-  const merge = f.has('merge')
-    ? manifestList(f.get('merge'), at(path, 'merge')).map((key, k) =>
-        manifestString(key, at(at(path, 'merge'), k))
-      )
-    : undefined;
+  const merge = f.has('merge') ? manifestList(f.get('merge'), at(path, 'merge')) : undefined;
   const cells = f.has('tableCells')
-    ? manifestList(f.get('tableCells'), at(path, 'tableCells')).map((cell, k) =>
-        int(cell, at(at(path, 'tableCells'), k))
-      )
+    ? manifestList(f.get('tableCells'), at(path, 'tableCells'))
     : undefined;
   return {
     suggestion: int(required(f, 'suggestion'), at(path, 'suggestion'), 0, suggestions - 1),
     element: f.has('element')
-      ? readProperties(f.get('element'), at(path, 'element'), target)
+      ? readPropertiesXml(f.get('element'), at(path, 'element'), target)
       : null,
-    ...(f.has('untracked') ? { untracked: bool(f.get('untracked'), at(path, 'untracked')) } : {}),
-    ...(merge === undefined ? {} : { merge }),
-    ...(f.has('recordUnchanged')
-      ? { recordUnchanged: bool(f.get('recordUnchanged'), at(path, 'recordUnchanged')) }
-      : {}),
-    ...(cells === undefined ? {} : { tableCells: cells }),
+    untracked: f.has('untracked') ? bool(f.get('untracked'), at(path, 'untracked')) : undefined,
+    merge: merge?.map((key, k) => manifestString(key, at(at(path, 'merge'), k))),
+    recordUnchanged: f.has('recordUnchanged')
+      ? bool(f.get('recordUnchanged'), at(path, 'recordUnchanged'))
+      : undefined,
+    tableCells: cells?.map((cell, k) => int(cell, at(at(path, 'tableCells'), k))),
   };
-}
-
-/** Properties of `target` read from their XML text; else they are not the properties named. */
-function readProperties(value: unknown, path: string, target: string): OoxmlElement {
-  const xml = manifestString(value, path);
-  const read = readOoxmlPart(xml, propertiesPart(path));
-  const root = read.ok ? read.part.root : undefined;
-  if (root === undefined || root.namespaceUri !== WML_NAMESPACE_URI || root.localName !== target) {
-    throw new Invalid('invalid-value', path, 'not the properties it names');
-  }
-
-  // The part's own namespace declarations stay with it: the properties go into another part
-  return { ...root, namespaceBindings: [] };
 }

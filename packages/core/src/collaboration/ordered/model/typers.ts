@@ -2,15 +2,20 @@
 
 import { CardRead } from '../card-of.ts';
 import { parseOrderedChangeId } from '../change/ids.ts';
-import { itemAt } from './document.ts';
+import { byStoryOrder } from '../load/load.ts';
+import { itemAt, mainStory } from './document.ts';
 import { isTextBoxStoryName, textBoxHostOf } from './text-boxes.ts';
 import { isUnit, type OrderedDocument, type OrderedItem, type OrderedStory } from './types.ts';
 
-/** The typers a checkpoint kept for a document loaded from it, by unit address. */
-const LOADED = new WeakMap<OrderedDocument, ReadonlyMap<string, string>>();
+/** Units of one space that one room change typed: the offsets from `from` up to `to`. */
+export interface TypedRun {
+  readonly from: number;
+  readonly to: number;
+  readonly typer: string;
+}
 
-/** The key a unit's typer is kept by: its address. */
-export const typedUnitKey = (space: string, offset: number): string => `${space}|${offset}`;
+/** The typers a checkpoint kept for a document loaded from it: runs of typed units by space. */
+const LOADED = new WeakMap<OrderedDocument, ReadonlyMap<string, readonly TypedRun[]>>();
 
 /**
  * The namespace of the room change that typed the unit at `offset` (in the item's space) of an
@@ -35,9 +40,10 @@ export function orderedUnitTyper(
     return null;
   }
 
-  const kept = LOADED.get(doc)?.get(typedUnitKey(item.space, offset));
+  const runs = LOADED.get(doc)?.get(item.space);
+  const kept = runs?.find((run) => offset >= run.from && offset < run.to);
   if (kept !== undefined) {
-    return kept;
+    return kept.typer;
   }
 
   // A change's units live in the space `i:<change id>.<k>`
@@ -70,8 +76,11 @@ export function eachInsertedUnit(
   }
 }
 
-/** Keep the typers a checkpoint names for the units of a document loaded from it, by key. */
-export function keepLoadedTypers(doc: OrderedDocument, typers: ReadonlyMap<string, string>): void {
+/** Keep the typers a checkpoint names for the units of a document loaded from it, by space. */
+export function keepLoadedTypers(
+  doc: OrderedDocument,
+  typers: ReadonlyMap<string, readonly TypedRun[]>
+): void {
   LOADED.set(doc, typers);
 }
 
@@ -80,12 +89,15 @@ export function keepLoadedTypers(doc: OrderedDocument, typers: ReadonlyMap<strin
  * parts by name, then the text boxes by their objects' places.
  */
 function storiesInFileOrder(doc: OrderedDocument): OrderedStory[] {
-  const [main, ...others] = [...doc.stories.values()].filter((s) => !isTextBoxStoryName(s.name));
-  if (main === undefined) {
+  const main = mainStory(doc);
+  if (main === null) {
     return [];
   }
 
-  const parts = [main, ...others.sort((a, b) => (a.name < b.name ? -1 : 1))];
+  const order = byStoryOrder(main.name);
+  const parts = [...doc.stories.values()]
+    .filter((s) => !isTextBoxStoryName(s.name))
+    .sort((a, b) => order(a.name, b.name));
   const boxes = [...doc.stories.values()]
     .filter((s) => isTextBoxStoryName(s.name))
     .map((story) => {

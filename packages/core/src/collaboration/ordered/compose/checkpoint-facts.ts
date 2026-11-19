@@ -7,14 +7,18 @@ import type { OoxmlElement } from '../../../store/package/ooxml-tree.ts';
 import { textboxFallbackExportPackage } from '../../../store/package/textbox-fallback-export.ts';
 import { orderedStoryParts } from '../load/load.ts';
 import type { CheckpointFacts } from '../model/checkpoint.ts';
-import type { CheckpointTypers } from '../model/checkpoint-suggestions.ts';
+import type { CheckpointTyperRuns } from '../model/checkpoint-suggestions.ts';
 import {
   checkpointPlacesOf,
   isCheckpointContainer,
   takenProperties,
+  type CheckpointTaken,
   type CheckpointTakeover,
 } from '../model/checkpoint-takeovers.ts';
-import type { CheckpointUntracked } from '../model/checkpoint-untracked.ts';
+import type {
+  CheckpointUntracked,
+  CheckpointUntrackedRecord,
+} from '../model/checkpoint-untracked.ts';
 import type { OrderedPerson } from '../model/person.ts';
 import { revisionIdsOf } from '../model/revision-ids.ts';
 import type {
@@ -22,6 +26,7 @@ import type {
   OrderedElementRecord,
   OrderedPropertyTarget,
   OrderedStory,
+  OrderedSuggestion,
 } from '../model/types.ts';
 import { eachInsertedUnit, orderedUnitTyper } from '../model/typers.ts';
 import { attributeOf, eachElement, isWml } from '../ooxml-nodes.ts';
@@ -35,6 +40,60 @@ interface ContainerPlace {
 }
 
 /**
+ * The suggestions a manifest lists, each once, in the order they are first named, with the
+ * `w:id`s the file writes for their marks.
+ */
+class SuggestionList {
+  readonly listed: OrderedSuggestion[] = [];
+  private readonly doc: OrderedDocument;
+  private readonly written: ReadonlySet<string>;
+  private readonly indexOfId = new Map<string, number>();
+  private readonly revisions = new Map<string, string[]>();
+
+  /** A list of the suggestions of `doc`, whose file writes marks under the `w:id`s `written`. */
+  constructor(doc: OrderedDocument, written: ReadonlySet<string>) {
+    this.doc = doc;
+    this.written = written;
+  }
+
+  /** The place of a suggestion in the list: at its end when it is new. */
+  indexOf(suggestion: OrderedSuggestion): number {
+    let k = this.indexOfId.get(suggestion.id);
+    if (k === undefined) {
+      k = this.listed.length;
+      this.indexOfId.set(suggestion.id, k);
+      this.listed.push(suggestion);
+    }
+
+    return k;
+  }
+
+  /** The place of a listed suggestion, or undefined for one not listed. */
+  placeOf(id: string): number | undefined {
+    return this.indexOfId.get(id);
+  }
+
+  /** The `w:id`s the file writes for a suggestion's marks, every role. */
+  writtenOf(id: string): string[] {
+    let ids = this.revisions.get(id);
+    if (ids === undefined) {
+      ids = [...revisionIdsOf(this.doc, id)].filter((r) => this.written.has(r));
+      this.revisions.set(id, ids);
+    }
+
+    return ids;
+  }
+}
+
+/** A container's open item, with each of its properties that a record changes untracked. */
+interface UntrackedOpen {
+  readonly story: OrderedStory;
+  readonly shell: OoxmlElement;
+  /** Every record of each such properties element, decided or not, that no takeover holds. */
+  readonly byTarget: ReadonlyMap<OrderedPropertyTarget, readonly OrderedElementRecord[]>;
+}
+
+/**
  * The room facts of a document composed as `pkg`, whose change records hold `held` by takeover.
  * Each pending suggestion the file writes marks for, or another fact names, is listed once, in
  * the order the room made them, so a load makes them in that order.
@@ -44,36 +103,38 @@ export function checkpointFacts(
   pkg: OoxmlPackage,
   held: OrderedPartTakeovers
 ): CheckpointFacts {
-  const written = writtenRevisionIds(pkg);
-  const order: string[] = [];
-  const listed = new Map<string, number>();
-  const indexOf = (id: string): number => {
-    let k = listed.get(id);
-    if (k === undefined) {
-      k = order.length;
-      listed.set(id, k);
-      order.push(id);
-    }
-
-    return k;
-  };
-  const revisions = new Map<string, string[]>();
-  const writtenOf = (id: string): string[] => {
-    let ids = revisions.get(id);
-    if (ids === undefined) {
-      ids = [...revisionIdsOf(doc, id)].filter((r) => written.has(r));
-      revisions.set(id, ids);
-    }
-
-    return ids;
-  };
-  for (const { id, status } of doc.suggestions.values()) {
-    if (status === 'pending' && !doc.partRevisions.has(id) && writtenOf(id).length > 0) {
-      indexOf(id);
+  const list = new SuggestionList(doc, writtenRevisionIds(pkg));
+  for (const suggestion of doc.suggestions.values()) {
+    const { id, status } = suggestion;
+    if (status === 'pending' && !doc.partRevisions.has(id) && list.writtenOf(id).length > 0) {
+      list.indexOf(suggestion);
     }
   }
 
-  // As a load reads the file: with each text box's legacy copy in step
+  // The file is read only for what a takeover or an untracked record names
+  const opens = untrackedOpens(doc);
+  const named = opens.length > 0 || [...held.values()].some((records) => records.size > 0);
+  const { containers, takeovers } = named
+    ? placesAndTakeovers(doc, pkg, held, list)
+    : { containers: new Map<string, ContainerPlace>(), takeovers: [] };
+  return inRoomOrder(list, {
+    commentPersons: commentPersons(doc),
+    takeovers,
+    typers: checkpointTypers(doc, list),
+    untracked: checkpointUntracked(doc, opens, containers, list),
+  });
+}
+
+/**
+ * The place of each container the file writes, by its node id, and each change record that holds
+ * records by takeover, as a load reads the file: with each text box's legacy copy in step.
+ */
+function placesAndTakeovers(
+  doc: OrderedDocument,
+  pkg: OoxmlPackage,
+  held: OrderedPartTakeovers,
+  list: SuggestionList
+): { containers: Map<string, ContainerPlace>; takeovers: CheckpointTakeover[] } {
   const containers = new Map<string, ContainerPlace>();
   const takeovers: CheckpointTakeover[] = [];
   for (const [part, story] of orderedStoryParts(textboxFallbackExportPackage(pkg))) {
@@ -87,43 +148,52 @@ export function checkpointFacts(
       const found = records?.get(element.id);
       const id = attributeOf(element, 'id');
       if (found !== undefined && id !== undefined) {
-        const taken = found.taken.flatMap(({ replaced, after }) =>
-          doc.suggestions.has(replaced)
-            ? [{ suggestion: indexOf(replaced), properties: takenProperties(found.record, after) }]
-            : []
-        );
+        const taken: CheckpointTaken[] = [];
+        for (const { replaced, after } of found.taken) {
+          const suggestion = doc.suggestions.get(replaced);
+          if (suggestion !== undefined) {
+            const properties = takenProperties(found.record, after);
+            taken.push({ suggestion: list.indexOf(suggestion), properties });
+          }
+        }
+
         takeovers.push({ part, record: container, id, occurrence, taken });
       }
     }
   }
 
-  const untracked = checkpointUntracked(doc, containers, indexOf);
-  const typers = checkpointTypers(doc, listed);
+  return { containers, takeovers };
+}
 
-  // In the order the room made them: the takeovers and the untracked records may name more
-  const sorted = order
-    .map((id, k) => ({ id, k, seq: doc.suggestions.get(id)?.seq ?? 0 }))
-    .sort((a, b) => a.seq - b.seq);
+/**
+ * The facts with the listed suggestions in the order the room made them, and every section's
+ * suggestion renumbered to that order: the takeovers and the untracked records may name
+ * suggestions made before those listed first.
+ */
+function inRoomOrder(
+  list: SuggestionList,
+  facts: Omit<CheckpointFacts, 'suggestions'>
+): CheckpointFacts {
+  const sorted = list.listed
+    .map((suggestion, k) => ({ suggestion, k }))
+    .sort((a, b) => a.suggestion.seq - b.suggestion.seq);
   const place = new Map(sorted.map(({ k }, n) => [k, n]));
-  const at = (k: number): number => place.get(k) ?? k;
+  const renumbered = (k: number): number => place.get(k) ?? k;
   return {
-    suggestions: sorted.map(({ id }) => {
-      const suggestion = doc.suggestions.get(id);
-      return {
-        attribution: suggestion?.attribution ?? { author: '', person: null },
-        revisions: writtenOf(id),
-        status: suggestion?.status ?? 'pending',
-      };
-    }),
-    comments: commentPersons(doc),
-    takeovers: takeovers.map((t) => ({
-      ...t,
-      taken: t.taken.map((taken) => ({ ...taken, suggestion: at(taken.suggestion) })),
+    suggestions: sorted.map(({ suggestion: { id, attribution, status } }) => ({
+      attribution,
+      revisions: list.writtenOf(id),
+      status,
     })),
-    typers: typers.map((t) => ({ ...t, suggestion: at(t.suggestion) })),
-    untracked: untracked.map((u) => ({
+    commentPersons: facts.commentPersons,
+    takeovers: facts.takeovers.map((t) => ({
+      ...t,
+      taken: t.taken.map((taken) => ({ ...taken, suggestion: renumbered(taken.suggestion) })),
+    })),
+    typers: facts.typers.map((t) => ({ ...t, suggestion: renumbered(t.suggestion) })),
+    untracked: facts.untracked.map((u) => ({
       ...u,
-      records: u.records.map((r) => ({ ...r, suggestion: at(r.suggestion) })),
+      records: u.records.map((r) => ({ ...r, suggestion: renumbered(r.suggestion) })),
     })),
   };
 }
@@ -140,6 +210,41 @@ function commentPersons(doc: OrderedDocument): Map<string, OrderedPerson> {
   return persons;
 }
 
+/** Each container's open item that holds a pending record of some properties, untracked. */
+function untrackedOpens(doc: OrderedDocument): UntrackedOpen[] {
+  const pending = (id: string) => doc.suggestions.get(id)?.status === 'pending';
+  const out: UntrackedOpen[] = [];
+  for (const story of doc.stories.values()) {
+    for (const open of story.tree.items()) {
+      const shell = open.node;
+      if (open.kind !== 'open' || shell === null || shell.kind === 'textValue') {
+        continue;
+      }
+
+      const byTarget = new Map<OrderedPropertyTarget, OrderedElementRecord[]>();
+      for (const record of open.props) {
+        if (record.kind === 'element' && record.replaced === undefined) {
+          const records = byTarget.get(record.target) ?? [];
+          records.push(record);
+          byTarget.set(record.target, records);
+        }
+      }
+
+      for (const [target, records] of byTarget) {
+        if (!records.some((record) => record.untracked === true && pending(record.suggestion))) {
+          byTarget.delete(target);
+        }
+      }
+
+      if (byTarget.size > 0) {
+        out.push({ story, shell, byTarget });
+      }
+    }
+  }
+
+  return out;
+}
+
 /**
  * For each properties element of a container the file writes that a pending record changes with
  * no change record: the container's own properties, and every record of them, decided or not,
@@ -147,50 +252,47 @@ function commentPersons(doc: OrderedDocument): Map<string, OrderedPerson> {
  */
 function checkpointUntracked(
   doc: OrderedDocument,
+  opens: readonly UntrackedOpen[],
   containers: ReadonlyMap<string, ContainerPlace>,
-  indexOf: (id: string) => number
+  list: SuggestionList
 ): CheckpointUntracked[] {
   const out: CheckpointUntracked[] = [];
-  for (const story of doc.stories.values()) {
-    for (const open of story.tree.items()) {
-      const shell = open.node;
-      const place = shell === null ? undefined : containers.get(shell.id);
-      if (open.kind !== 'open' || place === undefined || shell?.kind === 'textValue') {
-        continue;
-      }
+  for (const { story, shell, byTarget } of opens) {
+    const place = containers.get(shell.id);
+    if (place === undefined) {
+      continue;
+    }
 
-      const byTarget = new Map<OrderedPropertyTarget, OrderedElementRecord[]>();
-      for (const record of open.props) {
-        if (record.kind === 'element' && record.replaced === undefined) {
-          byTarget.set(record.target, [...(byTarget.get(record.target) ?? []), record]);
+    for (const [target, records] of byTarget) {
+      const listed: CheckpointUntrackedRecord[] = [];
+      for (const {
+        suggestion,
+        element,
+        untracked,
+        merge,
+        recordUnchanged,
+        tableCells,
+      } of records) {
+        const made = doc.suggestions.get(suggestion);
+        if (made !== undefined) {
+          listed.push({
+            suggestion: list.indexOf(made),
+            element,
+            untracked,
+            merge,
+            recordUnchanged,
+            tableCells: tableCells && cellPlaces(story, tableCells, containers),
+          });
         }
       }
 
-      for (const [target, records] of byTarget) {
-        const pending = (id: string) => doc.suggestions.get(id)?.status === 'pending';
-        if (!records.some((record) => record.untracked === true && pending(record.suggestion))) {
-          continue;
-        }
-
-        const properties = shell?.children.find((c) => isWml(c, target));
-        out.push({
-          ...place,
-          target,
-          ...(properties === undefined || properties.kind === 'textValue' ? {} : { properties }),
-          records: records.map((record) => ({
-            suggestion: indexOf(record.suggestion),
-            element: record.element,
-            ...(record.untracked === undefined ? {} : { untracked: record.untracked }),
-            ...(record.merge === undefined ? {} : { merge: record.merge }),
-            ...(record.recordUnchanged === undefined
-              ? {}
-              : { recordUnchanged: record.recordUnchanged }),
-            ...(record.tableCells === undefined
-              ? {}
-              : { tableCells: cellPlaces(story, record.tableCells, containers) }),
-          })),
-        });
-      }
+      const properties = shell.children.find((c) => isWml(c, target));
+      out.push({
+        ...place,
+        target,
+        properties: properties?.kind === 'textValue' ? undefined : properties,
+        records: listed,
+      });
     }
   }
 
@@ -214,27 +316,27 @@ function cellPlaces(
  * Who typed the units of each listed suggestion's insertion, as runs in the order the file
  * writes them; none for a suggestion no room change typed in.
  */
-function checkpointTypers(
-  doc: OrderedDocument,
-  listed: ReadonlyMap<string, number>
-): CheckpointTypers[] {
+function checkpointTypers(doc: OrderedDocument, list: SuggestionList): CheckpointTyperRuns[] {
   const runs = new Map<number, [number, string | null][]>();
   eachInsertedUnit(doc, (suggestion, item, offset) => {
-    const k = listed.get(suggestion);
+    const k = list.placeOf(suggestion);
     if (k === undefined) {
       return;
     }
 
     const typer = orderedUnitTyper(doc, item, offset);
-    const units = runs.get(k) ?? [];
+    let units = runs.get(k);
+    if (units === undefined) {
+      units = [];
+      runs.set(k, units);
+    }
+
     const last = units[units.length - 1];
     if (last !== undefined && last[1] === typer) {
       last[0] += 1;
     } else {
       units.push([1, typer]);
     }
-
-    runs.set(k, units);
   });
   return [...runs]
     .filter(([, units]) => units.some(([, typer]) => typer !== null))

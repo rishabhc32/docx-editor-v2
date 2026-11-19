@@ -1,5 +1,5 @@
-// The takeovers a checkpoint's manifest keeps (design D5, policy 2), and the places of the file it
-// names records by.
+// The takeovers a checkpoint's manifest keeps (design D5, policy 2), the places of the file it
+// names records by, and the properties it holds as XML.
 
 import { serializeOoxmlPart } from '../../../store/package/ooxml-serialize.ts';
 import {
@@ -13,7 +13,7 @@ import { normalizePartName } from '../../../store/package/opc-names.ts';
 import { build } from '../../../store/store/tree-op-tracked.ts';
 import { at, fieldsOf, int, Invalid, required } from '../change/read.ts';
 import { attributeOf } from '../ooxml-nodes.ts';
-import { manifestList, manifestString, xmlText } from './checkpoint-suggestions.ts';
+import { manifestList, manifestString, readNamedOnce, xmlText } from './checkpoint-suggestions.ts';
 
 /**
  * The change records that hold records by takeover, each of the properties element it names. Word
@@ -116,28 +116,46 @@ export function* checkpointPlacesOf(
 }
 
 /**
- * A takeover's properties as a part of their own: the manifest holds them as XML, read with the
- * engine's bounded reader. Each one is read under its own name, so its node ids are its own.
+ * Properties as a part of their own: the manifest holds them as XML, read with the engine's
+ * bounded reader. Each one is read under its own name, so its node ids are its own.
  */
-export const propertiesPart = (name: string) => ({
+const propertiesPart = (name: string) => ({
   name: `/ordered-checkpoint/${name}`,
   contentType: 'application/xml',
 });
 
+/** Properties as the manifest holds them: XML text. */
+export const propertiesXml = (root: OoxmlElement): string =>
+  serializeOoxmlPart({ id: 'properties', ...propertiesPart(''), root });
+
+/**
+ * Properties the manifest holds, read from their XML text; else they are not the `w:<localName>`
+ * element.
+ *
+ * @throws Invalid when they do not read.
+ */
+export function readPropertiesXml(value: unknown, path: string, localName: string): OoxmlElement {
+  const read = readOoxmlPart(manifestString(value, path), propertiesPart(path));
+  const root = read.ok ? read.part.root : undefined;
+  if (
+    root === undefined ||
+    root.namespaceUri !== WML_NAMESPACE_URI ||
+    root.localName !== localName
+  ) {
+    throw new Invalid('invalid-value', path, `not w:${localName}`);
+  }
+
+  // The part's own namespace declarations stay with it: the properties go into another part
+  return { ...root, namespaceBindings: [] };
+}
+
 /** The takeovers as the manifest lists them. */
 export function takeoversJson(takeovers: readonly CheckpointTakeover[]): unknown[] {
-  return takeovers.map(({ part, record, id, occurrence, taken }) => ({
-    part,
-    record,
-    id,
-    occurrence,
+  return takeovers.map(({ taken, ...takeover }) => ({
+    ...takeover,
     taken: taken.map(({ suggestion, properties }) => ({
       suggestion,
-      properties: serializeOoxmlPart({
-        id: 'properties',
-        ...propertiesPart(''),
-        root: properties,
-      }),
+      properties: propertiesXml(properties),
     })),
   }));
 }
@@ -149,17 +167,12 @@ export function takeoversJson(takeovers: readonly CheckpointTakeover[]): unknown
  * @throws Invalid when one does not read.
  */
 export function readTakeovers(takeovers: unknown, suggestions: number): CheckpointTakeover[] {
-  const keys = new Set<string>();
-  return manifestList(takeovers, 'takeovers').map((value, k) => {
-    const takeover = readTakeover(value, at('takeovers', k), suggestions);
-    const key = takeoverKey(takeover.part, takeover.record, takeover.id, takeover.occurrence);
-    if (keys.has(key)) {
-      throw new Invalid('invalid-value', at('takeovers', k), 'named twice');
-    }
-
-    keys.add(key);
-    return takeover;
-  });
+  return readNamedOnce(
+    takeovers,
+    'takeovers',
+    (value, path) => readTakeover(value, path, suggestions),
+    ({ part, record, id, occurrence }) => takeoverKey(part, record, id, occurrence)
+  );
 }
 
 function readTakeover(value: unknown, path: string, suggestions: number): CheckpointTakeover {
@@ -192,20 +205,13 @@ function readTaken(
   suggestions: number
 ): CheckpointTaken {
   const f = fieldsOf(value, path, new Set(['suggestion', 'properties']));
-  const xml = manifestString(required(f, 'properties'), at(path, 'properties'));
-  const read = readOoxmlPart(xml, propertiesPart(path));
-  const root = read.ok ? read.part.root : undefined;
-  if (
-    root === undefined ||
-    root.namespaceUri !== WML_NAMESPACE_URI ||
-    root.localName !== recordedProperties(record)
-  ) {
-    throw new Invalid('invalid-value', at(path, 'properties'), 'not the properties it records');
-  }
-
   return {
     suggestion: int(required(f, 'suggestion'), at(path, 'suggestion'), 0, suggestions - 1),
-    properties: root,
+    properties: readPropertiesXml(
+      required(f, 'properties'),
+      at(path, 'properties'),
+      recordedProperties(record)
+    ),
   };
 }
 

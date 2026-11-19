@@ -11,8 +11,8 @@ import type { OrderedAttribution, OrderedSuggestionStatus } from './types.ts';
 
 /**
  * A suggestion: who made it, and the `w:id`s the file writes for its marks, every role. A load
- * makes it once and reads each of those marks as it. Pending, but for one whose records another
- * section keeps (a decided record of properties an untracked record changes).
+ * makes it once and reads each of those marks as it. Pending, or decided when another section
+ * names it (a decided record of properties an untracked record changes).
  */
 export interface CheckpointSuggestion {
   readonly attribution: OrderedAttribution;
@@ -24,7 +24,7 @@ export interface CheckpointSuggestion {
  * Who typed the units a suggestion inserted, in the order the file writes them: runs of a count
  * and the namespace of the room change that typed them, or null for units no room change typed.
  */
-export interface CheckpointTypers {
+export interface CheckpointTyperRuns {
   /** The suggestion, by its place in the manifest's list. */
   readonly suggestion: number;
   readonly units: readonly (readonly [number, string | null])[];
@@ -37,6 +37,31 @@ export const manifestList = (value: unknown, path: string, min = 0): readonly un
 /** A string of the manifest, not empty: the manifest's byte cap bounds it. */
 export const manifestString = (value: unknown, path: string): string =>
   str(value, path, Number.MAX_SAFE_INTEGER);
+
+/**
+ * A section of the manifest, each entry read by `readEntry`, no two under one key.
+ *
+ * @throws Invalid when an entry does not read, or two share a key.
+ */
+export function readNamedOnce<T>(
+  value: unknown,
+  name: string,
+  readEntry: (entry: unknown, path: string) => T,
+  keyOf: (entry: T) => string | number
+): T[] {
+  const keys = new Set<string | number>();
+  return manifestList(value, name).map((entry, k) => {
+    const path = at(name, k);
+    const read = readEntry(entry, path);
+    const key = keyOf(read);
+    if (keys.has(key)) {
+      throw new Invalid('invalid-value', path, 'named twice');
+    }
+
+    keys.add(key);
+    return read;
+  });
+}
 
 const DECIDED: readonly OrderedSuggestionStatus[] = ['accepted', 'rejected'];
 
@@ -148,31 +173,26 @@ function xmlName(value: unknown, path: string): string {
   return name;
 }
 
-/** The typers as the manifest lists them. */
-export function typersJson(typers: readonly CheckpointTypers[]): unknown[] {
-  return typers.map(({ suggestion, units }) => ({ suggestion, units }));
-}
-
 /**
  * The listed typers, each checked: a suggestion of the list, named once, and runs of at least one
  * unit, each typed by a namespace or by none.
  *
  * @throws Invalid when one does not read.
  */
-export function readTypers(value: unknown, suggestions: number): CheckpointTypers[] {
-  const named = new Set<number>();
-  return manifestList(value, 'typers').map((entry, k) => {
-    const path = at('typers', k);
-    const f = fieldsOf(entry, path, new Set(['suggestion', 'units']));
-    const suggestion = int(required(f, 'suggestion'), at(path, 'suggestion'), 0, suggestions - 1);
-    if (named.has(suggestion)) {
-      throw new Invalid('invalid-value', at(path, 'suggestion'), 'named twice');
-    }
-
-    named.add(suggestion);
-    const units = manifestList(required(f, 'units'), at(path, 'units'), 1);
-    return { suggestion, units: units.map((run, j) => readRun(run, at(at(path, 'units'), j))) };
-  });
+export function readTypers(value: unknown, suggestions: number): CheckpointTyperRuns[] {
+  return readNamedOnce(
+    value,
+    'typers',
+    (entry, path) => {
+      const f = fieldsOf(entry, path, new Set(['suggestion', 'units']));
+      const units = manifestList(required(f, 'units'), at(path, 'units'), 1);
+      return {
+        suggestion: int(required(f, 'suggestion'), at(path, 'suggestion'), 0, suggestions - 1),
+        units: units.map((run, j) => readRun(run, at(at(path, 'units'), j))),
+      };
+    },
+    (typer) => typer.suggestion
+  );
 }
 
 /** One run of units: its count, and the namespace that typed them or null. */

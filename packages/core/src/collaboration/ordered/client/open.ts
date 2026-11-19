@@ -154,7 +154,10 @@ function openCheckpointRead(pkg: OoxmlPackage, options: OrderedWordFileOptions):
   const opened = openRead(checkpoint.base, checkpoint.media, options, facts);
   const doc = opened.document;
   const listedIds = [...doc.revisionIds.listed.keys()];
-  const places = placesOf(opened.base);
+
+  // Only the takeovers and the untracked records name places of the file
+  const places =
+    facts.takeovers.length + facts.untracked.length === 0 ? new Map() : placesOf(opened.base);
   if (
     !withCheckpointTakeovers(doc, places, facts.takeovers, listedIds) ||
     !withCheckpointUntracked(doc, places, facts.untracked, listedIds) ||
@@ -222,7 +225,7 @@ function openRead(
     file: options.file,
     ...(facts === undefined
       ? {}
-      : { suggestions: facts.suggestions, commentPersons: facts.comments }),
+      : { suggestions: facts.suggestions, commentPersons: facts.commentPersons }),
   });
   recordFileMedia(document, fileMedia);
   return { base, document };

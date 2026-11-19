@@ -1,8 +1,8 @@
 // A checkpoint's typers back in the document (design D14).
 
-import type { CheckpointTypers } from '../model/checkpoint-suggestions.ts';
+import type { CheckpointTyperRuns } from '../model/checkpoint-suggestions.ts';
 import type { OrderedDocument } from '../model/types.ts';
-import { eachInsertedUnit, keepLoadedTypers, typedUnitKey } from '../model/typers.ts';
+import { eachInsertedUnit, keepLoadedTypers, type TypedRun } from '../model/typers.ts';
 
 /**
  * Keep who typed each unit of an insertion a checkpoint names, for `orderedUnitTyper`: the runs
@@ -11,7 +11,7 @@ import { eachInsertedUnit, keepLoadedTypers, typedUnitKey } from '../model/typer
  */
 export function withCheckpointTypers(
   doc: OrderedDocument,
-  typers: readonly CheckpointTypers[],
+  typers: readonly CheckpointTyperRuns[],
   listedIds: readonly string[]
 ): boolean {
   if (typers.length === 0) {
@@ -19,41 +19,52 @@ export function withCheckpointTypers(
   }
 
   // Each suggestion's runs, and how far into them its units are
-  const runs = new Map<string, { units: CheckpointTypers['units']; run: number; left: number }>();
+  const cursors = new Map<
+    string,
+    { units: CheckpointTyperRuns['units']; index: number; left: number }
+  >();
   for (const { suggestion, units } of typers) {
     const id = listedIds[suggestion];
     if (id === undefined) {
       return false;
     }
 
-    runs.set(id, { units, run: 0, left: units[0]?.[0] ?? 0 });
+    cursors.set(id, { units, index: 0, left: units[0]?.[0] ?? 0 });
   }
 
-  const kept = new Map<string, string>();
+  const kept = new Map<string, TypedRun[]>();
   let fits = true;
   eachInsertedUnit(doc, (suggestion, item, offset) => {
-    const at = runs.get(suggestion);
-    if (at === undefined || !fits) {
+    const cursor = cursors.get(suggestion);
+    if (cursor === undefined || !fits) {
       return;
     }
 
-    const run = at.units[at.run];
-    if (run === undefined) {
+    const typer = cursor.units[cursor.index]?.[1];
+    if (typer === undefined) {
       fits = false;
       return;
     }
 
-    if (run[1] !== null) {
-      kept.set(typedUnitKey(item.space, offset), run[1]);
+    if (typer !== null) {
+      const runs = kept.get(item.space) ?? [];
+      const last = runs[runs.length - 1];
+      if (last !== undefined && last.to === offset && last.typer === typer) {
+        runs[runs.length - 1] = { ...last, to: offset + 1 };
+      } else {
+        runs.push({ from: offset, to: offset + 1, typer });
+      }
+
+      kept.set(item.space, runs);
     }
 
-    at.left -= 1;
-    if (at.left === 0) {
-      at.run += 1;
-      at.left = at.units[at.run]?.[0] ?? 0;
+    cursor.left -= 1;
+    if (cursor.left === 0) {
+      cursor.index += 1;
+      cursor.left = cursor.units[cursor.index]?.[0] ?? 0;
     }
   });
-  if (!fits || [...runs.values()].some((at) => at.run < at.units.length)) {
+  if (!fits || [...cursors.values()].some((cursor) => cursor.index < cursor.units.length)) {
     return false;
   }
 

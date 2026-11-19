@@ -3,7 +3,7 @@
 import type { OoxmlElement, OoxmlNode } from '../../../store/package/ooxml-tree.ts';
 import { containerKey } from '../model/checkpoint-takeovers.ts';
 import type { CheckpointUntracked } from '../model/checkpoint-untracked.ts';
-import { createOrderedItem } from '../model/document.ts';
+import { createOrderedItem, storyOfAddress } from '../model/document.ts';
 import { replaceItems } from '../model/mutations.ts';
 import {
   tokenSpace,
@@ -12,7 +12,6 @@ import {
   type OrderedItem,
   type OrderedPropertyRecord,
   type OrderedPropertyTarget,
-  type OrderedStory,
 } from '../model/types.ts';
 import { withMergedChildren } from '../compose/properties.ts';
 import { isWml, withChildren } from '../ooxml-nodes.ts';
@@ -30,68 +29,100 @@ export function withCheckpointUntracked(
   untracked: readonly CheckpointUntracked[],
   listedIds: readonly string[]
 ): boolean {
+  // The open item of the container at a place, and its story
   const opened = (part: string, container: string, occurrence: number) => {
     const element = places.get(containerKey(part, container, occurrence));
-    return element === undefined ? null : openItemOf(doc, tokenSpace(doc.file, element.id));
+    if (element === undefined) {
+      return null;
+    }
+
+    const space = tokenSpace(doc.file, element.id);
+    const story = storyOfAddress(doc, { space, offset: 0 });
+    const open = story?.spaces.get(space)?.[0];
+    return story === null || open?.kind !== 'open' ? null : { story, open };
   };
-  for (const { part, container, occurrence, target, properties, records } of untracked) {
-    const found = opened(part, container, occurrence);
+  for (const entry of untracked) {
+    const found = opened(entry.part, entry.container, entry.occurrence);
     const shell = found?.open.node;
     if (found === null || shell === null || shell === undefined || shell.kind === 'textValue') {
       return false;
     }
 
-    const restored: OrderedElementRecord[] = [];
-    for (const { suggestion, element, untracked, merge, recordUnchanged, tableCells } of records) {
-      const id = listedIds[suggestion];
-      const cells = (tableCells ?? []).map((cell) => opened(part, 'tc', cell)?.open.space);
-      const seq = id === undefined ? undefined : doc.suggestions.get(id)?.seq;
-      if (id === undefined || seq === undefined || cells.includes(undefined)) {
-        return false;
-      }
-
-      restored.push({
-        kind: 'element',
-        suggestion: id,
-        seq,
-        target,
-        element,
-        ...(untracked === undefined ? {} : { untracked }),
-        ...(merge === undefined ? {} : { merge }),
-        ...(recordUnchanged === undefined ? {} : { recordUnchanged }),
-        ...(tableCells === undefined ? {} : { tableCells: cells.filter((c) => c !== undefined) }),
-      });
+    const cellOf = (cell: number) => opened(entry.part, 'tc', cell)?.open.space;
+    const records = restoredRecords(doc, entry, listedIds, cellOf);
+    if (records === null) {
+      return false;
     }
 
-    // Records that set some children only give back their own: the others are the file's
-    const keys = records.every((r) => r.merge !== undefined && r.untracked === true)
-      ? records.flatMap((r) => r.merge ?? [])
-      : undefined;
-    const { story, open } = found;
-    const node = withChildren(shell, withProperties(shell.children, target, properties, keys));
-    const taken = (r: OrderedPropertyRecord) => r.kind === 'element' && r.replaced !== undefined;
-    const props = [...open.props.filter((r) => r.target !== target || taken(r)), ...restored].sort(
-      (a, b) => a.seq - b.seq
-    );
-    replaceItems(doc, story, [open], [createOrderedItem({ ...open, node, props })]);
+    const item = restoredOpen(found.open, shell, entry, records);
+    replaceItems(doc, found.story, [found.open], [item]);
   }
 
   return true;
 }
 
-/** The open item of a loaded container's space, and its story. */
-function openItemOf(
+/**
+ * The manifest's records of a container's properties as the document's, each with its
+ * suggestion's order and its table's cells; null when a suggestion or a cell is not there.
+ */
+function restoredRecords(
   doc: OrderedDocument,
-  space: string
-): { readonly story: OrderedStory; readonly open: OrderedItem } | null {
-  for (const story of doc.stories.values()) {
-    const open = story.spaces.get(space)?.[0];
-    if (open?.kind === 'open') {
-      return { story, open };
+  { target, records }: CheckpointUntracked,
+  listedIds: readonly string[],
+  cellOf: (cell: number) => string | undefined
+): OrderedElementRecord[] | null {
+  const restored: OrderedElementRecord[] = [];
+  for (const record of records) {
+    const id = listedIds[record.suggestion];
+    const seq = id === undefined ? undefined : doc.suggestions.get(id)?.seq;
+    if (id === undefined || seq === undefined) {
+      return null;
     }
+
+    const cells: string[] = [];
+    for (const cell of record.tableCells ?? []) {
+      const space = cellOf(cell);
+      if (space === undefined) {
+        return null;
+      }
+
+      cells.push(space);
+    }
+
+    restored.push({
+      ...record,
+      kind: 'element',
+      suggestion: id,
+      seq,
+      target,
+      tableCells: record.tableCells === undefined ? undefined : cells,
+    });
   }
 
-  return null;
+  return restored;
+}
+
+/**
+ * A container's open item with its properties of the target as the manifest gives them, and the
+ * restored records in the place of those loaded from the file (but the records a takeover put
+ * back), in their order.
+ */
+function restoredOpen(
+  open: OrderedItem,
+  shell: OoxmlElement,
+  { target, properties, records }: CheckpointUntracked,
+  restored: readonly OrderedElementRecord[]
+): OrderedItem {
+  // Records that set some children only give back their own: the others are the file's
+  const keys = records.every((r) => r.merge !== undefined && r.untracked === true)
+    ? records.flatMap((r) => r.merge ?? [])
+    : undefined;
+  const node = withChildren(shell, withProperties(shell.children, target, properties, keys));
+  const taken = (r: OrderedPropertyRecord) => r.kind === 'element' && r.replaced !== undefined;
+  const props = [...open.props.filter((r) => r.target !== target || taken(r)), ...restored].sort(
+    (a, b) => a.seq - b.seq
+  );
+  return createOrderedItem({ ...open, node, props });
 }
 
 /**

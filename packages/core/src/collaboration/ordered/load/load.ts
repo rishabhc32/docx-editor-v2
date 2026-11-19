@@ -53,12 +53,14 @@ export interface OrderedLoadOptions {
    */
   readonly placeholders?: ReadonlyMap<string, readonly OoxmlNode[]>;
   /**
-   * A room checkpoint's pending suggestions, each with the `w:id`s the file writes for its marks
-   * (`openOrderedCheckpoint` reads them). The load makes them first, in this order, and reads
-   * each mark with one of these ids, the author and the date as that one suggestion. Default:
-   * none, so every suggestion is the file's own, one for each revision triple, with no person.
+   * A room checkpoint's pending suggestions, and the decided ones its other records name, each
+   * with the `w:id`s the file writes for its marks (`openOrderedCheckpoint` reads them). The load
+   * makes them first, in this order, and reads each mark with one of these ids, the author and
+   * the date as that one suggestion. Default: none, so every suggestion is the file's own, one for
+   * each revision triple, with no person.
    */
   readonly suggestions?: readonly {
+    // Spelled out: the manifest's own type is not public
     readonly attribution: OrderedAttribution;
     readonly revisions: readonly string[];
     /** Pending when absent. */
@@ -96,7 +98,7 @@ export function orderedStoryParts(pkg: OoxmlPackage): Map<string, OoxmlPart> {
 }
 
 /** Compares story part names: the main document first, then the others by name. */
-function byStoryOrder(main: string): (a: string, b: string) => number {
+export function byStoryOrder(main: string): (a: string, b: string) => number {
   return (a, b) => {
     if (a === main) {
       return -1;
@@ -251,7 +253,9 @@ function loadStories(
   budget: LoadBudget
 ): OrderedDocument {
   const doc = createOrderedDocument(options.file ?? 0);
-  for (const [name, blocks] of options.placeholders ?? []) doc.placeholders.set(name, blocks);
+  for (const [name, blocks] of options.placeholders ?? []) {
+    doc.placeholders.set(name, blocks);
+  }
 
   // No fixed suggestion: each file revision is its own, or the suggestion a checkpoint lists
   const revisions = new RevisionReader(doc, undefined, options.suggestions);
