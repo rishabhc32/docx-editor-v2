@@ -99,7 +99,10 @@ export function withTextBoxContent(
 
     // The file's form when it reads the same, but for a takeover: a checkpoint names the change
     // record compose drew, which holds the records taken
-    if (!root || !composed || (!composed.takeovers && sameBlocks(root, composed.blocks))) continue;
+    if (!root || !composed || (!composed.takeovers && sameBlocks(root, composed.blocks))) {
+      continue;
+    }
+
     out = replaceBelow(out, root.id, withChildren(root, composed.blocks));
 
     // The VML fallback copy follows, as a save writes it and Word keeps it (same paragraph ids)

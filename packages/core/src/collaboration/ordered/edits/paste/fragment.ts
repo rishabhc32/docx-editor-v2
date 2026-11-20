@@ -48,6 +48,7 @@ function withOwnParagraphIds(ctx: Ctx, node: OoxmlNode | null): OoxmlNode | null
 function asPasted(ctx: Ctx, p: OrderedViewParagraph, item: OrderedItem, suggestion: string) {
   const block = item.token !== undefined && BLOCK_TOKENS.has(item.token);
   const own = item.by === null && (ctx.direct || !block);
+
   // The rows and cells around the host paragraph hold the paste too
   const out = nestedIn({ ...item, ...(own ? { by: suggestion } : {}) }, p.mark.within);
   return item.kind === 'mark' ? { ...out, node: withOwnParagraphIds(ctx, item.node) } : out;
