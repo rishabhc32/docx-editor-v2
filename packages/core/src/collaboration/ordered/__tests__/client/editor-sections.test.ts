@@ -354,6 +354,37 @@ describe("a party's section edits", () => {
     }
   });
 
+  test("a party's page setup rejected on a section that states default values: Word's restore", async () => {
+    const file = docx(
+      p(t('Words.')) +
+        '<w:sectPr><w:pgSz w:w="12240" w:h="15840" w:orient="portrait"/>' +
+        '<w:titlePg w:val="0"/></w:sectPr>'
+    );
+    const room = localRoom(file, { policy: suggestionsOnlyPolicy() });
+    const review = reviewTestModule();
+    const ana = await join(room, 'Ana', { wordFile: file, review });
+    const olive = await join(room, 'Olive', {
+      mode: 'edit',
+      login: ORGANISER,
+      wordFile: file,
+      review,
+    });
+    surface(ana).setSectionProperties({ orientation: 'landscape' });
+    await settle();
+    converged(room, ana, olive);
+    const [card] = olive.editor.getReviewItems();
+    expect(card && olive.editor.rejectReviewItem(card.key).ok).toBe(true);
+    await settle();
+    converged(room, ana, olive);
+
+    // Word leaves out the default values the record states, as the record of a fold does
+    for (const person of [ana, olive]) {
+      expect(bodySection((await saved(person))['word/document.xml'] ?? '')).toBe(
+        '<w:sectPr><w:pgSz w:h="15840" w:w="12240"/></w:sectPr>'
+      );
+    }
+  });
+
   test("a party's page setup over another person's pending one is refused: one record for each section", async () => {
     const room = localRoom(TWO, { policy: suggestionsOnlyPolicy() });
     const review = reviewTestModule();

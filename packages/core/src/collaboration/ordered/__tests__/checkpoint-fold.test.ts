@@ -28,6 +28,7 @@ import {
   FOOTNOTES,
   markOf,
   opens,
+  partsOf,
   textOf,
 } from './change-apply-fixture.ts';
 import { checkFold, folded, mediaStore } from './fold-check.ts';
@@ -260,6 +261,32 @@ describe('a fold of a section press', () => {
       );
       expect(orderedCards(doc)).toEqual([]);
       await checkFold(doc, base, mediaStore(base), label);
+    });
+  }
+
+  // The record keeps the values as the file stated them, and Bob's later press on a folded copy
+  // takes it over with them. A reject gives the section back as Word restores it
+  for (const [label, page] of [
+    ['a landscape page', { orientation: 'landscape' }],
+    ['a margin', { marginTopTwips: 2000 }],
+    ['a margin with the orientation it has', { orientation: 'portrait', marginTopTwips: 2000 }],
+  ] as const) {
+    test(`${label} on a section that states default values`, async () => {
+      const { document: doc, base } = openOrderedWordFile(file, { file: 1 });
+      apply(doc, 'ana:1', { kind: 'section-property', ...EDIT, sections: [], page });
+      await checkFold(doc, base, mediaStore(base), label, (copy) => {
+        apply(
+          copy,
+          'bob:1',
+          { kind: 'section-property', ...EDIT, sections: [], page: { marginLeftTwips: 1800 } },
+          'Bob'
+        );
+      });
+      const record = /<w:sectPrChange [^>]*><w:sectPr>(.*?)<\/w:sectPr>/.exec(
+        partsOf(doc)[0] ?? ''
+      );
+      expect(record?.[1]).toContain('<w:pgSz w:h="15840" w:orient="portrait" w:w="12240"/>');
+      expect(record?.[1]).toContain('<w:titlePg w:val="0"/>');
     });
   }
 });

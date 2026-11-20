@@ -4,6 +4,7 @@
 import type { OoxmlElement, OoxmlNode } from '../../../store/package/ooxml-tree.ts';
 import { sectionFurnitureChildren } from '../../../store/package/hf-lifecycle.ts';
 import { sectionChildrenWithNoteProperties } from '../../../store/package/note-lifecycle-props.ts';
+import { restoredSectionProperties } from '../../../store/store/revision-property-records.ts';
 import { cloneWithNewIds } from '../../../store/store/tree-op-nodes.ts';
 import {
   sameSectionProperties,
@@ -31,6 +32,7 @@ import {
   asWml,
   attributeOf,
   childWhere,
+  firstElement,
   isParagraphProperties,
   isWml,
   relationshipIdAttribute,
@@ -171,6 +173,41 @@ function applyRecord(
     : applySectionOp(ctx, section, record.op);
 }
 
+/**
+ * A tracked write of the room's whose suggestion is rejected, or drawn so. A direct edit's
+ * suggestion turns rejected when its author takes it back (`revert`), as the editor's undo,
+ * which takes the write away exactly.
+ */
+function isRejectedWrite(ctx: ComposeContext, record: SectionRecord): boolean {
+  return (
+    record.kind === 'sectionOp' &&
+    record.untracked !== true &&
+    record.keptOnReject !== true &&
+    ctx.doc.suggestions.get(record.suggestion)?.direct !== true &&
+    ctx.rejectedOrDrawnSo(record.suggestion)
+  );
+}
+
+/**
+ * A decided record on the section. A rejected write leaves the section as Word and the engine
+ * reject its `w:sectPrChange`: the properties the record states laid back over the write
+ * (`restoredSectionProperties`), without the default values the section stated. So a reject
+ * gives what the reject of a fold of the record gives.
+ */
+function applyDecided(
+  ctx: ComposeContext,
+  section: OoxmlElement | null,
+  record: SectionRecord
+): OoxmlElement | null {
+  const written = applyRecord(ctx, section, record);
+  if (written === null || !isRejectedWrite(ctx, record)) {
+    return written;
+  }
+
+  const recorded = sectionRecordChildren(section?.children ?? [], written.children, ctx.mint);
+  return withChildren(written, restoredSectionProperties(written.children, recorded));
+}
+
 /** Ids a composed section takes: a function of its holder, so a compose again keeps them. */
 function holderIds(holder: OrderedItem): () => string {
   let n = 0;
@@ -192,7 +229,8 @@ function withoutSectionRecord(base: OoxmlElement | null): OoxmlElement | null {
  * with one `w:sectPrChange` holding the section before them, under the latest pending author,
  * as Word keeps one change record for each section (ECMA-376 Part 1, §17.13.5.32) and the
  * engine's tracked section writes record it (`sectionRecordChildren`). A file's own record alone
- * is written back as the file had it.
+ * is written back as the file had it. A rejected write leaves the section as Word's reject of its
+ * record does (`applyDecided`).
  */
 export function sectionAfter(
   ctx: ComposeContext,
@@ -210,10 +248,20 @@ export function sectionAfter(
   );
   const accepted = [...records.filter(kept), ...shown.accepted].sort((a, b) => a.seq - b.seq);
   const pending = shown.pending;
-  const [earlier, later] = aroundPending(accepted, pending);
+  const rejected = records.filter((r) => isRejectedWrite(ctx, r));
+  const decided = [...accepted, ...rejected].sort((a, b) => a.seq - b.seq);
+  const [earlier, later] = aroundPending(decided, pending);
   let section = withoutSectionRecord(base);
-  for (const record of earlier) section = applyRecord(ctx, section, record);
-  const prior = section?.children ?? [];
+  for (const record of earlier) {
+    section = applyDecided(ctx, section, record);
+  }
+
+  // A file's record that stands holds the section before the writes drawn over it, as the
+  // engine keeps a standing record (`withSectionChangeRecord`)
+  const standing = pending.find(
+    (r): r is OrderedElementRecord => r.kind === 'element' && r.fileRecord !== undefined
+  )?.fileRecord;
+  const prior = (standing && firstElement(standing)?.children) ?? section?.children ?? [];
   const taken: DrawnTakeover[] = [];
   for (const record of pending) {
     const before = section?.children ?? [];
@@ -221,7 +269,10 @@ export function sectionAfter(
     noteTakeover(ctx, taken, record, before, section?.children ?? []);
   }
 
-  for (const record of later) section = applyRecord(ctx, section, record);
+  for (const record of later) {
+    section = applyDecided(ctx, section, record);
+  }
+
   if (section === null) return null;
   const fileRecord = fileRecordAlone(accepted, pending);
   const latest = pending.filter((r) => !(r.kind === 'sectionOp' && r.untracked === true)).at(-1);
@@ -261,13 +312,16 @@ export function sectionWithoutPendingWrites(
     const status = statusOf(ctx.doc, r.suggestion);
     if (r.kind === 'sectionOp' && r.keptOnReject === true) return true;
     if (r.kind === 'sectionOp' && r.untracked === true) return status === 'pending';
-    return status === 'accepted';
+    return status === 'accepted' || isRejectedWrite(ctx, r);
   };
   let section = withoutSectionRecord(base);
   const records = sectionRecordsOf(holder)
     .filter(shown)
     .sort((a, b) => a.seq - b.seq);
-  for (const record of records) section = applyRecord(ctx, section, record);
+  for (const record of records) {
+    section = applyDecided(ctx, section, record);
+  }
+
   return section;
 }
 
