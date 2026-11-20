@@ -180,14 +180,15 @@ function moveRangeEdge(
 }
 
 /**
- * The markers where two ranges of one move of the file meet with nothing drawn between them, as
- * when a decision took out the words that split the move. They are passed over, so the move is
- * one range again, as the room draws a move it made (`withMoveRanges`).
+ * The markers of a file's move with nothing drawn between them: where two ranges of one move
+ * meet, as when a decision took out the words that split the move, and around a range whose words
+ * all went. They are passed over, as the room draws a move it made (`withMoveRanges`): one range
+ * around its words, and none around no words.
  */
-function joinedMoveRanges(ctx: ComposeContext, buffer: readonly OrderedItem[]): Set<OrderedItem> {
-  const joined = new Set<OrderedItem>();
+function emptyMoveEdges(ctx: ComposeContext, buffer: readonly OrderedItem[]): Set<OrderedItem> {
+  const empty = new Set<OrderedItem>();
   if (ctx.doc.movesWithRanges.size === 0) {
-    return joined;
+    return empty;
   }
 
   let before: OrderedItem | null = null;
@@ -197,15 +198,20 @@ function joinedMoveRanges(ctx: ComposeContext, buffer: readonly OrderedItem[]): 
     }
 
     const edge = moveRangeEdge(item);
-    const end = before === null ? null : moveRangeEdge(before);
-    if (before !== null && edge?.start && end?.start === false && end.range === edge.range) {
-      joined.add(before).add(item);
+    const previous = before === null ? null : moveRangeEdge(before);
+    if (
+      before !== null &&
+      edge !== null &&
+      previous?.range === edge.range &&
+      previous.start !== edge.start
+    ) {
+      empty.add(before).add(item);
     }
 
     before = item;
   }
 
-  return joined;
+  return empty;
 }
 
 /** A unit in the boxes: the innermost held it; each one it shows in, reached or struck. */
@@ -235,7 +241,7 @@ export function composeInline(ctx: ComposeContext, buffer: readonly OrderedItem[
   let current: RunBuild | null = null;
   const passengers = fieldPassengers(buffer);
   const carried = new Set<OrderedItem>();
-  const joined = joinedMoveRanges(ctx, buffer);
+  const empty = emptyMoveEdges(ctx, buffer);
 
   // A rejected new link that still holds something stays, as in Word
   const kept = keptLinkEdges(ctx, buffer);
@@ -274,7 +280,7 @@ export function composeInline(ctx: ComposeContext, buffer: readonly OrderedItem[
     }
 
     if (isUnit(item)) noteUnit(ctx, boxes, item);
-    if (ctx.gone(item) || joined.has(item)) {
+    if (ctx.gone(item) || empty.has(item)) {
       continue;
     }
 

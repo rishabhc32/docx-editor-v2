@@ -282,6 +282,30 @@ describe('a fold of a move with words inside it', () => {
     apply(doc, 'bob:1', { kind: 'insert', ...EDIT, place: at(doc, 1, 7), text: 'X' }, 'Bob');
     await checkFold(doc, base, mediaStore(base), 'a move with words inside it');
   });
+
+  // A folded move keeps the file's range markers; once the moved words went by a direct
+  // deletion, the range holds nothing and draws nowhere, as the room draws no range around no
+  // words, so a decision of the move gives one file before and after a fold
+  test('a range whose words went', async () => {
+    const file = docx(p(t('Rich text here.')) + p(t('Other words.')));
+    const first = openOrderedWordFile(file, { file: 1 });
+    apply(first.document, 'ana:1', {
+      kind: 'move',
+      ...EDIT,
+      from: at(first.document, 0, 0),
+      to: at(first.document, 0, 5),
+      place: at(first.document, 1, 6),
+    });
+    const blobs = mediaStore(first.base);
+    const { document: doc, base } = await folded(first.document, first.base, 2, blobs);
+    apply(
+      doc,
+      'olive:1',
+      { kind: 'delete', ...DIRECT, from: at(doc, 0, 0), to: at(doc, 0, 5) },
+      'Olive'
+    );
+    await checkFold(doc, base, blobs, 'a range whose words went');
+  });
 });
 
 describe('who typed inside a new row or note', () => {
