@@ -36,8 +36,14 @@ function replaceBelow(node: OoxmlNode, id: string, next: OoxmlElement, depth = 0
   return changed ? withChildren(node, children) : node;
 }
 
-/** One text box's story composed, with what its compose leaves for the part (prompts). */
-function composedBlocks(ctx: ComposeContext, name: string): readonly OoxmlNode[] | null {
+/**
+ * One text box's story composed, with what its compose leaves for the part (prompts, takeovers),
+ * and whether a change record in it holds records by takeover.
+ */
+function composedBlocks(
+  ctx: ComposeContext,
+  name: string
+): { readonly blocks: readonly OoxmlNode[]; readonly takeovers: boolean } | null {
   const story = ctx.doc.stories.get(name);
   if (!story) return null;
   const inner = new ComposeContext(ctx.doc, story, ctx.options, ctx.mint);
@@ -50,7 +56,7 @@ function composedBlocks(ctx: ComposeContext, name: string): readonly OoxmlNode[]
     ctx.takeovers.set(id, taken);
   }
 
-  return children;
+  return { blocks: children, takeovers: inner.takeovers.size > 0 };
 }
 
 /**
@@ -89,9 +95,12 @@ export function withTextBoxContent(
   for (const name of names) {
     const host = textBoxHostOf(ctx.doc, name);
     const root = host ? drawn[loaded.findIndex((content) => content.id === host.root)] : undefined;
-    const blocks = composedBlocks(ctx, name);
-    if (!root || !blocks || sameBlocks(root, blocks)) continue;
-    out = replaceBelow(out, root.id, withChildren(root, blocks));
+    const composed = composedBlocks(ctx, name);
+
+    // The file's form when it reads the same, but for a takeover: a checkpoint names the change
+    // record compose drew, which holds the records taken
+    if (!root || !composed || (!composed.takeovers && sameBlocks(root, composed.blocks))) continue;
+    out = replaceBelow(out, root.id, withChildren(root, composed.blocks));
 
     // The VML fallback copy follows, as a save writes it and Word keeps it (same paragraph ids)
     out = withTextboxFallbackInStep(out, root.id, ctx.mint);

@@ -8,6 +8,7 @@ import { applyOrderedChange } from '../change/apply.ts';
 import { openOrderedWordFile } from '../client/open.ts';
 import { orderedIdMinter } from '../change/ids.ts';
 import { orderedCards } from '../decide.ts';
+import { isTextBoxStoryName } from '../model/text-boxes.ts';
 import type { OrderedDocument } from '../model/types.ts';
 import { orderedUnitTyper } from '../model/typers.ts';
 import { withUndoRecord } from '../model/undo-record.ts';
@@ -174,6 +175,35 @@ describe('a fold of a paragraph press that changes nothing', () => {
     );
     expect(orderedCards(doc)).toEqual([]);
     await checkFold(doc, base, mediaStore(base), 'a press that changes nothing');
+  });
+});
+
+describe('a fold of a takeover in a text box', () => {
+  // Pia's press takes over Quin's record of the text box's paragraph (policy 2): once folded, the
+  // text box reads as the file wrote it, and the next fold keeps the takeover too
+  test("a press over another person's alignment", async () => {
+    const item = MATRIX_ITEMS.find((candidate) => candidate.key === 'textbox');
+    const { document: doc, base } = openOrderedWordFile(docx(bodyOf(item!)), { file: 1 });
+    const part = [...doc.stories.keys()].find(isTextBoxStoryName)!;
+    for (const [id, who, property] of [
+      ['quin:1', 'Quin', { localName: 'jc', attributes: { val: 'center' } }],
+      ['pia:1', 'Pia', { localName: 'spacing', attributes: { after: '240' } }],
+    ] as const) {
+      apply(
+        doc,
+        id,
+        {
+          kind: 'paragraph-property',
+          part,
+          mode: 'suggest',
+          marks: [markOf(doc, 0, part)],
+          properties: [property],
+        },
+        who
+      );
+    }
+
+    await checkFold(doc, base, mediaStore(base), 'a takeover in a text box');
   });
 });
 
