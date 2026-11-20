@@ -3,7 +3,13 @@
 // its settled record on the units and leaves the pending suggestion as it was.
 
 import type { OrderedViewChar, OrderedViewParagraph } from '../compose/context.ts';
-import { insertedPending, isPending, itemAt, statusOf } from '../model/document.ts';
+import {
+  insertedPending,
+  isPending,
+  itemAt,
+  statusOf,
+  suggestionOrNull,
+} from '../model/document.ts';
 import { relabel, settleDirect } from '../model/mutations.ts';
 import type {
   OrderedDocument,
@@ -165,8 +171,7 @@ export function directParagraphOps(
 ): void {
   let into: OrderedSuggestion | null = null;
   for (const op of ops) {
-    const sid = paragraphOp(ctx, p, op, into);
-    into = ctx.doc.suggestions.get(sid) ?? null;
+    into = suggestionOrNull(ctx.doc, paragraphOp(ctx, p, op, into));
   }
 
   settle(ctx.doc, into?.id ?? null);

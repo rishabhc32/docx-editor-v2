@@ -3,6 +3,7 @@
 // the engine writes its own `w:pPrChange` (one record, the original under the latest author).
 
 import { findNode } from '../../../store/package/ooxml-edit.ts';
+import { ooxmlTreesEqual } from '../../../store/package/ooxml-serialize.ts';
 import type { OoxmlElement, OoxmlNode, OoxmlPart } from '../../../store/package/ooxml-tree.ts';
 import {
   directParagraphProperties,
@@ -150,4 +151,20 @@ export function paragraphOpRefusal(
 ): string | null {
   const { result } = runOnScratch(part, pPr, op, mint, null);
   return result.ok ? null : result.reason;
+}
+
+/**
+ * Whether the engine's op for a press by `revision`'s author leaves the paragraph as it shows
+ * (`pPr`, with any change record): the paragraph has every value the press sets, and the engine
+ * writes no record for it. Word records none either.
+ */
+export function paragraphOpKeeps(
+  part: OoxmlPart,
+  pPr: OoxmlElement | null,
+  op: OrderedParagraphOp,
+  mint: () => string,
+  revision: RevisionAttributionInput
+): boolean {
+  const after = withParagraphOp(part, pPr, op, mint, { revision, revisionId: mint() });
+  return after === null || pPr === null ? after === pPr : ooxmlTreesEqual(after, pPr);
 }

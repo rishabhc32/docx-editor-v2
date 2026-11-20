@@ -10,7 +10,7 @@ import {
   type OrderedViewChar,
   type OrderedViewParagraph,
 } from '../compose/context.ts';
-import { paragraphOpRefusal } from '../compose/paragraph-ops.ts';
+import { paragraphOpKeeps, paragraphOpRefusal } from '../compose/paragraph-ops.ts';
 import { ownItems, showsBlockPrompt } from '../compose/paragraph.ts';
 import { innermostSegment, isControlSegment, openOfSegment } from '../containers.ts';
 import { createOrderedItem, insertedPending } from '../model/document.ts';
@@ -439,8 +439,13 @@ export function formatMark(
   return suggestion.id;
 }
 
-/** The engine refuses the press on the paragraph as it shows now. */
-function checkParagraphOp(ctx: Ctx, mark: OrderedItem, op: OrderedParagraphOp): void {
+/** The engine refuses the press on the paragraph as it shows now (`shown`). */
+function checkParagraphOp(
+  ctx: Ctx,
+  shown: OoxmlElement | null,
+  op: OrderedParagraphOp,
+  mint: () => string
+): void {
   const known = ctx.doc.numbering;
 
   // A list number the file defines, or one a change added that this author may use (D14)
@@ -452,9 +457,6 @@ function checkParagraphOp(ctx: Ctx, mark: OrderedItem, op: OrderedParagraphOp): 
     orderedListOf(ctx.doc, op.numId, ctx.attribution) === null
   )
     throw new OrderedRefusal('not-covered', `a new list definition (${op.numId.slice(0, 32)})`);
-  let scratch = 0;
-  const mint = () => `check#${(scratch += 1)}`;
-  const shown = shownParagraphProperties(ctx, mark);
   const current = shown
     ? withChildren(
         shown,
@@ -467,17 +469,26 @@ function checkParagraphOp(ctx: Ctx, mark: OrderedItem, op: OrderedParagraphOp): 
 
 /**
  * A paragraph property press, as a record on the paragraph's mark. On a paragraph its author
- * proposed, the press is part of that proposal and draws with no record.
+ * proposed, the press is part of that proposal and draws with no record. A press that leaves the
+ * paragraph as it is (`paragraphOpKeeps`) makes no record. Returns the suggestion that holds the
+ * press, if any.
  */
 export function paragraphOp(
   ctx: Ctx,
   p: OrderedViewParagraph,
   op: OrderedParagraphOp,
   into: OrderedSuggestion | null
-): string {
+): string | null {
   refuseLockedBlocks(ctx, p.blocks);
   const mark = p.mark;
-  checkParagraphOp(ctx, mark, op);
+  let scratch = 0;
+  const mint = () => `check#${(scratch += 1)}`;
+  const shown = shownParagraphProperties(ctx, mark);
+  checkParagraphOp(ctx, shown, op, mint);
+  if (paragraphOpKeeps(ctx.story.part, shown, op, mint, ctx.attribution)) {
+    return into?.id ?? null;
+  }
+
   const own = pendingOwn(ctx, mark.by);
   if (own && insertedPending(ctx.doc, mark)) {
     relabel(ctx.doc, ctx.story, mark, {

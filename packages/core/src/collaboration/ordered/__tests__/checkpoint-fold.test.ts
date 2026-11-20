@@ -7,6 +7,7 @@ import { describe, expect, test } from 'bun:test';
 import { applyOrderedChange } from '../change/apply.ts';
 import { openOrderedWordFile } from '../client/open.ts';
 import { orderedIdMinter } from '../change/ids.ts';
+import { orderedCards } from '../decide.ts';
 import type { OrderedDocument } from '../model/types.ts';
 import { orderedUnitTyper } from '../model/typers.ts';
 import { withUndoRecord } from '../model/undo-record.ts';
@@ -20,6 +21,7 @@ import {
   DIRECT,
   EDIT,
   FOOTNOTES,
+  markOf,
   opens,
   textOf,
 } from './change-apply-fixture.ts';
@@ -152,6 +154,27 @@ describe('a fold of a filled prompt', () => {
       });
     }
   }
+});
+
+describe('a fold of a paragraph press that changes nothing', () => {
+  // Word and the engine record no change for a press that gives a paragraph a value it has
+  test('a suggested alignment the paragraph has makes no suggestion', async () => {
+    const file = docx(p(t('Centred words.'), '<w:jc w:val="center"/>'));
+    const { document: doc, base } = openOrderedWordFile(file, { file: 1 });
+    apply(
+      doc,
+      'bob:1',
+      {
+        kind: 'paragraph-property',
+        ...EDIT,
+        marks: [markOf(doc, 0)],
+        properties: [{ localName: 'jc', attributes: { val: 'center' } }],
+      },
+      'Bob'
+    );
+    expect(orderedCards(doc)).toEqual([]);
+    await checkFold(doc, base, mediaStore(base), 'a press that changes nothing');
+  });
 });
 
 describe('a fold of a link inside an insertion', () => {
