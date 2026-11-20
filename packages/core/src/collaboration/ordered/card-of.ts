@@ -77,16 +77,26 @@ export const authorOf = (doc: OrderedDocument, id: string): string =>
  * one), so a card reads the same live, where the room labels the edges, and after a reopen.
  */
 export const isCardUnit = (doc: OrderedDocument, item: OrderedItem): boolean =>
-  item.kind !== 'zero' &&
-  item.token !== 'hyperlink' &&
-  !isHidden(doc, item) &&
-  !hiddenPrompt(doc, item);
+  item.kind !== 'zero' && item.token !== 'hyperlink' && !isOrderedItemHidden(doc, item);
+
+/**
+ * Whether an item shows nowhere now: hidden for good (`isHidden`: its container went, its author
+ * took it back, a decision took it away), or a unit of a prompt that content took the place of
+ * (`hiddenPrompt`). Cards read units by this rule, and a fold, which keeps such a prompt in the
+ * glossary only, changes nothing it says.
+ *
+ * @public
+ */
+export function isOrderedItemHidden(doc: OrderedDocument, item: OrderedItem): boolean {
+  return isHidden(doc, item) || hiddenPrompt(doc, item);
+}
 
 /**
  * A unit of a prompt that content took the place of. Word and the engine drop a prompt's runs,
- * with any suggestion on them, when content fills the control (placement rule 7), and the save
- * keeps the prompt as words only, so a suggestion there shows on no card. Taking the content
- * back shows the prompt, and the card, again. A prompt's marks hide in the model (`gone`).
+ * with any suggestion on them, when content fills the control (placement rule 7), and a saved
+ * file keeps the prompt in the glossary only, so a suggestion there shows on no card. Taking the
+ * content back shows the prompt, and the card, again. A prompt's marks hide in the model
+ * (`gone`).
  */
 function hiddenPrompt(doc: OrderedDocument, item: OrderedItem): boolean {
   if (item.prompt !== true || (item.kind !== 'text' && item.kind !== 'atom')) return false;

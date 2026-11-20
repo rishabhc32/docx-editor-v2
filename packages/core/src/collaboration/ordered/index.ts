@@ -65,7 +65,6 @@ export {
   createOrderedDocument,
   createOrderedItem,
   addOrderedStory,
-  isHidden as isOrderedItemHidden,
   itemAt as orderedItemAt,
   statusOf as orderedStatusOf,
   type OrderedItemInit,
@@ -165,7 +164,7 @@ export type { OrderedLinkTarget } from './edits/links.ts';
 export type { OrderedPageField } from './edits/fields.ts';
 export type { OrderedTocBookmark, OrderedTocRow } from './edits/toc.ts';
 export { decideOrdered, orderedCards, type OrderedCard } from './decide.ts';
-export { orderedCardOf } from './card-of.ts';
+export { isOrderedItemHidden, orderedCardOf } from './card-of.ts';
 export { orderedSuggestionsOfRevision, type OrderedRevisionName } from './client/ops/review.ts';
 export { orderedReplacedSuggestions, type OrderedReplacedSuggestion } from './compose/replaced.ts';
 export { orderedUnitTyper, type OrderedTyper } from './model/typers.ts';

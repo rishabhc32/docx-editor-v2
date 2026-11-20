@@ -148,8 +148,6 @@ export function pendingBy(
  * container went, its author took it back, the suggestion that inserted it was rejected, or a
  * suggestion that struck it was accepted. Pending struck text shows struck, and pending
  * inserted text shows inserted.
- *
- * @public
  */
 export function isHidden(doc: OrderedDocument, item: OrderedItem): boolean {
   if (item.gone || item.retracted) return true;

@@ -117,6 +117,43 @@ describe('a fold of a hidden prompt', () => {
   }
 });
 
+describe('a fold of a filled prompt', () => {
+  const item = MATRIX_ITEMS.find((candidate) => candidate.key === 'placeholder');
+
+  // A suggested format on a prompt, then typing that fills its control: Word drops the prompt's
+  // runs, and a fold keeps them with the record in the glossary only. The room shows them
+  // nowhere either, so a fold changes no unit and no card. The format is the room's own, or
+  // one read from a checkpoint
+  for (const [label, mode, who] of [
+    ['direct typing', DIRECT, 'Olive'],
+    ['a suggested insertion', EDIT, 'Bob'],
+  ] as const) {
+    for (const loaded of [false, true]) {
+      test(`${label} fills the prompt${loaded ? ' of a folded copy' : ''}`, async () => {
+        let { document: doc, base } = openOrderedWordFile(docx(bodyOf(item!)), { file: 1 });
+        apply(doc, 'ana:1', {
+          kind: 'format',
+          ...EDIT,
+          from: at(doc, 1, 7),
+          to: at(doc, 1, 11),
+          properties: [{ localName: 'i' }],
+        });
+        if (loaded) {
+          ({ document: doc, base } = await folded(doc, base, 2, mediaStore(base)));
+        }
+
+        apply(
+          doc,
+          `${who.toLowerCase()}:2`,
+          { kind: 'insert', ...mode, place: at(doc, 1, 6), text: 'Q' },
+          who
+        );
+        await checkFold(doc, base, mediaStore(base), label);
+      });
+    }
+  }
+});
+
 describe('a fold of a link inside an insertion', () => {
   // Ana's link on the end of her own insertion, and Bob's words typed before the link: the room
   // labels the link's edges with her insertion, a Word file holds no insertion on a link

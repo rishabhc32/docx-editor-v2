@@ -16,7 +16,7 @@ import { expect } from 'bun:test';
 import { strFromU8, unzipSync } from 'fflate';
 import { readOoxmlPackage, type OoxmlPackage } from '../../../store/package/ooxml-package.ts';
 import { serializeOoxmlPart, type OoxmlElement } from '../../../store/package/ooxml-tree.ts';
-import { isCardUnit } from '../card-of.ts';
+import { isCardUnit, isOrderedItemHidden } from '../card-of.ts';
 import { orderedCardSeen } from '../change/apply-decide.ts';
 import { openOrderedCheckpoint, type OrderedWordFile } from '../client/open.ts';
 import { currentFace } from '../client/properties.ts';
@@ -26,7 +26,6 @@ import { orderedPackageBytes } from '../compose/package.ts';
 import { orderedReplacedSuggestions } from '../compose/replaced.ts';
 import { orderedCards } from '../decide.ts';
 import { MOVE_RANGE } from '../load/moves.ts';
-import { isHidden } from '../model/document.ts';
 import { setStatus } from '../model/mutations.ts';
 import { isTextBoxStoryName } from '../model/text-boxes.ts';
 import { orderedUnitTyper } from '../model/typers.ts';
@@ -85,19 +84,24 @@ const xmlOf = (face: OoxmlElement | null): string =>
  * labels them and a reopened link has no label.
  */
 const showsOn = (doc: OrderedDocument, item: OrderedItem): boolean =>
-  item.kind === 'zero' ? !isHidden(doc, item) && !isMoveRange(item) : isCardUnit(doc, item);
+  item.kind === 'zero'
+    ? !isOrderedItemHidden(doc, item) && !isMoveRange(item)
+    : isCardUnit(doc, item);
 
 /** A move's range marker: a fold writes the file's own, which the room draws from the move. */
 const isMoveRange = (item: OrderedItem): boolean =>
   item.node?.kind !== 'textValue' && MOVE_RANGE.test(item.node?.localName ?? '');
 
-/** Pending suggestions that show something: one taken back by its author shows nothing. */
+/**
+ * Pending suggestions that show something, by the room's read: one taken back by its author, or
+ * one only on a prompt that content took the place of, shows nothing.
+ */
 function shownPending(doc: OrderedDocument): OrderedSuggestion[] {
   return [...doc.suggestions.values()].filter(
     (s) =>
       s.status === 'pending' &&
       (doc.partRevisions.has(s.id) ||
-        [...(doc.labelled.get(s.id) ?? [])].some((item) => !isHidden(doc, item)))
+        [...(doc.labelled.get(s.id) ?? [])].some((item) => !isOrderedItemHidden(doc, item)))
   );
 }
 
