@@ -6,7 +6,6 @@ import {
   CardRead,
   cardFrom,
   changers,
-  inserter,
   isCardUnit,
   joinsInsertion,
   noCardRefusal,
@@ -15,7 +14,7 @@ import {
   startsRow,
   type OrderedCard,
 } from './card-of.ts';
-import { isHidden, isPending, oneMaker } from './model/document.ts';
+import { inserter, isHidden, isPending, oneMaker } from './model/document.ts';
 import { setStatus } from './model/mutations.ts';
 import { OrderedRefusal } from './model/refusal.ts';
 import type { OrderedDocument, OrderedItem, OrderedStory } from './model/types.ts';

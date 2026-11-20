@@ -106,6 +106,32 @@ export function statusOf(
 export const isPending = (doc: OrderedDocument, id: string | null): id is string =>
   id !== null && statusOf(doc, id) === 'pending';
 
+/** The innermost pending new row or cell around an item, or null. */
+export function innermostNewContainer(doc: OrderedDocument, item: OrderedItem): string | null {
+  for (let k = item.within.by.length - 1; k >= 0; k -= 1) {
+    const id = item.within.by[k] ?? null;
+    if (isPending(doc, id)) {
+      return id;
+    }
+  }
+
+  return null;
+}
+
+/**
+ * The pending suggestion that inserted an item, if any: its own, else the innermost new row or
+ * cell around it. Word marks a new row and its cells' paragraph marks, not the cells, so a cell
+ * loads with no inserter of its own; the host reads the row as covering its paragraphs whole
+ * (`isInside`), so a change on the cell or in its text sits inside the row.
+ */
+export function inserter(doc: OrderedDocument, item: OrderedItem): string | null {
+  if (isPending(doc, item.by)) {
+    return item.by;
+  }
+
+  return innermostNewContainer(doc, item);
+}
+
 /** Whether `id` names a pending suggestion that someone other than `maker` made. */
 export const pendingByOther = (
   doc: OrderedDocument,

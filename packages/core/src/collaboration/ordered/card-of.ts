@@ -3,7 +3,14 @@
 
 import { isNotesStory, leftOutNoteItems } from './compose/note-references.ts';
 import { promptControlOf, promptShows } from './compose/paragraph.ts';
-import { isHidden, isPending, oneMaker, storyOfItem } from './model/document.ts';
+import {
+  innermostNewContainer,
+  inserter,
+  isHidden,
+  isPending,
+  oneMaker,
+  storyOfItem,
+} from './model/document.ts';
 import { OrderedRefusal } from './model/refusal.ts';
 import { textBoxGone } from './model/text-boxes.ts';
 import type { OrderedDocument, OrderedItem, OrderedStory } from './model/types.ts';
@@ -16,32 +23,6 @@ export interface OrderedCard {
   readonly suggestions: readonly string[];
   /** The first suggestion's author. */
   readonly author: string;
-}
-
-/** The innermost pending new row or cell around an item, or null. */
-function innermostNewContainer(doc: OrderedDocument, item: OrderedItem): string | null {
-  for (let k = item.within.by.length - 1; k >= 0; k -= 1) {
-    const id = item.within.by[k] ?? null;
-    if (isPending(doc, id)) {
-      return id;
-    }
-  }
-
-  return null;
-}
-
-/**
- * The pending suggestion that inserted an item, if any: its own, else the innermost new row or
- * cell around it. Word marks a new row and its cells' paragraph marks, not the cells, so a cell
- * loads with no inserter of its own; the host reads the row as covering its paragraphs whole
- * (`isInside`), so a change on the cell or in its text sits inside the row.
- */
-export function inserter(doc: OrderedDocument, item: OrderedItem): string | null {
-  if (isPending(doc, item.by)) {
-    return item.by;
-  }
-
-  return innermostNewContainer(doc, item);
 }
 
 /** The pending suggestions that change an item without inserting it. */

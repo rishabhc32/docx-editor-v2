@@ -5,13 +5,13 @@ import type { OoxmlElement } from '../../../store/package/ooxml-tree.ts';
 import type { RevisionAttributionInput, TreeDocOp } from '../../../store/store/tree-op-types.ts';
 import { wholeMergedCellIds } from '../../../store/store/tree-op-table-merged-cells.ts';
 import type { OrderedViewParagraph } from '../compose/context.ts';
-import { oneMaker, statusOf } from '../model/document.ts';
+import { inserter, oneMaker, statusOf } from '../model/document.ts';
 import { relabel } from '../model/mutations.ts';
 import { OrderedRefusal } from '../model/refusal.ts';
 import type { OrderedElementRecord, OrderedItem, OrderedPropertyTarget } from '../model/types.ts';
 import { childNamed } from '../ooxml-nodes.ts';
 import { refuseLockedTable } from '../placement.ts';
-import { suggestionFor, type Ctx } from './context.ts';
+import { pendingOwn, suggestionFor, type Ctx } from './context.ts';
 import {
   blockOf,
   cellColumns,
@@ -146,61 +146,115 @@ function recordFlags(
 }
 
 /**
- * Record what the engine's op changed, as records of the suggestion: a suggestion's under the
- * edit's own author, as Word's form records them (`w:tblPrChange`, `w:tblGridChange`,
- * `w:trPrChange`, `w:tcPrChange`); a direct press's as the editor alone keeps what changed. Each
- * record holds the cells the table showed, for a later decision on a column
- * (`compose/table-columns.ts`).
+ * What the op set in a container of its author's own new row or table: a record of that
+ * insertion, shown with no change record (`untracked`), as the engine writes none there and its
+ * reject takes the container away whole. It sets only what changed, as `ownFormat` does on words.
+ */
+function recordOwn(
+  ctx: Ctx,
+  own: string,
+  open: OrderedItem,
+  target: OrderedPropertyTarget,
+  was: OoxmlElement | undefined,
+  now: OoxmlElement | undefined,
+  tableCells: readonly string[]
+): void {
+  if (!now || same(was, now)) {
+    return;
+  }
+
+  const flags = { untracked: true, merge: changedKeys(was, now) };
+  withRecord(ctx, open, elementRecord(ctx, own, target, now, tableCells, flags));
+}
+
+/**
+ * Record what the engine's op changed, as records of the suggestion (`sid` makes it at its first
+ * record): a suggestion's under the edit's own author, as Word's form records them
+ * (`w:tblPrChange`, `w:tblGridChange`, `w:trPrChange`, `w:tcPrChange`); a direct press's as the
+ * editor alone keeps what changed. Each record holds the cells the table showed, for a later
+ * decision on a column (`compose/table-columns.ts`). A row its author proposed, and a table whose
+ * rows all are, take records of that insertion (`recordOwn`), as the engine records nothing in
+ * them. Returns the suggestion that holds the press, if any.
  */
 function recordTableChanges(
   ctx: Ctx,
   before: OoxmlElement,
   after: OoxmlElement,
-  sid: string,
+  sid: () => string,
   tracked: boolean
-): void {
+): string | null {
   const tableCells = tableCellSpaces(ctx, after);
+  let made: string | null = null;
   const record = (target: OrderedPropertyTarget, element: OoxmlElement, was?: OoxmlElement) =>
     elementRecord(
       ctx,
-      sid,
+      (made ??= sid()),
       target,
       element,
       tableCells,
       recordFlags(tracked, target, element, was)
     );
+
+  // The pending insertion of a container, when it is the author's own (`insideOwnRow`)
+  const ownOf = (open: OrderedItem) => pendingOwn(ctx, inserter(ctx.doc, open))?.id ?? null;
   const tableOpen = openOf(ctx, before);
   if (!tableOpen) throw new OrderedRefusal('malformed-story', 'a table with no open item');
+  const rows = rowsOf(after).flatMap((row) => {
+    const open = openOf(ctx, row);
+    return open ? [{ row, open, own: ownOf(open) }] : [];
+  });
+  const ownTable = rows.every((r) => r.own !== null) ? ownOf(tableOpen) : null;
+  let own = ownTable;
   for (const name of ['tblPr', 'tblGrid'] as const) {
     const now = childNamed(after, name);
     const was = childNamed(before, name);
-    if (keeps(tracked, was, now)) withRecord(ctx, tableOpen, record(name, now, was));
+    if (ownTable !== null) {
+      recordOwn(ctx, ownTable, tableOpen, name, was, now, tableCells);
+    } else if (keeps(tracked, was, now)) {
+      withRecord(ctx, tableOpen, record(name, now, was));
+    }
   }
 
   const oldRows = new Map(rowsOf(before).map((row) => [row.id, row]));
   const oldCells = cellsOf(before);
-  for (const row of rowsOf(after)) {
-    const rowOpen = openOf(ctx, row);
-    if (!rowOpen) continue;
+  for (const { row, open: rowOpen, own: ownRow } of rows) {
     const was = oldRows.get(row.id);
     const trPr = childNamed(row, 'trPr');
     const oldTrPr = was && childNamed(was, 'trPr');
+    const cells = rowCells(row).flatMap((cell) => {
+      const open = openOf(ctx, cell);
+      const old = oldCells.get(cell.id);
+      return open
+        ? [{ open, tcPr: childNamed(cell, 'tcPr'), was: old && childNamed(old, 'tcPr') }]
+        : [];
+    });
+    if (ownRow !== null) {
+      own = ownRow;
+      recordOwn(ctx, ownRow, rowOpen, 'trPr', oldTrPr, trPr, tableCells);
+      for (const cell of cells) {
+        recordOwn(ctx, ownRow, cell.open, 'tcPr', cell.was, cell.tcPr, tableCells);
+      }
+
+      continue;
+    }
+
     if (keeps(tracked, oldTrPr, trPr)) withRecord(ctx, rowOpen, record('trPr', trPr, oldTrPr));
     // Word's height on a row with no properties: no row record, shown while it is pending; its
     // anchor is the table's record, or the row's own (`compose/row-heights.ts`)
     else if (tracked && trPr && !same(oldTrPr, trPr))
       withRecord(ctx, rowOpen, { ...record('trPr', trPr, oldTrPr), untracked: true });
-    for (const cell of rowCells(row)) {
-      const open = openOf(ctx, cell);
-      const old = oldCells.get(cell.id);
-      const tcPr = childNamed(cell, 'tcPr');
-      const oldTcPr = old && childNamed(old, 'tcPr');
-      if (open && keeps(tracked, oldTcPr, tcPr))
-        withRecord(ctx, open, record('tcPr', tcPr, oldTcPr));
+    for (const cell of cells) {
+      if (keeps(tracked, cell.was, cell.tcPr)) {
+        withRecord(ctx, cell.open, record('tcPr', cell.tcPr, cell.was));
+      }
     }
 
-    if (tracked) heightTakenOver(ctx, row, sid);
+    if (tracked && made !== null) {
+      heightTakenOver(ctx, row, made);
+    }
   }
+
+  return made ?? own;
 }
 
 /**
@@ -277,7 +331,5 @@ export function tableProperty(
   const treeOp = tableTreeOp(tableNode, shellId(row), cellIds, op, revision);
   const after = viewNode(engineScratch(view, [tableNode], treeOp), tableNode.id);
   if (after === tableNode) return null;
-  const suggestion = suggestionFor(ctx);
-  recordTableChanges(ctx, tableNode, after, suggestion.id, !ctx.direct);
-  return suggestion.id;
+  return recordTableChanges(ctx, tableNode, after, () => suggestionFor(ctx).id, !ctx.direct);
 }

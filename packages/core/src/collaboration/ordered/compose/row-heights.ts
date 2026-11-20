@@ -3,13 +3,16 @@
 import type { OoxmlElement, OoxmlNode } from '../../../store/package/ooxml-tree.ts';
 import { tableHeightAnchor } from '../../../store/store/revision-table-implicit-height.ts';
 import { rowHeightAnchorEdits } from '../../../store/store/revision-table-row-anchor.ts';
-import { statusOf } from '../model/document.ts';
+import { inserter, statusOf } from '../model/document.ts';
 import { REVISION_ROLE } from '../model/revision-ids.ts';
 import type { OrderedItem } from '../model/types.ts';
 import { childNamed, isWml, withChildren } from '../ooxml-nodes.ts';
 import type { ComposeContext } from './context.ts';
 
-/** The pending suggestion whose height the row shows with no row record, if any. */
+/**
+ * The pending suggestion whose height the row shows with no row record, if any. A height of the
+ * row's own insertion is part of it: Word writes it with no anchor.
+ */
 export function pendingHeightOf(ctx: ComposeContext, open: OrderedItem): string | undefined {
   if (ctx.options.pending === 'reject') return undefined;
   for (const p of open.props)
@@ -19,7 +22,8 @@ export function pendingHeightOf(ctx: ComposeContext, open: OrderedItem): string 
       p.untracked === true &&
       p.element !== null &&
       childNamed(p.element, 'trHeight') !== undefined &&
-      statusOf(ctx.doc, p.suggestion) === 'pending'
+      statusOf(ctx.doc, p.suggestion) === 'pending' &&
+      p.suggestion !== inserter(ctx.doc, open)
     )
       return p.suggestion;
   return undefined;

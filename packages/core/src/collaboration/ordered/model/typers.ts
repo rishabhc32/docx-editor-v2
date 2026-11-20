@@ -1,10 +1,10 @@
 // Who typed the units of a pending insertion: the namespace of the room change that typed them,
 // and its person.
 
-import { CardRead, inserter } from '../card-of.ts';
+import { CardRead } from '../card-of.ts';
 import { parseOrderedChangeId } from '../change/ids.ts';
 import { byStoryOrder } from '../load/load.ts';
-import { itemAt, mainStory } from './document.ts';
+import { inserter, itemAt, mainStory } from './document.ts';
 import type { OrderedPerson } from './person.ts';
 import { isTextBoxStoryName, textBoxHostOf } from './text-boxes.ts';
 import { isUnit, type OrderedDocument, type OrderedItem, type OrderedStory } from './types.ts';
