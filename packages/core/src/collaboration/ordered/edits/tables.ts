@@ -12,7 +12,8 @@ import type {
 import type { OrderedViewParagraph } from '../compose/context.ts';
 import { insertedPending } from '../model/document.ts';
 import { insertItems, relabel } from '../model/mutations.ts';
-import { OrderedRefusal } from '../model/refusal.ts';
+import type { OrderedItem } from '../model/types.ts';
+import { engineRefusal, OrderedRefusal } from '../model/refusal.ts';
 import { isWml } from '../ooxml-nodes.ts';
 import {
   closeOf,
@@ -148,24 +149,45 @@ export function deleteRow(
   }
 
   if (!options.evenStruck && struckAlready(ctx, row.dels)) return null;
-  const suggestion = suggestionFor(ctx);
-  for (const item of [row, close])
-    relabel(ctx.doc, ctx.story, item, { dels: [...item.dels, suggestion.id] });
+
+  // A cell holds one `w:cellIns`, `w:cellDel` or `w:cellMerge`: as the engine's tracked row
+  // deletion, a suggestion refuses a row whose cell shows one of its own (a pending new or struck
+  // column)
+  const cells = ownCellEdges(inside);
+  if (
+    !ctx.direct &&
+    cells.some((cell) => insertedPending(ctx.doc, cell) || struckAlready(ctx, cell.dels))
+  ) {
+    throw engineRefusal('deleteTableRow', 'unsupported-revision');
+  }
 
   // The row's own cells are struck too (`w:cellDel`, as the engine marks them); everything in
   // the row goes with it through `within`
-  let depth = 0;
-  for (const item of inside) {
-    const edge = item.kind === 'open' || item.kind === 'close';
-    if (edge && item.token === 'tbl') depth += item.kind === 'open' ? 1 : -1;
-    if (edge && item.token === 'tc' && depth === 0) {
-      relabel(ctx.doc, ctx.story, item, { dels: [...item.dels, suggestion.id] });
-    }
+  const suggestion = suggestionFor(ctx);
+  for (const item of [row, close, ...cells]) {
+    relabel(ctx.doc, ctx.story, item, { dels: [...item.dels, suggestion.id] });
+  }
 
+  for (const item of inside) {
     holdWithin(ctx, ctx.story, item, suggestion.id);
   }
 
   return suggestion.id;
+}
+
+/** The edges of a row's own cells among the items inside it, not those of a table in a cell. */
+function ownCellEdges(inside: readonly OrderedItem[]): OrderedItem[] {
+  const edges: OrderedItem[] = [];
+  let depth = 0;
+  for (const item of inside) {
+    if (item.token === 'tbl') {
+      depth += item.kind === 'open' ? 1 : -1;
+    } else if (item.token === 'tc' && depth === 0) {
+      edges.push(item);
+    }
+  }
+
+  return edges;
 }
 
 // ---- new tables ----
