@@ -7,14 +7,34 @@
 
 import { describe, expect, test } from 'bun:test';
 import { strFromU8, unzipSync } from 'fflate';
+import { applyOrderedChange } from '../change/apply.ts';
+import { orderedChangeId, orderedIdMinter } from '../change/ids.ts';
+import { validateOrderedChange } from '../change/validate.ts';
 import { openOrderedWordFile } from '../client/open.ts';
+import { orderedViewParagraph } from '../compose/compose.ts';
 import { orderedPackageBytes } from '../compose/package.ts';
 import { orderedCards } from '../decide.ts';
 import type { OoxmlPackage } from '../../../store/package/ooxml-package.ts';
+import { isHidden } from '../model/document.ts';
+import { OrderedRefusal } from '../model/refusal.ts';
 import type { OrderedDocument, OrderedItem } from '../model/types.ts';
-import { addressOf, apply, at, DIRECT, EDIT, markOf, textOf } from './change-apply-fixture.ts';
+import { withUndoRecord } from '../model/undo-record.ts';
+import { orderedStampDate } from '../room/room.ts';
+import {
+  addressOf,
+  apply,
+  at,
+  BODY,
+  DIRECT,
+  EDIT,
+  markOf,
+  textOf,
+} from './change-apply-fixture.ts';
 import { checkFold, folded, mediaStore } from './fold-check.ts';
+import { seededRandom } from './random.ts';
+import { randomChange, type ChangeBody } from './sessions/random-change.ts';
 import { checkSaveAndLoad } from './sessions/session.ts';
+import { testPerson } from './test-persons.ts';
 import { docx, p, t } from './word-fixtures.ts';
 
 const fldChar = (type: string) => `<w:r><w:fldChar w:fldCharType="${type}"/></w:r>`;
@@ -53,11 +73,16 @@ const cardMakers = (doc: OrderedDocument): string[] =>
     (card) => doc.suggestions.get(card.suggestions[0] ?? '')?.attribution.author ?? ''
   );
 
-/** The field character items of the body, by type. */
-function fieldChars(doc: OrderedDocument, type: string): OrderedItem[] {
-  return [...(doc.stories.get('/word/document.xml')?.tree.items() ?? [])].filter((item) => {
+/** The body's items. */
+const bodyItems = (doc: OrderedDocument): Iterable<OrderedItem> =>
+  doc.stories.get(BODY)?.tree.items() ?? [];
+
+/** The field character items among `items`, by type. */
+function fieldChars(items: Iterable<OrderedItem>, type: string): OrderedItem[] {
+  return [...items].filter((item) => {
     const node = item.node;
     return (
+      item.kind === 'zero' &&
       node !== null &&
       node.kind !== 'textValue' &&
       node.localName === 'fldChar' &&
@@ -84,8 +109,8 @@ describe('a table of contents field over one paragraph, its result a link', () =
   test("the organiser's one-row result, a party's break in its link, a page field after it", async () => {
     const file = docx(p(tocBegin) + p(link(t('Old row'))) + p(fldChar('end')) + heading);
     const { document: doc, base } = openOrderedWordFile(file, { file: 1 });
-    const [separate] = fieldChars(doc, 'separate');
-    const [end] = fieldChars(doc, 'end');
+    const [separate] = fieldChars(bodyItems(doc), 'separate');
+    const [end] = fieldChars(bodyItems(doc), 'end');
     if (!separate || !end) {
       throw new Error('fixture');
     }
@@ -109,7 +134,7 @@ describe('a table of contents field over one paragraph, its result a link', () =
     );
     apply(doc, 'olga:2', { kind: 'join', ...DIRECT, mark: markOf(doc, 0) }, 'Olga');
     expect(textOf(doc, 0)).toBe('Clause one2');
-    expect(fieldChars(doc, 'end').length).toBe(1);
+    expect(fieldChars(bodyItems(doc), 'end').length).toBe(1);
     apply(doc, 'ana:1', { kind: 'insert-break', ...EDIT, place: at(doc, 0, 5), break: 'column' });
     apply(
       doc,
@@ -179,5 +204,94 @@ describe('a field in one run', () => {
       expect(savedBody(doc, base)).toContain(content);
       await checkReopen(doc, base, label);
     });
+  }
+});
+
+describe('random edits around fields after fields', () => {
+  // The lasting fold test's random sessions type no field and hold no table of contents: here
+  // three people edit at random a file with a one-paragraph table of contents whose link holds
+  // a suggestion, and suggest page fields after fields, links and each other's fields
+  const PEOPLE = ['Olga', 'Ana', 'Cy'];
+  const row = t('Clau') + inserted(columnBreak) + t('se one') + pageTab + t('2');
+  const numPages = fldChar('begin') + instr('NUMPAGES') + fldChar('separate') + t('3');
+  const FILE = docx(
+    p(tocBegin + link(row) + fldChar('end')) +
+      p(t('Fee ') + numPages + fldChar('end') + t(' due.')) +
+      p(t('Page ') + oneRun('PAGE') + t(' of the terms.')) +
+      heading +
+      p(t('Signed here.'))
+  );
+  for (const seed of [7, 23]) {
+    test(`seed ${seed}: each fold gives back the room's file and cards`, async () => {
+      const { document: doc, base } = openOrderedWordFile(FILE, { file: 1 });
+      const rand = seededRandom(seed);
+      const send = (who: number, n: number, body: ChangeBody) => {
+        const author = PEOPLE[who] ?? 'Olga';
+        const namespace = author.toLowerCase();
+        const checked = validateOrderedChange(
+          { v: 1, id: orderedChangeId(namespace, n), ...body },
+          { namespace, parts: doc.stories }
+        );
+        if (!checked.ok) {
+          return;
+        }
+
+        try {
+          withUndoRecord(doc, () =>
+            applyOrderedChange(doc, checked.value, {
+              person: testPerson(author),
+              date: orderedStampDate(Date.UTC(2026, 9, 29) + 1000 * who),
+              ids: orderedIdMinter(checked.value.id),
+            })
+          );
+        } catch (error) {
+          if (!(error instanceof OrderedRefusal)) {
+            throw error;
+          }
+        }
+      };
+
+      // A page field after the table of contents' field first, then at random
+      for (let n = 1; n <= 120; n += 1) {
+        const who = n % PEOPLE.length;
+        const mode = who === 0 && rand() < 0.3 ? 'edit' : 'suggest';
+        let body: ChangeBody | null;
+        if (n === 1 || rand() < 0.25) {
+          // At the end of a paragraph where no field is open: a field inside a field that ends
+          // in a later paragraph is no unit to the engine (design D19, open)
+          const marks: OrderedItem[] = [];
+          let open = 0;
+          for (const item of bodyItems(doc)) {
+            if (isHidden(doc, item)) {
+              continue;
+            }
+
+            open += fieldChars([item], 'begin').length - fieldChars([item], 'end').length;
+            if (item.kind === 'mark' && open === 0) {
+              marks.push(item);
+            }
+          }
+
+          const mark = n === 1 ? marks[0] : marks[Math.floor(rand() * marks.length)];
+          body = mark
+            ? {
+                kind: 'insert-field',
+                part: BODY,
+                mode,
+                place: { mark: addressOf(mark) },
+                field: 'PAGE',
+              }
+            : null;
+        } else {
+          body = randomChange(doc, { author: PEOPLE[who] ?? '', organiser: who === 0 }, rand);
+        }
+
+        if (body !== null) {
+          send(who, n, body);
+        }
+      }
+
+      await checkReopen(doc, base, `seed ${seed}`);
+    }, 60_000);
   }
 });
