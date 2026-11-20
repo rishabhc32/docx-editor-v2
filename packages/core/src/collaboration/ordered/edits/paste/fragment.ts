@@ -23,7 +23,7 @@ import {
   siteAt,
   type Site,
 } from '../../placement.ts';
-import type { Ctx } from '../context.ts';
+import { nestedIn, type Ctx } from '../context.ts';
 import { holdsLines, promptBreakSite, splitContainers } from '../marks.ts';
 import { newParagraphIdentity, withParagraphIdentity } from '../para-ids.ts';
 import {
@@ -48,15 +48,8 @@ function withOwnParagraphIds(ctx: Ctx, node: OoxmlNode | null): OoxmlNode | null
 function asPasted(ctx: Ctx, p: OrderedViewParagraph, item: OrderedItem, suggestion: string) {
   const block = item.token !== undefined && BLOCK_TOKENS.has(item.token);
   const own = item.by === null && (ctx.direct || !block);
-  const out: OrderedItem = {
-    ...item,
-    ...(own ? { by: suggestion } : {}),
-    // The rows and cells around the host paragraph hold the paste too
-    within: {
-      by: [...p.mark.within.by, ...item.within.by],
-      dels: [...p.mark.within.dels, ...item.within.dels],
-    },
-  };
+  // The rows and cells around the host paragraph hold the paste too
+  const out = nestedIn({ ...item, ...(own ? { by: suggestion } : {}) }, p.mark.within);
   return item.kind === 'mark' ? { ...out, node: withOwnParagraphIds(ctx, item.node) } : out;
 }
 

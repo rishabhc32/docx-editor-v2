@@ -21,7 +21,7 @@ import {
   refuseLockedTable,
   refuseLockedWithin,
 } from '../placement.ts';
-import { holdWithin, pendingOwn, suggestionFor, takeBack, type Ctx } from './context.ts';
+import { holdWithin, nestedIn, pendingOwn, suggestionFor, takeBack, type Ctx } from './context.ts';
 import { takeBackNotesOf } from './note-body.ts';
 import { othersPending } from './retract.ts';
 import { blockOf } from './table-nodes.ts';
@@ -216,7 +216,9 @@ export function insertTable(
     throw new OrderedRefusal('engine-refused', 'the engine added more than a table');
   const suggestion = suggestionFor(ctx);
   const items = added.flatMap((node) =>
-    node.kind === 'textValue' ? [] : templateItems(ctx, node, suggestion.id)
+    node.kind === 'textValue'
+      ? []
+      : templateItems(ctx, node, suggestion.id).map((item) => nestedIn(item, p.mark.within))
   );
   insertItems(ctx.doc, ctx.story, before, items);
   return suggestion.id;

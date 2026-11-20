@@ -177,6 +177,75 @@ describe('a fold of a paragraph press that changes nothing', () => {
   });
 });
 
+describe('a fold of a table part inside a new row or table', () => {
+  const newRow = (doc: OrderedDocument) =>
+    apply(doc, 'ana:1', {
+      kind: 'insert-row',
+      ...EDIT,
+      row: addressOf(opens(doc, 'tr')[0]!),
+      where: 'below',
+    });
+
+  // Bob's new column, row or table inside Ana's new row or table sits in her insertion, as a
+  // reopened Word file reads it: it goes when her insertion is rejected
+  for (const [label, insert] of [
+    [
+      'a new column across a new row',
+      (doc: OrderedDocument) => {
+        newRow(doc);
+
+        // The new row's first cell, after the first row's two
+        apply(
+          doc,
+          'bob:1',
+          { kind: 'insert-column', ...EDIT, cell: addressOf(opens(doc, 'tc')[2]!), where: 'right' },
+          'Bob'
+        );
+      },
+    ],
+    [
+      'a new row in a new table',
+      (doc: OrderedDocument) => {
+        apply(doc, 'ana:1', {
+          kind: 'insert-table',
+          ...EDIT,
+          place: at(doc, 9, 0),
+          rows: 1,
+          columns: 2,
+          columnWidth: 3000,
+        });
+        const row = addressOf(opens(doc, 'tr').at(-1)!);
+        apply(doc, 'bob:1', { kind: 'insert-row', ...EDIT, row, where: 'below' }, 'Bob');
+      },
+    ],
+    [
+      'a new table in a new row',
+      (doc: OrderedDocument) => {
+        newRow(doc);
+        apply(
+          doc,
+          'bob:1',
+          {
+            kind: 'insert-table',
+            ...EDIT,
+            place: at(doc, 6, 0),
+            rows: 1,
+            columns: 1,
+            columnWidth: 2000,
+          },
+          'Bob'
+        );
+      },
+    ],
+  ] as const) {
+    test(label, async () => {
+      const { document: doc, base } = openOrderedWordFile(APPLY_FILE, { file: 1 });
+      insert(doc);
+      await checkFold(doc, base, mediaStore(base), label);
+    });
+  }
+});
+
 describe('a fold of a link inside an insertion', () => {
   // Ana's link on the end of her own insertion, and Bob's words typed before the link: the room
   // labels the link's edges with her insertion, a Word file holds no insertion on a link

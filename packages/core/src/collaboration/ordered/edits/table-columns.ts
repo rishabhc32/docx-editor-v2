@@ -11,7 +11,7 @@ import type { OrderedItem, OrderedPropertyTarget, OrderedSuggestion } from '../m
 import { childNamed, isWml, withChildren } from '../ooxml-nodes.ts';
 import { closeOf, itemsInside, refuseLockedTable } from '../placement.ts';
 import { retractSuggestion } from './retract.ts';
-import { holdWithin, suggestionFor, takeBack, type Ctx } from './context.ts';
+import { holdWithin, nestedIn, suggestionFor, takeBack, type Ctx } from './context.ts';
 import {
   blockOf,
   cellsOf,
@@ -114,7 +114,7 @@ function placeNewCells(
         ctx,
         ctx.direct ? asInsertedCell(ctx, cell) : withoutRecord(cell),
         sid
-      );
+      ).map((item) => nestedIn(item, beside.within));
       insertItems(ctx.doc, ctx.story, at, items);
       const first = items[0];
       if (first) added.set(cell.id, first);

@@ -16,6 +16,7 @@ import type {
   OrderedItem,
   OrderedStory,
   OrderedSuggestion,
+  OrderedWithin,
 } from '../model/types.ts';
 import { childWhere, isParagraphProperties, isWml, withChildren } from '../ooxml-nodes.ts';
 
@@ -146,6 +147,15 @@ export function holdWithin(
     within: { by: item.within.by, dels: [...item.within.dels, suggestion] },
   });
 }
+
+/**
+ * A new item inside containers that pending suggestions insert or strike (`outer`), as a load
+ * reads it: their labels go first, so it goes when they do.
+ */
+export const nestedIn = (item: OrderedItem, outer: OrderedWithin): OrderedItem => ({
+  ...item,
+  within: { by: [...outer.by, ...item.within.by], dels: [...outer.dels, ...item.within.dels] },
+});
 
 /** The suggestion an edit's labels go to: the joined one, the one it extends, or a new one. */
 export function suggestionFor(
