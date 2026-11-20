@@ -117,14 +117,15 @@ const holdsChangeRecord = (element: OoxmlElement | undefined): element is OoxmlE
 
 /**
  * Whether a container's properties take a record: tracked, when the engine wrote a change record
- * in them, changed or not (a row's cells are one decision in Word); direct, when they changed.
+ * in them, changed or not (a row's cells are one decision in Word); direct, when they changed. A
+ * container the engine left as it was keeps the records it holds, whoever made them.
  */
 function keeps(
   tracked: boolean,
   was: OoxmlElement | undefined,
   now: OoxmlElement | undefined
 ): now is OoxmlElement {
-  return tracked ? holdsChangeRecord(now) : now !== undefined && !same(was, now);
+  return tracked ? now !== was && holdsChangeRecord(now) : now !== undefined && !same(was, now);
 }
 
 /**

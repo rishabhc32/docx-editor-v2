@@ -5,6 +5,9 @@
 // is part of that insertion, with no card of its own, and the file holds its properties with no
 // record and no row anchor. Found by the acceptance run: a row height and a cell alignment in a
 // party's own new table read back after a fold as a row anchor and a grid record of nobody.
+//
+// A press records only the containers the engine wrote: another person's records elsewhere in the
+// table stay theirs.
 
 import { describe, expect, test } from 'bun:test';
 import type { OoxmlPackage } from '../../../store/package/ooxml-package.ts';
@@ -96,6 +99,33 @@ describe("a table press in its author's own new row or table", () => {
       expect(xml).toContain('<w:trHeight w:hRule="exact" w:val="480"/>');
       expect(xml).toContain('<w:vAlign w:val="center"/>');
       expect(xml).not.toMatch(/PrChange|PrExChange|GridChange/);
+      await checked(doc, base, label);
+    });
+  }
+});
+
+describe('a table press leaves the records it did not write', () => {
+  for (const [label, first] of [
+    ['a fill', { op: 'setTableCellFill', color: { kind: 'hex', value: 'FFCC00' } }],
+    ['a row height', HEIGHT],
+  ] as const) {
+    test(`${label} on the first row, then an alignment on the second`, async () => {
+      const { document: doc, base } = openOrderedWordFile(APPLY_FILE, { file: 1 });
+      const on = first.op === 'setTableRowHeight' ? opens(doc, 'tr')[0]! : opens(doc, 'tc')[0]!;
+      press(doc, 'ana:1', on, first, 'Ana');
+      const ana = records(doc);
+      press(doc, 'bob:1', opens(doc, 'tc')[3]!, ALIGN, 'Bob');
+
+      // Ana's records stay hers; Bob's alignment records the second row's cells
+      const [bob] = orderedCards(doc)
+        .flatMap((card) => card.suggestions)
+        .filter((id) => !ana.some((record) => record.suggestion === id));
+      expect(records(doc)).toEqual([
+        ...ana,
+        { token: 'tc', target: 'tcPr', suggestion: bob, untracked: false },
+        { token: 'tc', target: 'tcPr', suggestion: bob, untracked: false },
+      ]);
+      expect(orderedCards(doc)).toHaveLength(2);
       await checked(doc, base, label);
     });
   }
