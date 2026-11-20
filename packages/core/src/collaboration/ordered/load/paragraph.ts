@@ -45,6 +45,7 @@ import { loadFieldPiece, loadRun, simpleFieldAtom } from './runs.ts';
 import {
   checkDepth,
   markerLabels,
+  markPrompt,
   moveName,
   pushClose,
   pushItem,
@@ -443,8 +444,7 @@ function loadInlineControl(
 
   // A control showing its prompt: the prompt is not content
   if (showsPlaceholder(node)) {
-    state.prompts.add(first - 1);
-    for (let k = first; k < state.items.length; k += 1) state.prompts.add(k);
+    markPrompt(state, first, () => true);
   }
 
   pushClose(state, open, labels);

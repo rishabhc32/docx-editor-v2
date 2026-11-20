@@ -407,8 +407,9 @@ export interface OrderedItem
    */
   readonly rebuilt?: boolean;
   /**
-   * A control's prompt unit, or (on an open item) a control that shows one, or the mark of a
-   * paragraph of a block control's prompt of two or more paragraphs.
+   * A control's prompt unit, or (on an open item) a control that shows one or sits in another
+   * control's prompt, or the mark of a paragraph of a block control's prompt of two or more
+   * paragraphs.
    */
   readonly prompt?: boolean;
   /** Open and close items: the container kind. */

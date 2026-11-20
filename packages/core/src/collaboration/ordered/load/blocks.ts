@@ -27,6 +27,7 @@ import {
   checkDepth,
   contentLabels,
   markerLabels,
+  markPrompt,
   NO_LABELS,
   pushClose,
   pushOpen,
@@ -149,11 +150,7 @@ function loadBlockControl(
 
   // A block control showing its prompt: the prompt's units are not content
   if (showsPlaceholder(node)) {
-    state.prompts.add(first - 1);
-    for (let k = first; k < state.items.length; k += 1) {
-      const kind = state.items[k]?.kind;
-      if (kind === 'text' || kind === 'atom') state.prompts.add(k);
-    }
+    markPrompt(state, first, (item) => item.kind === 'text' || item.kind === 'atom');
 
     // A prompt of two or more paragraphs: their marks are the prompt's too, and the paragraphs
     // that hold nothing else go while content replaces it (`change/settle-prompts.ts`)

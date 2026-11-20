@@ -327,6 +327,42 @@ export function loadInEdit<T>(doc: OrderedDocument, load: () => T): T {
   return value;
 }
 
+/**
+ * Mark a control's prompt once the control is loaded: its open item (at `first - 1`) and each
+ * item from `first` on that `inPrompt` takes. A control inside the prompt keeps its own items,
+ * as a control the room puts in a prompt keeps them (`ownItems`): only its open item is marked,
+ * and its content stays its own, shown or not by its own rule.
+ */
+export function markPrompt(
+  state: LoadState,
+  first: number,
+  inPrompt: (item: OrderedItem) => boolean
+): void {
+  state.prompts.add(first - 1);
+  let inner: string | undefined;
+  for (let k = first; k < state.items.length; k += 1) {
+    const item = state.items[k];
+    if (!item) {
+      continue;
+    }
+
+    if (inner !== undefined) {
+      if (item.kind === 'close' && item.pair === inner) {
+        inner = undefined;
+      }
+
+      continue;
+    }
+
+    if (item.kind === 'open' && (item.token === 'sdt' || item.token === 'sdtBlock')) {
+      state.prompts.add(k);
+      inner = item.pair;
+    } else if (inPrompt(item)) {
+      state.prompts.add(k);
+    }
+  }
+}
+
 /** The story's items, each of a control's prompt units marked as such. */
 export function itemsWithPrompts(state: LoadState): OrderedItem[] {
   return state.items.map((item, k) => (state.prompts.has(k) ? { ...item, prompt: true } : item));
