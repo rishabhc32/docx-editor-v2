@@ -115,17 +115,27 @@ const holdsChangeRecord = (element: OoxmlElement | undefined): element is OoxmlE
   element !== undefined &&
   element.children.some((c) => c.kind !== 'textValue' && c.localName.endsWith('Change'));
 
+/** Whether a container holds a pending record of the edit's own author (`ownRowDecision`). */
+const holdsOwnRecord = (ctx: Ctx, open: OrderedItem, target: OrderedPropertyTarget): boolean =>
+  open.props.some((p) => p.target === target && pendingOwn(ctx, p.suggestion) !== null);
+
 /**
- * Whether a container's properties take a record: tracked, when the engine wrote a change record
- * in them, changed or not (a row's cells are one decision in Word); direct, when they changed. A
- * container the engine left as it was keeps the records it holds, whoever made them.
+ * Whether a container's properties take a record: tracked, when they hold a change record the
+ * engine wrote, changed or not (a row's cells are one decision in Word), or one the press joins
+ * (`own`: the author's own pending record, whose `w:id` the engine's write keeps); direct, when
+ * they changed. Another person's record in a container the engine left as it was stays theirs.
  */
 function keeps(
   tracked: boolean,
   was: OoxmlElement | undefined,
-  now: OoxmlElement | undefined
+  now: OoxmlElement | undefined,
+  own: boolean
 ): now is OoxmlElement {
-  return tracked ? now !== was && holdsChangeRecord(now) : now !== undefined && !same(was, now);
+  if (!tracked) {
+    return now !== undefined && !same(was, now);
+  }
+
+  return holdsChangeRecord(now) && (now !== was || own);
 }
 
 /**
@@ -211,7 +221,7 @@ function recordTableChanges(
     const was = childNamed(before, name);
     if (ownTable !== null) {
       recordOwn(ctx, ownTable, tableOpen, name, was, now, tableCells);
-    } else if (keeps(tracked, was, now)) {
+    } else if (keeps(tracked, was, now, holdsOwnRecord(ctx, tableOpen, name))) {
       withRecord(ctx, tableOpen, record(name, now, was));
     }
   }
@@ -239,13 +249,16 @@ function recordTableChanges(
       continue;
     }
 
-    if (keeps(tracked, oldTrPr, trPr)) withRecord(ctx, rowOpen, record('trPr', trPr, oldTrPr));
-    // Word's height on a row with no properties: no row record, shown while it is pending; its
-    // anchor is the table's record, or the row's own (`compose/row-heights.ts`)
-    else if (tracked && trPr && !same(oldTrPr, trPr))
+    if (keeps(tracked, oldTrPr, trPr, holdsOwnRecord(ctx, rowOpen, 'trPr'))) {
+      withRecord(ctx, rowOpen, record('trPr', trPr, oldTrPr));
+    } else if (tracked && trPr && !same(oldTrPr, trPr)) {
+      // Word's height on a row with no properties: no row record, shown while it is pending;
+      // its anchor is the table's record, or the row's own (`compose/row-heights.ts`)
       withRecord(ctx, rowOpen, { ...record('trPr', trPr, oldTrPr), untracked: true });
+    }
+
     for (const cell of cells) {
-      if (keeps(tracked, cell.was, cell.tcPr)) {
+      if (keeps(tracked, cell.was, cell.tcPr, holdsOwnRecord(ctx, cell.open, 'tcPr'))) {
         withRecord(ctx, cell.open, record('tcPr', cell.tcPr, cell.was));
       }
     }
