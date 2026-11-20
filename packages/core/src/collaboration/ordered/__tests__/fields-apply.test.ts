@@ -223,6 +223,24 @@ describe('a link that Enter split', () => {
     expect(() => partsOf(doc)).not.toThrow();
     expect([textOf(doc, 1), textOf(doc, 2)]).toEqual(['See the terms', '.']);
   });
+
+  test("is one link again when its author's deletion takes the Enter back over another person's words at the first half's end", () => {
+    const doc = load();
+    apply(doc, 'ana-1:1', { kind: 'split', ...EDIT, place: at(doc, 1, 7) });
+    expect([textOf(doc, 1), textOf(doc, 2)]).toEqual(['See the', ' terms.']);
+
+    // Bob's words at the first half's end go after its link; Ana's deletion takes her Enter back
+    apply(
+      doc,
+      'bob-1:1',
+      { kind: 'insert', ...EDIT, place: { mark: markOf(doc, 1) }, text: 'Z' },
+      'Bob'
+    );
+    apply(doc, 'ana-1:2', { kind: 'delete', ...EDIT, from: at(doc, 1, 5), to: at(doc, 2, 2) });
+    expect(textOf(doc, 1)).toBe('See theZ terms.');
+    const body = partsOf(doc).join();
+    expect(body.match(/<w:hyperlink /g)?.length).toBe(1);
+  });
 });
 
 const BOB = 'w:author="Bob" w:date="2026-10-28T12:00:00Z"';

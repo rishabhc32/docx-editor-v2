@@ -13,7 +13,7 @@ import {
 import { paragraphOpKeeps, paragraphOpRefusal } from '../compose/paragraph-ops.ts';
 import { ownItems, showsBlockPrompt } from '../compose/paragraph.ts';
 import { innermostSegment, isControlSegment, openOfSegment } from '../containers.ts';
-import { createOrderedItem, insertedPending } from '../model/document.ts';
+import { createOrderedItem, insertedPending, isSplitEdge } from '../model/document.ts';
 import { nextSeq, relabel } from '../model/mutations.ts';
 import { OrderedRefusal } from '../model/refusal.ts';
 import { orderedListOf } from '../model/resources.ts';
@@ -329,21 +329,26 @@ function enterDivides(open: OrderedItem): boolean {
 }
 
 /**
- * The close items right before a mark and the open items right after it that the same Enter
- * put there (a split link or control): they go with the mark when its author takes it back.
+ * The close items before a mark and the open items after it, in its two paragraphs, that the
+ * same Enter put there (a split link or control): they go with the mark when its author takes it
+ * back. Words typed at the first part's end go after its close items.
  */
 function splitAround(ctx: Ctx, mark: OrderedItem): OrderedItem[] {
   const out: OrderedItem[] = [];
-  const isSplitEdge = (item: OrderedItem | null, kind: 'open' | 'close'): item is OrderedItem =>
-    item !== null &&
-    item.kind === kind &&
-    item.space !== item.pair &&
-    mark.by !== null &&
-    item.by === mark.by;
-  for (let at = ctx.story.tree.prev(mark); isSplitEdge(at, 'close'); at = ctx.story.tree.prev(at))
-    out.push(at);
-  for (let at = ctx.story.tree.next(mark); isSplitEdge(at, 'open'); at = ctx.story.tree.next(at))
-    out.push(at);
+  const ofEnter = (item: OrderedItem, kind: 'open' | 'close'): boolean =>
+    item.kind === kind && isSplitEdge(item) && mark.by !== null && item.by === mark.by;
+  for (let at = ctx.story.tree.prev(mark); at && at.kind !== 'mark'; at = ctx.story.tree.prev(at)) {
+    if (ofEnter(at, 'close')) {
+      out.push(at);
+    }
+  }
+
+  for (let at = ctx.story.tree.next(mark); at && at.kind !== 'mark'; at = ctx.story.tree.next(at)) {
+    if (ofEnter(at, 'open')) {
+      out.push(at);
+    }
+  }
+
   return out;
 }
 
