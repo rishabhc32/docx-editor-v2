@@ -28,6 +28,8 @@ import {
   DIRECT,
   EDIT,
   markOf,
+  partsOf,
+  refusal,
   textOf,
 } from './change-apply-fixture.ts';
 import { checkFold, folded, mediaStore } from './fold-check.ts';
@@ -207,6 +209,41 @@ describe('a field in one run', () => {
   }
 });
 
+describe('a field inside another field', () => {
+  // The engine reads no field inside another field's result in that field's paragraph: its parse
+  // stops at a begin with no end there, and a closed field's result is that field's. A reopen
+  // would hold no unit and no card for such a field, so the room refuses to make one
+  const page = (place: ReturnType<typeof at> | { mark: ReturnType<typeof markOf> }) =>
+    ({ kind: 'insert-field', place, field: 'PAGE' }) as const;
+
+  test('is refused where a field that ends in a later paragraph is open', () => {
+    const file = docx(p(tocBegin + link(t('Clause one') + pageTab + t('2'))) + p(fldChar('end')));
+    const doc = openOrderedWordFile(file, { file: 1 }).document;
+    const before = partsOf(doc);
+    expect(refusal(doc, 'cy:1', { ...EDIT, ...page({ mark: markOf(doc, 0) }) }, 'Cy')).toBe(
+      'invalid-edit'
+    );
+    expect(refusal(doc, 'olga:1', { ...DIRECT, ...page(at(doc, 0, 3)) }, 'Olga')).toBe(
+      'invalid-edit'
+    );
+    expect(partsOf(doc)).toEqual(before);
+
+    // After the field's end, in its own paragraph, the field is one unit
+    expect(refusal(doc, 'cy:2', { ...EDIT, ...page({ mark: markOf(doc, 1) }) }, 'Cy')).toBe(
+      'applied'
+    );
+  });
+
+  test("is refused in a closed field's result, the field held as its markers", () => {
+    const file = docx(p(tocBegin + link(t('Clause one') + pageTab + t('2')) + fldChar('end')));
+    const doc = openOrderedWordFile(file, { file: 1 }).document;
+    expect(refusal(doc, 'cy:1', { ...EDIT, ...page(at(doc, 0, 3)) }, 'Cy')).toBe('invalid-edit');
+    expect(refusal(doc, 'cy:2', { ...EDIT, ...page({ mark: markOf(doc, 0) }) }, 'Cy')).toBe(
+      'applied'
+    );
+  });
+});
+
 describe('random edits around fields after fields', () => {
   // The lasting fold test's random sessions type no field and hold no table of contents: here
   // three people edit at random a file with a one-paragraph table of contents whose link holds
@@ -257,17 +294,9 @@ describe('random edits around fields after fields', () => {
         const mode = who === 0 && rand() < 0.3 ? 'edit' : 'suggest';
         let body: ChangeBody | null;
         if (n === 1 || rand() < 0.25) {
-          // At the end of a paragraph where no field is open: a field inside a field that ends
-          // in a later paragraph is no unit to the engine (design D19, open)
           const marks: OrderedItem[] = [];
-          let open = 0;
           for (const item of bodyItems(doc)) {
-            if (isHidden(doc, item)) {
-              continue;
-            }
-
-            open += fieldChars([item], 'begin').length - fieldChars([item], 'end').length;
-            if (item.kind === 'mark' && open === 0) {
+            if (item.kind === 'mark' && !isHidden(doc, item)) {
               marks.push(item);
             }
           }

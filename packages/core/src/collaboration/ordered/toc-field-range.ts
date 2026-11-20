@@ -4,10 +4,10 @@
 
 import type { OrderedViewParagraph } from './compose/context.ts';
 import { closesContainer } from './containers.ts';
+import { fieldCharType, fieldDepthAfter } from './field-depth.ts';
 import type { Ctx } from './edits/context.ts';
 import { isHidden } from './model/document.ts';
 import type { OrderedItem } from './model/types.ts';
-import { attributeOf } from './ooxml-nodes.ts';
 
 /** The view characters a TOC field covers in one paragraph, and whether it starts or ends there. */
 interface TocFieldRange {
@@ -15,27 +15,6 @@ interface TocFieldRange {
   readonly end: number;
   readonly startsHere: boolean;
   readonly endsHere: boolean;
-}
-
-/** A field character's type (`w:fldChar/@w:fldCharType`) on a marker, or undefined. */
-function fieldCharType(item: OrderedItem): string | undefined {
-  const node = item.node;
-  if (item.kind !== 'zero' || node === null || node.kind === 'textValue') return undefined;
-  return node.localName === 'fldChar' ? attributeOf(node, 'fldCharType') : undefined;
-}
-
-/** Fields open after a marker: one more at a begin, one fewer at an end. */
-function fieldDepthAfter(depth: number, item: OrderedItem): number {
-  const type = fieldCharType(item);
-  if (type === 'begin') {
-    return depth + 1;
-  }
-
-  if (type === 'end') {
-    return Math.max(0, depth - 1);
-  }
-
-  return depth;
 }
 
 /** How many view characters each item of a paragraph draws. */

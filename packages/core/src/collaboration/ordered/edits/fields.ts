@@ -8,6 +8,7 @@ import { bookmarkPairNodes } from '../../../store/package/toc-build.ts';
 import { pageFieldContentBuilders } from '../../../store/store/tree-op-fields.ts';
 import { build } from '../../../store/store/tree-op-tracked.ts';
 import type { TreeDocOp } from '../../../store/store/tree-op-types.ts';
+import { refuseFieldInField } from '../field-depth.ts';
 import {
   createOrderedItem,
   insertedPending,
@@ -234,6 +235,7 @@ function replaceField(ctx: Ctx, item: OrderedItem, form: FieldForm): string {
     ...(item.bare ? { bare: true } : {}),
   });
   insertItems(ctx.doc, ctx.story, item, [copy]);
+  refuseFieldInField(ctx, [copy]);
   if (ctx.direct) settle(ctx.doc, suggestion.id);
   return suggestion.id;
 }

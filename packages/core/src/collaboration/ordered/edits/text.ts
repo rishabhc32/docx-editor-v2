@@ -5,6 +5,7 @@ import type { OoxmlElement, OoxmlNode } from '../../../store/package/ooxml-tree.
 import { keepsPropertyChildren } from '../../../store/store/tree-op-properties.ts';
 import type { OrderedViewChar, OrderedViewParagraph } from '../compose/context.ts';
 import { faceWithProperties } from '../compose/properties.ts';
+import { refuseFieldInField } from '../field-depth.ts';
 import { createOrderedItem, insertedPending, itemAt, madeBy, statusOf } from '../model/document.ts';
 import { isolateUnits, nextSeq, recordAdded, relabel, replaceItems } from '../model/mutations.ts';
 import {
@@ -176,6 +177,7 @@ export function insertText(
     return item;
   });
   insertAtSite(ctx, site, items);
+  refuseFieldInField(ctx, items);
   noteOwnAddition(ctx, suggestion.id, [{ story: ctx.story.name, space, from: 0, to: at }]);
   return suggestion.id;
 }
