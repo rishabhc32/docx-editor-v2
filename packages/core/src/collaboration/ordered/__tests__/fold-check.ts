@@ -7,8 +7,9 @@
 //  - internal shapes: format records come back as `face` records with the file's record, paragraph
 //    and section ops as `element` records, a control's prompt as the glossary's placeholder;
 //  - a suggestion's `version`, which counts the writes since it was loaded;
-//  - a suggestion its author took back (`retracted`): nothing shows it, and only its redo needs it,
-//    as the undo history, which a fold does not keep;
+//  - the record of a suggestion its author took back, with the units it inserted (`retracted`):
+//    only its redo reads them, as the undo history, which a fold does not keep. What the take-back
+//    leaves is compared: the file, the cards, the shown units and their labels;
 //  - a suggested note reference that a direct deletion removed: the room keeps its record only for
 //    that deletion's undo; the note shows nowhere and has no card;
 //  - a record its author made on their own new words or paragraph (`untracked`): it shows with no
@@ -96,15 +97,16 @@ const isMoveRange = (item: OrderedItem): boolean =>
   item.node?.kind !== 'textValue' && MOVE_RANGE.test(item.node?.localName ?? '');
 
 /**
- * Pending suggestions that show something, by the room's read: one taken back by its author, or
- * one only on a prompt that content took the place of, shows nothing.
+ * Pending suggestions, but for one its author took back (every item it labels is taken back) and
+ * one only on a prompt that content took the place of: a fold keeps neither.
  */
-function shownPending(doc: OrderedDocument): OrderedSuggestion[] {
+function keptPending(doc: OrderedDocument): OrderedSuggestion[] {
+  const kept = (item: OrderedItem) =>
+    !item.retracted && !(item.prompt === true && isOrderedItemHidden(doc, item));
   return [...doc.suggestions.values()].filter(
     (s) =>
       s.status === 'pending' &&
-      (doc.partRevisions.has(s.id) ||
-        [...(doc.labelled.get(s.id) ?? [])].some((item) => !isOrderedItemHidden(doc, item)))
+      (doc.partRevisions.has(s.id) || [...(doc.labelled.get(s.id) ?? [])].some(kept))
   );
 }
 
@@ -172,7 +174,7 @@ export function foldPrint(doc: OrderedDocument, base: OoxmlPackage, blobs: FoldB
       });
     });
   };
-  const pending = shownPending(doc);
+  const pending = keptPending(doc);
   return {
     stories: [...doc.stories]
       .map(([name, story]) => {
@@ -296,10 +298,10 @@ function withoutFoldedLinks(
   );
 }
 
-/** The ids of each maker's pending suggestions that show something. */
+/** The ids of each maker's pending suggestions that a fold keeps. */
 function byMaker(doc: OrderedDocument): Map<string, string[]> {
   const out = new Map<string, string[]>();
-  for (const s of shownPending(doc)) {
+  for (const s of keptPending(doc)) {
     out.set(makerKey(s), [...(out.get(makerKey(s)) ?? []), s.id]);
   }
 

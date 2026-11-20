@@ -1,8 +1,9 @@
 // A fold changes nothing the room uses (design D14): random sessions replayed from the room's log,
-// folded at the end of rounds, and their folded copies edited at random and folded again, give
-// back every shown unit and its labels, every pending suggestion whole, its card, who typed its
-// units, the takeovers, comments, part revisions, what a page shows, the Word file, and the Word
-// file after an accept and after a reject of each suggestion.
+// folded at the end of rounds, and their folded copies, with suggestions read from the file taken
+// back and then edited at random, folded again, give back every shown unit and its labels, every
+// pending suggestion whole, its card, who typed its units, the takeovers, comments, part
+// revisions, what a page shows, the Word file, and the Word file after an accept and after a
+// reject of each suggestion.
 
 import { describe, expect, test } from 'bun:test';
 import { applyOrderedChange } from '../change/apply.ts';
@@ -38,7 +39,7 @@ import {
 import { checkFold, folded, mediaStore } from './fold-check.ts';
 import { seededRandom } from './random.ts';
 import { SESSION_FILE } from './sessions/fixture.ts';
-import { randomChange } from './sessions/random-change.ts';
+import { randomChange, type ChangeBody } from './sessions/random-change.ts';
 import { runSession } from './sessions/session.ts';
 import { testPerson } from './test-persons.ts';
 import { bodyOf, docx, MATRIX_EXTRAS, MATRIX_ITEMS, p, t } from './word-fixtures.ts';
@@ -67,26 +68,21 @@ describe('a fold of a random session', () => {
         await checkFold(doc, base, blobs, `seed ${seed} after ${end} changes`);
       }
 
-      // The folded copy edited at random, as a room goes on from its checkpoint, and folded
-      // again: what the copy read back from the file takes new edits and decisions. Each
-      // person's edits share one date, so the decisions of each maker stay few
+      // The folded copy edited as a room goes on from its checkpoint, and folded again: what the
+      // copy read back from the file takes new edits and decisions. Each person's edits share one
+      // date, so the decisions of each maker stay few. The copy refuses some changes by name
       const copy = await folded(doc, base, doc.file + 1, blobs);
-      const rand = seededRandom(seed);
-      for (let k = 1; k <= 80; k += 1) {
-        const who = k % PEOPLE.length;
+      let n = 0;
+      const send = (who: number, body: ChangeBody) => {
         const author = PEOPLE[who]!;
         const namespace = author.toLowerCase();
-        const body = randomChange(copy.document, { author, organiser: author === 'Olga' }, rand);
-        if (body === null) {
-          continue;
-        }
-
+        n += 1;
         const checked = validateOrderedChange(
-          { v: 1, id: orderedChangeId(namespace, k), ...body },
+          { v: 1, id: orderedChangeId(namespace, n), ...body },
           { namespace, parts: copy.document.stories }
         );
         if (!checked.ok) {
-          continue;
+          return;
         }
 
         try {
@@ -101,6 +97,29 @@ describe('a fold of a random session', () => {
           if (!(error instanceof OrderedRefusal)) {
             throw error;
           }
+        }
+      };
+
+      // First each person takes back every other suggestion of theirs that the copy read from
+      // the file: its paragraph or block may hold no other change, and must not show it again
+      const loaded = [...copy.document.suggestions.values()].filter((s) => s.status === 'pending');
+      for (const [k, suggestion] of loaded.entries()) {
+        const who = PEOPLE.indexOf(suggestion.attribution.author);
+        if (who >= 0 && k % 2 === 1) {
+          send(who, { kind: 'retract', suggestions: [suggestion.id] });
+        }
+      }
+
+      await checkFold(copy.document, copy.base, blobs, `seed ${seed} after take-backs`);
+
+      // Then at random
+      const rand = seededRandom(seed);
+      for (let k = 1; k <= 80; k += 1) {
+        const who = k % PEOPLE.length;
+        const author = PEOPLE[who]!;
+        const body = randomChange(copy.document, { author, organiser: author === 'Olga' }, rand);
+        if (body !== null) {
+          send(who, body);
         }
       }
 
