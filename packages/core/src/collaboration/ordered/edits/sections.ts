@@ -15,6 +15,7 @@ import {
   isSectionItem,
   markSection,
   orderedSectionsOf,
+  sectionOpKeeps,
   sectionRecordsOf,
   sectionWithoutPendingWrites,
   type OrderedSectionView,
@@ -118,22 +119,48 @@ function checkPage(
 }
 
 /**
+ * One write to each of `sections`, for one suggestion: `into` when given, else the edit's own. A
+ * suggested write that leaves a section as it shows (`sectionOpKeeps`) makes no record, so a
+ * press that changes nothing makes no suggestion. Returns the suggestion that holds the writes,
+ * if any.
+ */
+function addSectionWrites(
+  ctx: Ctx,
+  sections: readonly OrderedSectionView[],
+  op: OrderedSectionOp,
+  into: OrderedSuggestion | null
+): string | null {
+  const shown = scratchCompose(ctx.doc, ctx.story, 'section');
+  const written = ctx.direct
+    ? sections
+    : sections.filter((section) => !sectionOpKeeps(shown, section.sectPr, op, ctx.attribution));
+  if (written.length === 0) {
+    return into?.id ?? null;
+  }
+
+  const suggestion = into ?? suggestionFor(ctx);
+  for (const section of written) {
+    addSectionWrite(ctx, section.holder, op, suggestion);
+  }
+
+  return suggestion.id;
+}
+
+/**
  * Page size, orientation and margins (`setSectionProperties`) on the sections the document has
  * now: every one, the body's own too when the file wrote none (the engine mints it), or with
  * `pageAt` the one that governs that paragraph (a paragraph a join took is in the section of the
  * paragraph it joined). Each is checked as the engine checks it. Suggested, it records the
- * section before it (`w:sectPrChange`).
+ * section before it (`w:sectPrChange`). Returns the suggestion that holds the writes, if any.
  */
 export function setPageSetup(
   ctx: Ctx,
   pageAt: OrderedItemAddress | null,
   op: Extract<OrderedSectionOp, { op: 'page' }>
-): string {
+): string | null {
   const named = pageSetupSections(ctx, pageAt);
   for (const section of named) checkPage(ctx, section, op);
-  const suggestion = suggestionFor(ctx);
-  for (const section of named) addSectionWrite(ctx, section.holder, op, suggestion);
-  return suggestion.id;
+  return addSectionWrites(ctx, named, op, null);
 }
 
 /** A story and its document, as a page setup reads them. */
@@ -231,16 +258,18 @@ function governing(
 }
 
 /**
- * A different first page, and the header and footer distances, on one section. Suggested, it
- * records the section before it (`w:sectPrChange`), as page setup does.
+ * A different first page, and the header and footer distances, on the sections whose holders are
+ * at `addresses`, for `into` when given. Suggested, it records the section before it
+ * (`w:sectPrChange`), as page setup does. Returns the suggestion that holds the writes, if any.
  */
 export function setFurnitureOptions(
   ctx: Ctx,
-  address: OrderedItemAddress,
+  addresses: readonly OrderedItemAddress[],
   op: Extract<OrderedSectionOp, { op: 'furniture' }>,
-  suggestion: OrderedSuggestion
-): void {
-  addSectionWrite(ctx, sectionAt(ctx, address).section.holder, op, suggestion);
+  into: OrderedSuggestion | null
+): string | null {
+  const sections = addresses.map((address) => sectionAt(ctx, address).section);
+  return addSectionWrites(ctx, sections, op, into);
 }
 
 /**

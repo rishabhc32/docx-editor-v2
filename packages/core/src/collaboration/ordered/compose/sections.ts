@@ -5,7 +5,11 @@ import type { OoxmlElement, OoxmlNode } from '../../../store/package/ooxml-tree.
 import { sectionFurnitureChildren } from '../../../store/package/hf-lifecycle.ts';
 import { sectionChildrenWithNoteProperties } from '../../../store/package/note-lifecycle-props.ts';
 import { cloneWithNewIds } from '../../../store/store/tree-op-nodes.ts';
-import { sectionRecordChildren } from '../../../store/store/tree-op-section-record.ts';
+import {
+  sameSectionProperties,
+  sectionRecordChildren,
+  withSectionChangeRecord,
+} from '../../../store/store/tree-op-section-record.ts';
 import {
   applySetSectionProperties,
   defaultSectionChildren,
@@ -13,6 +17,7 @@ import {
 } from '../../../store/store/tree-op-section.ts';
 import { bodySectionOf, metricsOfSection } from '../../../store/store/tree-op-section-address.ts';
 import { build } from '../../../store/store/tree-op-tracked.ts';
+import type { RevisionAttributionInput } from '../../../store/store/tree-op-types.ts';
 import { isHidden, statusOf } from '../model/document.ts';
 import { REVISION_ROLE } from '../model/revision-ids.ts';
 import type { OrderedSectionOp, OrderedSectionRecord } from '../model/sections.ts';
@@ -130,6 +135,30 @@ function applySectionOp(
       return withChildren(base, sectionChildrenWithNoteProperties(base.children, op, mint));
     }
   }
+}
+
+/**
+ * Whether the engine's write for a press by `revision`'s author leaves the section as it shows
+ * (`section`, with any change record): the section has every value the press sets, and the
+ * engine's tracked write records nothing for it (`withSectionChangeRecord`). Word records none
+ * either.
+ */
+export function sectionOpKeeps(
+  ctx: ComposeContext,
+  section: OoxmlElement | null,
+  op: OrderedSectionOp,
+  revision: RevisionAttributionInput
+): boolean {
+  const prior = section?.children ?? [];
+  const after = withSectionChangeRecord({
+    prior,
+    next: applySectionOp(ctx, section, op)?.children ?? [],
+    revision,
+    mint: ctx.mint,
+    nextRevisionId: ctx.mint,
+  });
+  const record = (children: readonly OoxmlNode[]) => children.find((c) => isWml(c, 'sectPrChange'));
+  return sameSectionProperties(after, prior) && record(after) === record(prior);
 }
 
 function applyRecord(

@@ -225,6 +225,45 @@ describe('a fold of a paragraph press that changes nothing', () => {
   });
 });
 
+describe('a fold of a section press', () => {
+  // A section that states default values, as a file not made by Word may
+  const file = docx(
+    p(t('Words.')) +
+      '<w:sectPr><w:pgSz w:w="12240" w:h="15840" w:orient="portrait"/>' +
+      '<w:pgMar w:top="1440" w:right="1440" w:bottom="1440" w:left="1440" w:header="720"' +
+      ' w:footer="720" w:gutter="0"/><w:titlePg w:val="0"/></w:sectPr>'
+  );
+  const bodySection = (doc: OrderedDocument) =>
+    addressOf([...doc.stories.get(BODY)!.tree.items()].find((item) => item.block === true)!);
+
+  // Word and the engine record no change for a press that gives a section a value it has
+  for (const [label, page, furniture] of [
+    ['its orientation', { orientation: 'portrait' }, undefined],
+    ['its page size', { pageWidthTwips: 12240, pageHeightTwips: 15840 }, undefined],
+    ['its margins', { marginTopTwips: 1440, marginLeftTwips: 1440 }, undefined],
+    ['its header distance', undefined, { headerDistanceTwips: 720 }],
+    ['no different first page', undefined, { titlePage: false }],
+  ] as const) {
+    test(`a suggested press of ${label} makes no suggestion`, async () => {
+      const { document: doc, base } = openOrderedWordFile(file, { file: 1 });
+      apply(
+        doc,
+        'bob:1',
+        {
+          kind: 'section-property',
+          ...EDIT,
+          sections: furniture === undefined ? [] : [bodySection(doc)],
+          ...(page === undefined ? {} : { page }),
+          ...(furniture === undefined ? {} : { furniture }),
+        },
+        'Bob'
+      );
+      expect(orderedCards(doc)).toEqual([]);
+      await checkFold(doc, base, mediaStore(base), label);
+    });
+  }
+});
+
 describe('a fold of a takeover in a text box', () => {
   // Pia's press takes over Quin's record of the text box's paragraph (policy 2): once folded, the
   // text box reads as the file wrote it, and the next fold keeps the takeover too

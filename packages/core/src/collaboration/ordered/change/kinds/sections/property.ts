@@ -8,13 +8,13 @@
 // furniture options go to the sections the change names. Both are a suggestion when suggested:
 // Word records them as `w:sectPrChange` (ECMA-376 Part 1, §17.13.5.32).
 
-import { suggestionFor } from '../../../edits/context.ts';
 import {
   othersFurnitureRecord,
   othersSectionRecord,
   setFurnitureOptions,
   setPageSetup,
 } from '../../../edits/sections.ts';
+import { suggestionOrNull } from '../../../model/document.ts';
 import type { OrderedSectionOp } from '../../../model/sections.ts';
 import { address } from '../../values.ts';
 import { runKindEdit } from '../run.ts';
@@ -153,14 +153,12 @@ export const SECTION_PROPERTY_SPEC = orderedKindSpec<OrderedSectionPropertyChang
         }
 
         // One change is one suggestion: the furniture options join the page setup's
-        const joined =
-          pageSuggestion === null ? undefined : ctx.doc.suggestions.get(pageSuggestion);
-        const suggestion = joined ?? suggestionFor(ctx);
-        for (const holder of change.sections) {
-          setFurnitureOptions(ctx, holder, { op: 'furniture', ...change.furniture }, suggestion);
-        }
-
-        return suggestion.id;
+        return setFurnitureOptions(
+          ctx,
+          change.sections,
+          { op: 'furniture', ...change.furniture },
+          suggestionOrNull(ctx.doc, pageSuggestion)
+        );
       },
       { settleDirect: true }
     ),

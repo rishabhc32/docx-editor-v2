@@ -334,6 +334,26 @@ describe("a party's section edits", () => {
     }
   });
 
+  test("a party's page setup the section has makes no suggestion, as in Word", async () => {
+    const room = localRoom(FILE, { policy: suggestionsOnlyPolicy() });
+    const review = reviewTestModule();
+    const ana = await join(room, 'Ana', { wordFile: FILE, review });
+    const olive = await join(room, 'Olive', {
+      mode: 'edit',
+      login: ORGANISER,
+      wordFile: FILE,
+      review,
+    });
+    const before = bodySection((await saved(olive))['word/document.xml'] ?? '');
+    surface(ana).setSectionProperties({ orientation: 'portrait', marginLeftTwips: 1440 });
+    await settle();
+    converged(room, ana, olive);
+    for (const person of [ana, olive]) {
+      expect(person.editor.getReviewItems()).toEqual([]);
+      expect(bodySection((await saved(person))['word/document.xml'] ?? '')).toBe(before);
+    }
+  });
+
   test("a party's page setup over another person's pending one is refused: one record for each section", async () => {
     const room = localRoom(TWO, { policy: suggestionsOnlyPolicy() });
     const review = reviewTestModule();

@@ -101,6 +101,20 @@ function withoutAbsentValues(nodes: readonly OoxmlElement[]): OoxmlElement[] {
 }
 
 /**
+ * Whether two sets of section properties say the same: the same properties, read with the values
+ * a section has when it does not state them. References and a change record are not properties.
+ */
+export function sameSectionProperties(
+  left: readonly OoxmlNode[],
+  right: readonly OoxmlNode[]
+): boolean {
+  return equivalentNodes(
+    withoutAbsentValues(recordable(left)),
+    withoutAbsentValues(recordable(right))
+  );
+}
+
+/**
  * What a `w:sectPrChange` records for a write from `prior` to `next`: every property `prior`
  * states, and each property and attribute of `ABSENT_VALUES` that `next` adds at its value when
  * absent, in schema order, under new ids. The header and footer references stay out:
@@ -175,7 +189,7 @@ export function withSectionChangeRecord(options: {
   // The ORIGINAL: what a standing record holds, else the section this write replaces
   const original = recordable((existing ? recordedProperties(existing) : null) ?? prior);
   const body = next.filter((child) => !isWmlNamed(child, 'sectPrChange'));
-  if (equivalentNodes(withoutAbsentValues(recordable(body)), withoutAbsentValues(original))) {
+  if (sameSectionProperties(body, original)) {
     // Back at the original: this author's own record goes, anyone else's stays
     const owned =
       existing && attributeValueOf(existing, 'author', WML_NAMESPACE_URI) === revision.author;
