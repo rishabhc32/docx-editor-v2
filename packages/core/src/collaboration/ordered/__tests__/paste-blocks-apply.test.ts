@@ -7,6 +7,7 @@ import { orderedIdMinter } from '../change/ids.ts';
 import { applyOrderedChange } from '../change/apply.ts';
 import type { OrderedChange } from '../change/types.ts';
 import { openOrderedWordFile } from '../client/open.ts';
+import { setStatus } from '../model/mutations.ts';
 import { withUndoRecord } from '../model/undo-record.ts';
 import {
   apply,
@@ -24,6 +25,8 @@ import {
 } from './change-apply-fixture.ts';
 import { testAttribution, testPerson } from './test-persons.ts';
 import { docx, MATRIX_EXTRAS, p, t } from './word-fixtures.ts';
+
+const TABLE_OPEN = '<w:tbl><w:tblGrid><w:gridCol w:w="3000"/></w:tblGrid><w:tr><w:tc>';
 
 /** Take back or make again a direct edit's suggestions, as the organiser's undo and redo do. */
 function revert(
@@ -166,6 +169,35 @@ describe('delete-paragraph', () => {
     expect(body).not.toContain('<w:t/>');
     expect(body).not.toContain('w:bookmark');
   });
+
+  // A container keeps its last paragraph mark whatever the decisions, as Word never removes it:
+  // when the mark before the last paragraph is Pia's pending Enter, the paragraph before joins the
+  // last one, as Word removes the mark before a container's last one
+  for (const [where, body] of [
+    ['a cell', `${TABLE_OPEN}${p(t('One two'))}</w:tc></w:tr></w:tbl>${p(t('After.'))}`],
+    ["the story's end", p(t('One two'))],
+  ] as const) {
+    test(`keeps ${where}'s last mark when the mark before it is a pending insertion`, () => {
+      for (const status of ['accepted', 'rejected'] as const) {
+        const doc = openOrderedWordFile(docx(body), { file: 1 }).document;
+        const split = apply(
+          doc,
+          'pia-1:1',
+          { ...EDIT, kind: 'split', place: at(doc, 0, 3) },
+          'Pia'
+        );
+        apply(
+          doc,
+          'olive-1:1',
+          { ...DIRECT, kind: 'delete-paragraph', mark: markOf(doc, 1) },
+          'Olive'
+        );
+        setStatus(doc, split.suggestions[0]!, status);
+        expect([status, textOf(doc, 0)]).toEqual([status, 'One']);
+        expect(partsOf(doc)[0]).toContain('<w:t>One</w:t></w:r></w:p>');
+      }
+    });
+  }
 
   test('is refused as a suggestion: Word tracks it as struck text and mark', () => {
     const doc = load();

@@ -6,7 +6,7 @@ import { engineOnView } from '../../../edits/control-shell.ts';
 import { directDelete, directJoin, settle } from '../../../edits/direct.ts';
 import { strikeMark } from '../../../edits/marks.ts';
 import { shownItemAt } from '../../../edits/places.ts';
-import { isHidden } from '../../../model/document.ts';
+import { insertedPending, isHidden } from '../../../model/document.ts';
 import { OrderedRefusal } from '../../../model/refusal.ts';
 import type { OrderedStory } from '../../../model/types.ts';
 import { refuseLockedBlocks, refuseLockedWithin, siblings } from '../../../placement.ts';
@@ -61,6 +61,15 @@ function deleteParagraph(ctx: Ctx, story: OrderedStory, address: OrderedChangeAd
   // Beside a paragraph, a join
   if (next && siblings(ctx, after, next)) {
     directJoin(ctx, after, next);
+    return;
+  }
+
+  // A container keeps its last mark whatever the decisions, as Word never removes it: when the
+  // mark before is a pending insertion, which a decision may take away, the paragraph before
+  // joins this one, as Word removes the mark before a container's last one
+  const previous = orderedViewParagraph(ctx.doc, story.name, index - 1);
+  if (previous && siblings(ctx, previous, after) && insertedPending(ctx.doc, previous.mark)) {
+    directJoin(ctx, previous, after);
     return;
   }
 
