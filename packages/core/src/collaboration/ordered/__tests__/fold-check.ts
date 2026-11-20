@@ -10,7 +10,10 @@
 //  - a suggestion its author took back (`retracted`): nothing shows it, and only its redo needs it,
 //    as the undo history, which a fold does not keep;
 //  - a suggested note reference that a direct deletion removed: the room keeps its record only for
-//    that deletion's undo; the note shows nowhere and has no card.
+//    that deletion's undo; the note shows nowhere and has no card;
+//  - a record its author made on their own new words or paragraph (`untracked`): it shows with no
+//    change record, so a fold writes it as part of them, and a decision keeps or takes it with
+//    them; only the undo of the change that made it reads it.
 
 import { expect } from 'bun:test';
 import { strFromU8, unzipSync } from 'fflate';
@@ -136,11 +139,15 @@ export function foldPrint(doc: OrderedDocument, base: OoxmlPackage, blobs: FoldB
     // A unit in a new row or note keeps its label in the room, where a load reads it from the
     // container
     const by = item.quiet ? null : item.by;
+    const recorded = (records: readonly { suggestion: string; untracked?: boolean }[]) =>
+      records
+        .filter((r) => r.untracked !== true || r.suggestion !== item.by)
+        .map((r) => r.suggestion);
     const roles = {
       by: [by],
       del: item.dels,
-      fmt: item.fmts.map((f) => f.suggestion),
-      prop: item.props.map((r) => r.suggestion),
+      fmt: recorded(item.fmts),
+      prop: recorded(item.props),
       within: [...item.within.by, ...item.within.dels],
     };
     const labels = {
@@ -148,10 +155,10 @@ export function foldPrint(doc: OrderedDocument, base: OoxmlPackage, blobs: FoldB
       node,
       by: key(by),
       dels: keys(item.dels),
-      fmts: keys(item.fmts.map((f) => f.suggestion)),
+      fmts: keys(roles.fmt),
       replaced: keys(item.fmts.flatMap((f) => (f.replaced === undefined ? [] : [f.replaced]))),
       // Records apply in their order of creation, whatever their place in the list
-      props: keys(item.props.map((r) => r.suggestion)).sort(),
+      props: keys(roles.prop).sort(),
       move: item.move !== null && (key(item.by) !== null || keys(item.dels).length > 0),
       within: [keys(item.within.by), keys(item.within.dels)],
     };

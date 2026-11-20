@@ -1,17 +1,21 @@
 // A fold changes nothing the room uses (design D14): random sessions replayed from the room's log,
-// folded at the end of rounds, give back every shown unit and its labels, every pending suggestion
-// whole, its card, who typed its units, the takeovers, comments, part revisions, what a page
-// shows, the Word file, and the Word file after an accept and after a reject of each suggestion.
+// folded at the end of rounds, and their folded copies edited at random and folded again, give
+// back every shown unit and its labels, every pending suggestion whole, its card, who typed its
+// units, the takeovers, comments, part revisions, what a page shows, the Word file, and the Word
+// file after an accept and after a reject of each suggestion.
 
 import { describe, expect, test } from 'bun:test';
 import { applyOrderedChange } from '../change/apply.ts';
+import { orderedChangeId, orderedIdMinter } from '../change/ids.ts';
+import { validateOrderedChange } from '../change/validate.ts';
 import { openOrderedWordFile } from '../client/open.ts';
-import { orderedIdMinter } from '../change/ids.ts';
 import { orderedCards } from '../decide.ts';
+import { OrderedRefusal } from '../model/refusal.ts';
 import { isTextBoxStoryName } from '../model/text-boxes.ts';
 import type { OrderedDocument } from '../model/types.ts';
 import { orderedUnitTyper } from '../model/typers.ts';
 import { withUndoRecord } from '../model/undo-record.ts';
+import { orderedStampDate } from '../room/room.ts';
 import {
   addressOf,
   apply,
@@ -27,15 +31,19 @@ import {
   textOf,
 } from './change-apply-fixture.ts';
 import { checkFold, folded, mediaStore } from './fold-check.ts';
+import { seededRandom } from './random.ts';
 import { SESSION_FILE } from './sessions/fixture.ts';
+import { randomChange } from './sessions/random-change.ts';
 import { runSession } from './sessions/session.ts';
 import { testPerson } from './test-persons.ts';
 import { bodyOf, docx, MATRIX_ITEMS, p, t } from './word-fixtures.ts';
 
+const PEOPLE = ['Olga', 'Pia', 'Quin'];
+
 describe('a fold of a random session', () => {
   for (const seed of [7, 23]) {
     test(`seed ${seed}: the folded copy gives back what the room uses`, async () => {
-      const { log, rounds } = runSession(seed, ['Olga', 'Pia', 'Quin'], 240, 3);
+      const { log, rounds } = runSession(seed, PEOPLE, 240, 3);
       const { document: doc, base } = openOrderedWordFile(SESSION_FILE, { file: 0 });
       const blobs = mediaStore(base);
       let applied = 0;
@@ -53,6 +61,45 @@ describe('a fold of a random session', () => {
 
         await checkFold(doc, base, blobs, `seed ${seed} after ${end} changes`);
       }
+
+      // The folded copy edited at random, as a room goes on from its checkpoint, and folded
+      // again: what the copy read back from the file takes new edits and decisions. Each
+      // person's edits share one date, so the decisions of each maker stay few
+      const copy = await folded(doc, base, doc.file + 1, blobs);
+      const rand = seededRandom(seed);
+      for (let k = 1; k <= 80; k += 1) {
+        const who = k % PEOPLE.length;
+        const author = PEOPLE[who]!;
+        const namespace = author.toLowerCase();
+        const body = randomChange(copy.document, { author, organiser: author === 'Olga' }, rand);
+        if (body === null) {
+          continue;
+        }
+
+        const checked = validateOrderedChange(
+          { v: 1, id: orderedChangeId(namespace, k), ...body },
+          { namespace, parts: copy.document.stories }
+        );
+        if (!checked.ok) {
+          continue;
+        }
+
+        try {
+          withUndoRecord(copy.document, () =>
+            applyOrderedChange(copy.document, checked.value, {
+              person: testPerson(author),
+              date: orderedStampDate(Date.UTC(2026, 9, 29) + 1000 * who),
+              ids: orderedIdMinter(checked.value.id),
+            })
+          );
+        } catch (error) {
+          if (!(error instanceof OrderedRefusal)) {
+            throw error;
+          }
+        }
+      }
+
+      await checkFold(copy.document, copy.base, blobs, `seed ${seed} on the folded copy`);
     }, 60_000);
   }
 });
