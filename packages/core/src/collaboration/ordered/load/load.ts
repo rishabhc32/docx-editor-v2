@@ -10,7 +10,7 @@ import { DEFAULT_LIMITS } from '../../../store/runtime/limits.ts';
 import { addOrderedStory, createOrderedDocument } from '../model/document.ts';
 import type { OrderedPerson } from '../model/person.ts';
 import { OrderedRefusal } from '../model/refusal.ts';
-import { reserveFileRevisionId } from '../model/revision-ids.ts';
+import { PROMPT_RECORD_ROLES, reserveFileRevisionId } from '../model/revision-ids.ts';
 import {
   BLOCK_TOKENS,
   type OrderedAttribution,
@@ -273,9 +273,34 @@ function loadStories(
     loadTextBoxStories(doc, addOrderedStory(doc, name, part, items), revisions, budget);
   }
 
+  // A prompt the glossary kept may hold a change record (a format on the prompt before content
+  // filled its control): each is a suggestion, read as the stories' marks are, so a decision
+  // reaches it when the prompt shows again
+  for (const blocks of doc.placeholders.values()) {
+    for (const block of blocks) {
+      readPromptRecords(revisions, block);
+    }
+  }
+
   linkNewNotes(doc);
   linkStruckNotes(doc);
   return doc;
+}
+
+/** The suggestion of each change record in a prompt the glossary kept. */
+function readPromptRecords(revisions: RevisionReader, node: OoxmlNode): void {
+  if (node.kind === 'textValue') {
+    return;
+  }
+
+  const role = PROMPT_RECORD_ROLES.get(node.localName);
+  if (role !== undefined && isWml(node, node.localName)) {
+    revisions.suggestionFor(node, role);
+  }
+
+  for (const child of node.children) {
+    readPromptRecords(revisions, child);
+  }
 }
 
 /** Every inline item must belong to a paragraph: nothing but blocks after the last mark. */

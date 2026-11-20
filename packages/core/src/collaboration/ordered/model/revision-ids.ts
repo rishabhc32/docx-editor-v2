@@ -44,6 +44,15 @@ export const REVISION_ROLE = {
   numbering: 'numbering',
 } as const;
 
+/**
+ * The change records a control's prompt can hold, with the role each is read for: typing into a
+ * prompt fills its control, so only its properties change while it shows.
+ */
+export const PROMPT_RECORD_ROLES: ReadonlyMap<string, string> = new Map([
+  ['rPrChange', REVISION_ROLE.format],
+  ['pPrChange', REVISION_ROLE.paragraphProperties],
+]);
+
 const key = (suggestion: string, role: string) => `${suggestion}/${role}`;
 
 /**
@@ -137,6 +146,44 @@ export function seededAttributes(
   role: string
 ): readonly OoxmlAttribute[] | undefined {
   return doc.revisionIds.attributesByRole.get(key(suggestion, role));
+}
+
+/**
+ * The suggestion a file's revision mark was read for, by its `w:id`, author and date: the mark a
+ * load kept for one of the suggestion's roles, or one a room checkpoint listed for it. Undefined
+ * for a mark no load read.
+ */
+export function suggestionOfRevision(
+  doc: OrderedDocument,
+  revision: OoxmlElement
+): string | undefined {
+  const id = attributeOf(revision, 'id');
+  for (const [suggestion, kept] of keptRevisionIds(doc)) {
+    const attribution = doc.suggestions.get(suggestion)?.attribution;
+    if (
+      kept === id &&
+      attribution?.author === (attributeOf(revision, 'author') ?? '') &&
+      attribution.date === attributeOf(revision, 'date')
+    ) {
+      return suggestion;
+    }
+  }
+
+  return undefined;
+}
+
+/** Each `w:id` a load kept for a suggestion's role, or a room checkpoint listed for it. */
+export function* keptRevisionIds(doc: OrderedDocument): Generator<[string, string]> {
+  for (const [k, id] of doc.revisionIds.byRole) {
+    // A role may name a story part, with its slashes; a suggestion id has none
+    yield [k.slice(0, k.indexOf('/')), id];
+  }
+
+  for (const [suggestion, ids] of doc.revisionIds.listed) {
+    for (const id of ids) {
+      yield [suggestion, id];
+    }
+  }
 }
 
 /** A `w:id` the loaded parts hold: minted ids pass over it. */

@@ -7,6 +7,7 @@ import {
   type ContentControlProperties,
 } from '../../../store/package/content-control-nodes.ts';
 import { createNodeIdAllocator, findNode, replaceNode } from '../../../store/package/ooxml-edit.ts';
+import { applyTreeOp } from '../../../store/store/tree-op-apply.ts';
 import { build } from '../../../store/store/tree-op-tracked.ts';
 import type { OoxmlElement, OoxmlNode, OoxmlPart } from '../../../store/package/ooxml-tree.ts';
 import { promptToRetain } from '../../../store/store/content-control-prompt-glossary.ts';
@@ -23,7 +24,8 @@ import {
   contentControlPropertiesOf,
   findContentControl,
 } from '../../../store/store/tree-op-nodes.ts';
-import type { OrderedDocument } from '../model/types.ts';
+import { PROMPT_RECORD_ROLES, suggestionOfRevision } from '../model/revision-ids.ts';
+import type { OrderedDocument, OrderedSuggestionStatus } from '../model/types.ts';
 import { attributeOf, childNamed, isWml, withChildren } from '../ooxml-nodes.ts';
 import type { ComposeContext } from './context.ts';
 import { withStoryBlocks } from './paragraph-ops.ts';
@@ -110,14 +112,64 @@ export function withRestoredPrompts(
   doc: OrderedDocument,
   part: OoxmlPart,
   controls: readonly string[],
-  decided: ReadonlySet<string>
+  decided: ReadonlySet<string>,
+  status: (suggestion: string) => OrderedSuggestionStatus | null
 ): OoxmlPart {
   const options = { placeholderBlocks: (name: string) => doc.placeholders.get(name) };
-  for (const id of controls)
+  for (const id of controls) {
     part = decided.has(id)
       ? withDecisionPrompt(part, id, options)
       : withRestoredPrompt(part, id, options);
+    part = withPromptDecisions(doc, part, id, status);
+  }
+
   return part;
+}
+
+/**
+ * `part` with the change records of a control's prompt under their suggestions' decisions, as
+ * the engine decides them: accepted, the format stays with no record; rejected, the face before
+ * it; pending, the record as it is. The glossary keeps a prompt with its records while content
+ * fills the control, and a load reads each as a suggestion (`readPromptRecords`).
+ */
+function withPromptDecisions(
+  doc: OrderedDocument,
+  part: OoxmlPart,
+  controlId: string,
+  status: (suggestion: string) => OrderedSuggestionStatus | null
+): OoxmlPart {
+  const control = findContentControl(part, controlId);
+  for (const record of control ? promptRecords(control) : []) {
+    const suggestion = suggestionOfRevision(doc, record);
+    const decision = suggestion === undefined ? null : status(suggestion);
+    if (decision === null || decision === 'pending') {
+      continue;
+    }
+
+    const date = attributeOf(record, 'date');
+    const revision = {
+      id: attributeOf(record, 'id') ?? '',
+      author: attributeOf(record, 'author') ?? '',
+      ...(date === undefined ? {} : { date }),
+    };
+    const op = decision === 'accepted' ? 'acceptRevision' : 'rejectRevision';
+    const decided = applyTreeOp(part, { op, revision });
+    if (decided.ok) {
+      part = decided.part;
+    }
+  }
+
+  return part;
+}
+
+/** The change records under a node that a prompt can hold (`PROMPT_RECORD_ROLES`). */
+function promptRecords(node: OoxmlNode): OoxmlElement[] {
+  if (node.kind === 'textValue') {
+    return [];
+  }
+
+  const own = PROMPT_RECORD_ROLES.has(node.localName) && isWml(node, node.localName);
+  return [...(own ? [node] : []), ...node.children.flatMap(promptRecords)];
 }
 
 /** `part` with each control's value record (`w:lastValue`, `w:fullDate`) following its text. */

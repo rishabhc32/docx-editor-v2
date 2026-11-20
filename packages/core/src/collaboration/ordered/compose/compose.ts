@@ -2,7 +2,7 @@
 
 import { parentNodeOf, findNode } from '../../../store/package/ooxml-edit.ts';
 import type { OoxmlNode, OoxmlPart } from '../../../store/package/ooxml-tree.ts';
-import { isHidden, itemAt, storyNamed } from '../model/document.ts';
+import { isHidden, itemAt, statusOf, storyNamed } from '../model/document.ts';
 import {
   tokenSpace,
   type OrderedDocument,
@@ -114,7 +114,13 @@ export function composeStoryPart(
 } {
   const { composed, decisionEmptied, takeovers } = composeStory(doc, name, options);
   let part = withStoryBlocks(storyNamed(doc, name).part, composed.children);
-  part = withRestoredPrompts(doc, part, composed.emptied, decisionEmptied);
+
+  // A prompt's records show their decisions as the rest of the drawing does
+  const status = (suggestion: string) => {
+    const now = statusOf(doc, suggestion);
+    return now === 'pending' && options.pending === 'reject' ? 'rejected' : now;
+  };
+  part = withRestoredPrompts(doc, part, composed.emptied, decisionEmptied, status);
   part = withControlRecords(part, composed.reached);
   return { part, composed, takeovers };
 }

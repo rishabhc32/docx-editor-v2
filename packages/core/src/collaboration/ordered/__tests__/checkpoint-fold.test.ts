@@ -9,12 +9,14 @@ import { applyOrderedChange } from '../change/apply.ts';
 import { orderedChangeId, orderedIdMinter } from '../change/ids.ts';
 import { validateOrderedChange } from '../change/validate.ts';
 import { openOrderedWordFile } from '../client/open.ts';
+import { orderedPackageBytes } from '../compose/package.ts';
 import { orderedCards } from '../decide.ts';
+import { setStatus } from '../model/mutations.ts';
 import { OrderedRefusal } from '../model/refusal.ts';
 import { isTextBoxStoryName } from '../model/text-boxes.ts';
 import type { OrderedDocument } from '../model/types.ts';
 import { orderedUnitTyper } from '../model/typers.ts';
-import { withUndoRecord } from '../model/undo-record.ts';
+import { takeBack, withUndoRecord } from '../model/undo-record.ts';
 import { orderedStampDate } from '../room/room.ts';
 import {
   addressOf,
@@ -203,6 +205,114 @@ describe('a fold of a filled prompt', () => {
       });
     }
   }
+});
+
+describe('a prompt record the glossary keeps', () => {
+  // Quin's format on a control's prompt, then his insertion fills the control: the file keeps
+  // the prompt with its record in the glossary. A decision that empties the control shows the
+  // prompt under the record's own decision, live, after a save and reopen, and after one and two
+  // folds: accepted, the format with no record; rejected, the old face; pending, the record
+  const TYPED = '2026-10-28T09:31:00Z';
+  const item = MATRIX_ITEMS.find((candidate) => candidate.key === 'placeholder');
+  const prompt = (doc: OrderedDocument): string => {
+    const xml = partsOf(doc)[0] ?? '';
+    return xml.slice(xml.indexOf('<w:sdtContent>'), xml.indexOf('</w:sdtContent>'));
+  };
+  const made = (doc: OrderedDocument, date: string): string =>
+    [...doc.suggestions.values()].find((s) => s.attribution.date === date)?.id ?? 'none';
+
+  async function copies(): Promise<[string, OrderedDocument][]> {
+    const { document: doc, base } = openOrderedWordFile(docx(bodyOf(item!)), { file: 1 });
+    apply(
+      doc,
+      'quin:1',
+      {
+        kind: 'format',
+        ...EDIT,
+        from: at(doc, 1, 7),
+        to: at(doc, 1, 11),
+        properties: [{ localName: 'i' }],
+      },
+      'Quin'
+    );
+    apply(
+      doc,
+      'quin:2',
+      { kind: 'insert', ...EDIT, place: at(doc, 1, 6), text: 'Q' },
+      'Quin',
+      TYPED
+    );
+    const saved = openOrderedWordFile(orderedPackageBytes(doc, base), { file: 2 }).document;
+    const once = await folded(doc, base, 3, mediaStore(base));
+    const twice = await folded(once.document, once.base, 4, mediaStore(base));
+    return [
+      ['live', doc],
+      ['saved', saved],
+      ['folded once', once.document],
+      ['folded twice', twice.document],
+    ];
+  }
+
+  test('a decision that empties the control', async () => {
+    const decided = (doc: OrderedDocument, format: 'accepted' | 'rejected' | null) => {
+      const { record } = withUndoRecord(doc, () => {
+        const formatted = made(doc, DATE);
+        if (format !== null && doc.suggestions.has(formatted)) {
+          setStatus(doc, formatted, format);
+        }
+
+        setStatus(doc, made(doc, TYPED), 'rejected');
+      });
+      const shown = prompt(doc);
+      takeBack(doc, record);
+      return shown;
+    };
+    for (const [label, doc] of await copies()) {
+      const shown = [decided(doc, 'rejected'), decided(doc, 'accepted'), decided(doc, null)];
+      expect([
+        label,
+        shown.map((xml) => [xml.includes('<w:i/>'), xml.includes('rPrChange')]),
+      ]).toEqual([
+        label,
+        [
+          [false, false],
+          [true, false],
+          [true, true],
+        ],
+      ]);
+    }
+  });
+
+  test("the organiser's decisions, card by card", async () => {
+    for (const [label, doc] of await copies()) {
+      const decide = (id: string, suggestion: string) =>
+        apply(
+          doc,
+          id,
+          {
+            kind: 'decide',
+            cards: [
+              { suggestions: [{ suggestion, version: doc.suggestions.get(suggestion)!.version }] },
+            ],
+            status: 'rejected',
+          },
+          'Olga'
+        );
+      decide('olga:1', made(doc, TYPED));
+      const format = made(doc, DATE);
+      expect([
+        label,
+        orderedCards(doc).map((card) => card.suggestions),
+        prompt(doc).includes('rPrChange'),
+      ]).toEqual([label, [[format]], true]);
+      decide('olga:2', format);
+      expect([label, prompt(doc).includes('<w:i/>'), prompt(doc).includes('rPrChange')]).toEqual([
+        label,
+        false,
+        false,
+      ]);
+    }
+  });
 });
 
 describe('a fold of a paragraph press that changes nothing', () => {

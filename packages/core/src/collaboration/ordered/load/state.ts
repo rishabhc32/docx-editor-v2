@@ -13,7 +13,7 @@ import { noteCommentMarker } from '../model/comments.ts';
 import { createOrderedItem, NOT_WITHIN, type OrderedItemInit } from '../model/document.ts';
 import { newSuggestion, setStatus } from '../model/mutations.ts';
 import { OrderedRefusal } from '../model/refusal.ts';
-import { REVISION_ROLE, seedRevisionId } from '../model/revision-ids.ts';
+import { keptRevisionIds, REVISION_ROLE, seedRevisionId } from '../model/revision-ids.ts';
 import { recordUndo } from '../model/undo-record.ts';
 import {
   tokenSpace,
@@ -109,15 +109,15 @@ export class RevisionReader {
   }
 
   /**
-   * A reader of a prompt the glossary kept: a mark a room checkpoint listed is its suggestion's,
-   * as a reopen reads it, and every other one is `fixed`.
+   * A reader of a prompt the glossary kept: a mark a load read or a room checkpoint listed is its
+   * suggestion's, as a reopen reads it, and every other one is `fixed`.
    */
   static forPrompt(doc: OrderedDocument, fixed: string): RevisionReader {
     const reader = new RevisionReader(doc, fixed);
-    for (const [id, revisions] of doc.revisionIds.listed) {
+    for (const [id, revision] of keptRevisionIds(doc)) {
       const attribution = doc.suggestions.get(id)?.attribution;
       if (attribution) {
-        reader.addListed(id, attribution, revisions);
+        reader.addListed(id, attribution, [revision]);
       }
     }
 
