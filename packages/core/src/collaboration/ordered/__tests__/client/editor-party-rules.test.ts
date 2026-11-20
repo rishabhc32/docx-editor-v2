@@ -283,6 +283,30 @@ describe('a party edit today’s check refuses', () => {
     converged(room, ana, ben, olive);
   });
 
+  // A direct insertion inside a pending insertion goes into it, as Word extends a tracked
+  // insertion with untracked typing: Cy's words would go under Ana's name, with no suggestion of
+  // Cy's for the room to see (design D9). Refused as direct typing in the file's own text is
+  test('a party’s direct typing inside another person’s insertion: refused, the organiser’s joins it', async () => {
+    const { room, ana, ben, olive } = await people(FILE);
+    const cy = await join(room, 'Cy', { wordFile: FILE, mode: 'edit', login: PARTY, review });
+    caretAt(ana, 0, 4);
+    run(ana, { type: 'insertText', text: 'abc' });
+    await settle();
+    caretAt(cy, 0, 5);
+    run(cy, { type: 'insertText', text: 'X' });
+    await settle();
+    expect(refused(cy)).toEqual(['ordered-refused/text']);
+    converged(room, ana, ben, cy, olive);
+    expect(editorTexts(cy)[0]).toBe('The abcfee is 100 USD.');
+    caretAt(olive, 0, 5);
+    run(olive, { type: 'insertText', text: 'O' });
+    await settle();
+    converged(room, ana, ben, cy, olive);
+    expect(cardsOf(room)).toEqual([['Ana']]);
+    expect(revisions(await savedBody(olive))).toEqual(['ins:Ana']);
+    expect(editorTexts(cy)[0]).toBe('The aObcfee is 100 USD.');
+  });
+
   // Today: Enter removes the prompt for good (policy 4), so the take-back of the break leaves the
   // control empty and today's view loses the prompt's words (`text`)
   test('Enter in a block control’s prompt: refused for a party, the organiser’s goes', async () => {

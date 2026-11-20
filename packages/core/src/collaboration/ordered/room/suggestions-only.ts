@@ -140,15 +140,24 @@ function isFurniture(doc: OrderedDocument, story: OrderedStory | null): boolean 
   return part?.root.localName === 'hdr' || part?.root.localName === 'ftr';
 }
 
-/** Other people's pending suggestions that inserted an item or a container around it. */
-function insertedByOthers(doc: OrderedDocument, maker: OrderedMaker, item: OrderedItem): string[] {
+/**
+ * Other people's pending suggestions that inserted an item or a container around it. With no
+ * maker, everyone's: a direct edit is no one's suggestion, so every pending one is another's.
+ */
+function insertedByOthers(
+  doc: OrderedDocument,
+  maker: OrderedMaker | null,
+  item: OrderedItem
+): string[] {
+  const other = (id: string) =>
+    maker === null ? isPending(doc, id) : pendingByOther(doc, id, maker);
   const out: string[] = [];
-  if (item.by !== null && pendingByOther(doc, item.by, maker)) {
+  if (item.by !== null && other(item.by)) {
     out.push(item.by);
   }
 
   for (const id of item.within.by) {
-    if (pendingByOther(doc, id, maker)) {
+    if (other(id)) {
       out.push(id);
     }
   }
@@ -404,9 +413,13 @@ const heldByNew = (item: OrderedItem, id: string): boolean =>
  * note it made. A caret is where the change's new items go: past struck text, as the engine
  * types there (`OrderedCaret`). Beside their paragraph mark, a link's or a control's edge, or
  * between their deletion and their insertion, the new run sits beside their suggestions, as the
- * host's check reads the Word file.
+ * host's check reads the Word file. With no maker, inside anyone's (`insertedByOthers`).
  */
-function caretInside(doc: OrderedDocument, maker: OrderedMaker, caret: OrderedCaret): boolean {
+function caretInside(
+  doc: OrderedDocument,
+  maker: OrderedMaker | null,
+  caret: OrderedCaret
+): boolean {
   const { before, at } = caret;
   if (before === null) return false;
   const around = new Set(insertedByOthers(doc, maker, at));
@@ -415,6 +428,25 @@ function caretInside(doc: OrderedDocument, maker: OrderedMaker, caret: OrderedCa
       around.has(id) &&
       ((isUnit(before) && isUnit(at)) || heldByNew(before, id) || heldByNew(at, id))
   );
+}
+
+/**
+ * Whether a direct edit at a caret types into a pending insertion, the author's own too: inside
+ * it, or anywhere in a paragraph of a row, a note or a text box it made. The engine types it
+ * there as that insertion's author (`directInsert`), as Word extends a tracked insertion with
+ * untracked typing, so the edit makes no suggestion of its own.
+ */
+function typesIntoInsertion(
+  doc: OrderedDocument,
+  story: OrderedStory | null,
+  caret: OrderedCaret
+): boolean {
+  if (caretInside(doc, null, caret)) {
+    return true;
+  }
+
+  const mark = story === null ? null : paragraphMarkOf(doc, story, caret.at);
+  return mark !== null && insertedByOthers(doc, null, mark).some((id) => heldByNew(mark, id));
 }
 
 /**
@@ -736,9 +768,14 @@ function checkEdit(input: OrderedPolicyInput, change: OrderedEditChange): Ordere
     return refuse('policy-furniture', 'furniture');
   }
 
-  // Judged once applied (`checkApplied`): allowed when it changed nothing
-  if (appliedOnlyRefusal(input, change, flags) !== null) {
-    return ALLOW;
+  // Judged once applied (`checkApplied`): allowed when it changed nothing. A direct edit that
+  // types into a pending insertion makes no suggestion for that check to see: refused now
+  const held = appliedOnlyRefusal(input, change, flags);
+  if (held !== null) {
+    const into =
+      change.mode === 'edit' &&
+      touched.carets.some((c) => typesIntoInsertion(doc, touched.story, c));
+    return into ? held : ALLOW;
   }
 
   // A strike takes back what it strikes, with another person's records on it
@@ -796,8 +833,10 @@ function checkApplied(
  *   (`nested`), no direct edit (`text` or `package`), no decision, and nothing that adds to or
  *   takes back another person's suggestion (`others_suggestions`).
  *   A direct edit, or an edit in a header or a footer, that makes no suggestion changes nothing,
- *   so it passes, judged once applied. A format or property change may not take over another
- *   person's pending record (policy 2 is the organiser's).
+ *   so it passes, judged once applied. A direct edit that types inside a pending insertion, the
+ *   party's own too, joins it with no suggestion of its own: refused before it applies. A format
+ *   or property change may not take over another person's pending record (policy 2 is the
+ *   organiser's).
  * - An organiser edits directly or suggests anywhere, and decides when the login says so. No one
  *   adds to or takes back another person's suggestion: that would write under their name.
  * - Everyone the login gives comments adds comment threads and replies, on any words (another
