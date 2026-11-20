@@ -7,7 +7,8 @@
 // party's own new table read back after a fold as a row anchor and a grid record of nobody.
 //
 // A press records only the containers the engine wrote: another person's records elsewhere in the
-// table stay theirs.
+// table stay theirs. A grid record (`w:tblGridChange`) writes its `w:id` alone, so the
+// checkpoint names its suggestion, and a fold keeps who made it.
 
 import { describe, expect, test } from 'bun:test';
 import type { OoxmlPackage } from '../../../store/package/ooxml-package.ts';
@@ -20,6 +21,7 @@ import type { OrderedDocument, OrderedItem } from '../model/types.ts';
 import { addressOf, apply, APPLY_FILE, at, BODY, EDIT, opens } from './change-apply-fixture.ts';
 import { checkFold, mediaStore } from './fold-check.ts';
 import { checkSaveAndLoad } from './sessions/session.ts';
+import { docx, p, t } from './word-fixtures.ts';
 
 /** A suggested table press on a row or a cell. */
 const press = (doc: OrderedDocument, id: string, on: OrderedItem, op: OrderedTableOp, by: string) =>
@@ -129,4 +131,34 @@ describe('a table press leaves the records it did not write', () => {
       await checked(doc, base, label);
     });
   }
+});
+
+const cell = (text: string, width: number) =>
+  `<w:tc><w:tcPr><w:tcW w:w="${width}" w:type="dxa"/></w:tcPr>${p(t(text))}</w:tc>`;
+
+/** A table whose grid (3000, 3000) differs from its cells' widths (4000, 2000). */
+const UNEVEN = docx(
+  p(t('The fees are below.')) +
+    '<w:tbl><w:tblPr><w:tblW w:w="6000" w:type="dxa"/><w:tblLayout w:type="fixed"/></w:tblPr>' +
+    '<w:tblGrid><w:gridCol w:w="3000"/><w:gridCol w:w="3000"/></w:tblGrid>' +
+    `<w:tr>${cell('Fee', 4000)}${cell('Rate', 2000)}</w:tr>` +
+    '</w:tbl>' +
+    p(t('Signed here.'))
+);
+
+describe('a fold of a grid record', () => {
+  test('a drag that changes no cell keeps its maker', async () => {
+    const { document: doc, base } = openOrderedWordFile(UNEVEN, { file: 1 });
+    press(
+      doc,
+      'ana:1',
+      opens(doc, 'tc')[0]!,
+      { op: 'setTableColumnWidths', leftWidthTwips: 4000, rightWidthTwips: 2000 },
+      'Ana'
+    );
+    expect(tableXml(doc, 0)).toMatch(/<w:tblGridChange w:id="\d+">/);
+
+    // A Word file names nobody for it: only the checkpoint does
+    await checkFold(doc, base, mediaStore(base), 'a lone grid record');
+  });
 });

@@ -346,7 +346,8 @@ function checkpointTypers(doc: OrderedDocument): {
 
 /**
  * The `w:id` of every revision mark in a package's stories, and in its glossary: a prompt that
- * content took the place of keeps its records there.
+ * content took the place of keeps its records there. A grid record (`w:tblGridChange`) writes
+ * its `w:id` alone (`CT_Markup`): the manifest names its suggestion, or a load makes it nobody's.
  */
 function writtenRevisionIds(pkg: OoxmlPackage): Set<string> {
   const ids = new Set<string>();
@@ -354,7 +355,8 @@ function writtenRevisionIds(pkg: OoxmlPackage): Set<string> {
   for (const part of [...orderedStoryParts(pkg).values(), ...(glossary ? [glossary] : [])]) {
     eachElement(part.root, (element: OoxmlElement) => {
       const id = attributeOf(element, 'id');
-      if (id !== undefined && attributeOf(element, 'author') !== undefined) {
+      const mark = attributeOf(element, 'author') !== undefined || isWml(element, 'tblGridChange');
+      if (id !== undefined && mark) {
         ids.add(id);
       }
     });

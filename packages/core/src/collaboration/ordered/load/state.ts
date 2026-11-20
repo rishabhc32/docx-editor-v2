@@ -129,7 +129,11 @@ export class RevisionReader {
     return reader;
   }
 
-  /** Read the marks a checkpoint listed for a suggestion as that suggestion's. */
+  /**
+   * Read the marks a checkpoint listed for a suggestion as that suggestion's: by their triple, and
+   * by their `w:id` alone for a mark that writes nothing else (`CT_Markup`: a `w:tblGridChange`),
+   * so a fold keeps its owner.
+   */
   private addListed(
     id: string,
     { author, date }: OrderedAttribution,
@@ -137,9 +141,13 @@ export class RevisionReader {
   ): void {
     for (const revision of revisions) {
       // An id names one suggestion: two share one only when two minted ids meet
-      const triple = revisionTriple(revision, author, date);
-      if (!this.listedByTriple.has(triple)) {
-        this.listedByTriple.set(triple, id);
+      for (const triple of [
+        revisionTriple(revision, author, date),
+        revisionTriple(revision, '', undefined),
+      ]) {
+        if (!this.listedByTriple.has(triple)) {
+          this.listedByTriple.set(triple, id);
+        }
       }
     }
   }
