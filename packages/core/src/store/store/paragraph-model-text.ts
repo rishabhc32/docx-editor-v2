@@ -6,7 +6,7 @@ import { hardBreakKind, hardBreakText } from '../package/hard-break.ts';
 import type { OoxmlPart, OoxmlParagraphNode } from '../package/ooxml-tree.ts';
 import { findNode } from '../package/ooxml-edit.ts';
 import { withFieldResultsMode, type FieldResultsMode } from '../package/field-result-mode.ts';
-import { isParagraph, segmentsOf } from './tree-op-segments.ts';
+import { isParagraph, segmentsOf, type Segment } from './tree-op-segments.ts';
 
 /**
  * Paragraph text as the ops address it, for tests and callers computing offsets.
@@ -27,10 +27,16 @@ export function paragraphTextOf(
   });
 }
 
-/** Paragraph text as the ops address it, from one canonical paragraph node. @internal */
-export function paragraphModelTextOf(paragraph: OoxmlParagraphNode): string {
+/**
+ * Paragraph text as the ops address it, from one canonical paragraph node, or from `segments`, its
+ * segments the caller already has. @internal
+ */
+export function paragraphModelTextOf(
+  paragraph: OoxmlParagraphNode,
+  segments: readonly Segment[] = segmentsOf(paragraph)
+): string {
   let text = '';
-  for (const segment of segmentsOf(paragraph)) {
+  for (const segment of segments) {
     if (segment.removeNodeIds && segment.removeNodeIds.length > 0) {
       text += fieldAtomText();
       continue;

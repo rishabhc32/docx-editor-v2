@@ -1,15 +1,24 @@
 // A paragraph as items. Every unit gets the width the engine's offset index gives it, so a
-// paragraph's shown units read as the engine's model text. Revision markup becomes labels: the
-// same path loads a plain file and a file with tracked changes.
+// paragraph's shown units read as the engine's model text, but for a field one unit cannot hold
+// (`offsetIndexOf`). Revision markup becomes labels: the same path loads a plain file and a file
+// with tracked changes.
 
-import { isInlineRunContainer } from '../../../store/package/ooxml-shared.ts';
+import { atomicFieldSpansOf } from '../../../store/package/field-nodes.ts';
+import {
+  isInlineRunContainer,
+  MAX_INLINE_CONTAINER_DEPTH,
+} from '../../../store/package/ooxml-shared.ts';
 import type {
   OoxmlElement,
   OoxmlNode,
   OoxmlParagraphNode,
 } from '../../../store/package/ooxml-tree.ts';
 import { paragraphModelTextOf } from '../../../store/store/paragraph-model-text.ts';
-import { paragraphOffsetIndex } from '../../../store/store/tree-op-segments.ts';
+import {
+  paragraphOffsetIndex,
+  transientParagraphOffsetIndex,
+  type ParagraphOffsetIndex,
+} from '../../../store/store/tree-op-segments.ts';
 import { formatRunsOf } from '../compose/inline.ts';
 import { REVISION_ROLE } from '../model/revision-ids.ts';
 import { equationAtom, type EquationAtom } from './equations.ts';
@@ -59,7 +68,7 @@ export interface FieldBuild {
 /** What the walk of one paragraph's inline content knows. */
 export interface ParagraphLoad {
   readonly node: OoxmlParagraphNode;
-  readonly index: ReturnType<typeof paragraphOffsetIndex>;
+  readonly index: ParagraphOffsetIndex;
   /** The engine's model text: an atom's character is read from it. */
   readonly text: string;
   /** The space of the paragraph's units. */
@@ -98,21 +107,68 @@ export function atomCharAt(ctx: ParagraphLoad, span: { readonly start: number } 
   return span ? ctx.text.charAt(span.start) || OBJECT_CHAR : OBJECT_CHAR;
 }
 
-/** A complex field is one unit: its begin node, and every node it covers, to the begin node. */
-function fieldCover(index: ParagraphLoad['index']): Map<string, string> {
-  const coveredBy = new Map<string, string>();
-  for (const segment of index.segments) {
-    if (!isFieldChar(segment.node) || !segment.removeNodeIds?.length) {
-      continue;
-    }
+/** The engine's whole complex fields: the segment of each one's begin node. */
+const wholeFields = (index: ParagraphOffsetIndex) =>
+  index.segments.filter((segment) => isFieldChar(segment.node) && segment.removeNodeIds?.length);
 
+/** A complex field is one unit: its begin node, and every node it covers, to the begin node. */
+function fieldCover(index: ParagraphOffsetIndex): Map<string, string> {
+  const coveredBy = new Map<string, string>();
+  for (const segment of wholeFields(index)) {
     coveredBy.set(segment.node.id, segment.node.id);
-    for (const id of segment.removeNodeIds) {
+    for (const id of segment.removeNodeIds ?? []) {
       coveredBy.set(id, segment.node.id);
     }
   }
 
   return coveredBy;
+}
+
+/** The content of each run, to the node that holds the run: the paragraph, a link, a revision. */
+function runHomes(paragraph: OoxmlParagraphNode): Map<string, string> {
+  const homes = new Map<string, string>();
+  const visit = (node: OoxmlElement, depth: number): void => {
+    for (const child of node.children) {
+      if (child.kind === 'run') {
+        for (const content of child.children) {
+          homes.set(content.id, node.id);
+        }
+      } else if (child.kind !== 'textValue' && depth < MAX_INLINE_CONTAINER_DEPTH) {
+        visit(child, depth + 1);
+      }
+    }
+  };
+  visit(paragraph, 0);
+  return homes;
+}
+
+/**
+ * The engine's offset index of a paragraph, but for a complex field whose runs are not all where
+ * its begin run is: one unit cannot hold a link or a revision that starts or ends in the field (a
+ * table of contents field whose result is a link, a suggestion in a field's result). Such a field
+ * loads as its markers and its result, as a field over two paragraphs does, as the room holds it.
+ */
+function offsetIndexOf(paragraph: OoxmlParagraphNode): ParagraphOffsetIndex {
+  const index = paragraphOffsetIndex(paragraph);
+  const fields = wholeFields(index);
+  if (fields.length === 0) {
+    return index;
+  }
+
+  const homes = runHomes(paragraph);
+  const split = new Set(
+    fields
+      .filter((field) =>
+        field.removeNodeIds?.some((id) => homes.get(id) !== homes.get(field.node.id))
+      )
+      .map((field) => field.node.id)
+  );
+  if (split.size === 0) {
+    return index;
+  }
+
+  const spans = atomicFieldSpansOf(paragraph).filter((span) => !split.has(span.node.id));
+  return transientParagraphOffsetIndex(paragraph, spans);
 }
 
 /** Load one paragraph: its inline content, then its mark. */
@@ -123,11 +179,11 @@ export function loadParagraph(
   depth: number
 ): void {
   checkDepth(state, depth);
-  const index = paragraphOffsetIndex(node);
+  const index = offsetIndexOf(node);
   const ctx: ParagraphLoad = {
     node,
     index,
-    text: paragraphModelTextOf(node),
+    text: paragraphModelTextOf(node, index.segments),
     space: paragraphSpace(state.doc.file, node.id),
     markKey: markSpace(state.doc.file, node.id),
     coveredBy: fieldCover(index),

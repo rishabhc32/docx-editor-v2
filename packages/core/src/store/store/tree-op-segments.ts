@@ -184,7 +184,7 @@ const offsetIndexCache = new FieldResultsModeMemo<OoxmlParagraphNode, ParagraphO
 export function paragraphOffsetIndex(paragraph: OoxmlParagraphNode): ParagraphOffsetIndex {
   const cached = offsetIndexCache.get(paragraph);
   if (cached) return cached;
-  const index = buildParagraphOffsetIndex(paragraph);
+  const index = transientParagraphOffsetIndex(paragraph);
   offsetIndexCache.set(paragraph, index);
   return index;
 }
@@ -194,14 +194,13 @@ export function paragraphInlineLengthOf(paragraph: OoxmlParagraphNode, node: Oox
   return paragraphOffsetIndex(paragraph).lengthOf(node);
 }
 
-/** Build an offset index without populating the interactive paragraph memo. @internal */
-export function transientParagraphOffsetIndex(paragraph: OoxmlParagraphNode): ParagraphOffsetIndex {
-  return buildParagraphOffsetIndex(paragraph);
-}
-
-function buildParagraphOffsetIndex(paragraph: OoxmlParagraphNode): ParagraphOffsetIndex {
+/** Build an offset index without populating the memo, over `fieldSpans` when given. @internal */
+export function transientParagraphOffsetIndex(
+  paragraph: OoxmlParagraphNode,
+  fieldSpans?: readonly AtomicFieldSpan[]
+): ParagraphOffsetIndex {
   const spans = new Map<string, OffsetSpan>();
-  const segments = walkParagraph(paragraph, spans, null);
+  const segments = walkParagraph(paragraph, spans, null, fieldSpans);
   const length = segments.length === 0 ? 0 : segments[segments.length - 1]!.end;
   const lookup = (node: OoxmlNode | string): OffsetSpan | null =>
     spans.get(typeof node === 'string' ? node : node.id) ?? null;
