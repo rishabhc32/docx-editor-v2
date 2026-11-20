@@ -10,7 +10,12 @@ import { DEFAULT_LIMITS } from '../../../store/runtime/limits.ts';
 import { MAX_XML_DEPTH } from '../../../store/package/xml-reader.ts';
 import type { CheckpointSuggestion } from '../model/checkpoint-suggestions.ts';
 import { noteCommentMarker } from '../model/comments.ts';
-import { createOrderedItem, NOT_WITHIN, type OrderedItemInit } from '../model/document.ts';
+import {
+  createOrderedItem,
+  isLabelled,
+  NOT_WITHIN,
+  type OrderedItemInit,
+} from '../model/document.ts';
 import { newSuggestion, setStatus } from '../model/mutations.ts';
 import { OrderedRefusal } from '../model/refusal.ts';
 import { keptRevisionIds, REVISION_ROLE, seedRevisionId } from '../model/revision-ids.ts';
@@ -317,6 +322,14 @@ export function loadInEdit<T>(doc: OrderedDocument, load: () => T): T {
 /** The story's items, each of a control's prompt units marked as such. */
 export function itemsWithPrompts(state: LoadState): OrderedItem[] {
   return state.items.map((item, k) => (state.prompts.has(k) ? { ...item, prompt: true } : item));
+}
+
+/**
+ * A story's loaded items, each one the file labelled marked `rebuilt`: a take-back takes its
+ * labels off, but its loaded paragraph still shows the file's record.
+ */
+export function withFileLabels(items: readonly OrderedItem[]): OrderedItem[] {
+  return items.map((item) => (isLabelled(item) ? { ...item, rebuilt: true } : item));
 }
 
 /** Refuse a walk past the depth limit. */

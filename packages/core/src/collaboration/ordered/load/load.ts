@@ -33,6 +33,7 @@ import {
   newLoadState,
   NOTE_MARK_ROLES,
   RevisionReader,
+  withFileLabels,
 } from './state.ts';
 
 /** Bounds on a load. A caller may lower them, never raise them. @public */
@@ -265,7 +266,7 @@ function loadStories(
     const notes = isWml(part.root, 'footnotes') || isWml(part.root, 'endnotes');
     const state = newLoadState(doc, name, revisions, budget, notes ? NOTE_MARK_ROLES : MARK_ROLES);
     loadBlocks(state, storyBlocksOf(part), 1);
-    const items = withLoadedSections(state, part, itemsWithPrompts(state));
+    const items = withFileLabels(withLoadedSections(state, part, itemsWithPrompts(state)));
     checkEndsWithMark(name, items);
     collectOriginals(doc, part.root);
 

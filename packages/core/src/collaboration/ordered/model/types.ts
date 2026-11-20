@@ -402,8 +402,8 @@ export interface OrderedItem
   /** Text inside a field instruction. */
   readonly instr?: boolean;
   /**
-   * Reserved for a compaction that folds decided labels into the item, so its paragraph is
-   * drawn again. Nothing sets it yet.
+   * The file labelled it at load (a revision record its loaded paragraph or block shows), so
+   * they are drawn again from the items, also once a take-back took the labels off.
    */
   readonly rebuilt?: boolean;
   /**

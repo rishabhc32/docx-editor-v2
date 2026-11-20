@@ -25,6 +25,7 @@ import {
   newLoadState,
   RevisionReader,
   type LoadBudget,
+  withFileLabels,
 } from './state.ts';
 
 /**
@@ -89,7 +90,7 @@ function addTextBoxStory(
   // A text box in an object a suggestion inserted is that suggestion's: its plain content takes
   // the insertion's label under its marker, as a new note's content does (`load/notes.ts`), so a
   // person types inside another person's new text box only as inside their suggestion
-  const items = itemsWithPrompts(state).map(
+  const items = withFileLabels(itemsWithPrompts(state)).map(
     (item): OrderedItem =>
       owner !== null && item.by === null ? { ...item, by: owner, quiet: true } : item
   );

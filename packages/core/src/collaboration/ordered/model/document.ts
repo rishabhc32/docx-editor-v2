@@ -242,7 +242,10 @@ export function widthOf(item: OrderedItem): number {
   }
 }
 
-/** Whether any label names a suggestion (or the item went), so its paragraph is drawn again. */
+/**
+ * Whether any label names a suggestion (or the item went, or the file labelled it), so its
+ * paragraph is drawn again.
+ */
 export function isLabelled(item: OrderedItem): boolean {
   return (
     item.by !== null ||
