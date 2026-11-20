@@ -1,0 +1,10 @@
+{
+  "impact": "compatible",
+  "fields": [],
+  "before": "The organiser's direct paragraph removal (delete-paragraph) was applied where the engine's deleteBlock refuses it: a note's paragraph, a cell's only paragraph and a paragraph that ends a section, which left an empty note or cell, or merged two sections. At a cell's or the story's end it left the paragraph's markers and empty runs with no paragraph, so the story no longer composed and the room could not write its file or checkpoint.",
+  "after": "delete-paragraph is refused where the engine's deleteBlock refuses it (engine-refused), checked by the engine's own op on the drawn story. When the mark goes alone, the paragraph's markers and empty runs go with it, as the engine removes the whole w:p.",
+  "reason": "The Yjs document format, the ordered protocol and the checkpoint manifest do not change. Every copy runs the same check on the same document, so every copy refuses the same change. Ordered rooms are not deployed yet.",
+  "tests": ["packages/core/src/collaboration/ordered/__tests__/paste-blocks-apply.test.ts"],
+  "changeset": "ordered-delete-paragraph-engine",
+  "migration": null
+}

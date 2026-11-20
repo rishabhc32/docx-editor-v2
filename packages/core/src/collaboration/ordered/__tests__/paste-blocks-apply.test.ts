@@ -6,6 +6,7 @@ import { describe, expect, test } from 'bun:test';
 import { orderedIdMinter } from '../change/ids.ts';
 import { applyOrderedChange } from '../change/apply.ts';
 import type { OrderedChange } from '../change/types.ts';
+import { openOrderedWordFile } from '../client/open.ts';
 import { withUndoRecord } from '../model/undo-record.ts';
 import {
   apply,
@@ -14,6 +15,7 @@ import {
   DATE,
   DIRECT,
   EDIT,
+  FOOTNOTES,
   load,
   markOf,
   partsOf,
@@ -21,6 +23,7 @@ import {
   textOf,
 } from './change-apply-fixture.ts';
 import { testAttribution, testPerson } from './test-persons.ts';
+import { docx, MATRIX_EXTRAS, p, t } from './word-fixtures.ts';
 
 /** Take back or make again a direct edit's suggestions, as the organiser's undo and redo do. */
 function revert(
@@ -107,6 +110,61 @@ describe('delete-paragraph', () => {
     );
     expect(texts(doc)).toEqual(all.filter((text) => text !== 'First item'));
     expect(partsOf(doc)[0]).toContain('<w:tbl>');
+  });
+
+  // The engine's `deleteBlock` keeps the paragraph a note, a cell or a section's end needs
+  test('is refused where the engine keeps the paragraph', () => {
+    const cell = '<w:tbl><w:tblGrid><w:gridCol w:w="3000"/></w:tblGrid><w:tr><w:tc>';
+    const file = docx(
+      p(t('Ends a section.'), '<w:sectPr/>') + `${cell}${p(t('Cell.'))}</w:tc></w:tr></w:tbl>`,
+      MATRIX_EXTRAS
+    );
+    const refused = (
+      [
+        [BODY, 0],
+        [BODY, 1],
+        [FOOTNOTES, 1],
+        [FOOTNOTES, 0],
+      ] as const
+    ).map(([part, last]) => {
+      const doc = openOrderedWordFile(file, { file: 1 }).document;
+      apply(
+        doc,
+        'pia-1:1',
+        { ...EDIT, kind: 'insert-note', place: markOf(doc, 0), note: 'footnote', text: ' Note' },
+        'Pia'
+      );
+
+      // A note's only paragraph: the file's, and Pia's new one at the story's end
+      const notes = doc.stories.get(FOOTNOTES)!.tree.summary.marks;
+      const index = part === BODY ? last : notes - 1 - last;
+      const change = {
+        part,
+        mode: 'edit',
+        kind: 'delete-paragraph',
+        mark: markOf(doc, index, part),
+      };
+      return refusal(doc, 'olive-1:1', change as never, 'Olive');
+    });
+    expect(refused).toEqual(Array(4).fill('engine-refused'));
+  });
+
+  // The engine removes the whole paragraph, its markers and empty runs too: at a cell's end
+  // nothing is left after the cell's last paragraph
+  test("removes a cell's last paragraph with the markers at its end", () => {
+    const end = '<w:bookmarkStart w:id="1" w:name="b"/><w:bookmarkEnd w:id="1"/><w:r><w:t/></w:r>';
+    const doc = openOrderedWordFile(
+      docx(
+        '<w:tbl><w:tblGrid><w:gridCol w:w="3000"/></w:tblGrid><w:tr><w:tc>' +
+          `${p(t('First.'))}${p(t('Second.') + end)}</w:tc></w:tr></w:tbl>${p(t('After.'))}`
+      ),
+      { file: 1 }
+    ).document;
+    apply(doc, 'olive-1:1', { ...DIRECT, kind: 'delete-paragraph', mark: markOf(doc, 1) }, 'Olive');
+    const body = partsOf(doc)[0] ?? '';
+    expect(body).toContain('<w:t>First.</w:t></w:r></w:p></w:tc>');
+    expect(body).not.toContain('<w:t/>');
+    expect(body).not.toContain('w:bookmark');
   });
 
   test('is refused as a suggestion: Word tracks it as struck text and mark', () => {

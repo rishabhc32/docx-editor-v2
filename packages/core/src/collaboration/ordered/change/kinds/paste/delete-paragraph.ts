@@ -1,10 +1,12 @@
 // The `delete-paragraph` change kind (group 9.10): a whole paragraph removed with tracking off.
 
 import { orderedViewParagraph } from '../../../compose/compose.ts';
-import type { Ctx } from '../../../edits/context.ts';
+import { strikeItems, type Ctx } from '../../../edits/context.ts';
+import { engineOnView } from '../../../edits/control-shell.ts';
 import { directDelete, directJoin, settle } from '../../../edits/direct.ts';
 import { strikeMark } from '../../../edits/marks.ts';
 import { shownItemAt } from '../../../edits/places.ts';
+import { isHidden } from '../../../model/document.ts';
 import { OrderedRefusal } from '../../../model/refusal.ts';
 import type { OrderedStory } from '../../../model/types.ts';
 import { refuseLockedBlocks, refuseLockedWithin, siblings } from '../../../placement.ts';
@@ -39,9 +41,11 @@ function deleteParagraph(ctx: Ctx, story: OrderedStory, address: OrderedChangeAd
     throw new OrderedRefusal('no-paragraph-after', 'the story keeps one paragraph');
   }
 
-  // As the engine's `deleteBlock`: a lock around the paragraph, or any lock on a control in it
+  // As the engine's `deleteBlock`: a lock around the paragraph, or any lock on a control in it,
+  // and the paragraph a note, a cell or a section's end keeps
   refuseLockedBlocks(ctx, p.blocks);
   refuseLockedWithin(ctx, p.items, true);
+  engineOnView(ctx, { op: 'deleteBlock', blockId: p.id });
 
   // The text first: every view offset of the paragraphs after it stays where it is
   if (p.chars.length > 0) {
@@ -54,12 +58,21 @@ function deleteParagraph(ctx: Ctx, story: OrderedStory, address: OrderedChangeAd
     throw new OrderedRefusal('malformed-story', 'the paragraph went');
   }
 
-  // Beside a paragraph, a join; before a table or at a container's end, the mark alone goes
+  // Beside a paragraph, a join
   if (next && siblings(ctx, after, next)) {
     directJoin(ctx, after, next);
-  } else {
-    settle(ctx.doc, strikeMark(ctx, after.mark, null, { evenStruck: true }));
+    return;
   }
+
+  // Before a table or at a container's end the mark goes with what the paragraph still holds
+  // (its markers, an empty run), as no paragraph is left to take them
+  const struck = strikeMark(ctx, after.mark, null, { evenStruck: true });
+  if (struck !== null) {
+    const left = after.items.filter((item) => item.kind === 'zero' && !isHidden(ctx.doc, item));
+    strikeItems(ctx, story, left, struck);
+  }
+
+  settle(ctx.doc, struck);
 }
 
 export const DELETE_PARAGRAPH_SPEC = orderedKindSpec<OrderedDeleteParagraphChange>({
