@@ -354,9 +354,13 @@ function writtenRevisionIds(pkg: OoxmlPackage): Set<string> {
   const glossary = glossaryPartOf(pkg);
   for (const part of [...orderedStoryParts(pkg).values(), ...(glossary ? [glossary] : [])]) {
     eachElement(part.root, (element: OoxmlElement) => {
+      // Most elements hold no `w:id`: only those are read further
       const id = attributeOf(element, 'id');
-      const mark = attributeOf(element, 'author') !== undefined || isWml(element, 'tblGridChange');
-      if (id !== undefined && mark) {
+      if (id === undefined) {
+        return;
+      }
+
+      if (attributeOf(element, 'author') !== undefined || isWml(element, 'tblGridChange')) {
         ids.add(id);
       }
     });
