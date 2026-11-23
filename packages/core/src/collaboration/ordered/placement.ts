@@ -22,7 +22,7 @@ import {
   type OrderedViewParagraph,
 } from './compose/context.ts';
 import { keptLinkEdges } from './compose/kept-links.ts';
-import { showsPrompt } from './compose/paragraph.ts';
+import { ownItems, replacedPromptOf } from './compose/paragraph.ts';
 import { containerPropertiesAfter } from './compose/properties.ts';
 import {
   closesContainer,
@@ -401,8 +401,8 @@ export function siteAt(ctx: Ctx, p: OrderedViewParagraph, at: number, skipStruck
  * the prompt, in the face of the prompt's first words without the placeholder style, wherever
  * the caret is in it (the engine empties the prompt into its first run). The typed text replaces
  * the prompt; deleting the prompt does nothing (that skip is in `edits/text.ts`). Null when no
- * prompt is there. In a control's prompt that holds another control showing its own, the outer
- * prompt is replaced, as the engine replaces the outermost (`placeholderControlForInsertion`).
+ * prompt is there. In a control's prompt that holds another control showing its own, inline or
+ * block, the outer prompt is replaced, as the engine replaces the outermost (`replacedPromptOf`).
  */
 export function promptSite(ctx: Ctx, p: OrderedViewParagraph, offset: number): Site | null {
   const at = [p.chars[offset], offset > 0 ? p.chars[offset - 1] : undefined].find(
@@ -412,12 +412,13 @@ export function promptSite(ctx: Ctx, p: OrderedViewParagraph, offset: number): S
     return null;
   }
 
-  const shown = new ComposeContext(ctx.doc, ctx.story, {});
-  const showsOwn = (segment: string) => {
-    const open = isControlSegment(segment) ? openOfSegment(ctx.story, segment) : null;
-    return open !== null && showsPrompt(shown, open);
-  };
-  const segment = segmentsOf(at.containers).find(showsOwn) ?? innermostSegment(at.containers);
+  const open = replacedPromptOf(new ComposeContext(ctx.doc, ctx.story, {}), at.item);
+  if (!open) {
+    return null;
+  }
+
+  const block = open.token === 'sdtBlock';
+  const segment = block ? '' : `c:${open.space}`;
   const first = p.chars.find(
     (char) =>
       char.item.prompt === true &&
@@ -425,9 +426,10 @@ export function promptSite(ctx: Ctx, p: OrderedViewParagraph, offset: number): S
       innermostSegment(char.containers) === segment
   );
   const face = withoutPlaceholderStyle(currentFace(ctx, (first ?? at).item));
-  if (!isControlSegment(segment)) {
-    // A block control's prompt: after the paragraph's last prompt unit
-    const last = [...p.items]
+  if (block) {
+    // A block control's prompt: after the paragraph's last unit of it (a control inside it that
+    // goes with it keeps its own, `ownItems`)
+    const last = [...ownItems(p.items, open)]
       .reverse()
       .find((item) => item.prompt === true && item.kind !== 'mark');
     if (!last) {
@@ -442,10 +444,8 @@ export function promptSite(ctx: Ctx, p: OrderedViewParagraph, offset: number): S
     };
   }
 
-  const open = openOfSegment(ctx.story, segment);
-
   // A control typing never enters keeps its prompt: text at its edge goes beside it
-  if (!open || open.kind !== 'open' || refusesTyping(ctx, open)) {
+  if (refusesTyping(ctx, open)) {
     return null;
   }
 

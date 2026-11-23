@@ -6,7 +6,9 @@
 // nested exactly when the edit, applied, loses that suggestion from the saved file.
 
 import { describe, expect, test } from 'bun:test';
+import { serializeOoxmlPart } from '../../../store/package/ooxml-tree.ts';
 import { orderedChangeTargets } from '../change/targets.ts';
+import { composeOrderedPart } from '../compose/compose.ts';
 import { orderedCards } from '../decide.ts';
 import { applyOrderedChange } from '../change/apply.ts';
 import { loadOrderedPackage } from '../index.ts';
@@ -224,4 +226,167 @@ describe('every kind of edit at every place by a prompt: nested exactly when the
       }
       expect(rows.filter((row) => row.endsWith('(differs)'))).toEqual([]);
     });
+});
+
+/** Bob's pending insertion of runs, as Word writes a suggested control's content. */
+const insertedByBob = (runs: string) =>
+  `<w:ins w:id="70" w:author="Bob" w:date="2026-10-28T08:00:00Z">${runs}</w:ins>`;
+const CITY =
+  '<w:id w:val="9204"/><w:showingPlcHdr/><w:comboBox><w:listItem w:value=""/>' +
+  '<w:listItem w:displayText="Mumbai" w:value="Mumbai"/></w:comboBox>';
+
+/**
+ * "Courts at [Choose a city.] have jurisdiction.": a control's prompt that holds a combo box
+ * showing its own, each control the file's own or Bob's pending insertion, in a block control
+ * after "Venue:" or in an inline one after "Venue: ".
+ */
+function venue(block: boolean, outerBob: boolean, innerBob: boolean): Uint8Array {
+  const outer = (runs: string) => (outerBob ? insertedByBob(runs) : runs);
+  const city = t('Choose a city.', FACE);
+  const prompt =
+    outer(t('Courts at ', FACE)) +
+    sdt(CITY, innerBob ? insertedByBob(city) : city) +
+    outer(t(' have jurisdiction.', FACE));
+  const props = '<w:id w:val="9203"/><w:showingPlcHdr/>';
+  const first = block
+    ? p(t('Venue:')) + sdt(props, p(prompt))
+    : p(t('Venue: ') + sdt(props, prompt));
+  return docx(first + p(t('Moved words here.')));
+}
+
+/** Bob's suggestions as a save writes them: his insertions' words, then his formats' words. */
+function bobsWords(doc: OrderedDocument): string {
+  const xml = serializeOoxmlPart(composeOrderedPart(doc, BODY).part);
+  const words = (runs: string) =>
+    [...runs.matchAll(/<w:t(?: [^>]*)?>([^<]*)<\/w:t>/g)].map((m) => m[1]).join('');
+  const inserted = [...xml.matchAll(/<w:ins [^>]*w:author="Bob"[^>]*>(.*?)<\/w:ins>/gs)];
+  const formatted = [
+    ...xml.matchAll(/<w:r>(?:(?!<\/w:r>).)*?w:rPrChange [^>]*w:author="Bob".*?<\/w:r>/gs),
+  ];
+  const insertions = inserted.map((m) => words(m[1] ?? '')).join('');
+  const formats = formatted.map((m) => words(m[0])).join('');
+  return `${insertions}|${formats}`;
+}
+
+/** Bob's pending bold on the second to fifth characters of the prompt text `words` starts. */
+function boldOn(doc: OrderedDocument, words: string) {
+  const item = doc.stories
+    .get(BODY)
+    ?.tree.toArray()
+    .find((each) => each.kind === 'text' && each.prompt === true && each.text?.startsWith(words));
+  if (!item) {
+    throw new Error('fixture');
+  }
+
+  const place = (n: number) => ({ space: item.space, offset: item.offset + n });
+  return {
+    kind: 'format',
+    ...EDIT,
+    from: place(1),
+    to: place(5),
+    properties: [{ localName: 'b' }],
+  };
+}
+
+const VENUES = [
+  { name: 'inline', block: false, line: 0, start: 7 },
+  { name: 'block', block: true, line: 1, start: 0 },
+] as const;
+
+const BOBS = [
+  { name: 'his format on the outer prompt', bold: 'Courts', outer: false, inner: false },
+  { name: 'his format on the inner prompt', bold: 'Choose', outer: false, inner: false },
+  { name: 'the outer control his insertion', bold: null, outer: true, inner: false },
+  { name: 'the inner control his insertion', bold: null, outer: false, inner: true },
+  { name: 'both controls his insertion', bold: null, outer: true, inner: true },
+] as const;
+
+/** Places from the outer prompt's start. */
+const VENUE_PLACES = [
+  ['the outer prompt, its start', 0],
+  ['the outer prompt, its middle', 5],
+  ['the outer prompt, its end', 43],
+  ['the inner prompt, its start', 10],
+  ['the inner prompt, its middle', 15],
+  ['the inner prompt, its end', 24],
+] as const;
+
+const VENUE_KINDS: Readonly<Record<string, Make>> = {
+  ...KINDS,
+  'value of the combo box': (doc) => ({
+    kind: 'control-value',
+    ...EDIT,
+    control: addressOf(opens(doc, 'sdt').at(-1)!),
+    value: { kind: 'listItem', value: 'Mumbai' },
+  }),
+};
+
+/**
+ * Each kind of edit at each place of the two prompts: the edits that lose a suggestion of Bob's
+ * from the room or the saved file and are allowed, and those refused as nested that lose none.
+ */
+function venueVerdicts(file: Uint8Array, line: number, start: number, bold: string | null) {
+  const lost: string[] = [];
+  const kept: string[] = [];
+  for (const [place, n] of VENUE_PLACES) {
+    for (const [name, make] of Object.entries(VENUE_KINDS)) {
+      const doc = loadOrderedPackage(packageOf(file));
+      if (bold) {
+        apply(doc, 'bob-1:1', boldOn(doc, bold) as never, 'Bob');
+      }
+
+      const before = bobsWords(doc);
+      const where = at(doc, line, start + n);
+      const change = { v: 1, id: 'cy-1:1', ...make(doc, where, line) } as never;
+      const targets = orderedChangeTargets(doc, change);
+      if (!targets.ok) {
+        throw new Error(`${name}: ${targets.code}`);
+      }
+
+      const verdict = suggestionsOnlyPolicy().check({
+        actor: CY,
+        change,
+        touched: targets.touched,
+        document: doc,
+      });
+      const nested = !verdict.ok && verdict.code === 'policy-nested';
+      try {
+        apply(doc, 'cy-1:1', make(doc, where, line) as never, 'Cy');
+      } catch (error) {
+        if (!(error instanceof OrderedRefusal)) {
+          throw error;
+        }
+      }
+
+      const saves = bobsWords(reopened(saved(packageOf(file), doc)));
+      const loses = bobsWords(doc) !== before || saves !== before;
+      if (loses && !nested) {
+        lost.push(`${place}, ${name}`);
+      }
+
+      if (nested && !loses) {
+        kept.push(`${place}, ${name}`);
+      }
+    }
+  }
+
+  return { lost, kept };
+}
+
+describe('every kind of edit at every place of a prompt that holds a control with its own', () => {
+  for (const { name: control, block, line, start } of VENUES) {
+    for (const bob of BOBS) {
+      test(`${control}: ${bob.name}`, () => {
+        const file = venue(block, bob.outer, bob.inner);
+        const { lost, kept } = venueVerdicts(file, line, start, bob.bold);
+        expect(lost).toEqual([]);
+
+        // In his new control, a deletion over its prompt and an edit at a caret in it are
+        // inside his insertion (`caretNested`), wherever the content lands: refused, never lost
+        if (bob.bold) {
+          expect(kept).toEqual([]);
+        }
+      });
+    }
+  }
 });

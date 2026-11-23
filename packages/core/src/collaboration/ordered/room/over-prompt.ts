@@ -7,7 +7,12 @@
 // rule finds it gone. The suggestions-only policy refuses such an edit as `nested`.
 
 import { ComposeContext } from '../compose/context.ts';
-import { ownItems, promptControlOf, showsPrompt } from '../compose/paragraph.ts';
+import {
+  ownItems,
+  promptControlsAround,
+  replacedPromptOf,
+  showsPrompt,
+} from '../compose/paragraph.ts';
 import { isHidden, pendingByOther } from '../model/document.ts';
 import type { OrderedMaker } from '../model/person.ts';
 import {
@@ -26,12 +31,21 @@ type PromptPlace = 'edge' | 'inside' | 'block-edge' | 'block';
 /** Kinds that fill the control they name, in place of its prompt. */
 const FILLS: ReadonlySet<OrderedEditChange['kind']> = new Set(['control-value', 'building-block']);
 
-/** Kinds whose content goes into a control at its prompt's edge: typed text (`promptSite`). */
-const TYPES_AT_EDGE: ReadonlySet<OrderedEditChange['kind']> = new Set([
-  'insert',
-  'move',
-  'insert-note',
-]);
+/** Kinds whose content is typed text. */
+const TYPED: ReadonlySet<OrderedEditChange['kind']> = new Set(['insert', 'move', 'insert-note']);
+
+/**
+ * Whether the change's content is typed text, which goes in through a prompt's edge too
+ * (placement rule 7, `promptSite`): words, a move's words, a note's reference, a paste of one
+ * paragraph.
+ */
+function isTyped(change: OrderedEditChange): boolean {
+  if (change.kind === 'insert-fragment') {
+    return change.blocks.length === 1 && change.blocks[0]?.e === 'w:p' && change.whole !== true;
+  }
+
+  return TYPED.has(change.kind);
+}
 
 /**
  * The unit next to a caret in its paragraph, as a view reads it: past container edges, markers
@@ -51,25 +65,43 @@ function unitBeside(
   return null;
 }
 
-/** The control whose shown prompt a caret is at, and where. */
+/**
+ * The control whose shown prompt a caret is at, and where, as the edit places `typed` content
+ * or other content there.
+ */
 function promptAt(
   ctx: ComposeContext,
   story: OrderedStory,
-  caret: OrderedCaret
+  caret: OrderedCaret,
+  typed: boolean
 ): { readonly control: OrderedItem; readonly place: PromptPlace } | null {
   // Inside an item, both are that item (`before` is `at` then)
   const before = unitBeside(ctx.doc, story, caret.before, 'prev');
   const after = unitBeside(ctx.doc, story, caret.at, 'next');
-  const next = after ? promptControlOf(story, after) : null;
-  const previous = before ? promptControlOf(story, before) : null;
+  let control: OrderedItem | null;
+  let both: boolean;
+  if (typed) {
+    // Typed text replaces the outermost shown prompt, at the unit after the caret first
+    // (`promptSite`)
+    const next = after ? replacedPromptOf(ctx, after) : null;
+    const previous = before ? replacedPromptOf(ctx, before) : null;
+    control = next ?? previous;
+    both = next === previous;
+  } else {
+    // Other content goes in the innermost control that holds both sides, and at a control's
+    // edge beside it (`siteAt`)
+    const previous = before ? [...promptControlsAround(story, before)] : [];
+    const next = after ? [...promptControlsAround(story, after)] : [];
+    const common = next.find((open) => previous.includes(open));
+    const near = common ?? next[0] ?? previous[0];
+    control = near && showsPrompt(ctx, near) ? near : null;
+    both = common !== undefined;
+  }
 
-  // Typed text goes into the control at the unit after the caret first (`promptSite`)
-  const control = next ?? previous;
-  if (!control || !showsPrompt(ctx, control)) {
+  if (!control) {
     return null;
   }
 
-  const both = next === previous;
   if (control.token === 'sdtBlock') return { control, place: both ? 'block' : 'block-edge' };
   return { control, place: both ? 'inside' : 'edge' };
 }
@@ -82,17 +114,13 @@ function promptAt(
  *    item goes in the control; not a table (it goes beside the paragraph), and not Enter, which
  *    the engine refuses inside an inline prompt. Enter removes a block prompt anywhere in its
  *    paragraph, its edges too, as Word's Return replaces the selected prompt (policy 4);
- *  - at an inline prompt's edge only typed text goes in (placement rule 7, `promptSite`): words,
- *    a move's words, a note's reference, a paste of one paragraph. An object, a tab, a break or
- *    a table goes beside the control.
+ *  - at an inline prompt's edge only typed text goes in (`isTyped`). An object, a tab, a break
+ *    or a table goes beside the control.
  */
 function fillsAt(change: OrderedEditChange, place: PromptPlace): boolean {
   if (change.kind === 'insert-table') return false;
   if (change.kind === 'split') return place === 'block' || place === 'block-edge';
-  if (place !== 'edge') return true;
-  if (change.kind === 'insert-fragment')
-    return change.blocks.length === 1 && change.blocks[0]?.e === 'w:p' && change.whole !== true;
-  return TYPES_AT_EDGE.has(change.kind);
+  return place !== 'edge' || isTyped(change);
 }
 
 /** Whether a pending suggestion of someone other than `maker` is on a control's prompt. */
@@ -139,8 +167,15 @@ export function fillsOthersPrompt(
     }
   }
 
+  const typed = isTyped(change);
   for (const caret of touched.carets) {
-    const found = promptAt(ctx, story, caret);
+    let found = promptAt(ctx, story, caret, typed);
+
+    // Paragraphs pasted inside an inline control land there as one line (`insideBlocks`)
+    if (!typed && change.kind === 'insert-fragment' && found?.place === 'inside') {
+      found = promptAt(ctx, story, caret, true);
+    }
+
     if (found && fillsAt(change, found.place) && othersOnPrompt(doc, maker, story, found.control)) {
       return true;
     }

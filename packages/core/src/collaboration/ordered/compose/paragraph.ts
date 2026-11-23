@@ -409,6 +409,36 @@ function promptHolderOf(story: OrderedStory, open: OrderedItem): OrderedItem | n
 }
 
 /**
+ * The controls whose prompts hold a prompt's item, innermost first: its control, then each
+ * control whose prompt holds the one before.
+ */
+export function* promptControlsAround(
+  story: OrderedStory,
+  item: OrderedItem
+): Generator<OrderedItem> {
+  let control = promptControlOf(story, item);
+  for (; control !== null; control = promptHolderOf(story, control)) {
+    yield control;
+  }
+}
+
+/**
+ * The control whose prompt content replaces at a prompt's item: of its control and the controls
+ * whose prompts hold that one, the outermost that shows its prompt, as the engine replaces the
+ * outermost (`placeholderControlForInsertion`); null when none shows one.
+ */
+export function replacedPromptOf(ctx: ComposeContext, item: OrderedItem): OrderedItem | null {
+  let replaced: OrderedItem | null = null;
+  for (const control of promptControlsAround(ctx.story, item)) {
+    if (showsPrompt(ctx, control)) {
+      replaced = control;
+    }
+  }
+
+  return replaced;
+}
+
+/**
  * Whether a prompt's unit shows nowhere: content took the place of its control's prompt, or of
  * the prompt that holds its control, which goes with it (`promptParts`).
  */
@@ -418,8 +448,7 @@ export function promptUnitHidden(
   item: OrderedItem
 ): boolean {
   const ctx = new ComposeContext(doc, story, {});
-  let control = promptControlOf(story, item);
-  for (; control !== null; control = promptHolderOf(story, control)) {
+  for (const control of promptControlsAround(story, item)) {
     showsPrompt(ctx, control);
     if (ctx.hiddenPrompts.has(item)) {
       return true;

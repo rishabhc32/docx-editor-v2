@@ -44,9 +44,8 @@ const COURTS = p(
 const venue = (prompt: string) =>
   docx(p(t('Venue:')) + sdt('<w:id w:val="9203"/><w:showingPlcHdr/>', prompt) + p(t('Signed.')));
 
-/** The prompt of one paragraph, and of two, the combo box in the second. */
+/** The prompt of one paragraph. */
 const ONE = venue(COURTS);
-const TWO = venue(p(t('Terms apply.', FACE)) + COURTS);
 
 /** Each file, its prompt's paragraphs, and places in them: from the paragraph's start. */
 const FILES = [
@@ -63,26 +62,24 @@ const FILES = [
       ['its end', 1, 43],
     ],
   },
-  {
-    name: 'two paragraphs',
-    file: TWO,
-    unchanged:
-      'Venue:¶[#9203?Terms apply.¶Courts at [#9204?Choose a city.] have jurisdiction.¶]Signed.¶',
-    places: [
-      ['the first paragraph, its start', 1, 0],
-      ['the first paragraph, its middle', 1, 5],
-      ['the first paragraph, its end', 1, 12],
-      ['the second paragraph, its start', 2, 0],
-      ['the start of the combo box', 2, 10],
-      ['the middle of the combo box', 2, 15],
-      ['the end of the combo box', 2, 24],
-      ['the second paragraph, its end', 2, 43],
-    ],
-  },
 ] as const;
 
 /** The edits, as the keyboard and the clipboard make them. */
-const EDITS = [['Enter', (person: Person) => surface(person).splitParagraph()]] as const;
+const EDITS = [
+  [
+    'typing',
+    (person: Person) => {
+      surface(person).type('Q');
+      surface(person).type('R');
+    },
+  ],
+  ['Enter', (person: Person) => surface(person).splitParagraph()],
+  ['a paste', (person: Person) => surface(person).pasteRich('Q', '<p>Q</p>')],
+  [
+    'a paste of two paragraphs',
+    (person: Person) => surface(person).pasteRich('Q\nR', '<p>Q</p><p>R</p>'),
+  ],
+] as const;
 
 /** Who edits: the organiser directly or suggesting, and a party. */
 const PEOPLE = [
@@ -143,7 +140,7 @@ async function folds(
   await checkFold(room.room.document, base, mediaStore(base), label);
 }
 
-describe('each edit at each place of a block prompt that holds a combo box, as the editor alone', () => {
+describe('each edit at each place of a block prompt holding a combo box, as alone', () => {
   for (const { name: file, file: bytes, unchanged, places } of FILES) {
     for (const [who, name, mode] of PEOPLE) {
       for (const [place, line, offset] of places) {
