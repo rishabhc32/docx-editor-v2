@@ -17,6 +17,7 @@ import { BLOCK_TOKENS, type OrderedItem } from '../../model/types.ts';
 import { isParagraphProperties, withChildren } from '../../ooxml-nodes.ts';
 import {
   breakSite,
+  commonContainers,
   insertAtSite,
   promptSite,
   refuseLocked,
@@ -76,7 +77,7 @@ function siteOf(
   const blockPrompt = prompt && !inControl ? promptSite(ctx, p, offset) : null;
   if (blockPrompt) return { site: blockPrompt, split: [] };
   return prev?.item.prompt && next?.item.prompt
-    ? { site: promptBreakSite(ctx, p, prev.item), split: [] }
+    ? { site: promptBreakSite(ctx, p, commonContainers(prev, next)), split: [] }
     : breakSite(ctx, p, offset);
 }
 

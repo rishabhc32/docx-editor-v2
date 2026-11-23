@@ -30,6 +30,7 @@ import {
 import { attributeOf, childNamed, isWml, withChildren, withId } from '../ooxml-nodes.ts';
 import {
   breakSite,
+  commonContainers,
   formatPassesContentLock,
   insertAtSite,
   itemsInside,
@@ -79,11 +80,11 @@ function singleLine(open: OrderedItem): boolean {
  * prompt goes for good, its other paragraphs too, with no revision and no glossary block, as
  * Word's Return replaces the selected prompt (Word 16.114, `~$p4-enter-tracked.docx`); once the
  * control is empty it shows a prompt as any control does. An inline control cannot hold a
- * break, and a control that allows one line refuses it by name.
+ * break, and a control that allows one line refuses it by name. `containers` are those Enter
+ * falls in (`promptAround`).
  */
-export function promptBreakSite(ctx: Ctx, p: OrderedViewParagraph, at: OrderedItem): Site {
-  const char = p.chars.find((c) => c.item === at);
-  const segment = innermostSegment(char?.containers ?? '');
+export function promptBreakSite(ctx: Ctx, p: OrderedViewParagraph, containers: string): Site {
+  const segment = innermostSegment(containers);
   if (isControlSegment(segment)) {
     const open = openOfSegment(ctx.story, segment);
     if (open && singleLine(open))
@@ -179,9 +180,10 @@ export function splitParagraph(ctx: Ctx, p: OrderedViewParagraph, offset: number
   const prev = offset > 0 ? p.chars[offset - 1] : undefined;
   const next = p.chars[offset];
   const prompt = promptAround(prev, next);
-  const { site, split } = prompt
-    ? { site: promptBreakSite(ctx, p, prompt), split: [] }
-    : breakSite(ctx, p, offset);
+  const { site, split } =
+    prompt !== null
+      ? { site: promptBreakSite(ctx, p, prompt), split: [] }
+      : breakSite(ctx, p, offset);
   for (const open of split)
     if (open.token === 'sdt' && !enterDivides(open))
       throw new OrderedRefusal('single-line-control', 'Enter in a control that holds one line');
@@ -209,16 +211,17 @@ export function splitParagraph(ctx: Ctx, p: OrderedViewParagraph, offset: number
 }
 
 /**
- * The prompt unit Enter falls in, or null. Inside a prompt, prompt units lie on both sides. At a
- * block prompt's edge (the paragraph's start or end) Enter is in the prompt too: Word selects a
- * prompt whole, so Return replaces it wherever the caret was (policy 4). At an inline prompt's
- * edge Enter goes beside the control.
+ * The containers of the prompt Enter falls in, or null. Inside a prompt, prompt units lie on both
+ * sides, and Enter falls in the containers they share: at the edge of a control inside the
+ * prompt, beside it. At a block prompt's edge (the paragraph's start or end) Enter is in the
+ * prompt too: Word selects a prompt whole, so Return replaces it wherever the caret was (policy
+ * 4). At an inline prompt's edge Enter goes beside the control.
  */
 function promptAround(
   prev: OrderedViewChar | undefined,
   next: OrderedViewChar | undefined
-): OrderedItem | null {
-  if (prev?.item.prompt && next?.item.prompt) return prev.item;
+): string | null {
+  if (prev?.item.prompt && next?.item.prompt) return commonContainers(prev, next);
 
   // At the paragraph's start or end: the one side there is
   let edge: OrderedViewChar | undefined;
@@ -230,7 +233,7 @@ function promptAround(
 
   if (!edge?.item.prompt) return null;
   const inline = isControlSegment(innermostSegment(edge.containers));
-  return inline ? null : edge.item;
+  return inline ? null : edge.containers;
 }
 
 /**

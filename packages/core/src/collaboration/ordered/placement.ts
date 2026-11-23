@@ -118,7 +118,7 @@ export function firstItemOf(p: OrderedViewParagraph, pastBookmarks = false): Ord
 // ---- containers ----
 
 /** The containers two characters share, as the view names them. */
-function commonContainers(a: OrderedViewChar, b: OrderedViewChar): string {
+export function commonContainers(a: OrderedViewChar, b: OrderedViewChar): string {
   const outer = segmentsOf(a.containers);
   return outer.slice(0, sharedDepth(outer, segmentsOf(b.containers))).join('>');
 }
