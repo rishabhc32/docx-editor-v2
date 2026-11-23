@@ -12,6 +12,7 @@ import { build, textNode } from '../../../store/store/tree-op-tracked.ts';
 import { MOVE_RANGE } from '../load/moves.ts';
 import { isSplitEdge, movedAwayBy, statusOf } from '../model/document.ts';
 import { REVISION_ROLE } from '../model/revision-ids.ts';
+import type { OrderedTyper } from '../model/typers.ts';
 import {
   isUnit,
   type OrderedFieldPiece,
@@ -64,6 +65,8 @@ interface RunBuild {
   textShell: OoxmlElement | undefined;
   /** The text form's item is drawn in its own paragraph: the form keeps its id. */
   textHomed: boolean;
+  /** Who typed its units, from its first unit (undefined: none yet): a run holds one typer's. */
+  typer?: OrderedTyper | null;
 }
 
 /** Whether an item is a unit: text or an atom. */
@@ -256,7 +259,8 @@ export function composeInline(ctx: ComposeContext, buffer: readonly OrderedItem[
   const flush = (): void => {
     if (!current) return;
     flushText(current);
-    place(ctx, box().children, runNode(ctx, current.item, current.content), current.item);
+    const run = runNode(ctx, current.item, current.content);
+    place(ctx, box().children, ctx.typed(run, current.typer ?? null), current.item);
     current = null;
   };
   for (const item of buffer) {
@@ -305,8 +309,10 @@ export function composeInline(ctx: ComposeContext, buffer: readonly OrderedItem[
       continue;
     }
 
+    // Units of two typers never share a run: a checkpoint names the typer on the run
     const key = runKey(ctx, item);
-    if (!current || current.key !== key) {
+    const typer = isUnit(item) ? ctx.typerOf(item) : undefined;
+    if (!current || current.key !== key || (typer !== undefined && typedOther(current, typer))) {
       flush();
       current = {
         key,
@@ -317,6 +323,10 @@ export function composeInline(ctx: ComposeContext, buffer: readonly OrderedItem[
         textShell: undefined,
         textHomed: false,
       };
+    }
+
+    if (current.typer === undefined) {
+      current.typer = typer;
     }
 
     if (item.kind === 'text') {
@@ -414,6 +424,10 @@ function textElement(
   return withId(withChildren(form, [{ id: ctx.mint(), kind: 'textValue', value: text }]), id);
 }
 
+/** Whether a run holds units another typer typed than `typer` (null: none typed them). */
+const typedOther = (build: RunBuild, typer: OrderedTyper | null): boolean =>
+  build.typer !== undefined && build.typer?.namespace !== typer?.namespace;
+
 function runKey(ctx: ComposeContext, item: OrderedItem): string {
   return [
     item.run,
@@ -451,11 +465,11 @@ function drawBare(ctx: ComposeContext, item: OrderedItem, into: OoxmlNode[]): vo
       else inner.push(piece.node);
     }
 
-    into.push(withChildren(node, inner));
+    into.push(ctx.typed(withChildren(node, inner), ctx.typerOf(item)));
     return;
   }
 
-  place(ctx, into, node, item);
+  place(ctx, into, node.kind === 'textValue' ? node : ctx.typed(node, ctx.typerOf(item)), item);
 }
 
 /**
@@ -479,11 +493,12 @@ function drawField(
   const formatted = item.fmts.some((record) => record.kind === 'properties')
     ? formatRunsOf(pieces)
     : [];
+  const typer = ctx.typerOf(item);
   for (const [k, piece] of pieces.entries()) {
     ride((slot) => slot === k);
     let node = piece.node;
     if (node.kind === 'run') {
-      node = withId(node, ctx.runId(node.id));
+      node = ctx.typed(withId(node, ctx.runId(node.id)), typer);
     }
 
     place(ctx, into, fieldRun(ctx, item, piece, node, formatted[k] === true), item);

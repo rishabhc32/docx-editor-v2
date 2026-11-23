@@ -3,8 +3,8 @@
 import type { OoxmlElement } from '../../../store/package/ooxml-tree.ts';
 import { createOrderedItem } from '../model/document.ts';
 import {
+  holdsTakeover,
   recordedProperties,
-  takeoverKey,
   type CheckpointTakeover,
 } from '../model/checkpoint-takeovers.ts';
 import { relabel, replaceItems } from '../model/mutations.ts';
@@ -41,13 +41,14 @@ interface ItemTakeovers {
 /**
  * Put each takeover a checkpoint names back in the document loaded from it: each item whose
  * change record holds it has the taken record again, with `replaced` (a suggestion of the
- * manifest's list, by `listedIds`), in front of the holder's own. False when a takeover does not
- * fit the file: no change record at its place, or none loaded as a record of the properties it
- * names.
+ * manifest's list, by `listedIds`), in front of the holder's own. `labels` gives the elements
+ * that carry each label. False when a takeover does not fit the file: its label on no change
+ * record a loaded record of the properties it names holds, or on two (a text box's other copy
+ * holds none), or on another element.
  */
 export function withCheckpointTakeovers(
   doc: OrderedDocument,
-  places: ReadonlyMap<string, OoxmlElement>,
+  labels: ReadonlyMap<string, readonly OoxmlElement[]>,
   takeovers: readonly CheckpointTakeover[],
   listedIds: readonly string[]
 ): boolean {
@@ -58,12 +59,14 @@ export function withCheckpointTakeovers(
   const holders = holdersOf(doc);
   const items = new Map<OrderedItem, ItemTakeovers>();
   for (const takeover of takeovers) {
-    const { part, record, id, occurrence } = takeover;
-    const element = places.get(takeoverKey(part, record, id, occurrence));
+    const held = (labels.get(String(takeover.label)) ?? []).filter((e) => holders.has(e));
+    const element = held[0];
     const holdersAt = element === undefined ? [] : (holders.get(element) ?? []);
     if (
-      holdersAt.length === 0 ||
-      !holdersAt.every((holder) => noteTaken(items, holder, takeover, listedIds))
+      held.length !== 1 ||
+      element === undefined ||
+      !holdsTakeover(element, takeover) ||
+      !holdersAt.every((holder) => noteTaken(items, holder, element.localName, takeover, listedIds))
     ) {
       return false;
     }
@@ -119,16 +122,18 @@ function holdersOf(doc: OrderedDocument): Map<OoxmlElement, Holder[]> {
 /**
  * Note in `items` the records a holder took back for its item, each held by the holder's
  * suggestion: a format as the face it gave, a property record as the properties. A field's other
- * runs give only their own faces. False when the holder is not a record of the properties the
- * takeover names, or a record would be taken from the holder's own suggestion.
+ * runs give only their own faces. False when the holder is not a record of the properties its
+ * change record (`changeRecord`, a local name) names, or a record would be taken from the holder's
+ * own suggestion.
  */
 function noteTaken(
   items: Map<OrderedItem, ItemTakeovers>,
   { story, item, record, piece }: Holder,
+  changeRecord: string,
   takeover: CheckpointTakeover,
   listedIds: readonly string[]
 ): boolean {
-  const target = recordedProperties(takeover.record);
+  const target = recordedProperties(changeRecord);
   if (record.kind === 'face' ? target !== 'rPr' : record.target !== target) {
     return false;
   }

@@ -1,11 +1,11 @@
-// The pending suggestions a checkpoint's manifest lists, and who typed the units of insertions
+// The pending suggestions a checkpoint's manifest lists, and the rules every section is read by
 // (design D14).
 
 import type { OoxmlAttribute } from '../../../store/package/ooxml-tree.ts';
 import { isXmlNCName } from '../../../store/package/qname.ts';
 import { isValidXmlText } from '../../../store/package/sinks.ts';
 import { ORDERED_NAMESPACE_PATTERN } from '../change/ids.ts';
-import { at, fieldsOf, int, Invalid, list, oneOf, required, str } from '../change/read.ts';
+import { at, int, Invalid, list, oneOf, plainFields, required, str } from '../change/read.ts';
 import { isTripleAttribute, MAX_OTHER_ATTRIBUTES } from '../load/state.ts';
 import { readPerson } from './person.ts';
 import type { OrderedAttribution, OrderedSuggestionStatus } from './types.ts';
@@ -20,12 +20,6 @@ export interface CheckpointSuggestion {
   readonly revisions: readonly string[];
   readonly status?: OrderedSuggestionStatus;
 }
-
-/**
- * Who typed a run of the units the file writes, in the order a load reads them: their count, and
- * the namespace of the room change that typed them inside a pending insertion, or null.
- */
-export type CheckpointTyperRun = readonly [number, string | null];
 
 /** A list of the manifest, of at least `min` entries: the manifest's byte cap bounds it. */
 export const manifestList = (value: unknown, path: string, min = 0): readonly unknown[] =>
@@ -96,11 +90,7 @@ export function readSuggestions(value: unknown): CheckpointSuggestion[] {
 }
 
 function readSuggestion(value: unknown, path: string): CheckpointSuggestion {
-  const f = fieldsOf(
-    value,
-    path,
-    new Set(['author', 'date', 'attributes', 'person', 'revisions', 'status'])
-  );
+  const f = plainFields(value, path);
   const revisions = manifestList(required(f, 'revisions'), at(path, 'revisions'));
   return {
     attribution: {
@@ -133,7 +123,7 @@ function readAttributes(value: unknown, path: string): OoxmlAttribute[] {
 
 /** A revision mark's attribute past its triple, such as `w16du:dateUtc`. */
 function readAttribute(value: unknown, path: string): OoxmlAttribute {
-  const f = fieldsOf(value, path, new Set(['namespace', 'name', 'prefix', 'value']));
+  const f = plainFields(value, path);
   const prefix = f.has('prefix') ? xmlName(f.get('prefix'), at(path, 'prefix')) : undefined;
   return {
     kind: 'genericExtension',
@@ -168,23 +158,6 @@ function xmlName(value: unknown, path: string): string {
   }
 
   return name;
-}
-
-/**
- * The listed typers, each checked: runs of at least one unit, each typed by a namespace or by
- * none.
- *
- * @throws Invalid when one does not read.
- */
-export function readTypers(value: unknown): CheckpointTyperRun[] {
-  return manifestList(value, 'typers').map((run, k) => readRun(run, at('typers', k)));
-}
-
-/** One run of units: its count, and the namespace that typed them or null. */
-function readRun(value: unknown, path: string): CheckpointTyperRun {
-  const [count, namespace] = list(value, path, 2, 2);
-  const typer = namespace === null ? null : readNamespace(namespace, at(path, 1));
-  return [int(count, at(path, 0), 1), typer];
 }
 
 /**

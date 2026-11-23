@@ -1,21 +1,20 @@
 // Reads and writes a checkpoint's manifest (design D14).
 
 import type { OoxmlPackage } from '../../../store/package/ooxml-package.ts';
+import type { OoxmlAttribute } from '../../../store/package/ooxml-tree.ts';
 import { normalizePartName, partNameKey } from '../../../store/package/opc-names.ts';
 import { resolveContentTypeOf } from '../../../store/package/package-edit.ts';
 import { XML_HARD_MAX_BYTES } from '../../../store/package/xml-reader.ts';
 import { DEFAULT_ZIP_LIMITS } from '../../../store/package/zip.ts';
-import { at, attempt, fieldsOf, required } from '../change/read.ts';
+import { at, attempt, Invalid, isForbiddenKey, plainFields, required } from '../change/read.ts';
 import { sha256 } from '../change/resources.ts';
 import {
   readNamedOnce,
   readNamespace,
   readSuggestions,
-  readTypers,
   suggestionsJson,
   xmlText,
   type CheckpointSuggestion,
-  type CheckpointTyperRun,
 } from './checkpoint-suggestions.ts';
 import { readTakeovers, takeoversJson, type CheckpointTakeover } from './checkpoint-takeovers.ts';
 import { readUntracked, untrackedJson, type CheckpointUntracked } from './checkpoint-untracked.ts';
@@ -28,20 +27,48 @@ import type { OrderedFileMedia } from './resources.ts';
 export const CHECKPOINT_MANIFEST = '/ordered-checkpoint.json';
 
 const FORMAT = 'docx-editor.dev/ordered-checkpoint';
-const VERSION = 4;
+
+/**
+ * The format's version. A version adds sections and fields, and a reader skips those it does not
+ * know: the version moves only for a change an older reader would misread.
+ */
+const VERSION = 5;
+
+/**
+ * The namespace of the attributes only a checkpoint's parts hold: `oc:label` on each element a
+ * manifest entry names (a number unique in the checkpoint), and `oc:typer` on each run, and each
+ * unit not in a run, whose units a room change typed inside a pending insertion (its namespace).
+ * An open takes them off before the load, from a Word file too.
+ */
+export const CHECKPOINT_NAMESPACE = 'https://docx-editor.dev/ordered-checkpoint';
+
+/** The prefix a checkpoint declares the namespace under, on each part root that may hold it. */
+export const CHECKPOINT_PREFIX = 'oc';
+
+/** A checkpoint's attribute: a label, or a typer's namespace. */
+export const checkpointAttribute = (
+  localName: 'label' | 'typer',
+  value: string
+): OoxmlAttribute => ({
+  kind: 'genericExtension',
+  namespaceUri: CHECKPOINT_NAMESPACE,
+  localName,
+  prefix: CHECKPOINT_PREFIX,
+  value,
+});
 
 /**
  * The room facts a checkpoint's manifest keeps, which Word has no place for: each pending
  * suggestion whole, and each decided one another section names; the person of each room comment
- * by its `w:id`; the records each change record holds by takeover; who typed the units of the
- * insertions, and the person of each namespace that typed; and the records Word writes no change
- * record for, decided or not. Every section names a suggestion by its place in `suggestions`.
+ * by its `w:id`; the records each change record holds by takeover; the person of each namespace
+ * the parts name as a typer; and the records Word writes no change record for, decided or not.
+ * Every section names a suggestion by its place in `suggestions`, and an element of the file by
+ * its label.
  */
 export interface CheckpointFacts {
   readonly suggestions: readonly CheckpointSuggestion[];
   readonly commentPersons: ReadonlyMap<string, OrderedPerson>;
   readonly takeovers: readonly CheckpointTakeover[];
-  readonly typers: readonly CheckpointTyperRun[];
   readonly namespacePersons: ReadonlyMap<string, OrderedPerson>;
   readonly untracked: readonly CheckpointUntracked[];
 }
@@ -86,7 +113,6 @@ export function checkpointManifestBytes(
       suggestions: suggestionsJson(facts.suggestions),
       comments: [...facts.commentPersons].map(([id, person]) => ({ id, person })),
       takeovers: takeoversJson(facts.takeovers),
-      typers: facts.typers,
       namespaces: [...facts.namespacePersons].map(([namespace, person]) => ({ namespace, person })),
       untracked: untrackedJson(facts.untracked),
     })
@@ -170,7 +196,6 @@ function factsOf(manifest: Record<string, unknown>): CheckpointFacts {
     suggestions,
     commentPersons: readComments(manifest.comments),
     takeovers: readTakeovers(manifest.takeovers, count),
-    typers: readTypers(manifest.typers),
     namespacePersons: readNamespaces(manifest.namespaces),
     untracked: readUntracked(manifest.untracked, count),
   };
@@ -190,9 +215,16 @@ function manifestOf(bytes: Uint8Array): Manifest {
     return { ok: false, reason: 'checkpoint-manifest' };
   }
 
+  // A key that reaches an object's prototype is refused anywhere, in a section a reader skips too
   let value: unknown;
   try {
-    value = JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(bytes));
+    value = JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(bytes), (key, read) => {
+      if (isForbiddenKey(key)) {
+        throw new Invalid('forbidden-key', key);
+      }
+
+      return read;
+    });
   } catch {
     return { ok: false, reason: 'checkpoint-manifest' };
   }
@@ -227,7 +259,7 @@ function readComments(value: unknown): Map<string, OrderedPerson> {
     value,
     'comments',
     (entry, path) => {
-      const f = fieldsOf(entry, path, new Set(['id', 'person']));
+      const f = plainFields(entry, path);
       return {
         id: xmlText(required(f, 'id'), at(path, 'id')),
         person: readPerson(required(f, 'person'), at(path, 'person')),
@@ -248,7 +280,7 @@ function readNamespaces(value: unknown): Map<string, OrderedPerson> {
     value,
     'namespaces',
     (entry, path) => {
-      const f = fieldsOf(entry, path, new Set(['namespace', 'person']));
+      const f = plainFields(entry, path);
       return {
         namespace: readNamespace(required(f, 'namespace'), at(path, 'namespace')),
         person: readPerson(required(f, 'person'), at(path, 'person')),

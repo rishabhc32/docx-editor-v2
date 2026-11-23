@@ -4,7 +4,6 @@ import {
   type OoxmlPackage,
   type OoxmlPackageLimits,
 } from '../../../store/package/ooxml-package.ts';
-import type { OoxmlElement } from '../../../store/package/ooxml-tree.ts';
 import { normalizeParagraphIdentity } from '../../../store/package/para-id.ts';
 import { textboxFallbackExportPackage } from '../../../store/package/textbox-fallback-export.ts';
 import { materializeGlossaryPlaceholders } from '../../../store/store/placeholder-materialize.ts';
@@ -14,7 +13,7 @@ import {
   readCheckpoint,
   type CheckpointFacts,
 } from '../model/checkpoint.ts';
-import { checkpointPlacesOf } from '../model/checkpoint-takeovers.ts';
+import { withoutCheckpointMarks, type CheckpointMarks } from '../model/checkpoint-labels.ts';
 import { recordFileMedia } from '../model/file-media.ts';
 import { orderedAuthorName, type OrderedPerson } from '../model/person.ts';
 import type { OrderedFileMedia } from '../model/resources.ts';
@@ -92,7 +91,7 @@ export function openOrderedWordFile(
     throw new OrderedWordFileError('checkpoint');
   }
 
-  return openRead(pkg, [], options);
+  return openRead(pkg, [], options).opened;
 }
 
 /**
@@ -130,7 +129,7 @@ export function openOrderedRoomFile(
   const pkg = readPackage(bytes, options);
   return holdsCheckpointManifest(pkg)
     ? openCheckpointRead(pkg, options)
-    : openRead(pkg, [], options);
+    : openRead(pkg, [], options).opened;
 }
 
 /** The engine's bounded read of a room's file. */
@@ -151,35 +150,19 @@ function openCheckpointRead(pkg: OoxmlPackage, options: OrderedWordFileOptions):
   }
 
   const { facts } = checkpoint;
-  const opened = openRead(checkpoint.base, checkpoint.media, options, facts);
+  const { opened, marks } = openRead(checkpoint.base, checkpoint.media, options, facts);
   const doc = opened.document;
   const listedIds = [...doc.revisionIds.listed.keys()];
-
-  // Only the takeovers and the untracked records name places of the file
-  const places =
-    facts.takeovers.length + facts.untracked.length === 0 ? new Map() : placesOf(opened.base);
   if (
-    !withCheckpointTakeovers(doc, places, facts.takeovers, listedIds) ||
-    !withCheckpointUntracked(doc, places, facts.untracked, listedIds) ||
-    !withCheckpointTypers(doc, facts.typers, facts.namespacePersons) ||
+    !withCheckpointTakeovers(doc, marks.labels, facts.takeovers, listedIds) ||
+    !withCheckpointUntracked(doc, marks.labels, facts.untracked, listedIds) ||
+    !withCheckpointTypers(doc, marks.typers, facts.namespacePersons) ||
     !personsFit(doc)
   ) {
     throw new OrderedWordFileError('checkpoint-manifest');
   }
 
   return opened;
-}
-
-/** The places of a package's stories the manifest names records by, each by its key. */
-function placesOf(pkg: OoxmlPackage): Map<string, OoxmlElement> {
-  const places = new Map<string, OoxmlElement>();
-  for (const [name, part] of orderedStoryParts(pkg)) {
-    for (const { element, key } of checkpointPlacesOf(name, part)) {
-      places.set(key, element);
-    }
-  }
-
-  return places;
 }
 
 /** Whether every item and comment the manifest gives a person carries that person's Word name. */
@@ -203,14 +186,15 @@ function personsFit(doc: OrderedDocument): boolean {
 
 /**
  * A read package, normalized and loaded, with the file's media, and the suggestions and comment
- * persons a checkpoint names.
+ * persons a checkpoint names; and what its parts held of a checkpoint's labels and typers, which
+ * the load never reads: a Word file's are dropped, so an upload brings none into a room.
  */
 function openRead(
   pkg: OoxmlPackage,
   fileMedia: readonly OrderedFileMedia[],
   options: OrderedWordFileOptions,
   facts?: CheckpointFacts
-): OrderedWordFile {
+): { readonly opened: OrderedWordFile; readonly marks: CheckpointMarks } {
   let base = pkg;
   const main = base.parts.get(base.mainDocumentPart);
   if (!main) throw new OrderedWordFileError('no-main-document');
@@ -220,6 +204,10 @@ function openRead(
 
   // As a save writes them, so the file the room saves reopens to the same paragraph ids
   base = textboxFallbackExportPackage(base);
+
+  // A checkpoint's labels and typers off: the load reads the parts as the Word file holds them
+  const marks = withoutCheckpointMarks(base);
+  base = marks.pkg;
   const document = loadOrderedPackage(base, {
     ...options.load,
     file: options.file,
@@ -228,5 +216,5 @@ function openRead(
       : { suggestions: facts.suggestions, commentPersons: facts.commentPersons }),
   });
   recordFileMedia(document, fileMedia);
-  return { base, document };
+  return { opened: { base, document }, marks };
 }

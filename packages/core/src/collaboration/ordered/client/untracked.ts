@@ -1,7 +1,7 @@
 // A checkpoint's records with no change record back in the document (design D14).
 
 import type { OoxmlElement, OoxmlNode } from '../../../store/package/ooxml-tree.ts';
-import { containerKey } from '../model/checkpoint-takeovers.ts';
+import { isCheckpointContainer } from '../model/checkpoint-takeovers.ts';
 import type { CheckpointUntracked } from '../model/checkpoint-untracked.ts';
 import { createOrderedItem, storyOfAddress } from '../model/document.ts';
 import { replaceItems } from '../model/mutations.ts';
@@ -21,34 +21,43 @@ import { isWml, withChildren } from '../ooxml-nodes.ts';
  * changes with no change record: the container's own properties of the target are the manifest's
  * again, and the manifest's records, each with its suggestion's order, take the place of those
  * loaded from the file (but the records a takeover put back), so compose draws them over those
- * properties as the room did. False when a container or a cell is not at its place.
+ * properties as the room did. `labels` gives the elements that carry each label. False when a
+ * label is on no container or cell the load holds, or on two (a text box's other copy holds none).
  */
 export function withCheckpointUntracked(
   doc: OrderedDocument,
-  places: ReadonlyMap<string, OoxmlElement>,
+  labels: ReadonlyMap<string, readonly OoxmlElement[]>,
   untracked: readonly CheckpointUntracked[],
   listedIds: readonly string[]
 ): boolean {
-  // The open item of the container at a place, and its story
-  const opened = (part: string, container: string, occurrence: number) => {
-    const element = places.get(containerKey(part, container, occurrence));
-    if (element === undefined) {
-      return null;
-    }
-
-    const space = tokenSpace(doc.file, element.id);
-    const story = storyOfAddress(doc, { space, offset: 0 });
-    const open = story?.spaces.get(space)?.[0];
-    return story === null || open?.kind !== 'open' ? null : { story, open };
+  // The open item of the container a label is on, and its story
+  const opened = (label: number) => {
+    const found = (labels.get(String(label)) ?? []).flatMap((element) => {
+      const space = tokenSpace(doc.file, element.id);
+      const story = storyOfAddress(doc, { space, offset: 0 });
+      const open = story?.spaces.get(space)?.[0];
+      return story === null || open?.kind !== 'open' || !isCheckpointContainer(element)
+        ? []
+        : [{ story, open, element }];
+    });
+    return found.length === 1 ? found[0] : undefined;
   };
   for (const entry of untracked) {
-    const found = opened(entry.part, entry.container, entry.occurrence);
+    const found = opened(entry.label);
     const shell = found?.open.node;
-    if (found === null || shell === null || shell === undefined || shell.kind === 'textValue') {
+    if (
+      found === undefined ||
+      shell === null ||
+      shell === undefined ||
+      shell.kind === 'textValue'
+    ) {
       return false;
     }
 
-    const cellOf = (cell: number) => opened(entry.part, 'tc', cell)?.open.space;
+    const cellOf = (cell: number) => {
+      const at = opened(cell);
+      return at?.element.localName === 'tc' ? at.open.space : undefined;
+    };
     const records = restoredRecords(doc, entry, listedIds, cellOf);
     if (records === null) {
       return false;

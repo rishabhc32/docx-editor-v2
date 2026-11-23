@@ -23,7 +23,7 @@ import { withDecidedPartRevisions } from './part-revisions.ts';
 import { withUniqueIds } from './unique-ids.ts';
 import { MEDIA_PLACE, withFileMediaBytes, withFileMediaPlaces } from './file-media.ts';
 import { withoutComments } from './without-comments.ts';
-import type { HeldTakeovers, OrderedRetainedPrompt } from './context.ts';
+import type { ComposeOptions, HeldTakeovers, OrderedRetainedPrompt } from './context.ts';
 import {
   isAddedStory,
   mediaBytesOf,
@@ -73,6 +73,9 @@ export function composeOrderedPackage(
 /** The takeovers the change records of each story part hold: by part name, then by node id. */
 export type OrderedPartTakeovers = ReadonlyMap<string, ReadonlyMap<string, HeldTakeovers>>;
 
+/** How a package is composed: its comments, and the typers a checkpoint writes. */
+type PackageComposeOptions = OrderedPackageCommentOptions & Pick<ComposeOptions, 'typers'>;
+
 /**
  * {@link composeOrderedPackage}, with the bytes of added media from `bytes`, and the takeovers
  * the change records of its story parts hold.
@@ -81,7 +84,7 @@ function composeWithMedia(
   doc: OrderedDocument,
   base: OoxmlPackage,
   bytes: OrderedMediaBytes,
-  options: OrderedPackageCommentOptions
+  options: PackageComposeOptions
 ): { readonly pkg: OoxmlPackage; readonly takeovers: OrderedPartTakeovers } {
   const removesComments = options.comments === 'remove';
   let pkg = withFileMediaPlaces(base, doc);
@@ -91,7 +94,8 @@ function composeWithMedia(
   for (const name of doc.stories.keys()) {
     // A text box's story is drawn into its object, in its host's part
     if (isTextBoxStoryName(name)) continue;
-    const { part: composedPart, composed, takeovers: held } = composeStoryPart(doc, name);
+    const drawn = composeStoryPart(doc, name, { typers: options.typers });
+    const { part: composedPart, composed, takeovers: held } = drawn;
     takeovers.set(name, held);
 
     // Each node id once in a part: the package writer finds nodes by id
@@ -172,7 +176,7 @@ interface OrderedComposedWithoutMedia {
 export function composedWithoutMedia(
   doc: OrderedDocument,
   base: OoxmlPackage,
-  options: OrderedPackageCommentOptions = {}
+  options: PackageComposeOptions = {}
 ): OrderedComposedWithoutMedia {
   const media = new Map<string, OrderedMediaReference>();
   const { pkg, takeovers } = composeWithMedia(

@@ -1,16 +1,14 @@
-// The room facts a checkpoint's manifest keeps, by where the composed file writes them (design
-// D14): a model address holds the file number, so none is kept.
+// The room facts a checkpoint's manifest keeps, by the labels the composed file carries (design
+// D14): a model address holds the file number, and a place counted in the file holds the engine's
+// rules of the day, so neither is kept.
 
 import { glossaryPartOf } from '../../../store/package/building-blocks.ts';
 import type { OoxmlPackage } from '../../../store/package/ooxml-package.ts';
 import type { OoxmlElement } from '../../../store/package/ooxml-tree.ts';
-import { textboxFallbackExportPackage } from '../../../store/package/textbox-fallback-export.ts';
 import { orderedStoryParts } from '../load/load.ts';
 import type { CheckpointFacts } from '../model/checkpoint.ts';
-import type { CheckpointTyperRun } from '../model/checkpoint-suggestions.ts';
+import { withCheckpointLabels } from '../model/checkpoint-labels.ts';
 import {
-  checkpointPlacesOf,
-  isCheckpointContainer,
   takenProperties,
   type CheckpointTaken,
   type CheckpointTakeover,
@@ -28,16 +26,8 @@ import type {
   OrderedStory,
   OrderedSuggestion,
 } from '../model/types.ts';
-import { eachFileUnit, orderedUnitTyper } from '../model/typers.ts';
 import { attributeOf, eachElement, isWml } from '../ooxml-nodes.ts';
 import type { OrderedPartTakeovers } from './package.ts';
-
-/** A container of the composed file: its part, local name and place among those of its name. */
-interface ContainerPlace {
-  readonly part: string;
-  readonly container: string;
-  readonly occurrence: number;
-}
 
 /**
  * The suggestions a manifest lists, each once, in the order they are first named, with the
@@ -89,15 +79,17 @@ interface UntrackedOpen {
 }
 
 /**
- * The room facts of a document composed as `pkg`, whose change records hold `held` by takeover.
- * Each pending suggestion the file writes marks for, or another fact names, is listed once, in
- * the order the room made them, so a load makes them in that order.
+ * The room facts of a document composed as `pkg`, whose change records hold `held` by takeover
+ * and whose units the namespaces of `typers` typed, and the package with a label on each element
+ * they name. Each pending suggestion the file writes marks for, or another fact names, is listed
+ * once, in the order the room made them, so a load makes them in that order.
  */
 export function checkpointFacts(
   doc: OrderedDocument,
   pkg: OoxmlPackage,
-  held: OrderedPartTakeovers
-): CheckpointFacts {
+  held: OrderedPartTakeovers,
+  typers: ReadonlyMap<string, OrderedPerson>
+): { readonly pkg: OoxmlPackage; readonly facts: CheckpointFacts } {
   const list = new SuggestionList(doc, writtenRevisionIds(pkg));
   for (const suggestion of doc.suggestions.values()) {
     const { id, status } = suggestion;
@@ -106,60 +98,68 @@ export function checkpointFacts(
     }
   }
 
-  // The file is read only for what a takeover or an untracked record names
+  // A label on each change record that holds a takeover, and on each container and cell an
+  // untracked record names
   const opens = untrackedOpens(doc);
-  const named = opens.length > 0 || [...held.values()].some((records) => records.size > 0);
-  const { containers, takeovers } = named
-    ? placesAndTakeovers(doc, pkg, held, list)
-    : { containers: new Map<string, ContainerPlace>(), takeovers: [] };
-  const typed = checkpointTypers(doc);
-  return inRoomOrder(list, {
-    commentPersons: commentPersons(doc),
-    takeovers,
-    typers: typed.runs,
-    namespacePersons: typed.persons,
-    untracked: checkpointUntracked(doc, opens, containers, list),
-  });
-}
+  const wanted = new Set<string>();
+  for (const records of held.values()) {
+    for (const id of records.keys()) {
+      wanted.add(id);
+    }
+  }
 
-/**
- * The place of each container the file writes, by its node id, and each change record that holds
- * records by takeover, as a load reads the file: with each text box's legacy copy in step.
- */
-function placesAndTakeovers(
-  doc: OrderedDocument,
-  pkg: OoxmlPackage,
-  held: OrderedPartTakeovers,
-  list: SuggestionList
-): { containers: Map<string, ContainerPlace>; takeovers: CheckpointTakeover[] } {
-  const containers = new Map<string, ContainerPlace>();
-  const takeovers: CheckpointTakeover[] = [];
-  for (const [part, story] of orderedStoryParts(textboxFallbackExportPackage(pkg))) {
-    const records = held.get(part);
-    for (const { element, occurrence } of checkpointPlacesOf(part, story)) {
-      const container = element.localName;
-      if (isCheckpointContainer(container) && !containers.has(element.id)) {
-        containers.set(element.id, { part, container, occurrence });
-      }
-
-      const found = records?.get(element.id);
-      const id = attributeOf(element, 'id');
-      if (found !== undefined && id !== undefined) {
-        const taken: CheckpointTaken[] = [];
-        for (const { replaced, after } of found.taken) {
-          const suggestion = doc.suggestions.get(replaced);
-          if (suggestion !== undefined) {
-            const properties = takenProperties(found.record, after);
-            taken.push({ suggestion: list.indexOf(suggestion), properties });
-          }
+  for (const { story, shell, byTarget } of opens) {
+    wanted.add(shell.id);
+    for (const records of byTarget.values()) {
+      for (const space of records.flatMap((record) => record.tableCells ?? [])) {
+        const cell = cellShell(story, space);
+        if (cell !== undefined) {
+          wanted.add(cell);
         }
-
-        takeovers.push({ part, record: container, id, occurrence, taken });
       }
     }
   }
 
-  return { containers, takeovers };
+  const labelled = withCheckpointLabels(pkg, wanted, typers.size > 0);
+  const { labels } = labelled;
+  const facts = inRoomOrder(list, {
+    commentPersons: commentPersons(doc),
+    takeovers: checkpointTakeovers(doc, held, labels, list),
+    namespacePersons: typers,
+    untracked: checkpointUntracked(doc, opens, labels, list),
+  });
+  return { pkg: labelled.pkg, facts };
+}
+
+/** Each change record of the file that holds records by takeover, by its label. */
+function checkpointTakeovers(
+  doc: OrderedDocument,
+  held: OrderedPartTakeovers,
+  labels: ReadonlyMap<string, number>,
+  list: SuggestionList
+): CheckpointTakeover[] {
+  const takeovers: CheckpointTakeover[] = [];
+  for (const records of held.values()) {
+    for (const [id, found] of records) {
+      const label = labels.get(id);
+      if (label === undefined) {
+        continue;
+      }
+
+      const taken: CheckpointTaken[] = [];
+      for (const { replaced, after } of found.taken) {
+        const suggestion = doc.suggestions.get(replaced);
+        if (suggestion !== undefined) {
+          const properties = takenProperties(found.record, after);
+          taken.push({ suggestion: list.indexOf(suggestion), properties });
+        }
+      }
+
+      takeovers.push({ label, taken });
+    }
+  }
+
+  return takeovers;
 }
 
 /**
@@ -187,7 +187,6 @@ function inRoomOrder(
       ...t,
       taken: t.taken.map((taken) => ({ ...taken, suggestion: renumbered(taken.suggestion) })),
     })),
-    typers: facts.typers,
     namespacePersons: facts.namespacePersons,
     untracked: facts.untracked.map((u) => ({
       ...u,
@@ -251,13 +250,13 @@ function untrackedOpens(doc: OrderedDocument): UntrackedOpen[] {
 function checkpointUntracked(
   doc: OrderedDocument,
   opens: readonly UntrackedOpen[],
-  containers: ReadonlyMap<string, ContainerPlace>,
+  labels: ReadonlyMap<string, number>,
   list: SuggestionList
 ): CheckpointUntracked[] {
   const out: CheckpointUntracked[] = [];
   for (const { story, shell, byTarget } of opens) {
-    const place = containers.get(shell.id);
-    if (place === undefined) {
+    const label = labels.get(shell.id);
+    if (label === undefined) {
       continue;
     }
 
@@ -279,14 +278,14 @@ function checkpointUntracked(
             untracked,
             merge,
             recordUnchanged,
-            tableCells: tableCells && cellPlaces(story, tableCells, containers),
+            tableCells: tableCells && cellLabels(story, tableCells, labels),
           });
         }
       }
 
       const properties = shell.children.find((c) => isWml(c, target));
       out.push({
-        ...place,
+        label,
         target,
         properties: properties?.kind === 'textValue' ? undefined : properties,
         records: listed,
@@ -297,51 +296,21 @@ function checkpointUntracked(
   return out;
 }
 
-/** The places of the cells of a record's table that the file writes. */
-function cellPlaces(
+/** The node id of a cell's shell, by the cell's space. */
+const cellShell = (story: OrderedStory, space: string): string | undefined =>
+  story.spaces.get(space)?.[0]?.node?.id;
+
+/** The labels of the cells of a record's table that the file writes. */
+function cellLabels(
   story: OrderedStory,
   cells: readonly string[],
-  containers: ReadonlyMap<string, ContainerPlace>
+  labels: ReadonlyMap<string, number>
 ): number[] {
   return cells.flatMap((space) => {
-    const shell = story.spaces.get(space)?.[0]?.node;
-    const place = shell === null || shell === undefined ? undefined : containers.get(shell.id);
-    return place === undefined ? [] : [place.occurrence];
+    const shell = cellShell(story, space);
+    const label = shell === undefined ? undefined : labels.get(shell);
+    return label === undefined ? [] : [label];
   });
-}
-
-/**
- * Who typed the units the file writes, as runs in the order a load reads them, up to the last
- * unit a room change typed inside a pending insertion (none when no such unit is left), and the
- * person of each namespace the runs name.
- */
-function checkpointTypers(doc: OrderedDocument): {
-  runs: CheckpointTyperRun[];
-  persons: Map<string, OrderedPerson>;
-} {
-  const runs: [number, string | null][] = [];
-  const persons = new Map<string, OrderedPerson>();
-  eachFileUnit(doc, (item, offset) => {
-    const typer = orderedUnitTyper(doc, item, offset);
-    const namespace = typer?.namespace ?? null;
-    const last = runs[runs.length - 1];
-    if (last !== undefined && last[1] === namespace) {
-      last[0] += 1;
-    } else {
-      runs.push([1, namespace]);
-    }
-
-    if (typer !== null) {
-      persons.set(typer.namespace, typer.person);
-    }
-  });
-
-  // The units after the last typed one read as typed by none
-  if (runs[runs.length - 1]?.[1] === null) {
-    runs.pop();
-  }
-
-  return { runs, persons };
 }
 
 /**

@@ -12,8 +12,11 @@ import {
   pendingDeleters,
   statusOf,
 } from '../model/document.ts';
+import { checkpointAttribute } from '../model/checkpoint.ts';
+import type { OrderedPerson } from '../model/person.ts';
 import { textBoxHostOf } from '../model/text-boxes.ts';
 import { revisionIdFor, seededAttributes } from '../model/revision-ids.ts';
+import { orderedUnitTyper, type OrderedTyper } from '../model/typers.ts';
 import { withAttributes } from '../ooxml-nodes.ts';
 import type {
   OrderedAttribution,
@@ -31,6 +34,16 @@ export interface OrderedComposeOptions {
   readonly rebuild?: boolean;
   /** `show` (default): pending suggestions as Word revisions. `reject`: as if all rejected. */
   readonly pending?: 'show' | 'reject';
+}
+
+/** How one compose draws: the public options, and what only a checkpoint's compose does. */
+export interface ComposeOptions extends OrderedComposeOptions {
+  /**
+   * Set for a checkpoint: each element a unit is drawn in (its run, each run of a field, a unit
+   * not in a run) carries the namespace of the room change that typed the unit inside a pending
+   * insertion (`oc:typer`), and the person of each namespace written is kept here.
+   */
+  readonly typers?: Map<string, OrderedPerson>;
 }
 
 /** One shown unit of a paragraph's view. @public */
@@ -105,7 +118,7 @@ export interface WrapperInfo {
 export class ComposeContext {
   readonly doc: OrderedDocument;
   readonly story: OrderedStory;
-  readonly options: OrderedComposeOptions;
+  readonly options: ComposeOptions;
   /** Ids of nodes this drawing placed: a second use of one node gets a copy with new ids. */
   readonly placed = new Set<string>();
   /** Run node ids this drawing gave (`runId`). */
@@ -169,7 +182,7 @@ export class ComposeContext {
   constructor(
     doc: OrderedDocument,
     story: OrderedStory,
-    options: OrderedComposeOptions,
+    options: ComposeOptions,
     mint?: () => string
   ) {
     this.doc = doc;
@@ -186,6 +199,23 @@ export class ComposeContext {
     const hostStory = host ? doc.stories.get(host.host) : undefined;
     const object = host && hostStory ? itemAt(hostStory, host.atom) : null;
     this.#objectGone = host !== null && (object === null || this.unshown(object));
+  }
+
+  /** Who typed a unit (`orderedUnitTyper`): one room change typed all of an item. */
+  typerOf(item: OrderedItem): OrderedTyper | null {
+    return orderedUnitTyper(this.doc, item, item.offset);
+  }
+
+  /** The element a unit is drawn in, with the unit's typer on it when a checkpoint is drawn. */
+  typed(element: OoxmlElement, typer: OrderedTyper | null): OoxmlElement {
+    const typers = this.options.typers;
+    if (typers === undefined || typer === null) {
+      return element;
+    }
+
+    typers.set(typer.namespace, typer.person);
+    const attribute = checkpointAttribute('typer', typer.namespace);
+    return withAttributes(element, [...element.attributes, attribute]);
   }
 
   /** Whether an item shows nowhere in this drawing, by its labels and the drawing's options. */

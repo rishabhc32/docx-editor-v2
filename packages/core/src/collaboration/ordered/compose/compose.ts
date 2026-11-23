@@ -12,6 +12,7 @@ import {
 import { composeBlocks, isBlockToken, isLeftOut, joinsNothing, showsPastJoin } from './blocks.ts';
 import {
   ComposeContext,
+  type ComposeOptions,
   type HeldTakeovers,
   type OrderedComposeOptions,
   type OrderedRetainedPrompt,
@@ -69,11 +70,7 @@ interface StoryDrawing {
 }
 
 /** A story's drawing. */
-function composeStory(
-  doc: OrderedDocument,
-  name: string,
-  options: OrderedComposeOptions
-): StoryDrawing {
+function composeStory(doc: OrderedDocument, name: string, options: ComposeOptions): StoryDrawing {
   const ctx = new ComposeContext(doc, storyNamed(doc, name), options);
   const { children, paragraphs } = composeBlocks(ctx);
   const composed = {
@@ -106,7 +103,7 @@ export function composeOrderedPart(
 export function composeStoryPart(
   doc: OrderedDocument,
   name: string,
-  options: OrderedComposeOptions = {}
+  options: ComposeOptions = {}
 ): {
   readonly part: OoxmlPart;
   readonly composed: OrderedComposedStory;

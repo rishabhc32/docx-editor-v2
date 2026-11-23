@@ -1,15 +1,9 @@
 // The records a checkpoint's manifest keeps that Word writes no change record for (design D14).
 
 import type { OoxmlElement } from '../../../store/package/ooxml-tree.ts';
-import { normalizePartName } from '../../../store/package/opc-names.ts';
-import { at, bool, fieldsOf, int, Invalid, oneOf, required } from '../change/read.ts';
+import { at, bool, int, oneOf, plainFields, required } from '../change/read.ts';
 import { manifestList, manifestString, readNamedOnce } from './checkpoint-suggestions.ts';
-import {
-  containerKey,
-  isCheckpointContainer,
-  propertiesXml,
-  readPropertiesXml,
-} from './checkpoint-takeovers.ts';
+import { propertiesXml, readPropertiesXml } from './checkpoint-takeovers.ts';
 import type { OrderedPropertyTarget } from './types.ts';
 
 /** The properties a container's records with no change record give. */
@@ -28,20 +22,17 @@ export interface CheckpointUntrackedRecord {
   readonly untracked?: boolean;
   readonly merge?: readonly string[];
   readonly recordUnchanged?: boolean;
-  /** The cells the table showed when it was taken, by their places among the part's cells. */
+  /** The cells the table showed when it was taken, by their labels. */
   readonly tableCells?: readonly number[];
 }
 
 /**
- * A container's properties that a pending record changes with no change record, by where the
- * file writes the container: its story part, its local name and its place among the part's
- * containers of that name. The file holds the properties the records give; the manifest keeps the
- * container's own and every record of them, decided or not.
+ * A container's properties that a pending record changes with no change record, by the label on
+ * the container (a table, a row, a cell or a control). The file holds the properties the records
+ * give; the manifest keeps the container's own and every record of them, decided or not.
  */
 export interface CheckpointUntracked {
-  readonly part: string;
-  readonly container: string;
-  readonly occurrence: number;
+  readonly label: number;
   readonly target: OrderedPropertyTarget;
   /** The container's own properties of the target, under the records; absent for none. */
   readonly properties?: OoxmlElement;
@@ -72,37 +63,19 @@ export function readUntracked(value: unknown, suggestions: number): CheckpointUn
     value,
     'untracked',
     (entry, path) => readEntry(entry, path, suggestions),
-    ({ part, container, occurrence, target }) =>
-      `${containerKey(part, container, occurrence)}\u0000${target}`
+    ({ label, target }) => `${label} ${target}`
   );
 }
 
 function readEntry(value: unknown, path: string, suggestions: number): CheckpointUntracked {
-  const f = fieldsOf(
-    value,
-    path,
-    new Set(['part', 'container', 'occurrence', 'target', 'properties', 'records'])
-  );
-  const part = manifestString(required(f, 'part'), at(path, 'part'));
-  const name = normalizePartName(part);
-  if (!name.ok || name.partName !== part) {
-    throw new Invalid('invalid-value', at(path, 'part'), 'not a part name');
-  }
-
-  const container = manifestString(required(f, 'container'), at(path, 'container'));
-  if (!isCheckpointContainer(container)) {
-    throw new Invalid('invalid-value', at(path, 'container'), 'not a container');
-  }
-
+  const f = plainFields(value, path);
   const target = oneOf(required(f, 'target'), at(path, 'target'), TARGETS);
   const records = manifestList(required(f, 'records'), at(path, 'records'), 1);
   return {
-    part,
-    container,
-    occurrence: int(required(f, 'occurrence'), at(path, 'occurrence')),
+    label: int(required(f, 'label'), at(path, 'label')),
     target,
     properties: f.has('properties')
-      ? readPropertiesXml(f.get('properties'), at(path, 'properties'), target)
+      ? readPropertiesXml(f.get('properties'), at(path, 'properties'), new Set([target]))
       : undefined,
     records: records.map((record, j) =>
       readRecord(record, at(at(path, 'records'), j), target, suggestions)
@@ -116,11 +89,7 @@ function readRecord(
   target: string,
   suggestions: number
 ): CheckpointUntrackedRecord {
-  const f = fieldsOf(
-    value,
-    path,
-    new Set(['suggestion', 'element', 'untracked', 'merge', 'recordUnchanged', 'tableCells'])
-  );
+  const f = plainFields(value, path);
   const merge = f.has('merge') ? manifestList(f.get('merge'), at(path, 'merge')) : undefined;
   const cells = f.has('tableCells')
     ? manifestList(f.get('tableCells'), at(path, 'tableCells'))
@@ -128,7 +97,7 @@ function readRecord(
   return {
     suggestion: int(required(f, 'suggestion'), at(path, 'suggestion'), 0, suggestions - 1),
     element: f.has('element')
-      ? readPropertiesXml(f.get('element'), at(path, 'element'), target)
+      ? readPropertiesXml(f.get('element'), at(path, 'element'), new Set([target]))
       : null,
     untracked: f.has('untracked') ? bool(f.get('untracked'), at(path, 'untracked')) : undefined,
     merge: merge?.map((key, k) => manifestString(key, at(at(path, 'merge'), k))),

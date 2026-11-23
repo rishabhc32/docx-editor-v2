@@ -152,13 +152,31 @@ export function fieldsOf(
     if (isForbiddenKey(key)) throw new Invalid('forbidden-key', at(path, key));
   for (const key of keys) if (server.has(key)) throw new Invalid('server-field', at(path, key));
   for (const key of keys) if (!known.has(key)) throw new Invalid('unknown-field', at(path, key));
+  return plainFields(value, path);
+}
+
+/**
+ * The fields of a plain object, every key allowed: for a checkpoint's manifest, whose reader skips
+ * a field a newer engine added and refuses a key that reaches a prototype as it parses.
+ */
+export function plainFields(value: unknown, path: string): Fields {
+  if (!isPlainObject(value)) {
+    throw new Invalid('invalid-type', path, 'not an object');
+  }
+
   return {
     path,
     has: (key) => Object.hasOwn(value, key),
     get: (key) => {
       const descriptor = Object.getOwnPropertyDescriptor(value, key);
-      if (descriptor === undefined) return undefined;
-      if (!('value' in descriptor)) throw new Invalid('invalid-type', at(path, key), 'accessor');
+      if (descriptor === undefined) {
+        return undefined;
+      }
+
+      if (!('value' in descriptor)) {
+        throw new Invalid('invalid-type', at(path, key), 'accessor');
+      }
+
       return descriptor.value;
     },
   };

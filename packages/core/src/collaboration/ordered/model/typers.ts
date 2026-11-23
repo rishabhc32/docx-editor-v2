@@ -1,13 +1,10 @@
 // Who typed the units of a pending insertion: the namespace of the room change that typed them,
 // and its person.
 
-import { CardRead } from '../card-of.ts';
 import { parseOrderedChangeId } from '../change/ids.ts';
-import { byStoryOrder } from '../load/load.ts';
-import { inserter, itemAt, mainStory } from './document.ts';
+import { inserter } from './document.ts';
 import type { OrderedPerson } from './person.ts';
-import { isTextBoxStoryName, textBoxHostOf } from './text-boxes.ts';
-import { isUnit, type OrderedDocument, type OrderedItem, type OrderedStory } from './types.ts';
+import { isUnit, type OrderedDocument, type OrderedItem } from './types.ts';
 
 /** Units of one space that one room change typed: the offsets from `from` up to `to`. */
 export interface TypedRun {
@@ -60,60 +57,10 @@ export function orderedUnitTyper(
   return { namespace, person };
 }
 
-/**
- * Visit each unit the file writes, in the order a load of the file reads them: units hidden for
- * good or in a note left out are passed over.
- */
-export function eachFileUnit(
-  doc: OrderedDocument,
-  visit: (item: OrderedItem, offset: number) => void
-): void {
-  const read = new CardRead(doc);
-  for (const story of storiesInFileOrder(doc)) {
-    for (const item of story.tree.items()) {
-      if (!isUnit(item) || !read.isUnit(item, story)) {
-        continue;
-      }
-
-      for (let k = 0; k < item.length; k += 1) {
-        visit(item, item.offset + k);
-      }
-    }
-  }
-}
-
 /** Keep the typers a checkpoint names for the units of a document loaded from it, by space. */
 export function keepLoadedTypers(
   doc: OrderedDocument,
   typers: ReadonlyMap<string, readonly TypedRun[]>
 ): void {
   LOADED.set(doc, typers);
-}
-
-/**
- * The stories in the order a load of the composed file makes them: the main document, the other
- * parts by name, then the text boxes by their objects' places.
- */
-function storiesInFileOrder(doc: OrderedDocument): OrderedStory[] {
-  const main = mainStory(doc);
-  if (main === null) {
-    return [];
-  }
-
-  const order = byStoryOrder(main.name);
-  const parts = [...doc.stories.values()]
-    .filter((s) => !isTextBoxStoryName(s.name))
-    .sort((a, b) => order(a.name, b.name));
-  const boxes = [...doc.stories.values()]
-    .filter((s) => isTextBoxStoryName(s.name))
-    .map((story) => {
-      const host = textBoxHostOf(doc, story.name);
-      const hostStory = host === null ? undefined : doc.stories.get(host.host);
-      const atom = host === null || hostStory === undefined ? null : itemAt(hostStory, host.atom);
-      const position =
-        atom === null || hostStory === undefined ? 0 : hostStory.tree.before(atom).units;
-      return { story, host: parts.indexOf(hostStory ?? main), position };
-    });
-  boxes.sort((a, b) => a.host - b.host || a.position - b.position);
-  return [...parts, ...boxes.map(({ story }) => story)];
 }

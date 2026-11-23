@@ -34,7 +34,7 @@ import { apply, at, BODY, EDIT } from './change-apply-fixture.ts';
 import { actor } from './room-harness.ts';
 import { EMBEDDED_SOURCE, EMBEDDED_WORKBOOK, INK } from './client/paste-embedded-harness.ts';
 import { OBJECT_SOURCE } from './client/paste-objects-harness.ts';
-import { docx, MATRIX_EXTRAS, p, pictureRun, R, RED_PNG, t } from './word-fixtures.ts';
+import { docx, MATRIX_EXTRAS, p, pictureRun, R, RED_PNG, t, W } from './word-fixtures.ts';
 import { testPerson } from './test-persons.ts';
 
 const FIXTURES = join(import.meta.dir, '../../../../../../e2e/fixtures');
@@ -114,7 +114,6 @@ const manifestOf = (checkpoint: Uint8Array) =>
     suggestions: { person: unknown }[];
     comments: unknown[];
     takeovers: unknown[];
-    typers: unknown[];
     namespaces: unknown[];
     untracked: unknown[];
   };
@@ -229,10 +228,10 @@ describe('writeOrderedCheckpoint', () => {
       const listed = orderedPackageMedia(file.base);
       expect(store.reads).toEqual([]);
       expect(manifest.format).toBe('docx-editor.dev/ordered-checkpoint');
-      expect(manifest.version).toBe(4);
+      expect(manifest.version).toBe(5);
       expect(manifest.suggestions.filter((s) => s.person !== null)).toEqual([]);
-      const { comments, takeovers, typers, namespaces, untracked } = manifest;
-      expect([comments, takeovers, typers, namespaces, untracked]).toEqual([[], [], [], [], []]);
+      const { comments, takeovers, namespaces, untracked } = manifest;
+      expect([comments, takeovers, namespaces, untracked]).toEqual([[], [], [], []]);
       expect(manifest.media.map((media) => media.sha256).sort()).toEqual(
         listed.map((media) => media.sha256).sort()
       );
@@ -459,7 +458,7 @@ describe('a file of another kind is refused by name', () => {
     expect(reasonOf(open(await withManifest((m) => ({ ...m, format: 'other' }))))).toBe(
       'checkpoint-format'
     );
-    for (const version of [1, 2, 3, 5]) {
+    for (const version of [1, 2, 3, 4, 6]) {
       expect(reasonOf(open(await withManifest((m) => ({ ...m, version }))))).toBe(
         'checkpoint-version'
       );
@@ -493,56 +492,45 @@ describe('a file of another kind is refused by name', () => {
           { id: '7', person: ANA },
         ],
       }),
-      (m) => ({ ...m, takeovers: [{ part: '/word/document.xml', record: 'rPrChange' }] }),
-      (m) => ({ ...m, typers: [{ suggestion: 0, units: [[1, 'ana']] }] }),
-      (m) => ({ ...m, typers: [[1, 'ana', 2]] }),
-      (m) => ({ ...m, typers: [[0, null]] }),
-      (m) => ({ ...m, typers: [[1, 'a b']] }),
-      // Runs past the units the file holds
+      (m) => ({ ...m, takeovers: [{ label: 0 }] }),
+      // A label on no element of the file
       (m) => ({
         ...m,
-        typers: [[1_000_000, 'ana']],
-        namespaces: [{ namespace: 'ana', person: ANA }],
+        suggestions: [ANA_SUGGESTION, ANA_SUGGESTION],
+        takeovers: [
+          { label: 0, taken: [{ suggestion: 1, properties: `<w:rPr xmlns:w="${W}"/>` }] },
+        ],
       }),
       ({ namespaces: _, ...m }) => m,
-      // A typer with no person, a person of no typer, a namespace twice, and no namespace
-      (m) => ({ ...m, typers: [[1, 'ana']] }),
-      (m) => ({ ...m, namespaces: [{ namespace: 'ana', person: ANA }] }),
+      // A namespace twice, and no namespace
       (m) => ({
         ...m,
-        typers: [[1, 'ana']],
         namespaces: [
           { namespace: 'ana', person: ANA },
           { namespace: 'ana', person: ANA },
         ],
       }),
-      (m) => ({ ...m, typers: [[1, 'a b']], namespaces: [{ namespace: 'a b', person: ANA }] }),
-      (m) => ({ ...m, untracked: [{ part: '/word/document.xml', container: 'p' }] }),
+      (m) => ({ ...m, namespaces: [{ namespace: 'a b', person: ANA }] }),
+      (m) => ({ ...m, untracked: [{ label: 0, target: 'p' }] }),
       (m) => ({
         ...m,
         suggestions: [ANA_SUGGESTION],
-        untracked: [
-          {
-            part: '/word/document.xml',
-            container: 'tc',
-            occurrence: 0,
-            target: 'tcPr',
-            records: [{ suggestion: 0 }],
-          },
-        ],
+        untracked: [{ label: 0, target: 'tcPr', records: [{ suggestion: 0 }] }],
       }),
+      // A key that reaches a prototype, in a known section or in one a reader skips
+      (m) => ({ ...m, comments: [JSON.parse('{"__proto__": {"id": "7"}}')] }),
+      (m) => ({ ...m, later: { constructor: 1 } }),
     ];
     for (const change of cases) {
       expect(reasonOf(open(await withManifest(change)))).toBe('checkpoint-manifest');
     }
 
-    // A typer with its person opens
-    const typed = await withManifest((m) => ({
+    // A namespace's person opens with no run that names it
+    const named = await withManifest((m) => ({
       ...m,
-      typers: [[1, 'ana']],
       namespaces: [{ namespace: 'ana', person: ANA }],
     }));
-    expect(reasonOf(open(typed))).toBe('opened');
+    expect(reasonOf(open(named))).toBe('opened');
 
     const entries = unzipSync(await checkpoint());
     entries[MANIFEST] = strToU8('{"format":');
