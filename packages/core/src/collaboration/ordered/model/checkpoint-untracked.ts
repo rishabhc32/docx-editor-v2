@@ -6,8 +6,17 @@ import { manifestList, manifestString, readNamedOnce } from './checkpoint-sugges
 import { propertiesXml, readPropertiesXml } from './checkpoint-takeovers.ts';
 import type { OrderedPropertyTarget } from './types.ts';
 
-/** The properties a container's records with no change record give. */
-const TARGETS: readonly OrderedPropertyTarget[] = ['tblPr', 'tblGrid', 'trPr', 'tcPr', 'sdtPr'];
+/**
+ * The properties a container's records with no change record give, and the container whose
+ * properties they are.
+ */
+export const UNTRACKED_CONTAINERS: ReadonlyMap<OrderedPropertyTarget, string> = new Map([
+  ['tblPr', 'tbl'],
+  ['tblGrid', 'tbl'],
+  ['trPr', 'tr'],
+  ['tcPr', 'tc'],
+  ['sdtPr', 'sdt'],
+]);
 
 /**
  * A record, decided or not, of properties some record changes with no change record
@@ -69,7 +78,7 @@ export function readUntracked(value: unknown, suggestions: number): CheckpointUn
 
 function readEntry(value: unknown, path: string, suggestions: number): CheckpointUntracked {
   const f = plainFields(value, path);
-  const target = oneOf(required(f, 'target'), at(path, 'target'), TARGETS);
+  const target = oneOf(required(f, 'target'), at(path, 'target'), [...UNTRACKED_CONTAINERS.keys()]);
   const records = manifestList(required(f, 'records'), at(path, 'records'), 1);
   return {
     label: int(required(f, 'label'), at(path, 'label')),

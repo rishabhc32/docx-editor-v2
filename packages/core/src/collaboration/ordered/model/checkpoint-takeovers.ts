@@ -64,13 +64,6 @@ export const holdsTakeover = (element: OoxmlElement, takeover: CheckpointTakeove
     ({ properties }) => properties.localName === recordedProperties(element.localName)
   );
 
-/** The containers whose properties a record may change with no change record (`untracked`). */
-const CONTAINERS: ReadonlySet<string> = new Set(['tbl', 'tr', 'tc', 'sdt']);
-
-/** Whether an element is a container whose properties an untracked record changes. */
-export const isCheckpointContainer = (element: OoxmlElement): boolean =>
-  CONTAINERS.has(element.localName) && isWml(element, element.localName);
-
 /**
  * Properties as a part of their own: the manifest holds them as XML, read with the engine's
  * bounded reader. Each one is read under its own name, so its node ids are its own.
