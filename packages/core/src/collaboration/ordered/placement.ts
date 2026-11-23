@@ -558,8 +558,9 @@ export function insertAtSite(ctx: Ctx, site: Site, items: readonly OrderedItem[]
     if (target.kind === 'text' && address.offset + 1 < target.offset + target.length)
       target = splitItem(doc, story, target, address.offset + 1)?.[0] ?? target;
     if (site.pastMarkers) {
-      // Past the rest of the character's run and past bookmark markers; nothing else
+      // Past the rest of its run, bookmark markers and the markers riding in its field; no more
       const run = target.run;
+      const field = `${target.space}|${target.offset}`;
       for (
         let next = story.tree.next(target);
         next &&
@@ -568,6 +569,7 @@ export function insertAtSite(ctx: Ctx, site: Site, items: readonly OrderedItem[]
         ((next.inRun === true && next.run === run) ||
           isBookmarkMarker(next) ||
           isFieldEnd(next) ||
+          next.fieldSlot?.field === field ||
           (site.pastRangeEnds === true && isRangeEnd(next)));
         next = story.tree.next(next)
       )

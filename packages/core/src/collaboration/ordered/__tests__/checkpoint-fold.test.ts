@@ -177,6 +177,27 @@ describe('a fold of a formatted simple field', () => {
   });
 });
 
+describe('a fold of words typed after a field', () => {
+  // An empty run inside a field rides with it and draws inside it: words typed right after the
+  // field go past it, where a fold reads it back
+  const fldChar = (type: string) => `<w:r><w:fldChar w:fldCharType="${type}"/></w:r>`;
+  const FIELD =
+    fldChar('begin') +
+    '<w:r><w:instrText xml:space="preserve"> PAGE </w:instrText></w:r>' +
+    '<w:r><w:rPr><w:b/></w:rPr></w:r>' +
+    fldChar('separate') +
+    '<w:r><w:t>3</w:t></w:r>' +
+    fldChar('end');
+
+  test('a suggested word after a field with an empty run in it', async () => {
+    const { document: doc, base } = openOrderedWordFile(docx(p(t('Page ') + FIELD + t('.'))), {
+      file: 1,
+    });
+    apply(doc, 'olga:1', { kind: 'insert', ...EDIT, place: at(doc, 0, 6), text: ' only' });
+    await checkFold(doc, base, mediaStore(base), 'a word after a field');
+  });
+});
+
 describe('a fold of a hidden prompt', () => {
   // A suggested format on a prompt that direct typing then filled: the glossary keeps the prompt
   // with its record, and an emptying after the fold gives it back with that record. The prompt
