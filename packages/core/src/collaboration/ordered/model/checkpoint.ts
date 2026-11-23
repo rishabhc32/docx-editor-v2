@@ -8,6 +8,7 @@ import { XML_HARD_MAX_BYTES } from '../../../store/package/xml-reader.ts';
 import { DEFAULT_ZIP_LIMITS } from '../../../store/package/zip.ts';
 import { at, attempt, Invalid, isForbiddenKey, plainFields, required } from '../change/read.ts';
 import { sha256 } from '../change/resources.ts';
+import { readLists, type CheckpointList } from './checkpoint-lists.ts';
 import {
   readNamedOnce,
   readNamespace,
@@ -64,9 +65,9 @@ export const checkpointAttribute = (
  * The room facts a checkpoint's manifest keeps, which Word has no place for: each pending
  * suggestion whole, and each decided one another section names; the person of each room comment
  * by its `w:id`; the records each change record holds by takeover; the person of each namespace
- * the parts name as a typer; and the records Word writes no change record for, decided or not.
- * Every section names a suggestion by its place in `suggestions`, and an element of the file by
- * its label.
+ * the parts name as a typer; the records Word writes no change record for, decided or not; and
+ * the list definitions of pending suggestions. Every section names a suggestion by its place in
+ * `suggestions`, and an element of the file by its label.
  */
 export interface CheckpointFacts {
   readonly suggestions: readonly CheckpointSuggestion[];
@@ -74,6 +75,7 @@ export interface CheckpointFacts {
   readonly takeovers: readonly CheckpointTakeover[];
   readonly namespacePersons: ReadonlyMap<string, OrderedPerson>;
   readonly untracked: readonly CheckpointUntracked[];
+  readonly lists: readonly CheckpointList[];
 }
 
 /**
@@ -118,6 +120,7 @@ export function checkpointManifestBytes(
       takeovers: takeoversJson(facts.takeovers),
       namespaces: [...facts.namespacePersons].map(([namespace, person]) => ({ namespace, person })),
       untracked: untrackedJson(facts.untracked),
+      lists: facts.lists,
     })
   );
   if (bytes.byteLength > XML_HARD_MAX_BYTES) {
@@ -201,6 +204,8 @@ function factsOf(manifest: Record<string, unknown>): CheckpointFacts {
     takeovers: readTakeovers(manifest.takeovers, count),
     namespacePersons: readNamespaces(manifest.namespaces),
     untracked: readUntracked(manifest.untracked, count),
+    // A section a checkpoint of this version may not hold yet
+    lists: manifest.lists === undefined ? [] : readLists(manifest.lists, count),
   };
 }
 

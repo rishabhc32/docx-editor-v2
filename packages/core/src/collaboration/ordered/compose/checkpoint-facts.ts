@@ -7,6 +7,7 @@ import type { OoxmlPackage } from '../../../store/package/ooxml-package.ts';
 import type { OoxmlElement } from '../../../store/package/ooxml-tree.ts';
 import { orderedStoryParts } from '../load/load.ts';
 import type { CheckpointFacts } from '../model/checkpoint.ts';
+import type { CheckpointList } from '../model/checkpoint-lists.ts';
 import type { CheckpointSuggestion } from '../model/checkpoint-suggestions.ts';
 import { withCheckpointLabels } from '../model/checkpoint-labels.ts';
 import {
@@ -143,8 +144,43 @@ export function checkpointFacts(
     takeovers: checkpointTakeovers(doc, held, labels, list),
     namespacePersons: typers,
     untracked: checkpointUntracked(doc, opens, labels, list),
+    lists: checkpointLists(doc, pkg, list),
   });
   return { pkg: labelled.pkg, facts };
+}
+
+/** Each list definition of a pending suggestion that the file holds, with no picture bullet. */
+function checkpointLists(
+  doc: OrderedDocument,
+  pkg: OoxmlPackage,
+  list: SuggestionList
+): CheckpointList[] {
+  const written = new Set<string>();
+  for (const part of pkg.parts.values()) {
+    if (isWml(part.root, 'numbering')) {
+      for (const child of part.root.children) {
+        const numId = child.kind === 'textValue' ? undefined : attributeOf(child, 'numId');
+        if (numId !== undefined && isWml(child, 'num')) {
+          written.add(numId);
+        }
+      }
+    }
+  }
+
+  const out: CheckpointList[] = [];
+  for (const resource of doc.resources.added.values()) {
+    const suggestion = doc.suggestions.get(resource.suggestion);
+    if (
+      resource.kind === 'list' &&
+      resource.bullets === undefined &&
+      written.has(resource.numId) &&
+      suggestion?.status === 'pending'
+    ) {
+      out.push({ suggestion: list.indexOf(suggestion), key: resource.key });
+    }
+  }
+
+  return out;
 }
 
 /** Each change record of the file that holds records by takeover, by its label. */
@@ -204,6 +240,7 @@ function inRoomOrder(
       ...u,
       records: u.records.map((r) => ({ ...r, suggestion: renumbered(r.suggestion) })),
     })),
+    lists: facts.lists.map((l) => ({ ...l, suggestion: renumbered(l.suggestion) })),
   };
 }
 

@@ -18,6 +18,7 @@ import { recordFileMedia } from '../model/file-media.ts';
 import { orderedAuthorName, type OrderedPerson } from '../model/person.ts';
 import type { OrderedFileMedia } from '../model/resources.ts';
 import type { OrderedDocument } from '../model/types.ts';
+import { withCheckpointLists, withoutCheckpointLists } from './lists.ts';
 import { withCheckpointRuns } from './room-runs.ts';
 import { withCheckpointTakeovers } from './takeovers.ts';
 import { withCheckpointTypers } from './typers.ts';
@@ -150,11 +151,18 @@ function openCheckpointRead(pkg: OoxmlPackage, options: OrderedWordFileOptions):
     throw new OrderedWordFileError(checkpoint.reason);
   }
 
+  // The list definitions of pending suggestions out of the file, before the load reads its lists
   const { facts } = checkpoint;
-  const { opened, marks } = openRead(checkpoint.base, checkpoint.media, options, facts);
+  const lists = withoutCheckpointLists(checkpoint.base, facts.lists);
+  if (lists === null) {
+    throw new OrderedWordFileError('checkpoint-manifest');
+  }
+
+  const { opened, marks } = openRead(lists.pkg, checkpoint.media, options, facts);
   const doc = opened.document;
   const listedIds = [...doc.revisionIds.listed.keys()];
   if (
+    !withCheckpointLists(doc, lists.taken, listedIds) ||
     !withCheckpointTakeovers(doc, marks.labels, facts.takeovers, listedIds) ||
     !withCheckpointUntracked(doc, marks.labels, facts.untracked, listedIds) ||
     !withCheckpointTypers(doc, marks.typers, facts.namespacePersons) ||
