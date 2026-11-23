@@ -1,0 +1,13 @@
+{
+  "impact": "compatible",
+  "fields": [],
+  "before": "In an ordered room, typing or a paste in a block control's prompt at a control inside it that showed its own prompt went into that inner control, Enter right after the inner control was refused, content over a block prompt of two paragraphs kept the paragraph that held only the inner control, and the party policy judged typed text by the innermost prompt at the caret, where the editor alone replaces the outermost prompt and drops the inner control with it.",
+  "after": "Every copy replaces the outermost shown prompt, inline or block, with one rule (replacedPromptOf); Enter decides by the containers both sides of the caret share; a control that goes with a replaced prompt is no content of its paragraph, so that paragraph goes too; the party policy judges typed text by the outermost shown prompt and other content by the innermost control that holds both sides of the caret.",
+  "reason": "Every copy applies and draws the change with the same code, and the Yjs document format and the change format do not change. Ordered rooms admit only clients of their own code version and are not deployed yet, so no migration is needed.",
+  "tests": [
+    "packages/core/src/collaboration/ordered/__tests__/client/editor-controls-prompt-nested-block.test.ts",
+    "packages/core/src/collaboration/ordered/__tests__/room-policy-prompts.test.ts"
+  ],
+  "changeset": "ordered-block-prompt-nested",
+  "migration": null
+}
