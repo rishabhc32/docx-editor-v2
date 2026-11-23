@@ -964,8 +964,11 @@ export interface OrderedDocument {
 }
 
 // @public
-export type OrderedEdit = {
+export type OrderedEdit =
+/** Typed text; `inside` names the inline control a caret on its edge types into. */
+    {
     readonly at: OrderedPlace;
+    readonly inside?: OrderedPlace;
     readonly kind: 'insert';
     readonly text: string;
 }
@@ -1436,6 +1439,7 @@ export interface OrderedInsertBreakChange extends OrderedEditBase {
 
 // @public
 export interface OrderedInsertChange extends OrderedEditBase {
+    readonly inside?: OrderedChangeAddress;
     // (undocumented)
     readonly kind: 'insert';
     // (undocumented)
