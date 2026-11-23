@@ -419,11 +419,21 @@ function containersAfter(
   const out: OrderedItem[] = [];
   let depth = 0;
   for (let item: OrderedItem | null = from; item !== null; item = story.tree.prev(item)) {
-    if ((item.kind === 'mark' && !isHidden(doc, item)) || isBlockToken(item)) break;
-    if ((item.kind !== 'open' && item.kind !== 'close') || isHidden(doc, item)) continue;
-    if (item.kind === 'close') depth += 1;
-    else if (depth > 0) depth -= 1;
-    else out.push(item);
+    if ((item.kind === 'mark' && !isHidden(doc, item)) || isBlockToken(item)) {
+      break;
+    }
+
+    if ((item.kind !== 'open' && item.kind !== 'close') || isHidden(doc, item)) {
+      continue;
+    }
+
+    if (item.kind === 'close') {
+      depth += 1;
+    } else if (depth > 0) {
+      depth -= 1;
+    } else {
+      out.push(item);
+    }
   }
 
   return out;

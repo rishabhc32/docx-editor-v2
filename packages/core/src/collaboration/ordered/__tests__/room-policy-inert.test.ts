@@ -64,8 +64,12 @@ function setup() {
 
 /** The shown atom whose element is a drawing. */
 function pictureOf(doc: OrderedDocument): OrderedItem {
-  for (const item of doc.stories.get(BODY)?.tree.items() ?? [])
-    if (item.kind === 'atom' && item.node?.kind === 'drawing') return item;
+  for (const item of doc.stories.get(BODY)?.tree.items() ?? []) {
+    if (item.kind === 'atom' && item.node?.kind === 'drawing') {
+      return item;
+    }
+  }
+
   throw new Error('no picture');
 }
 

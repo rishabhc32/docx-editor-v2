@@ -153,11 +153,15 @@ describe('the policy and today’s check', () => {
         Object.fromEntries(
           Object.entries(change).map(([k, v]) => [k, typeof v === 'number' ? at(0, v) : v])
         );
+
       // Ben strikes "USD", makes the container, and adds "XY" in it to his deletion
       expect(send(BEN, { kind: 'delete', ...EDIT, from: at(0, 15), to: at(0, 18) })).toBe(
         'accepted'
       );
-      for (const change of make) expect(send(BEN, { ...EDIT, ...places(change) })).toBe('accepted');
+      for (const change of make) {
+        expect(send(BEN, { ...EDIT, ...places(change) })).toBe('accepted');
+      }
+
       expect(
         send(BEN, { kind: 'insert', ...EDIT, place: at(0, xy), text: 'XY', into: 'S:ben-1:1.1' })
       ).toBe('accepted');
@@ -176,6 +180,7 @@ describe('the policy and today’s check', () => {
         send(OLGA, { kind: 'decide', cards: [{ suggestions: seen }], status: 'accepted' })
       ).toBe('accepted');
       expect(typed(xy + 1)).toBe('policy-nested/nested');
+
       // Past its end, beside it; from its start on, inside it
       const [end, start] = edges;
       expect({ end: typed(end), start: typed(start) }).toEqual({

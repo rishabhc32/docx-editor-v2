@@ -259,11 +259,19 @@ export function setWatermark(ctx: Ctx, write: OrderedChangeWatermark | null): st
 
   const suggestion = suggestionFor(ctx);
   const evenAndOdd = evenAndOddHeadersNow(ctx);
-  if (write !== null) createShownHeaders(ctx, suggestion, evenAndOdd);
+  if (write !== null) {
+    createShownHeaders(ctx, suggestion, evenAndOdd);
+  }
+
   const sections = furnitureOf(ctx.doc, ctx.story, sectionsNow(ctx));
-  for (const story of namedHeaders(sections))
+  for (const story of namedHeaders(sections)) {
     removeWatermark(ctx, storyNamed(ctx.doc, story), suggestion);
-  if (write === null) return suggestion.id;
+  }
+
+  if (write === null) {
+    return suggestion.id;
+  }
+
   const media = write.kind === 'picture' ? addMedia(ctx, suggestion.id, write.media) : null;
   const watermark = packageWatermark(write);
 

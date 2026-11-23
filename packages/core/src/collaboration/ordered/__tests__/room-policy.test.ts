@@ -214,6 +214,7 @@ describe('the suggestions-only policy', () => {
       send(BEN, { kind: 'format', ...edit, ...struck, properties: [{ localName: 'i' }] })
     ).toBe('accepted');
     const xml = serializeOoxmlPart(composeOrderedPart(room.document, BODY).part);
+
     // Ben's record in a run of Ana's revision mark, before it closes
     const inside = (mark: 'ins' | 'del', face: string) =>
       new RegExp(
@@ -222,6 +223,7 @@ describe('the suggestions-only policy', () => {
       );
     expect(xml).toMatch(inside('ins', '<w:b/>'));
     expect(xml).toMatch(inside('del', '<w:i/>'));
+
     // Taking over Ben's pending record is not Ana's to do (D5 policy 2)
     expect(
       send(ANA, { kind: 'format', ...edit, ...struck, properties: [{ localName: 'i' }] })
