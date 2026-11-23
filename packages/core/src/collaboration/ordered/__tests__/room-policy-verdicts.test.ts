@@ -420,7 +420,8 @@ describe('the policy and today’s check', () => {
     expect(
       send(BEN, { kind: 'paragraph-property', ...EDIT, marks: [markOf(0)], properties: [style] })
     ).toBe('accepted');
-    // A format on struck text is inside the deletion (Word nests it there)
+    // A format on struck text goes in the deletion (Word nests its record there), and today's
+    // check takes it back alone: allowed too
     expect(send(OLGA, { kind: 'delete', ...EDIT, from: at(0, 0), to: at(0, 3) })).toBe('accepted');
     expect(
       send(BEN, {
@@ -430,7 +431,7 @@ describe('the policy and today’s check', () => {
         to: at(0, 2),
         properties: [{ localName: 'b' }],
       })
-    ).toBe('policy-nested/nested');
+    ).toBe('accepted');
   });
 
   // Word writes Ben's `w:pPrChange` beside Ana's `w:ins` on the mark, and today's check takes

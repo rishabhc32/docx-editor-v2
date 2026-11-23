@@ -165,11 +165,7 @@ function insertedByOthers(
   return out;
 }
 
-/**
- * Whether another person's pending deletion holds the unit in Word: their `w:del` around its run.
- * A row or a cell they struck marks only the row or the cell (`within.dels`), so a format on its
- * text sits beside their deletion.
- */
+/** Whether another person's pending deletion strikes the item itself (a row they struck). */
 function struckByOthers(doc: OrderedDocument, maker: OrderedMaker, item: OrderedItem): boolean {
   for (const id of item.dels) {
     if (pendingByOther(doc, id, maker)) {
@@ -512,12 +508,12 @@ function besideNested(
 
 /**
  * Whether a range or a target reaches inside another person's pending suggestion at one shown
- * item, as Word nests the change in it. It is inside when it reaches a unit they inserted; a
- * property change on a mark or a container they inserted sits beside their insertion (Word
- * writes its change record beside the `w:ins`). A format on text or an object they struck is
- * inside their deletion too (Word nests the format in it); a property change on a paragraph
- * mark, a row or a table they struck is not (Word writes its change record beside the deletion
- * mark). A control value or a new link target reaches the units it strikes.
+ * item, as Word nests the change in it: a change that is not a property change, on an item they
+ * inserted. A control value or a new link target reaches the units it strikes. A format or a
+ * property change is never inside: Word writes its change record in their `w:ins` or `w:del`
+ * (a run's) or beside it (a mark's, a row's or a table's), and taking back that record alone
+ * gives their suggestion back as it was. Taking over their pending record is refused once
+ * applied (`checkApplied`).
  */
 function itemNested(
   doc: OrderedDocument,
@@ -525,11 +521,7 @@ function itemNested(
   item: OrderedItem,
   properties: boolean
 ): boolean {
-  if (insertedByOthers(doc, maker, item).length > 0 && (!properties || isUnit(item))) {
-    return true;
-  }
-
-  return properties && isUnit(item) && struckByOthers(doc, maker, item);
+  return !properties && insertedByOthers(doc, maker, item).length > 0;
 }
 
 /**

@@ -13,6 +13,7 @@ import { openOrderedWordFile } from '../../client/open.ts';
 import { composeOrderedPart } from '../../compose/compose.ts';
 import { orderedCards } from '../../decide.ts';
 import { suggestionsOnlyPolicy } from '../../room/suggestions-only.ts';
+import { checkFold, folded, mediaStore } from '../fold-check.ts';
 import { docx, p, t } from '../word-fixtures.ts';
 import {
   BODY,
@@ -157,6 +158,41 @@ describe('a party edit today’s check allows', () => {
     converged(room, ana, ben, olive);
     expect(revisions(await savedBody(olive))).toEqual(['del:Ana', 'ins:Ana']);
     expect(editorTexts(olive)[0]).toBe('The fee is 100y200 USD.');
+  });
+
+  // Today: Word writes Ben's `w:rPrChange` in the runs of Ana's `w:del` and `w:ins`, and the
+  // take-back of Ben's record alone leaves the file as it was (allowed; s25-short, s50-long). It
+  // joins Ana's card, as a property change on her new paragraph does
+  test('a format over another person’s struck and inserted words: decided with them', async () => {
+    for (const status of ['rejected', 'accepted'] as const) {
+      const { room, ana, ben, olive } = await people(FILE);
+      caretAt(ana, 0, 11, 14);
+      run(ana, { type: 'insertText', text: '200' });
+      await settle();
+      caretAt(ben, 0, 11, 17);
+      run(ben, { type: 'toggleMark', mark: 'bold' });
+      await settle();
+      converged(room, ana, ben, olive);
+      expect(cardsOf(room)).toEqual([['Ana', 'Ben']]);
+      const live = await savedBody(olive);
+      expect(revisions(live)).toEqual(['del:Ana', 'rPrChange:Ben', 'ins:Ana', 'rPrChange:Ben']);
+      const doc = room.room.document;
+      const { base } = openOrderedWordFile(FILE, { file: 1 });
+      const once = await folded(doc, base, 2, mediaStore(base));
+      expect(serializeOoxmlPart(composeOrderedPart(once.document, BODY).part)).toBe(
+        serializeOoxmlPart(composeOrderedPart(doc, BODY).part)
+      );
+      await checkFold(doc, base, mediaStore(base), 'a format over Ana’s words');
+      await decide(room, olive, 'Ben', status);
+      converged(room, ana, ben, olive);
+      const body = await savedBody(olive);
+      expect(revisions(body)).toEqual([]);
+      expect(editorTexts(olive)[0]).toBe(
+        status === 'rejected' ? 'The fee is 100 USD.' : 'The fee is 200 USD.'
+      );
+      expect(body.includes('<w:b/>')).toBe(status === 'accepted');
+      closeAll();
+    }
   });
 
   // Today: Word writes Ben's `w:pPrChange` beside Ana's `w:ins` on the paragraph mark, and the

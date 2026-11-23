@@ -57,8 +57,8 @@ export interface OrderedKindPolicy {
    */
   readonly text: boolean;
   /**
-   * The edit sets properties: it is inside another person's suggestion also on units that
-   * person struck (Word nests the record inside the deletion).
+   * The edit sets properties: it is never inside another person's insertion or deletion (Word
+   * writes its record in their revision mark or beside it, and takes it back alone).
    */
   readonly properties: boolean;
   /**

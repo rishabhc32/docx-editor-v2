@@ -177,20 +177,13 @@ describe('the suggestions-only policy', () => {
 
   test('a party may not change anything inside another person suggestion', () => {
     const { send, edit, p0, p1, typed } = setup();
-    // Typing inside Ana's typed text, and deleting or formatting it
+    // Typing inside Ana's typed text, and deleting it
     expect(
       send(BEN, { kind: 'insert', ...edit, place: { space: typed, offset: 1 }, text: 'b' })
     ).toBe('policy-nested/nested');
     const overTyped = { from: { space: p0.text, offset: 2 }, to: { space: p0.text, offset: 6 } };
     expect(send(BEN, { kind: 'delete', ...edit, ...overTyped })).toBe('policy-nested/nested');
-    expect(
-      send(BEN, { kind: 'format', ...edit, ...overTyped, properties: [{ localName: 'b' }] })
-    ).toBe('policy-nested/nested');
-    // A format on text Ana struck sits inside her deletion
     const struck = { from: { space: p1.text, offset: 1 }, to: { space: p1.text, offset: 2 } };
-    expect(
-      send(BEN, { kind: 'format', ...edit, ...struck, properties: [{ localName: 'i' }] })
-    ).toBe('policy-nested/nested');
     // Beside Ana's text is not inside it; a second deletion of struck text is allowed (policy 1)
     expect(
       send(BEN, { kind: 'insert', ...edit, place: { space: typed, offset: 0 }, text: 'b' })
@@ -206,6 +199,33 @@ describe('the suggestions-only policy', () => {
     expect(
       send(OLGA, { kind: 'insert', ...edit, place: { space: typed, offset: 2 }, text: 'o' })
     ).toBe('accepted');
+  });
+
+  // Today: Word writes Ben's format record in Ana's `w:ins` and `w:del`; taking back Ben's own
+  // format alone gives the file back, so the check allows it (s50-long, s25-short)
+  test('a party’s format on another person’s inserted or struck words is the party’s own', () => {
+    const { room, send, edit, p0, p1 } = setup();
+    const overTyped = { from: { space: p0.text, offset: 2 }, to: { space: p0.text, offset: 6 } };
+    const struck = { from: { space: p1.text, offset: 1 }, to: { space: p1.text, offset: 2 } };
+    expect(
+      send(BEN, { kind: 'format', ...edit, ...overTyped, properties: [{ localName: 'b' }] })
+    ).toBe('accepted');
+    expect(
+      send(BEN, { kind: 'format', ...edit, ...struck, properties: [{ localName: 'i' }] })
+    ).toBe('accepted');
+    const xml = serializeOoxmlPart(composeOrderedPart(room.document, BODY).part);
+    // Ben's record in a run of Ana's revision mark, before it closes
+    const inside = (mark: 'ins' | 'del', face: string) =>
+      new RegExp(
+        `<w:${mark} [^>]*w:author="Ana"[^>]*>((?!</w:${mark}>).)*` +
+          `<w:r><w:rPr>${face}<w:rPrChange [^>]*w:author="Ben"`
+      );
+    expect(xml).toMatch(inside('ins', '<w:b/>'));
+    expect(xml).toMatch(inside('del', '<w:i/>'));
+    // Taking over Ben's pending record is not Ana's to do (D5 policy 2)
+    expect(
+      send(ANA, { kind: 'format', ...edit, ...struck, properties: [{ localName: 'i' }] })
+    ).toBe('policy-not-own/others_suggestions');
   });
 
   test('a person may take back their own suggestion, not another person', () => {

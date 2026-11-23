@@ -102,8 +102,7 @@ const objectPropertySpec = orderedKindSpec<OrderedObjectPropertyChange>({
   apply: (change, input) =>
     runKindEdit(input, (ctx) => changeObject(ctx, objectAt(input, change.object), change.ops)),
   // Word has no tracked form for an object's properties or its image (`model/objects.ts`): a
-  // party's is refused as the host's check refuses it (`policy-direct`, reason `package`). A
-  // property change strikes nothing: inside another person's struck object it is inside
+  // party's is refused as the host's check refuses it (`policy-direct`, reason `package`)
   policy: { text: false, properties: true, strikes: false },
   publish: 'paragraphs',
 });
@@ -120,8 +119,7 @@ const objectResourceSpec = orderedKindSpec<OrderedObjectResourceChange>({
     runKindEdit(input, (ctx) =>
       changeObject(ctx, objectAt(input, change.object), [{ op: 'image', media: change.media }])
     ),
-  // A direct edit only, as `object-property`. A property change strikes nothing: inside another
-  // person's struck object it is inside
+  // A direct edit only, as `object-property`
   policy: { text: false, properties: true, strikes: false },
   publish: 'paragraphs',
   blobs: (change) => [change.media.sha256],
