@@ -402,7 +402,7 @@ export function siteAt(ctx: Ctx, p: OrderedViewParagraph, at: number, skipStruck
  * the caret is in it (the engine empties the prompt into its first run). The typed text replaces
  * the prompt; deleting the prompt does nothing (that skip is in `edits/text.ts`). Null when no
  * prompt is there. In a control's prompt that holds another control showing its own, the outer
- * prompt is the one replaced, as the engine replaces the outermost (`placeholderControlForInsertion`).
+ * prompt is replaced, as the engine replaces the outermost (`placeholderControlForInsertion`).
  */
 export function promptSite(ctx: Ctx, p: OrderedViewParagraph, offset: number): Site | null {
   const at = [p.chars[offset], offset > 0 ? p.chars[offset - 1] : undefined].find(

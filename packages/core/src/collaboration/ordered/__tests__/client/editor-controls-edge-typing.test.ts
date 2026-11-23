@@ -87,7 +87,8 @@ describe('typing at an edge of an inline control stays in it, as the editor alon
     ] as const) {
       for (const tail of ['', ' end.']) {
         for (const [who, name, mode] of PEOPLE) {
-          const label = `${who}, at the ${where} character of a ${control} control${tail ? ', text after it' : ''}`;
+          const after = tail === '' ? '' : ', text after it';
+          const label = `${who}, at the ${where} character of a ${control} control${after}`;
           test(label, async () => {
             const file = fileWith(props, content, tail);
             const review = reviewTestModule();
