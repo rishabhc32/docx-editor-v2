@@ -1,0 +1,16 @@
+{
+  "impact": "compatible",
+  "fields": [],
+  "before": "The checkpoint manifest (version 4) found the places of its facts by counting: takeovers by part, record, w:id and occurrence, untracked records by part, container and occurrence, and typers as runs of counts over every unit in load order, all taken on the prepared package. A change of a unit rule or of the preparation in a later engine misread them. A fold gave every suggestion a new id, and the reader refused any unknown field.",
+  "after": "The manifest (version 5) names each element a takeover or an untracked record names by a label attribute of the checkpoint's own namespace, and compose writes who typed a run on the run, for the checkpoint only; every open takes them off before the load, and a Word file drops them. Each suggestion entry holds the suggestion's id, a style's change record too, and the load makes it under that id; minted ids pass over kept ones, and a change id used again after a fold is refused as name-taken. The reader skips an unknown section or field, stays strict on known ones and refuses prototype keys anywhere. Golden checkpoints of version 5 guard later engines.",
+  "reason": "The Yjs document format, the ordered protocol and the change format do not change. Only the checkpoint manifest and the attributes a checkpoint's parts hold change, and every copy of a room opens the same checkpoint with the same code version. Ordered rooms are not deployed yet, so no checkpoint holds version 4 and no migration is needed. Exported Word files do not change.",
+  "tests": [
+    "packages/core/src/collaboration/ordered/__tests__/checkpoint-labels.test.ts",
+    "packages/core/src/collaboration/ordered/__tests__/checkpoint-ids.test.ts",
+    "packages/core/src/collaboration/ordered/__tests__/checkpoint-golden.test.ts",
+    "packages/core/src/collaboration/ordered/__tests__/checkpoint.test.ts",
+    "packages/core/src/collaboration/ordered/__tests__/checkpoint-fold.test.ts"
+  ],
+  "changeset": "ordered-checkpoint-labels",
+  "migration": null
+}

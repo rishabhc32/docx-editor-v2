@@ -11,6 +11,7 @@ If you operate an application, see [Collaboration versions and upgrades](../site
 | Understand what makes a change breaking | [Understand compatibility](#understand-compatibility) |
 | Submit a fix or feature | [Contributor workflow](#contributor-workflow) |
 | Change the collaboration format | [Document a migration](#document-a-migration) |
+| Change the ordered room checkpoint format | [Ordered room checkpoints](#ordered-room-checkpoints) |
 | Diagnose a failed check | [Troubleshoot a compatibility check](#troubleshoot-a-compatibility-check) |
 | Prepare a release or capture its baseline | [Release gate and baseline maintenance](#release-gate-and-baseline-maintenance) |
 | Upgrade stored collaboration data | [Operator migration checklist](#operator-migration-checklist) |
@@ -47,6 +48,17 @@ Compatibility includes behavior, not only the names of stored fields. For exampl
 A fix can also preserve the format. For example, a split operation can stop writing incorrect replacement identities for text that it moves to another paragraph. Released readers already understand the corrected writes. The old writer still has its original bug, but that does not make the corrected representation incompatible.
 
 Test the fixed writer against released readers. Also test ordinary editing with both versions as writers. Do not require released code to contain a later fix.
+
+### Ordered room checkpoints
+
+An ordered room saves its document as a _checkpoint_: the room's Word file with a manifest part, `/ordered-checkpoint.json`. The manifest keeps the room facts that Word has no place for. A checkpoint that one release writes must open in every later release, so its format follows these rules:
+
+- **Add, never change.** A later version can add a manifest section or a field. It never changes the meaning, the type, or the values of a section or field that a released reader knows. A reader skips a section and a field that it does not know, and stays strict on every field that it knows.
+- **Name places by label, not by count.** A fact names an element of the file by a label attribute of the checkpoint's own namespace, and who typed a run by an attribute on the run. A count of elements or units depends on the engine's rules of the day. A later engine that reads one more element must still find every fact.
+- **Move the version only for a break.** The manifest `version` changes only when an older reader would misread a checkpoint. A reader refuses any other version as `checkpoint-version`.
+- **Keep the golden checkpoints.** `packages/core/src/collaboration/ordered/__tests__/fixtures/checkpoints/` holds checkpoints of version 5, each with its fold print. `checkpoint-golden.test.ts` opens each one and compares the print. Never write a golden checkpoint again. If a release changes what a print shows, write the print again and explain why in the pull request.
+
+The checkpoint format is separate from the Yjs collaboration format. A checkpoint change still needs a decision from `bun run collaboration:change`.
 
 ## Decide whether a change is compatible
 
