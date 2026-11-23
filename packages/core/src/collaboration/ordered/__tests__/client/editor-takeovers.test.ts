@@ -328,8 +328,14 @@ describe('the records of a takeover', () => {
     const checkpoint = await checkpointOf(room);
     const manifest = JSON.parse(strFromU8(unzipSync(checkpoint)[MANIFEST] ?? new Uint8Array()));
 
-    // Olga's one `w:id` marks the paragraph mark first, then "The", " fees ", "are" and " below."
-    expect(manifest.takeovers.map((t: { occurrence: number }) => t.occurrence)).toEqual([1, 3]);
+    // Olga's one `w:id` marks the paragraph mark first, then "The", " fees ", "are" and " below.":
+    // the second and the fourth record hold a takeover, each by its label
+    const body = strFromU8(unzipSync(checkpoint)['word/document.xml'] ?? new Uint8Array());
+    const records = [...body.matchAll(/<w:[a-zA-Z]+Change [^>]*>/g)].map(([record]) => record);
+    expect(records.flatMap((record, k) => (record.includes(' oc:label=') ? [k] : []))).toEqual([
+      1, 3,
+    ]);
+    expect(manifest.takeovers).toHaveLength(2);
     const reopened = openOrderedCheckpoint(checkpoint, { file: 1 }).document;
     expect(held(reopened)).toEqual(held(live));
     expect(replacedBy(reopened)).toEqual(replacedBy(live));
@@ -460,10 +466,9 @@ describe('the records of a takeover', () => {
     const manifest = JSON.parse(strFromU8(entries[MANIFEST] ?? new Uint8Array()));
     const [takeover] = manifest.takeovers;
     const cases = [
-      { ...manifest, takeovers: [{ ...takeover, occurrence: 1 }] },
-      { ...manifest, takeovers: [{ ...takeover, id: '1' }] },
-      { ...manifest, takeovers: [{ ...takeover, record: 'pPrChange' }] },
-      { ...manifest, takeovers: [{ ...takeover, record: 'w:rPrChange' }] },
+      { ...manifest, takeovers: [{ ...takeover, label: takeover.label + 1 }] },
+      { ...manifest, takeovers: [{ ...takeover, label: -1 }] },
+      { ...manifest, takeovers: [{ ...takeover, label: String(takeover.label) }] },
       { ...manifest, takeovers: [takeover, takeover] },
       { ...manifest, takeovers: [{ ...takeover, taken: [] }] },
       {
@@ -499,16 +504,20 @@ describe('the records of a takeover', () => {
     }
   });
 
-  test('exports write the Word file only: the checkpoint’s Word parts are the same', async () => {
+  test('exports write the Word file only: the checkpoint’s Word parts are the same but for its marks', async () => {
     const { room, ana, olga } = await people();
     await steps(room, [ana, toggle('bold')], [olga, toggle('italic')]);
     const { base } = openOrderedRoomFile(SOURCE, { file: FILE });
     const exported = unzipSync(orderedPackageBytes(room.room.document, base));
     const checkpoint = unzipSync(await checkpointOf(room));
     expect(Object.keys(checkpoint)).toEqual([...Object.keys(exported), MANIFEST]);
+
+    // The checkpoint's own attributes (`oc:label`, `oc:typer`) and their declaration taken off
+    const unmarked = (bytes: Uint8Array) =>
+      strFromU8(bytes).replace(/ (?:xmlns:)?oc(?::[a-z]+)?="[^"]*"/g, '');
     for (const [entry, bytes] of Object.entries(exported)) {
-      const same = Buffer.compare(bytes, checkpoint[entry] ?? new Uint8Array());
-      expect({ entry, same }).toEqual({ entry, same: 0 });
+      const same = unmarked(checkpoint[entry] ?? new Uint8Array()) === strFromU8(bytes);
+      expect({ entry, same }).toEqual({ entry, same: true });
     }
   });
 });

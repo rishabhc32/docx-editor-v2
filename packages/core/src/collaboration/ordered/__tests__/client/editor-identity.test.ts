@@ -5,7 +5,7 @@
 // names the person.
 
 import { afterEach, describe, expect, test } from 'bun:test';
-import { strFromU8, unzipSync, zipSync } from 'fflate';
+import { strFromU8, strToU8, unzipSync, zipSync } from 'fflate';
 import { writeOoxmlPackage } from '../../../../store/package/ooxml-package.ts';
 import type { OrderedLocalRoom } from '../../client/local-room.ts';
 import { openOrderedCheckpoint, openOrderedRoomFile } from '../../client/open.ts';
@@ -283,10 +283,17 @@ describe('a room knows each person by ID', () => {
       }
     }
 
-    // The checkpoint keeps them and the takeover, in its manifest only
+    // The checkpoint keeps them and the takeover in its manifest; its parts name only who typed
+    // a run, by the namespace of the change (`oc:typer`)
     const checkpoint = await checkpointOf(room, 1);
+    const parts = Object.fromEntries(
+      Object.entries(unzipSync(checkpoint)).map(([name, data]) => [
+        name,
+        strToU8(strFromU8(data).replace(/ oc:typer="[^"]*"/g, '')),
+      ])
+    );
     for (const person of [ANA, BEN, OLGA]) {
-      expect(entriesWith(checkpoint, person.id)).toEqual([MANIFEST]);
+      expect(entriesWith(zipSync(parts), person.id)).toEqual([MANIFEST]);
     }
 
     const manifest = JSON.parse(strFromU8(unzipSync(checkpoint)[MANIFEST] ?? new Uint8Array()));
