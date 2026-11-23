@@ -1768,6 +1768,8 @@ export interface OrderedLoadOptions {
     readonly placeholders?: ReadonlyMap<string, readonly OoxmlNode[]>;
     readonly suggestions?: readonly {
         readonly attribution: OrderedAttribution;
+        readonly id: string;
+        readonly record?: string;
         readonly revisions: readonly string[];
         readonly status?: OrderedSuggestionStatus;
     }[];
