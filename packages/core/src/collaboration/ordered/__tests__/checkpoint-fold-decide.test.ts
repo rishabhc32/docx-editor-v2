@@ -6,7 +6,7 @@
 import { describe, test } from 'bun:test';
 import { openOrderedWordFile } from '../client/open.ts';
 import type { OrderedDocument } from '../model/types.ts';
-import { apply, at, EDIT, markOf, opens } from './change-apply-fixture.ts';
+import { apply, at, DIRECT, EDIT, markOf, opens } from './change-apply-fixture.ts';
 import { checkFold, mediaStore } from './fold-check.ts';
 import {
   alphaOmega,
@@ -70,11 +70,11 @@ describe('a decision after a fold, on a suggestion inside a run', () => {
 });
 
 describe('a decision after a fold, on a new list', () => {
-  /** Ana's suggested list on the first paragraph. */
-  const newList = (doc: OrderedDocument) => {
-    apply(doc, 'ana:1', {
+  /** A new list on paragraph `k`: Ana's suggestion, or Olive's direct edit. */
+  const listOn = (doc: OrderedDocument, k: number, id = 'ana:1') =>
+    apply(doc, id, {
       kind: 'new-list',
-      ...EDIT,
+      ...(id.startsWith('olive') ? DIRECT : EDIT),
       list: {
         abstract: {
           e: 'w:abstractNum',
@@ -90,9 +90,9 @@ describe('a decision after a fold, on a new list', () => {
           ],
         },
       },
-      paragraphs: [{ mark: markOf(doc, 0), level: 0 }],
+      paragraphs: [{ mark: markOf(doc, k), level: 0 }],
     });
-  };
+  const newList = (doc: OrderedDocument) => listOn(doc, 0);
   const ITEMS = p(run('First item.')) + p(run('Second item.'));
 
   test('in a file with no lists: the numbering part goes with it', async () => {
@@ -101,6 +101,17 @@ describe('a decision after a fold, on a new list', () => {
 
   test("in a file with lists of its own: the file's stay", async () => {
     await foldOf(ITEMS, newList, 'a new list, a numbering part', MATRIX_EXTRAS);
+  });
+
+  test('beside a direct new list: the definitions keep their order', async () => {
+    await foldOf(
+      ITEMS,
+      (doc) => {
+        listOn(doc, 1, 'olive:1');
+        listOn(doc, 0);
+      },
+      'a new list beside a direct one'
+    );
   });
 });
 

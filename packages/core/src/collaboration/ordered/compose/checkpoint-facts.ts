@@ -20,6 +20,7 @@ import type {
   CheckpointUntrackedRecord,
 } from '../model/checkpoint-untracked.ts';
 import type { OrderedPerson } from '../model/person.ts';
+import { orderedResourceShows } from '../model/resources.ts';
 import { revisionIdsOf } from '../model/revision-ids.ts';
 import type {
   OrderedDocument,
@@ -149,7 +150,10 @@ export function checkpointFacts(
   return { pkg: labelled.pkg, facts };
 }
 
-/** Each list definition of a pending suggestion that the file holds, with no picture bullet. */
+/**
+ * Each list definition a change added that shows (its suggestion pending or accepted) and the file
+ * holds, with no picture bullet: all of them, so an open gives them back in the room's order.
+ */
 function checkpointLists(
   doc: OrderedDocument,
   pkg: OoxmlPackage,
@@ -174,7 +178,8 @@ function checkpointLists(
       resource.kind === 'list' &&
       resource.bullets === undefined &&
       written.has(resource.numId) &&
-      suggestion?.status === 'pending'
+      suggestion !== undefined &&
+      orderedResourceShows(doc, resource)
     ) {
       out.push({ suggestion: list.indexOf(suggestion), key: resource.key });
     }

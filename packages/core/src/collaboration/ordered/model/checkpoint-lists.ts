@@ -1,14 +1,15 @@
-// The list definitions a checkpoint's manifest gives back to their pending suggestions (design D14).
+// The list definitions a checkpoint's manifest gives back to their suggestions (design D14).
 
 import { at, int, Invalid, plainFields, required } from '../change/read.ts';
 import { manifestString, readNamedOnce } from './checkpoint-suggestions.ts';
 import { orderedResourceToken } from './resources.ts';
 
 /**
- * A list definition a pending suggestion added, which the file holds in its numbering part as
- * the room wrote it, under the numbers its key gives (`orderedListNumber`). An open takes it out
- * of the file and gives it back to the suggestion, so a decision writes it or leaves it out as
- * the room does. A list with picture bullets stays the file's: its images are the file's media.
+ * A list definition a change added, pending or accepted, which the file holds in its numbering
+ * part as the room wrote it, under the numbers its key gives (`orderedListNumber`). An open takes
+ * it out of the file and gives it back to the suggestion, so a decision writes it or leaves it out
+ * as the room does, in the room's order. A list with picture bullets stays the file's: its images
+ * are the file's media.
  */
 export interface CheckpointList {
   /** The suggestion, by its place in the manifest's list. */

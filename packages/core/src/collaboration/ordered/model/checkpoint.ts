@@ -66,7 +66,7 @@ export const checkpointAttribute = (
  * suggestion whole, and each decided one another section names; the person of each room comment
  * by its `w:id`; the records each change record holds by takeover; the person of each namespace
  * the parts name as a typer; the records Word writes no change record for, decided or not; and
- * the list definitions of pending suggestions. Every section names a suggestion by its place in
+ * the list definitions changes added. Every section names a suggestion by its place in
  * `suggestions`, and an element of the file by its label.
  */
 export interface CheckpointFacts {

@@ -1,4 +1,4 @@
-// A checkpoint's list definitions back to their pending suggestions (design D14).
+// A checkpoint's list definitions back to their suggestions (design D14).
 
 import { withPart, type OoxmlPackage } from '../../../store/package/ooxml-package.ts';
 import type { OoxmlNode } from '../../../store/package/ooxml-tree.ts';

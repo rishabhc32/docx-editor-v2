@@ -151,7 +151,7 @@ function openCheckpointRead(pkg: OoxmlPackage, options: OrderedWordFileOptions):
     throw new OrderedWordFileError(checkpoint.reason);
   }
 
-  // The list definitions of pending suggestions out of the file, before the load reads its lists
+  // The list definitions changes added out of the file, before the load reads its lists
   const { facts } = checkpoint;
   const lists = withoutCheckpointLists(checkpoint.base, facts.lists);
   if (lists === null) {
