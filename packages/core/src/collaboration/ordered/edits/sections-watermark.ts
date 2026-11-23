@@ -17,9 +17,14 @@ import { createOrderedItem, isHidden, statusOf, storyNamed } from '../model/docu
 import { insertItems, relabel } from '../model/mutations.ts';
 import { OrderedRefusal } from '../model/refusal.ts';
 import type { OrderedFurnitureVariant } from '../model/sections.ts';
-import type { OrderedItem, OrderedStory, OrderedSuggestion } from '../model/types.ts';
+import type {
+  OrderedDocument,
+  OrderedItem,
+  OrderedStory,
+  OrderedSuggestion,
+} from '../model/types.ts';
 import { childWhere, isRunProperties, isWml, withChildren } from '../ooxml-nodes.ts';
-import type { Ctx } from './context.ts';
+import { suggestionFor, type Ctx } from './context.ts';
 import { mintParagraph, paragraphIdAttributes } from './para-ids.ts';
 import { addMedia, addRelationship } from './resources.ts';
 import {
@@ -27,7 +32,7 @@ import {
   furnitureOf,
   type OrderedSectionFurniture,
 } from './sections-furniture.ts';
-import { sectionsNow } from './sections.ts';
+import { sectionsNow, sectionsOfStory } from './sections.ts';
 
 const VARIANTS: readonly OrderedFurnitureVariant[] = ['default', 'first', 'even'];
 
@@ -111,16 +116,34 @@ function holdsWatermark(node: OoxmlNode, depth = 0): boolean {
   return node.children.some((child) => holdsWatermark(child, depth + 1));
 }
 
+/** The shown items of a story that hold a watermark shape. */
+const watermarkItems = (doc: OrderedDocument, story: OrderedStory): OrderedItem[] =>
+  [...story.tree.items()].filter(
+    (item) => item.node !== null && !isHidden(doc, item) && holdsWatermark(item.node)
+  );
+
+/** Every header a section names, its own or the one it takes from the section before. */
+const namedHeaders = (sections: readonly OrderedSectionFurniture[]): Set<string> =>
+  new Set(sections.flatMap((section) => [...section.headers.values()].map((slot) => slot.story)));
+
+/**
+ * Whether a header a section of the story names shows a watermark: without one, a removal
+ * changes nothing (no part), so it makes no suggestion.
+ */
+export function showsWatermark(doc: OrderedDocument, story: OrderedStory): boolean {
+  const sections = furnitureOf(doc, story, sectionsOfStory(doc, story));
+  return [...namedHeaders(sections)].some(
+    (name) => watermarkItems(doc, storyNamed(doc, name)).length > 0
+  );
+}
+
 /**
  * Take the watermark out of one header: each item that shows one is hidden by the suggestion,
  * and what else its node held (another shape in the same `w:pict`) comes back as a new item in
  * the same run, as the engine removes the watermark's shape alone.
  */
 function removeWatermark(ctx: Ctx, story: OrderedStory, suggestion: OrderedSuggestion): void {
-  const found = [...story.tree.items()].filter(
-    (item) => item.node !== null && !isHidden(ctx.doc, item) && holdsWatermark(item.node)
-  );
-  for (const item of found) {
+  for (const item of watermarkItems(ctx.doc, story)) {
     const node = item.node;
     if (node === null || node.kind === 'textValue') continue;
     const rest = withoutWatermark(node);
@@ -219,29 +242,28 @@ function addWatermark(
 }
 
 /**
- * Set the document's watermark, or remove it (`null`), as one direct edit of the suggestion.
- * The change's story is the main document's. A section that shows no header of a variant that
+ * Set the document's watermark, or remove it (`null`), as one direct edit of a new suggestion,
+ * which it returns; a removal with no watermark makes none. The change's story is the main
+ * document's. A section that shows no header of a variant that
  * can paint gets a new one first; the old watermark goes from every header a section names; then
  * every header a section shows takes the new shape at the start of its first paragraph. In the
  * list a watermark is the item of its `w:pict`, so the edit hides old items and adds new ones,
  * and the organiser's undo (`revert`) shows the old ones again exactly.
  */
-export function setWatermark(
-  ctx: Ctx,
-  suggestion: OrderedSuggestion,
-  write: OrderedChangeWatermark | null
-): void {
+export function setWatermark(ctx: Ctx, write: OrderedChangeWatermark | null): string | null {
   if (ctx.story.part.root.localName !== 'document')
     throw new OrderedRefusal('invalid-edit', "a watermark is the main document's");
+  if (write === null && !showsWatermark(ctx.doc, ctx.story)) {
+    return null;
+  }
+
+  const suggestion = suggestionFor(ctx);
   const evenAndOdd = evenAndOddHeadersNow(ctx);
   if (write !== null) createShownHeaders(ctx, suggestion, evenAndOdd);
   const sections = furnitureOf(ctx.doc, ctx.story, sectionsNow(ctx));
-
-  // Every header a section names, its own or the one it takes from the section before
-  const named = new Set(sections.flatMap((section) => [...section.headers.values()]));
-  for (const story of new Set([...named].map((slot) => slot.story)))
+  for (const story of namedHeaders(sections))
     removeWatermark(ctx, storyNamed(ctx.doc, story), suggestion);
-  if (write === null) return;
+  if (write === null) return suggestion.id;
   const media = write.kind === 'picture' ? addMedia(ctx, suggestion.id, write.media) : null;
   const watermark = packageWatermark(write);
 
@@ -274,4 +296,6 @@ export function setWatermark(
     );
     ordinal += 1;
   }
+
+  return suggestion.id;
 }

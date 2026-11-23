@@ -1,7 +1,7 @@
 // A party's direct edit, or an edit in a header or a footer, that changes nothing (design D9).
 // Today's check compares the Word file before and after it, so it allows one that changes no
 // part, and refuses one that changes a part. The room judges it once applied: the edit made no
-// suggestion. Found in the multi-party acceptance run (s2-short).
+// suggestion. Found in the multi-party acceptance run (s2-short, x68-long).
 
 import { describe, expect, test } from 'bun:test';
 import { loadOrderedPackage } from '../load/load.ts';
@@ -28,6 +28,20 @@ const FILE = docx(
     contentTypes: `${MATRIX_EXTRAS.contentTypes ?? ''}<Override PartName="/word/header1.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.header+xml"/>`,
   }
 );
+
+const TEXT_WATERMARK = {
+  kind: 'text',
+  text: 'DRAFT',
+  fontFamily: 'Calibri',
+  fontSizePt: null,
+  bold: false,
+  italic: false,
+  colorHex: 'C0C0C0',
+  opacity: 0.5,
+  diagonal: true,
+  widthPt: 400,
+  heightPt: 100,
+} as const;
 
 function setup() {
   let tick = 0;
@@ -72,5 +86,16 @@ describe('a party’s edit that changes nothing', () => {
     expect(doc.suggestions.size).toBe(suggestions);
     expect(send(ANA, wrap('square'))).toBe('policy-direct/package');
     expect(doc.suggestions.size).toBe(suggestions);
+  });
+
+  test('a watermark removal with no watermark passes; one with a watermark is refused (x68-long)', () => {
+    const { doc, send } = setup();
+    const remove = { kind: 'watermark', part: BODY, mode: 'edit', watermark: null };
+    expect(send(ANA, remove)).toBe('accepted');
+    expect(doc.suggestions.size).toBe(0);
+    expect(send(OLGA, { ...remove, watermark: TEXT_WATERMARK })).toBe('accepted');
+    expect(send(ANA, remove)).toBe('policy-furniture/furniture');
+    expect(send(ANA, { ...remove, watermark: TEXT_WATERMARK })).toBe('policy-furniture/furniture');
+    expect(doc.suggestions.size).toBe(1);
   });
 });

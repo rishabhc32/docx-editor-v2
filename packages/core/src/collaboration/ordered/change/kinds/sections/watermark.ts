@@ -3,8 +3,8 @@
 // (`edits/sections-watermark.ts`). A picture names its bytes by their SHA-256 (design D14): the
 // room refuses it while its storage lacks them.
 
-import { suggestionFor } from '../../../edits/context.ts';
-import { setWatermark } from '../../../edits/sections-watermark.ts';
+import { setWatermark, showsWatermark } from '../../../edits/sections-watermark.ts';
+import { storyNamed } from '../../../model/document.ts';
 import { OrderedRefusal } from '../../../model/refusal.ts';
 import type { OrderedDocument } from '../../../model/types.ts';
 import {
@@ -21,7 +21,11 @@ import {
   variantFields,
 } from '../../read.ts';
 import { changeMedia, type OrderedChangeMedia } from '../../resources.ts';
-import { ORDERED_CHANGE_LIMITS, type OrderedEditBase } from '../../types.ts';
+import {
+  ORDERED_CHANGE_LIMITS,
+  type OrderedEditBase,
+  type OrderedEditChange,
+} from '../../types.ts';
 import { runKindEdit } from '../run.ts';
 import { orderedKindSpec } from '../spec.ts';
 
@@ -194,6 +198,15 @@ function headerStories(doc: OrderedDocument): string[] {
   return out;
 }
 
+/** Whether a watermark change writes a header part: a removal with no watermark writes none. */
+function changesFurniture(change: OrderedEditChange, doc: OrderedDocument): boolean {
+  if (change.kind !== 'watermark') {
+    return false;
+  }
+
+  return change.watermark !== null || showsWatermark(doc, storyNamed(doc, change.part));
+}
+
 export const WATERMARK_SPEC = orderedKindSpec<OrderedWatermarkChange>({
   kind: 'watermark',
   fields: ['watermark'],
@@ -210,18 +223,12 @@ export const WATERMARK_SPEC = orderedKindSpec<OrderedWatermarkChange>({
       );
     }
 
-    return runKindEdit(
-      input,
-      (ctx) => {
-        const suggestion = suggestionFor(ctx);
-        setWatermark(ctx, suggestion, change.watermark);
-        return suggestion.id;
-      },
-      { settleDirect: true }
-    );
+    return runKindEdit(input, (ctx) => setWatermark(ctx, change.watermark), {
+      settleDirect: true,
+    });
   },
-  // Every watermark change writes header parts: the host's check refuses a party's
-  policy: { text: false, properties: false, furniture: () => true },
+  // A watermark change writes header parts: the host's check refuses a party's
+  policy: { text: false, properties: false, furniture: changesFurniture },
   publish: 'story',
   stories: (_change, doc) => headerStories(doc),
   blobs: (change) => (change.watermark?.kind === 'picture' ? [change.watermark.media.sha256] : []),
