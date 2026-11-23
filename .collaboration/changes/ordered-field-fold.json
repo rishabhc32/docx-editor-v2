@@ -1,0 +1,13 @@
+{
+  "impact": "compatible",
+  "fields": [],
+  "before": "A simple field's item had no face of its own, so a format over the field showed only the format's properties in the room and the field run's whole properties after a checkpoint, and words typed next to the field took the face the copy had. Words typed right after a field went before an empty run or a bookmark that rides inside the field, and after it once a checkpoint was read back.",
+  "after": "A simple field's item takes its first run's face, as a complex field's item does, so every copy reads the same face before and after a checkpoint. Words typed right after a field go past the markers that ride inside it, where a checkpoint reads them back. The fold check leaves out the records the room keeps only for an undo, which a checkpoint does not hold.",
+  "reason": "Change messages, the change log and its kinds keep their meaning, and the Yjs document format does not change. Both rules are read by every copy from the same file and change log with the same code version; an ordered room admits only clients of its own code version. Ordered rooms are not deployed yet, so no room needs a migration. Exported Word files do not change.",
+  "tests": [
+    "packages/core/src/collaboration/ordered/__tests__/checkpoint-fold.test.ts",
+    "packages/core/src/collaboration/ordered/__tests__/checkpoint-fold-left-out.test.ts"
+  ],
+  "changeset": "ordered-field-fold",
+  "migration": null
+}
