@@ -1,0 +1,13 @@
+{
+  "impact": "compatible",
+  "fields": [],
+  "before": "A checkpoint wrote each piece of a run that a pending suggestion split as a run of its own, wrote a pending suggestion's new list definition as the file's own, and wrote a record's properties of another namespace with a prefix of its own making that a reopen left unbound. A decision after a fold then drew two runs where the room drew one, kept a rejected list's definition, and could not show an emptied control's prompt.",
+  "after": "A checkpoint numbers each run it draws from units and each of its text elements by the room's run (oc:run), and an open joins the pieces again. The manifest lists each pending suggestion's list definition (lists), and an open takes it out of the numbering part and gives it back to its suggestion. Properties the manifest holds as XML declare the prefixes they use. A decision after a fold gives the same Word file as in the room.",
+  "reason": "Change messages, the change log and its kinds keep their meaning, and the Yjs document format does not change. The checkpoint format only adds: an older reader drops every attribute of the checkpoint namespace, so it ignores oc:run, and it skips the lists section and reads the definition as the file's own, as before. Prefix declarations change no meaning. Ordered rooms are not deployed yet, so no room needs a migration. Exported Word files do not change.",
+  "tests": [
+    "packages/core/src/collaboration/ordered/__tests__/checkpoint-fold-decide.test.ts",
+    "packages/core/src/collaboration/ordered/__tests__/checkpoint-ids.test.ts"
+  ],
+  "changeset": "ordered-decide-fold",
+  "migration": null
+}
