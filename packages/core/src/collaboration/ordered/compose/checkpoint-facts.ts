@@ -93,16 +93,18 @@ interface UntrackedOpen {
 }
 
 /**
- * The room facts of a document composed as `pkg`, whose change records hold `held` by takeover
- * and whose units the namespaces of `typers` typed, and the package with a label on each element
- * they name. Each pending suggestion the file writes marks for, or another fact names, is listed
- * once, in the order the room made them, so a load makes them in that order.
+ * The room facts of a document composed as `pkg`, whose change records hold `held` by takeover,
+ * whose units the namespaces of `typers` typed and whose runs the room runs of `runs` number, and
+ * the package with a label on each element they name. Each pending suggestion the file writes
+ * marks for, or another fact names, is listed once, in the order the room made them, so a load
+ * makes them in that order.
  */
 export function checkpointFacts(
   doc: OrderedDocument,
   pkg: OoxmlPackage,
   held: OrderedPartTakeovers,
-  typers: ReadonlyMap<string, OrderedPerson>
+  typers: ReadonlyMap<string, OrderedPerson>,
+  runs: ReadonlyMap<string, string>
 ): { readonly pkg: OoxmlPackage; readonly facts: CheckpointFacts } {
   const list = new SuggestionList(doc, writtenRevisionIds(pkg));
   for (const suggestion of doc.suggestions.values()) {
@@ -134,7 +136,7 @@ export function checkpointFacts(
     }
   }
 
-  const labelled = withCheckpointLabels(pkg, wanted, typers.size > 0);
+  const labelled = withCheckpointLabels(pkg, wanted, typers.size > 0 || runs.size > 0);
   const { labels } = labelled;
   const facts = inRoomOrder(list, {
     commentPersons: commentPersons(doc),

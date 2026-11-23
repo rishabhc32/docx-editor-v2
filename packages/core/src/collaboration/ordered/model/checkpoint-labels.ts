@@ -1,6 +1,7 @@
 // The attributes only a checkpoint's parts hold (design D14): a label on each element the
-// manifest names, and the typer on each typed run. The writer puts the labels on after compose;
-// every open takes all of them off before the load.
+// manifest names, the typer on each typed run, and the room run's number on each run drawn from
+// units. The writer puts the labels on after compose; every open takes all of them off before the
+// load.
 
 import { glossaryPartOf } from '../../../store/package/building-blocks.ts';
 import { withPart, type OoxmlPackage } from '../../../store/package/ooxml-package.ts';
@@ -39,18 +40,18 @@ interface Labelling {
 /**
  * A composed package as a checkpoint writes it: a label on each element `wanted` names by node
  * id, each a number unique in the checkpoint, and the namespace declared on the root of each
- * part (a story or the glossary) that holds a label or a typer compose wrote (`typed`: it wrote
- * one). Only the paths to a labelled element are made again, and a package with nothing to mark
- * is the same package. A text box's other copy takes the labels of its story when the package is
+ * part (a story or the glossary) that holds a label or another attribute compose wrote
+ * (`marked`: it wrote one, a typer or a room run). Only the paths to a labelled element are made
+ * again, and a package with nothing to mark is the same package. A text box's other copy takes the labels of its story when the package is
  * written.
  */
 export function withCheckpointLabels(
   pkg: OoxmlPackage,
   wanted: ReadonlySet<string>,
-  typed: boolean
+  marked: boolean
 ): { readonly pkg: OoxmlPackage; readonly labels: ReadonlyMap<string, number> } {
   const labelling: Labelling = { wanted, labels: new Map(), marked: false };
-  if (wanted.size === 0 && !typed) {
+  if (wanted.size === 0 && !marked) {
     return { pkg, labels: labelling.labels };
   }
 
@@ -107,6 +108,8 @@ export interface CheckpointMarks {
   readonly labels: ReadonlyMap<string, readonly OoxmlElement[]>;
   /** The typer each element carries, as written, by the element's node id. */
   readonly typers: ReadonlyMap<string, string>;
+  /** The room run's number each run and text element carries, by the element's node id. */
+  readonly runs: ReadonlyMap<string, string>;
 }
 
 /**
@@ -117,22 +120,24 @@ export interface CheckpointMarks {
 export function withoutCheckpointMarks(pkg: OoxmlPackage): CheckpointMarks {
   const labels = new Map<string, OoxmlElement[]>();
   const typers = new Map<string, string>();
+  const runs = new Map<string, string>();
   let out = pkg;
   for (const part of pkg.parts.values()) {
-    const root = unmarked(part.root, labels, typers);
+    const root = unmarked(part.root, labels, typers, runs);
     if (root !== part.root) {
       out = withPart(out, { ...part, root });
     }
   }
 
-  return { pkg: out, labels, typers };
+  return { pkg: out, labels, typers, runs };
 }
 
 /** An element without the namespace's attributes and declarations, below it too. */
 function unmarked(
   element: OoxmlElement,
   labels: Map<string, OoxmlElement[]>,
-  typers: Map<string, string>
+  typers: Map<string, string>,
+  runs: Map<string, string>
 ): OoxmlElement {
   let children: OoxmlNode[] | null = null;
   for (let k = 0; k < element.children.length; k += 1) {
@@ -141,7 +146,7 @@ function unmarked(
       continue;
     }
 
-    const next = unmarked(child, labels, typers);
+    const next = unmarked(child, labels, typers, runs);
     if (next !== child) {
       children ??= [...element.children];
       children[k] = next;
@@ -164,6 +169,8 @@ function unmarked(
       labels.set(value, [...(labels.get(value) ?? []), out]);
     } else if (localName === 'typer') {
       typers.set(out.id, value);
+    } else if (localName === 'run') {
+      runs.set(out.id, value);
     }
   }
 

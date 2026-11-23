@@ -73,8 +73,8 @@ export function composeOrderedPackage(
 /** The takeovers the change records of each story part hold: by part name, then by node id. */
 export type OrderedPartTakeovers = ReadonlyMap<string, ReadonlyMap<string, HeldTakeovers>>;
 
-/** How a package is composed: its comments, and the typers a checkpoint writes. */
-type PackageComposeOptions = OrderedPackageCommentOptions & Pick<ComposeOptions, 'typers'>;
+/** How a package is composed: its comments, and the typers and room runs a checkpoint writes. */
+type PackageComposeOptions = OrderedPackageCommentOptions & Pick<ComposeOptions, 'typers' | 'runs'>;
 
 /**
  * {@link composeOrderedPackage}, with the bytes of added media from `bytes`, and the takeovers
@@ -94,7 +94,7 @@ function composeWithMedia(
   for (const name of doc.stories.keys()) {
     // A text box's story is drawn into its object, in its host's part
     if (isTextBoxStoryName(name)) continue;
-    const drawn = composeStoryPart(doc, name, { typers: options.typers });
+    const drawn = composeStoryPart(doc, name, { typers: options.typers, runs: options.runs });
     const { part: composedPart, composed, takeovers: held } = drawn;
     takeovers.set(name, held);
 

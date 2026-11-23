@@ -68,8 +68,8 @@ interface StoryDrawing {
   readonly decisionEmptied: ReadonlySet<string>;
   /** The takeovers each change record holds, by the record's node id. */
   readonly takeovers: ReadonlyMap<string, HeldTakeovers>;
-  /** Whether the drawing put a typer on an element (a checkpoint's compose only). */
-  readonly typed: boolean;
+  /** Whether the drawing put a checkpoint's attribute on an element (a checkpoint's only). */
+  readonly marked: boolean;
 }
 
 /** A story's drawing. */
@@ -87,7 +87,7 @@ function composeStory(doc: OrderedDocument, name: string, options: ComposeOption
     composed,
     decisionEmptied: ctx.decisionEmptied,
     takeovers: ctx.takeovers,
-    typed: ctx.typedAny,
+    marked: ctx.markedAny,
   };
 }
 
@@ -117,11 +117,11 @@ export function composeStoryPart(
   readonly composed: OrderedComposedStory;
   readonly takeovers: ReadonlyMap<string, HeldTakeovers>;
 } {
-  const { composed, decisionEmptied, takeovers, typed } = composeStory(doc, name, options);
+  const { composed, decisionEmptied, takeovers, marked } = composeStory(doc, name, options);
   let part = withStoryBlocks(storyNamed(doc, name).part, composed.children);
 
-  // A typer's prefix bound before the edits below, which check the part
-  if (typed) {
+  // A checkpoint's prefix bound before the edits below, which check the part
+  if (marked) {
     part = { ...part, root: withCheckpointNamespace(part.root) };
   }
 

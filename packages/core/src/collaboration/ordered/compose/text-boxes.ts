@@ -51,7 +51,7 @@ function composedBlocks(
   ctx.emptied.push(...inner.emptied);
   for (const id of inner.decisionEmptied) ctx.decisionEmptied.add(id);
   ctx.reached.push(...inner.reached);
-  ctx.typedAny ||= inner.typedAny;
+  ctx.markedAny ||= inner.markedAny;
   ctx.prompts.push(...inner.prompts);
   for (const [id, taken] of inner.takeovers) {
     ctx.takeovers.set(id, taken);

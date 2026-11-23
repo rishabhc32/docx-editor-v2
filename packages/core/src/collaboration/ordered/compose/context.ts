@@ -44,6 +44,13 @@ export interface ComposeOptions extends OrderedComposeOptions {
    * insertion (`oc:typer`), and the person of each namespace written is kept here.
    */
   readonly typers?: Map<string, OrderedPerson>;
+  /**
+   * Set for a checkpoint: each run drawn from units carries the number of the run the room draws
+   * them in, and each text element the number of the room's text element (`oc:run`), kept here
+   * by what no file holds. A pending suggestion may split a run of the room into pieces; an open
+   * joins them again.
+   */
+  readonly runs?: Map<string, string>;
 }
 
 /** One shown unit of a paragraph's view. @public */
@@ -115,6 +122,17 @@ export interface WrapperInfo {
   readonly move: string | null;
 }
 
+/** The run the room draws a unit in, by what no file holds: its `run`, face and format records. */
+const roomRunOf = (unit: OrderedItem): string =>
+  [unit.run, unit.face?.id ?? '', ...unit.fmts.map((record) => record.id)].join(' ');
+
+/** The number of a room run or text element in a checkpoint's drawing, the first time a new one. */
+function roomNumber(runs: Map<string, string>, key: string): string {
+  const number = runs.get(key) ?? String(runs.size);
+  runs.set(key, number);
+  return number;
+}
+
 export class ComposeContext {
   readonly doc: OrderedDocument;
   readonly story: OrderedStory;
@@ -133,8 +151,8 @@ export class ComposeContext {
   readonly decisionEmptied = new Set<string>();
   /** Controls a decision reached: their value record follows the text they show. */
   readonly reached: string[] = [];
-  /** Whether this drawing put a typer on an element: its part declares the namespace. */
-  typedAny = false;
+  /** Whether this drawing put a checkpoint's attribute on an element: its part declares it. */
+  markedAny = false;
   /** Prompt units of controls that hold content now, and the controls those prompts held. */
   readonly hiddenPrompts = new Set<OrderedItem>();
   /** Open item spaces of the controls whose prompt is hidden. */
@@ -217,10 +235,43 @@ export class ComposeContext {
       return element;
     }
 
-    this.typedAny = true;
+    this.markedAny = true;
     typers.set(typer.namespace, typer.person);
     const attribute = checkpointAttribute('typer', typer.namespace);
     return withAttributes(element, [...element.attributes, attribute]);
+  }
+
+  /** A run drawn from `unit` and its neighbours, numbered by its room run for a checkpoint. */
+  ofRoomRun(run: OoxmlElement, unit: OrderedItem): OoxmlElement {
+    const runs = this.options.runs;
+    if (runs === undefined) {
+      return run;
+    }
+
+    this.markedAny = true;
+    const number = roomNumber(runs, roomRunOf(unit));
+    return withAttributes(run, [...run.attributes, checkpointAttribute('run', number)]);
+  }
+
+  /**
+   * A text element of `unit`'s run, numbered for a checkpoint by the room's text element: the
+   * text form the room draws it from (`shell`) and whether that keeps its id (`homed`), which a
+   * fold does not keep, as each run read back is drawn in the paragraph it was read in.
+   */
+  ofRoomText(
+    text: OoxmlNode,
+    unit: OrderedItem,
+    shell: OoxmlElement | undefined,
+    homed: boolean
+  ): OoxmlNode {
+    const runs = this.options.runs;
+    if (runs === undefined || text.kind === 'textValue') {
+      return text;
+    }
+
+    const key = `text ${roomRunOf(unit)} ${shell?.id ?? ''} ${homed}`;
+    const number = roomNumber(runs, key);
+    return withAttributes(text, [...text.attributes, checkpointAttribute('run', number)]);
   }
 
   /** Whether an item shows nowhere in this drawing, by its labels and the drawing's options. */

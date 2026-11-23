@@ -18,6 +18,7 @@ import { recordFileMedia } from '../model/file-media.ts';
 import { orderedAuthorName, type OrderedPerson } from '../model/person.ts';
 import type { OrderedFileMedia } from '../model/resources.ts';
 import type { OrderedDocument } from '../model/types.ts';
+import { withCheckpointRuns } from './room-runs.ts';
 import { withCheckpointTakeovers } from './takeovers.ts';
 import { withCheckpointTypers } from './typers.ts';
 import { withCheckpointUntracked } from './untracked.ts';
@@ -165,6 +166,7 @@ function openCheckpointRead(pkg: OoxmlPackage, options: OrderedWordFileOptions):
     throw new OrderedWordFileError('checkpoint-manifest');
   }
 
+  withCheckpointRuns(doc, marks.runs);
   return opened;
 }
 
@@ -189,8 +191,8 @@ function personsFit(doc: OrderedDocument): boolean {
 
 /**
  * A read package, normalized and loaded, with the file's media, and the suggestions and comment
- * persons a checkpoint names; and what its parts held of a checkpoint's labels and typers, which
- * the load never reads: a Word file's are dropped, so an upload brings none into a room.
+ * persons a checkpoint names; and what its parts held of a checkpoint's labels, typers and room
+ * runs, which the load never reads: a Word file's are dropped, so an upload brings none into a room.
  */
 function openRead(
   pkg: OoxmlPackage,
@@ -208,7 +210,7 @@ function openRead(
   // As a save writes them, so the file the room saves reopens to the same paragraph ids
   base = textboxFallbackExportPackage(base);
 
-  // A checkpoint's labels and typers off: the load reads the parts as the Word file holds them
+  // A checkpoint's attributes off: the load reads the parts as the Word file holds them
   const marks = withoutCheckpointMarks(base);
   base = marks.pkg;
   const document = loadOrderedPackage(base, {

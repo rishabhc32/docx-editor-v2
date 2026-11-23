@@ -89,7 +89,7 @@ describe('an id the engine mints', () => {
     // Zed's insertion, which the room never read
     const entries = unzipSync(bytes);
     const mark = `<w:ins w:id="90" w:author="Zed" w:date="${DATE}">${t('late ')}</w:ins>`;
-    const xml = strFromU8(entries['word/document.xml']!).replace('<w:r>', `${mark}<w:r>`);
+    const xml = strFromU8(entries['word/document.xml']!).replace(/<w:r[ >]/, (run) => mark + run);
     entries['word/document.xml'] = strToU8(xml);
     const opened = openOrderedCheckpoint(zipSync(entries), { file: 2 });
     const byAuthor = [...opened.document.suggestions.values()].map(

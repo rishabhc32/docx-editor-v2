@@ -71,9 +71,10 @@ export async function writeOrderedCheckpoint(
   options: OrderedPackageWriteOptions
 ): Promise<void> {
   const typers = new Map<string, OrderedPerson>();
-  const composed = composedWithoutMedia(doc, base, { typers });
+  const runs = new Map<string, string>();
+  const composed = composedWithoutMedia(doc, base, { typers, runs });
   const { media } = composed;
-  const { pkg, facts } = checkpointFacts(doc, composed.pkg, composed.takeovers, typers);
+  const { pkg, facts } = checkpointFacts(doc, composed.pkg, composed.takeovers, typers, runs);
   const referenceOf = partReferences(pkg);
   const references: OrderedFileMedia[] = [];
   await writeComposedEntries(

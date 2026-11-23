@@ -36,18 +36,21 @@ const VERSION = 5;
 
 /**
  * The namespace of the attributes only a checkpoint's parts hold: `oc:label` on each element a
- * manifest entry names (a number unique in the checkpoint), and `oc:typer` on each run, and each
- * unit not in a run, whose units a room change typed inside a pending insertion (its namespace).
- * An open takes them off before the load, from a Word file too.
+ * manifest entry names (a number unique in the checkpoint); `oc:typer` on each run, and each
+ * unit not in a run, whose units a room change typed inside a pending insertion (its namespace);
+ * and `oc:run` on each run drawn from units and on each of its text elements, a number that names
+ * the run the room draws them in (`run`, face and format records) and the room's text element,
+ * which a pending suggestion may split into pieces. An open takes them off before the load, from
+ * a Word file too.
  */
 export const CHECKPOINT_NAMESPACE = 'https://docx-editor.dev/ordered-checkpoint';
 
 /** The prefix a checkpoint declares the namespace under, on each part root that may hold it. */
 export const CHECKPOINT_PREFIX = 'oc';
 
-/** A checkpoint's attribute: a label, or a typer's namespace. */
+/** A checkpoint's attribute: a label, a typer's namespace, or a room run's number. */
 export const checkpointAttribute = (
-  localName: 'label' | 'typer',
+  localName: 'label' | 'typer' | 'run',
   value: string
 ): OoxmlAttribute => ({
   kind: 'genericExtension',

@@ -250,9 +250,8 @@ export function composeInline(ctx: ComposeContext, buffer: readonly OrderedItem[
   const hidden = (item: OrderedItem): boolean => ctx.gone(item) && !kept.has(item);
   const flushText = (build: RunBuild): void => {
     if (!build.text) return;
-    build.content.push(
-      textElement(ctx, build.text, build.textShell, build.deleted, build.textHomed)
-    );
+    const text = textElement(ctx, build.text, build.textShell, build.deleted, build.textHomed);
+    build.content.push(ctx.ofRoomText(text, build.item, build.textShell, build.textHomed));
     build.text = '';
   };
   const flush = (): void => {
@@ -438,10 +437,11 @@ function runNode(ctx: ComposeContext, item: OrderedItem, content: OoxmlNode[]): 
   const homed = ctx.homed(item);
   const rPr = ctx.fresh(faceAfter(ctx, item.fmts, item.face), homed);
   const id = ctx.runId(homed ? shell?.id : undefined);
-  return withId(
-    withChildren(shell ?? build(id, 'run', 'r', [], []), [...(rPr ? [rPr] : []), ...content]),
-    id
-  );
+  const run = withChildren(shell ?? build(id, 'run', 'r', [], []), [
+    ...(rPr ? [rPr] : []),
+    ...content,
+  ]);
+  return ctx.ofRoomRun(withId(run, id), item);
 }
 
 /** An object in the paragraph itself: an equation, a simple field with its runs. */
