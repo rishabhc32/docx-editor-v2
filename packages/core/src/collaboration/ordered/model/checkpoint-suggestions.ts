@@ -6,18 +6,25 @@ import { isXmlNCName } from '../../../store/package/qname.ts';
 import { isValidXmlText } from '../../../store/package/sinks.ts';
 import { ORDERED_NAMESPACE_PATTERN } from '../change/ids.ts';
 import { at, int, Invalid, list, oneOf, plainFields, required, str } from '../change/read.ts';
+import { suggestionId } from '../change/values.ts';
 import { isTripleAttribute, MAX_OTHER_ATTRIBUTES } from '../load/state.ts';
 import { readPerson } from './person.ts';
 import type { OrderedAttribution, OrderedSuggestionStatus } from './types.ts';
 
 /**
- * A suggestion: who made it, and the `w:id`s the file writes for its marks, every role. A load
- * makes it once and reads each of those marks as it. Pending, or decided when another section
- * names it (a decided record of properties an untracked record changes).
+ * A suggestion: its id, who made it, and the `w:id`s the file writes for its marks, every role. A
+ * load makes it once, under its id, and reads each of those marks as it. Pending, or decided when
+ * another section names it (a decided record of properties an untracked record changes).
  */
 export interface CheckpointSuggestion {
+  readonly id: string;
   readonly attribution: OrderedAttribution;
   readonly revisions: readonly string[];
+  /**
+   * The local name of the file's change record outside the stories that the suggestion is (a
+   * style's `w:rPrChange`), whose `w:id` is the one in `revisions`; absent for marks in the stories.
+   */
+  readonly record?: string;
   readonly status?: OrderedSuggestionStatus;
 }
 
@@ -58,7 +65,8 @@ const DECIDED: readonly OrderedSuggestionStatus[] = ['accepted', 'rejected'];
 
 /** The suggestions as the manifest lists them. */
 export function suggestionsJson(suggestions: readonly CheckpointSuggestion[]): unknown[] {
-  return suggestions.map(({ attribution, revisions, status }) => ({
+  return suggestions.map(({ id, attribution, revisions, record, status }) => ({
+    id,
     author: attribution.author,
     ...(attribution.date === undefined ? {} : { date: attribution.date }),
     ...(attribution.attributes === undefined
@@ -73,26 +81,28 @@ export function suggestionsJson(suggestions: readonly CheckpointSuggestion[]): u
         }),
     ...(attribution.person === null ? {} : { person: attribution.person }),
     revisions,
+    ...(record === undefined ? {} : { record }),
     ...(status === undefined || status === 'pending' ? {} : { status }),
   }));
 }
 
 /**
- * The listed suggestions, each checked: every value comes from storage. The author, the date and
- * the other attributes are as a load keeps them from a revision mark: any text valid in XML.
+ * The listed suggestions, each checked: every value comes from storage. The id is as a decision
+ * names a suggestion, each named once; the author, the date and the other attributes are as a
+ * load keeps them from a revision mark: any text valid in XML.
  *
  * @throws Invalid when one does not read.
  */
 export function readSuggestions(value: unknown): CheckpointSuggestion[] {
-  return manifestList(value, 'suggestions').map((entry, k) =>
-    readSuggestion(entry, at('suggestions', k))
-  );
+  return readNamedOnce(value, 'suggestions', readSuggestion, ({ id }) => id);
 }
 
 function readSuggestion(value: unknown, path: string): CheckpointSuggestion {
   const f = plainFields(value, path);
   const revisions = manifestList(required(f, 'revisions'), at(path, 'revisions'));
   return {
+    // As a decision names it
+    id: suggestionId(required(f, 'id'), at(path, 'id')),
     attribution: {
       author: xmlText(required(f, 'author'), at(path, 'author')),
       person: f.has('person') ? readPerson(f.get('person'), at(path, 'person')) : null,
@@ -102,8 +112,18 @@ function readSuggestion(value: unknown, path: string): CheckpointSuggestion {
         : {}),
     },
     revisions: revisions.map((id, k) => xmlText(id, at(at(path, 'revisions'), k))),
+    ...(f.has('record') ? { record: readRecord(f.get('record'), path, revisions) } : {}),
     ...(f.has('status') ? { status: oneOf(f.get('status'), at(path, 'status'), DECIDED) } : {}),
   };
+}
+
+/** A change record's local name, of a suggestion with its one `w:id`. */
+function readRecord(value: unknown, path: string, revisions: readonly unknown[]): string {
+  if (revisions.length !== 1) {
+    throw new Invalid('invalid-value', at(path, 'revisions'), 'not the one id of a record');
+  }
+
+  return xmlName(value, at(path, 'record'));
 }
 
 /** A revision mark's attributes past its triple, as many as a load keeps, each named once. */

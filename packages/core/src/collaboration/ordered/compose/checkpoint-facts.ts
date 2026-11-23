@@ -7,6 +7,7 @@ import type { OoxmlPackage } from '../../../store/package/ooxml-package.ts';
 import type { OoxmlElement } from '../../../store/package/ooxml-tree.ts';
 import { orderedStoryParts } from '../load/load.ts';
 import type { CheckpointFacts } from '../model/checkpoint.ts';
+import type { CheckpointSuggestion } from '../model/checkpoint-suggestions.ts';
 import { withCheckpointLabels } from '../model/checkpoint-labels.ts';
 import {
   takenProperties,
@@ -58,6 +59,19 @@ class SuggestionList {
     return k;
   }
 
+  /**
+   * A listed suggestion as the manifest lists it; a file's change record outside the stories by
+   * its local name, with its own `w:id`.
+   */
+  entryOf({ id, attribution, status }: OrderedSuggestion): CheckpointSuggestion {
+    const record = this.doc.partRevisions.get(id);
+    if (record === undefined) {
+      return { id, attribution, revisions: this.writtenOf(id), status };
+    }
+
+    return { id, attribution, revisions: [record.revision.id], record: record.element, status };
+  }
+
   /** The `w:id`s the file writes for a suggestion's marks, every role. */
   writtenOf(id: string): string[] {
     let ids = this.revisions.get(id);
@@ -93,7 +107,7 @@ export function checkpointFacts(
   const list = new SuggestionList(doc, writtenRevisionIds(pkg));
   for (const suggestion of doc.suggestions.values()) {
     const { id, status } = suggestion;
-    if (status === 'pending' && !doc.partRevisions.has(id) && list.writtenOf(id).length > 0) {
+    if (status === 'pending' && (doc.partRevisions.has(id) || list.writtenOf(id).length > 0)) {
       list.indexOf(suggestion);
     }
   }
@@ -177,11 +191,7 @@ function inRoomOrder(
   const place = new Map(sorted.map(({ k }, n) => [k, n]));
   const renumbered = (k: number): number => place.get(k) ?? k;
   return {
-    suggestions: sorted.map(({ suggestion: { id, attribution, status } }) => ({
-      attribution,
-      revisions: list.writtenOf(id),
-      status,
-    })),
+    suggestions: sorted.map(({ suggestion }) => list.entryOf(suggestion)),
     commentPersons: facts.commentPersons,
     takeovers: facts.takeovers.map((t) => ({
       ...t,

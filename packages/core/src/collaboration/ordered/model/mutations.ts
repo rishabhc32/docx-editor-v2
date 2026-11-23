@@ -229,8 +229,11 @@ export function replaceItems(
 }
 
 /**
- * A new pending suggestion. Its id is `id`, or minted from the document's counter.
+ * A new pending suggestion. Its id is `id`, or minted from the document's counter past every id
+ * the document holds (a checkpoint keeps each suggestion's id, a minted one too).
  *
+ * @throws OrderedRefusal `name-taken` when the document holds `id`: a change id used again after
+ *   a fold, which the room no longer knows, mints the ids it minted before.
  * @public
  */
 export function newSuggestion(
@@ -238,9 +241,17 @@ export function newSuggestion(
   attribution: OrderedAttribution,
   id?: string
 ): OrderedSuggestion {
+  if (id !== undefined && doc.suggestions.has(id)) {
+    throw new OrderedRefusal('name-taken', id);
+  }
+
   doc.counters.suggestion += 1;
-  const sid = id ?? `S${doc.counters.suggestion}`;
-  if (doc.suggestions.has(sid)) throw new RangeError(`The suggestion ${sid} already exists.`);
+  let sid = id ?? `S${doc.counters.suggestion}`;
+  while (doc.suggestions.has(sid)) {
+    doc.counters.suggestion += 1;
+    sid = `S${doc.counters.suggestion}`;
+  }
+
   const suggestion: OrderedSuggestion = {
     id: sid,
     attribution,

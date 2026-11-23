@@ -97,19 +97,23 @@ export class RevisionReader {
 
   /**
    * A reader of a document's revisions. The suggestions a room checkpoint lists are made first,
-   * in its order, and `doc.revisionIds.listed` keeps their ids in that order.
+   * in its order and under their own ids, and `doc.revisionIds.listed` keeps their ids in that
+   * order.
    */
   constructor(doc: OrderedDocument, fixed?: string, listed: readonly CheckpointSuggestion[] = []) {
     this.doc = doc;
     this.fixed = fixed;
-    for (const { attribution, revisions, status } of listed) {
-      const { id } = newSuggestion(doc, attribution);
+    for (const { id, attribution, revisions, record, status } of listed) {
+      newSuggestion(doc, attribution, id);
       if (status !== undefined) {
         setStatus(doc, id, status);
       }
 
+      // A record outside the stories is no mark of them (`loadPartRevisions` reads it)
       doc.revisionIds.listed.set(id, revisions);
-      this.addListed(id, attribution, revisions);
+      if (record === undefined) {
+        this.addListed(id, attribution, revisions);
+      }
     }
   }
 

@@ -1,7 +1,7 @@
 // What a fold keeps (design D14): a room writes its document as a checkpoint and the next opening
 // reads it back under another file number. Everything the room and its pages read must come back
-// the same. Ids and addresses are new after a fold, so suggestions compare by who made them and
-// when, and items by what they show.
+// the same. A suggestion keeps its id, and the print names each by it; addresses are new after a
+// fold, so items compare by what they show.
 //
 // Left out, as the same file and the same decisions follow from them:
 //  - internal shapes: format records come back as `face` records with the file's record, paragraph
@@ -24,6 +24,7 @@ import { isCardUnit, isOrderedItemHidden } from '../card-of.ts';
 import { orderedCardSeen } from '../change/apply-decide.ts';
 import { settlePromptMarks } from '../change/settle-prompts.ts';
 import { openOrderedCheckpoint, type OrderedWordFile } from '../client/open.ts';
+import { orderedSuggestionsOfRevision } from '../client/ops/review.ts';
 import { currentFace } from '../client/properties.ts';
 import { orderedPackageMedia, writeOrderedCheckpoint } from '../compose/checkpoint.ts';
 import { orderedViewParagraph } from '../compose/compose.ts';
@@ -43,6 +44,7 @@ import type {
   OrderedSuggestion,
 } from '../model/types.ts';
 import { takeBack, withUndoRecord } from '../model/undo-record.ts';
+import { attributeOf, eachElement } from '../ooxml-nodes.ts';
 import { normalizedBody, semanticBody } from './matrix/compare.ts';
 
 /** The media bytes of a room's Word file, by SHA-256: the room's storage. */
@@ -56,8 +58,17 @@ export async function folded(
   doc: OrderedDocument,
   base: OoxmlPackage,
   file: number,
-  blobs: (sha256: string) => Uint8Array | undefined
+  blobs: FoldBlobs
 ): Promise<OrderedWordFile> {
+  return openOrderedCheckpoint(await checkpointBytes(doc, base, blobs), { file });
+}
+
+/** The bytes of the document's checkpoint. */
+export async function checkpointBytes(
+  doc: OrderedDocument,
+  base: OoxmlPackage,
+  blobs: FoldBlobs
+): Promise<Uint8Array> {
   const chunks: Uint8Array[] = [];
   await writeOrderedCheckpoint(doc, base, {
     media: async (sha256) => {
@@ -72,10 +83,10 @@ export async function folded(
       chunks.push(chunk);
     },
   });
-  return openOrderedCheckpoint(new Uint8Array(Buffer.concat(chunks)), { file });
+  return new Uint8Array(Buffer.concat(chunks));
 }
 
-/** A suggestion by who made it and when: a fold keeps these, not its id. */
+/** Who made a suggestion, and when. */
 const makerKey = ({ attribution }: OrderedSuggestion): string =>
   JSON.stringify([attribution.person, attribution.author, attribution.date ?? null]);
 
@@ -132,7 +143,7 @@ function keptPending(doc: OrderedDocument): OrderedSuggestion[] {
 export function foldPrint(doc: OrderedDocument, base: OoxmlPackage, blobs: FoldBlobs): unknown {
   const key = (id: string | null): string | null => {
     const suggestion = id === null ? undefined : doc.suggestions.get(id);
-    return suggestion?.status === 'pending' ? makerKey(suggestion) : null;
+    return suggestion?.status === 'pending' ? suggestion.id : null;
   };
   const keys = (ids: readonly string[]) => ids.map(key).filter((k) => k !== null);
 
@@ -193,6 +204,7 @@ export function foldPrint(doc: OrderedDocument, base: OoxmlPackage, blobs: FoldB
     });
   };
   const pending = keptPending(doc);
+  const file = orderedPackageBytes(doc, base, { blobs });
   return {
     stories: [...doc.stories]
       .map(([name, story]) => {
@@ -202,7 +214,7 @@ export function foldPrint(doc: OrderedDocument, base: OoxmlPackage, blobs: FoldB
         return [storyLabel(name), ...listed].join('\n');
       })
       .sort(),
-    suggestions: pending.map(makerKey).sort(),
+    suggestions: pending.map((s) => `${s.id} ${makerKey(s)}`).sort(),
     owned: [...owned].map(([id, list]) => [key(id), ...list.sort()].join('|')).sort(),
     cards: orderedCards(doc)
       .map((card) => keys(card.suggestions).join('|'))
@@ -218,7 +230,7 @@ export function foldPrint(doc: OrderedDocument, base: OoxmlPackage, blobs: FoldB
     replaced: pending
       .flatMap((s) =>
         orderedReplacedSuggestions(doc, s.id).map((r) =>
-          JSON.stringify([makerKey(s), key(r.suggestion), r.formattingKind, r.formattingChanges])
+          JSON.stringify([s.id, r.suggestion, r.formattingKind, r.formattingChanges])
         )
       )
       .sort(),
@@ -229,8 +241,38 @@ export function foldPrint(doc: OrderedDocument, base: OoxmlPackage, blobs: FoldB
       .filter(([id]) => key(id) !== null)
       .map(([id, r]) => JSON.stringify([key(id), r.part, r.element, r.styleId ?? null])),
     view: viewOf(doc),
-    file: partsOf(orderedPackageBytes(doc, base, { blobs })),
+    revisions: revisionReads(doc, file),
+    file: partsOf(file),
   };
+}
+
+/** The suggestions `orderedSuggestionsOfRevision` names for each revision mark of the file. */
+function revisionReads(doc: OrderedDocument, file: Uint8Array): string[] {
+  const read = readOoxmlPackage(file, {});
+  if (!read.ok) {
+    throw new Error(`the file does not read: ${read.reason}`);
+  }
+
+  const out: string[] = [];
+  for (const [part, { root }] of read.package.parts) {
+    eachElement(root, (element) => {
+      const id = attributeOf(element, 'id');
+      const author = attributeOf(element, 'author');
+      if (id === undefined || author === undefined) {
+        return;
+      }
+
+      const date = attributeOf(element, 'date');
+      const name = { part, id, author, element: element.localName };
+      const found = orderedSuggestionsOfRevision(
+        doc,
+        date === undefined ? name : { ...name, date }
+      );
+      out.push(`${part} ${element.localName} ${id}: ${found.join(' ')}`);
+    });
+  }
+
+  return out;
 }
 
 type FoldBlobs = (sha256: string) => Uint8Array | undefined;

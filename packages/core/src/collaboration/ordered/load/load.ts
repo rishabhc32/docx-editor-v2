@@ -56,14 +56,20 @@ export interface OrderedLoadOptions {
   /**
    * A room checkpoint's pending suggestions, and the decided ones its other records name, each
    * with the `w:id`s the file writes for its marks (`openOrderedCheckpoint` reads them). The load
-   * makes them first, in this order, and reads each mark with one of these ids, the author and
-   * the date as that one suggestion. Default: none, so every suggestion is the file's own, one for
-   * each revision triple, with no person.
+   * makes them first, in this order, each under its own id, and reads each mark with one of these
+   * ids, the author and the date as that one suggestion. Default: none, so every suggestion is the
+   * file's own, one for each revision triple, with no person, under a new id.
    */
   readonly suggestions?: readonly {
     // Spelled out: the manifest's own type is not public
+    readonly id: string;
     readonly attribution: OrderedAttribution;
     readonly revisions: readonly string[];
+    /**
+     * The local name of the styles part's change record the suggestion is, whose `w:id` is the
+     * one in `revisions`: the record group it names keeps the suggestion's id.
+     */
+    readonly record?: string;
     /** Pending when absent. */
     readonly status?: OrderedSuggestionStatus;
   }[];
@@ -147,7 +153,7 @@ export function loadOrderedPackage(
   recordFurniture(doc, pkg);
 
   // After the stories, so their suggestion ids stay as they were
-  loadPartRevisions(doc, pkg);
+  loadPartRevisions(doc, pkg, options.suggestions);
   for (const part of pkg.parts.values()) {
     // The comments part is no story: only its comment and revision ids
     if (isWml(part.root, 'comments')) {

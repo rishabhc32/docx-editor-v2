@@ -157,6 +157,9 @@ function openCheckpointRead(pkg: OoxmlPackage, options: OrderedWordFileOptions):
     !withCheckpointTakeovers(doc, marks.labels, facts.takeovers, listedIds) ||
     !withCheckpointUntracked(doc, marks.labels, facts.untracked, listedIds) ||
     !withCheckpointTypers(doc, marks.typers, facts.namespacePersons) ||
+    !facts.suggestions.every(
+      ({ id, record }) => record === undefined || doc.partRevisions.has(id)
+    ) ||
     !personsFit(doc)
   ) {
     throw new OrderedWordFileError('checkpoint-manifest');
