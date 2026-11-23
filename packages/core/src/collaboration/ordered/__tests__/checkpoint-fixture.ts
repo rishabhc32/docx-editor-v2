@@ -3,7 +3,6 @@
 
 import type { OoxmlPackage } from '../../../store/package/ooxml-package.ts';
 import { orderedSeenCards } from '../change/apply-decide.ts';
-import type { OrderedChangePlace } from '../change/types.ts';
 import { isTextBoxStoryName } from '../model/text-boxes.ts';
 import type { OrderedDocument } from '../model/types.ts';
 import { orderedBlobHash } from '../protocol/blobs.ts';
@@ -105,13 +104,6 @@ const itemOf = (doc: OrderedDocument, localName: string) =>
     )!
   );
 
-/** Ana's pending words in APPLY_FILE's `Due` paragraph, and a place inside them. */
-export function insideAnas(doc: OrderedDocument): OrderedChangePlace {
-  const due = paragraph(doc, 'Due');
-  apply(doc, 'ana:1', { kind: 'insert', ...EDIT, place: at(doc, due, 4), text: 'new words' });
-  return at(doc, due, 7);
-}
-
 /**
  * Units Olive types inside pending insertions, drawn in runs: text, a tab, a line break, a
  * picture and a complex field inside Ana's words, a note reference (and its note), and words in
@@ -121,7 +113,8 @@ export const TYPED_RUNS: CheckpointRoom = {
   name: 'typed runs',
   source: APPLY_FILE,
   edit: (doc) => {
-    insideAnas(doc);
+    const due = paragraph(doc, 'Due');
+    apply(doc, 'ana:1', { kind: 'insert', ...EDIT, place: at(doc, due, 4), text: 'new words' });
 
     // Each between two of Ana's letters, from the last, so the places before stay
     const object = {
@@ -129,7 +122,6 @@ export const TYPED_RUNS: CheckpointRoom = {
       media: PNG_MEDIA,
       extent: { cx: 914_400, cy: 457_200 },
     } as const;
-    const due = paragraph(doc, 'Due');
     for (const [id, letter, body] of [
       ['olive:1', 12, { kind: 'insert', ...DIRECT, text: 'XY' }],
       ['olive:2', 11, { kind: 'insert-tab', ...DIRECT }],

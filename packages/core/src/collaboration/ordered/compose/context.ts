@@ -16,7 +16,7 @@ import { checkpointAttribute } from '../model/checkpoint.ts';
 import type { OrderedPerson } from '../model/person.ts';
 import { textBoxHostOf } from '../model/text-boxes.ts';
 import { revisionIdFor, seededAttributes } from '../model/revision-ids.ts';
-import { orderedUnitTyper, type OrderedTyper } from '../model/typers.ts';
+import { orderedUnitTyper } from '../model/typers.ts';
 import { withAttributes } from '../ooxml-nodes.ts';
 import type {
   OrderedAttribution,
@@ -201,14 +201,16 @@ export class ComposeContext {
     this.#objectGone = host !== null && (object === null || this.unshown(object));
   }
 
-  /** Who typed a unit (`orderedUnitTyper`): one room change typed all of an item. */
-  typerOf(item: OrderedItem): OrderedTyper | null {
-    return orderedUnitTyper(this.doc, item, item.offset);
-  }
-
-  /** The element a unit is drawn in, with the unit's typer on it when a checkpoint is drawn. */
-  typed(element: OoxmlElement, typer: OrderedTyper | null): OoxmlElement {
+  /**
+   * The element units are drawn in, with the typer of `unit` on it when a checkpoint is drawn: one
+   * room change typed every unit of an item, and of a run, whose key holds the item's `run`.
+   */
+  typed(element: OoxmlElement, unit: OrderedItem | undefined): OoxmlElement {
     const typers = this.options.typers;
+    const typer =
+      typers === undefined || unit === undefined
+        ? null
+        : orderedUnitTyper(this.doc, unit, unit.offset);
     if (typers === undefined || typer === null) {
       return element;
     }

@@ -11,28 +11,11 @@ import {
 } from '../client/open.ts';
 import { orderedPackageBytes } from '../compose/package.ts';
 import { CHECKPOINT_NAMESPACE } from '../model/checkpoint.ts';
-import { replaceItems } from '../model/mutations.ts';
 import { isTextBoxStoryName } from '../model/text-boxes.ts';
 import type { OrderedDocument } from '../model/types.ts';
 import { orderedUnitTyper } from '../model/typers.ts';
-import {
-  apply,
-  APPLY_FILE,
-  at,
-  BODY,
-  DIRECT,
-  EDIT,
-  FOOTNOTES,
-  textOf,
-} from './change-apply-fixture.ts';
-import {
-  insideAnas,
-  paragraph,
-  roomBlobs,
-  TYPED_BARE,
-  TYPED_RUNS,
-  withRoomFacts,
-} from './checkpoint-fixture.ts';
+import { apply, APPLY_FILE, at, BODY, EDIT, FOOTNOTES } from './change-apply-fixture.ts';
+import { roomBlobs, TYPED_BARE, TYPED_RUNS, withRoomFacts } from './checkpoint-fixture.ts';
 import { checkFold, checkpointBytes, folded, foldPrint, mediaStore } from './fold-check.ts';
 import { p, t } from './word-fixtures.ts';
 
@@ -183,39 +166,6 @@ describe("a checkpoint's namespace", () => {
         reason: 'checkpoint-manifest',
       });
     }
-  });
-});
-
-describe('a run of two typers', () => {
-  // No edit draws one today: a run's units are one change's (`i:<change>`) or one loaded run's.
-  // The state is made by hand, as a later edit might make it.
-  test('is cut in the checkpoint and in the Word file alike, so both open to the same addresses', async () => {
-    const { document: doc, base } = openOrderedWordFile(APPLY_FILE, { file: 1 });
-    const place = insideAnas(doc);
-    apply(doc, 'olive:1', { kind: 'insert', ...DIRECT, place, text: 'XY' }, 'Olive');
-    const due = paragraph(doc, 'Due');
-    apply(doc, 'pia:1', { kind: 'insert', ...DIRECT, place: at(doc, due, 8), text: 'Z' }, 'Pia');
-    expect(textOf(doc, due)).toBe('Due newXZY wordsin 30 days.');
-
-    // Pia's letter in the run of Olive's, with its face
-    const story = doc.stories.get(BODY)!;
-    const olive = story.spaces.get('i:olive:1.1')![0]!;
-    const pia = story.spaces.get('i:pia:1.1')![0]!;
-    replaceItems(
-      doc,
-      story,
-      [pia],
-      [{ ...pia, run: olive.run, face: olive.face, leaf: undefined }]
-    );
-
-    const blobs = mediaStore(base);
-    const runs = (bytes: Uint8Array) =>
-      [...strFromU8(unzipSync(bytes)['word/document.xml']!).matchAll(/<w:r[ >].*?<\/w:r>/g)]
-        .map(([run]) => run.replace(/<[^>]*>/g, ''))
-        .filter((text) => /[XYZ]/.test(text));
-    expect(runs(orderedPackageBytes(doc, base, { blobs }))).toEqual(['X', 'Z', 'Y']);
-    expect(runs(await checkpointBytes(doc, base, blobs))).toEqual(['X', 'Z', 'Y']);
-    await checkFold(doc, base, blobs, 'two typers');
   });
 });
 
