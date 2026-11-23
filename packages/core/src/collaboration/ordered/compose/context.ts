@@ -120,7 +120,7 @@ export class ComposeContext {
   readonly decisionEmptied = new Set<string>();
   /** Controls a decision reached: their value record follows the text they show. */
   readonly reached: string[] = [];
-  /** Prompt units of controls that hold content now. */
+  /** Prompt units of controls that hold content now, and the controls those prompts held. */
   readonly hiddenPrompts = new Set<OrderedItem>();
   /** Open item spaces of the controls whose prompt is hidden. */
   readonly unprompted = new Set<string>();
@@ -262,7 +262,7 @@ export class ComposeContext {
   /** Whether the item shows nowhere in this drawing. */
   gone(item: OrderedItem): boolean {
     if (this.#objectGone || isHidden(this.doc, item)) return true;
-    if (item.prompt === true && this.hiddenPrompts.has(item)) return true;
+    if (this.hiddenPrompts.has(item)) return true;
 
     // A rejected Enter keeps the link or control it split in two (`isSplitEdge`)
     if (isSplitEdge(item)) return false;

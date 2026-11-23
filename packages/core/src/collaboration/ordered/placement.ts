@@ -22,6 +22,7 @@ import {
   type OrderedViewParagraph,
 } from './compose/context.ts';
 import { keptLinkEdges } from './compose/kept-links.ts';
+import { showsPrompt } from './compose/paragraph.ts';
 import { containerPropertiesAfter } from './compose/properties.ts';
 import {
   closesContainer,
@@ -400,7 +401,8 @@ export function siteAt(ctx: Ctx, p: OrderedViewParagraph, at: number, skipStruck
  * the prompt, in the face of the prompt's first words without the placeholder style, wherever
  * the caret is in it (the engine empties the prompt into its first run). The typed text replaces
  * the prompt; deleting the prompt does nothing (that skip is in `edits/text.ts`). Null when no
- * prompt is there.
+ * prompt is there. In a control's prompt that holds another control showing its own, the outer
+ * prompt is the one replaced, as the engine replaces the outermost (`placeholderControlForInsertion`).
  */
 export function promptSite(ctx: Ctx, p: OrderedViewParagraph, offset: number): Site | null {
   const at = [p.chars[offset], offset > 0 ? p.chars[offset - 1] : undefined].find(
@@ -410,7 +412,12 @@ export function promptSite(ctx: Ctx, p: OrderedViewParagraph, offset: number): S
     return null;
   }
 
-  const segment = innermostSegment(at.containers);
+  const shown = new ComposeContext(ctx.doc, ctx.story, {});
+  const showsOwn = (segment: string) => {
+    const open = isControlSegment(segment) ? openOfSegment(ctx.story, segment) : null;
+    return open !== null && showsPrompt(shown, open);
+  };
+  const segment = segmentsOf(at.containers).find(showsOwn) ?? innermostSegment(at.containers);
   const first = p.chars.find(
     (char) =>
       char.item.prompt === true &&
@@ -448,7 +455,6 @@ export function promptSite(ctx: Ctx, p: OrderedViewParagraph, offset: number): S
 /**
  * Typing at an edge of the inline control the keyboard types in (the engine's `inside`): into
  * it, after its last character or before its first, where rule 5 puts other text beside it.
- * Null strictly inside it, where `siteAt` already places the text in it.
  */
 export function insideSite(
   ctx: Ctx,
@@ -461,7 +467,10 @@ export function insideSite(
     char !== undefined && segmentsOf(char.containers).includes(segment);
   const previous = offset > 0 ? p.chars[offset - 1] : undefined;
   const next = p.chars[offset];
-  if (holds(previous) && holds(next)) {
+
+  // Strictly inside it `siteAt` places the text in it; away from it (another person's edit took
+  // the caret out before this one arrived) beside it
+  if (holds(previous) === holds(next)) {
     return null;
   }
 
@@ -476,12 +485,8 @@ export function insideSite(
   }
 
   // At its start: before its first character, or before a control inside it that starts there
-  if (holds(next)) {
-    const first = innermostSegment(next.containers) === segment ? next.item : null;
-    return { after: null, before: first ?? ctx.story.tree.next(open), neighbour: next };
-  }
-
-  throw new OrderedRefusal('unknown-control', 'the place is not in the control');
+  const first = next && innermostSegment(next.containers) === segment ? next.item : null;
+  return { after: null, before: first ?? ctx.story.tree.next(open), neighbour: next };
 }
 
 /** Where a paragraph break goes, and the inline containers it splits (outermost first). */

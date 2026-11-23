@@ -2,7 +2,7 @@
 // costs what its card and the units around it hold, not what the document holds.
 
 import { isNotesStory, leftOutNoteItems } from './compose/note-references.ts';
-import { promptControlOf, promptShows } from './compose/paragraph.ts';
+import { promptUnitHidden } from './compose/paragraph.ts';
 import {
   innermostNewContainer,
   inserter,
@@ -77,13 +77,12 @@ export function isOrderedItemHidden(doc: OrderedDocument, item: OrderedItem): bo
  * with any suggestion on them, when content fills the control (placement rule 7), and a saved
  * file keeps the prompt in the glossary only, so a suggestion there shows on no card. Taking the
  * content back shows the prompt, and the card, again. A prompt's marks hide in the model
- * (`gone`).
+ * (`gone`). A control that such a prompt held goes with it, its prompt too.
  */
 function hiddenPrompt(doc: OrderedDocument, item: OrderedItem): boolean {
   if (item.prompt !== true || (item.kind !== 'text' && item.kind !== 'atom')) return false;
   const story = storyOfItem(doc, item);
-  const control = story ? promptControlOf(story, item) : null;
-  return story !== null && control !== null && !promptShows(doc, story, control);
+  return story !== null && promptUnitHidden(doc, story, item);
 }
 
 /**

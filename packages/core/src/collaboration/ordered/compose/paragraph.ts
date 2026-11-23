@@ -208,25 +208,72 @@ const filledBy = (ctx: ComposeContext, item: OrderedItem): boolean =>
   item.by !== null && !item.retracted && !item.gone && !ctx.revertedDirect(item.by) && isUnit(item);
 
 /**
+ * The items after a control's open item up to its close item, each with the open item of the
+ * control inside it that holds it, or null: a control there that shows a prompt of its own, or
+ * that a prompt holds, keeps its own items.
+ */
+function* promptWalk(
+  items: Iterable<OrderedItem>,
+  open: OrderedItem
+): Generator<readonly [OrderedItem, OrderedItem | null]> {
+  let nested: OrderedItem | null = null;
+  for (const item of items) {
+    if (item.kind === 'close' && item.pair === open.pair) return;
+    if (
+      nested === null &&
+      item.kind === 'open' &&
+      item.prompt === true &&
+      item.pair !== undefined
+    ) {
+      nested = item;
+    }
+
+    yield [item, nested];
+    if (nested !== null && item.kind === 'close' && item.pair === nested.pair) {
+      nested = null;
+    }
+  }
+}
+
+/**
  * The items after a control's open item up to its close item, without those of a control inside
  * it that shows a prompt of its own: that prompt shows or hides by that control's own rule.
  */
 export function* ownItems(items: Iterable<OrderedItem>, open: OrderedItem): Generator<OrderedItem> {
-  let nested: string | undefined;
-  for (const item of items) {
-    if (item.kind === 'close' && item.pair === open.pair) return;
-    if (nested !== undefined) {
-      if (item.kind === 'close' && item.pair === nested) nested = undefined;
-      continue;
+  for (const [item, nested] of promptWalk(items, open)) {
+    if (nested === null) {
+      yield item;
     }
-
-    if (item.kind === 'open' && item.prompt === true && item.pair !== undefined) {
-      nested = item.pair;
-      continue;
-    }
-
-    yield item;
   }
+}
+
+/**
+ * A control's own items (`ownItems`), and the items of the controls inside it that go with its
+ * prompt: content that replaces a prompt replaces what the prompt holds, as the engine's
+ * `clearPlaceholder` empties the control. Only a control there that shows its own prompt and
+ * that no edit reached goes: one with a suggestion in it, or one someone put there, stays, shown
+ * or not by its own rule, so no suggestion goes with the prompt and no later decision takes the
+ * control away; one with words of its own stays too.
+ */
+function promptParts(
+  items: Iterable<OrderedItem>,
+  open: OrderedItem
+): { readonly own: OrderedItem[]; readonly going: OrderedItem[] } {
+  const own: OrderedItem[] = [];
+  const nested = new Map<OrderedItem, OrderedItem[]>();
+  for (const [item, holder] of promptWalk(items, open)) {
+    if (holder === null) {
+      own.push(item);
+    } else if (nested.has(holder)) {
+      nested.get(holder)?.push(item);
+    } else {
+      nested.set(holder, [item]);
+    }
+  }
+
+  const goes = (held: readonly OrderedItem[]) =>
+    held.every((item) => !isLabelled(item) && (item.prompt === true || !isUnit(item)));
+  return { own, going: [...nested.values()].filter(goes).flat() };
 }
 
 /**
@@ -242,14 +289,15 @@ function hidePrompts(ctx: ComposeContext, buffer: readonly OrderedItem[]): void 
 
 /** One inline control's prompt, by the rule of `hidePrompts`; `after` runs past its close. */
 function hideInlinePrompt(ctx: ComposeContext, open: OrderedItem, after: Iterable<OrderedItem>) {
-  const inside = [...ownItems(after, open)];
-  const units = inside.filter((item) => !item.prompt && isUnit(item));
+  const { own, going } = promptParts(after, open);
+  const units = own.filter((item) => !item.prompt && isUnit(item));
   if (units.some((item) => filledBy(ctx, item)) || isFilledPrompt(ctx.doc, open.space))
     ctx.filledPrompts.add(open.space);
   const present = units.some((item) => !ctx.unshown(item));
   if (!present) return;
   ctx.unprompted.add(open.space);
-  for (const item of inside) if (item.prompt) ctx.hiddenPrompts.add(item);
+  for (const item of own) if (item.prompt) ctx.hiddenPrompts.add(item);
+  for (const item of going) ctx.hiddenPrompts.add(item);
 }
 
 /** Whether every unit of a control's prompt is gone, and it has one: Enter removed it for good. */
@@ -265,7 +313,8 @@ function removedForGood(prompts: readonly OrderedItem[]): boolean {
 export function hideBlockPrompt(ctx: ComposeContext, open: OrderedItem): void {
   const prompts: OrderedItem[] = [];
   let present = false;
-  for (const item of ownItems(ctx.story.tree.items(ctx.story.tree.next(open)), open)) {
+  const { own, going } = promptParts(ctx.story.tree.items(ctx.story.tree.next(open)), open);
+  for (const item of own) {
     if (item.prompt) {
       // A prompt's marks show or go in the model (`change/settle-prompts.ts`)
       if (item.kind !== 'mark') prompts.push(item);
@@ -283,7 +332,7 @@ export function hideBlockPrompt(ctx: ComposeContext, open: OrderedItem): void {
   if (removed) ctx.promptRemoved.add(open.space);
   if (!present && !removed) return;
   ctx.unprompted.add(open.space);
-  for (const item of prompts) ctx.hiddenPrompts.add(item);
+  for (const item of [...prompts, ...going]) ctx.hiddenPrompts.add(item);
 }
 
 /** Whether Enter removed a block control's prompt for good (policy 4): its every unit is gone. */
@@ -325,4 +374,39 @@ export function promptControlOf(story: OrderedStory, item: OrderedItem): Ordered
   }
 
   return null;
+}
+
+/**
+ * The control whose prompt holds a control, in its paragraph or around it (past the marks of a
+ * prompt of several paragraphs), or null. The walk ends at its paragraph's start.
+ */
+function promptHolderOf(story: OrderedStory, open: OrderedItem): OrderedItem | null {
+  let depth = 0;
+  for (let at = story.tree.prev(open); at !== null; at = story.tree.prev(at)) {
+    if (at.kind === 'mark' && at.prompt !== true) return null;
+    if (at.kind === 'close') depth += 1;
+    else if (at.kind === 'open' && depth > 0) depth -= 1;
+    else if (at.kind === 'open' && at.prompt === true) return at;
+  }
+
+  return null;
+}
+
+/**
+ * Whether a prompt's unit shows nowhere: content took the place of its control's prompt, or of
+ * the prompt that holds its control, which goes with it (`promptParts`).
+ */
+export function promptUnitHidden(
+  doc: OrderedDocument,
+  story: OrderedStory,
+  item: OrderedItem
+): boolean {
+  const ctx = new ComposeContext(doc, story, {});
+  let control = promptControlOf(story, item);
+  for (; control !== null; control = promptHolderOf(story, control)) {
+    showsPrompt(ctx, control);
+    if (ctx.hiddenPrompts.has(item)) return true;
+  }
+
+  return false;
 }

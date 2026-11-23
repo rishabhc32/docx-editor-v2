@@ -1,0 +1,13 @@
+{
+  "impact": "compatible",
+  "fields": [],
+  "before": "In an ordered room, typing, a paste or Enter in a control's prompt that held a control showing its own prompt replaced the inner prompt or kept the inner control, where the editor alone replaces the outer prompt and drops the inner control with it, so the page showed the room's version, not the editor alone's.",
+  "after": "Every copy replaces the outermost shown prompt at the caret, and the drawing hides a control inside that prompt with it when no edit reached it; a control with a suggestion in it, one someone put there, or one with words of its own stays. Cards and checkpoints read the same rule.",
+  "reason": "Every copy applies and draws the change with the same code, and the Yjs document format and the change format do not change. Ordered rooms admit only clients of their own code version and are not deployed yet, so no migration is needed.",
+  "tests": [
+    "packages/core/src/collaboration/ordered/__tests__/client/editor-controls-prompt-nested-typing.test.ts",
+    "packages/core/src/collaboration/ordered/__tests__/client/editor-controls-prompt-nested.test.ts"
+  ],
+  "changeset": "ordered-nested-prompt-typing",
+  "migration": null
+}

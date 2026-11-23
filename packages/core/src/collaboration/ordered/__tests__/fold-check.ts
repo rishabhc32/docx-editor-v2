@@ -26,6 +26,8 @@ import { openOrderedCheckpoint, type OrderedWordFile } from '../client/open.ts';
 import { currentFace } from '../client/properties.ts';
 import { orderedPackageMedia, writeOrderedCheckpoint } from '../compose/checkpoint.ts';
 import { orderedViewParagraph } from '../compose/compose.ts';
+import { ComposeContext } from '../compose/context.ts';
+import { showsPrompt } from '../compose/paragraph.ts';
 import { orderedPackageBytes } from '../compose/package.ts';
 import { orderedReplacedSuggestions } from '../compose/replaced.ts';
 import { orderedCards } from '../decide.ts';
@@ -95,6 +97,21 @@ const showsOn = (doc: OrderedDocument, item: OrderedItem): boolean =>
 /** A move's range marker: a fold writes the file's own, which the room draws from the move. */
 const isMoveRange = (item: OrderedItem): boolean =>
   item.node?.kind !== 'textValue' && MOVE_RANGE.test(item.node?.localName ?? '');
+
+/**
+ * The items a story's drawing hides with the prompts content took the place of, with the
+ * controls those prompts held: a fold keeps them in the glossary only.
+ */
+function promptsHidden(doc: OrderedDocument, story: OrderedStory): ReadonlySet<OrderedItem> {
+  const ctx = new ComposeContext(doc, story, {});
+  for (const item of story.tree.items()) {
+    if (item.kind === 'open' && item.prompt === true) {
+      showsPrompt(ctx, item);
+    }
+  }
+
+  return ctx.hiddenPrompts;
+}
 
 /**
  * Pending suggestions, but for one its author took back (every item it labels is taken back) and
@@ -178,7 +195,8 @@ export function foldPrint(doc: OrderedDocument, base: OoxmlPackage, blobs: FoldB
   return {
     stories: [...doc.stories]
       .map(([name, story]) => {
-        const shown = story.tree.toArray().filter((item) => showsOn(doc, item));
+        const hidden = promptsHidden(doc, story);
+        const shown = story.tree.toArray().filter((i) => showsOn(doc, i) && !hidden.has(i));
         const listed = shown.flatMap((item) => units(story, item));
         return [storyLabel(name), ...listed].join('\n');
       })
