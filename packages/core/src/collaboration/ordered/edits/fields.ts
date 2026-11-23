@@ -1,5 +1,6 @@
 // Fields and bookmarks (group 9.5): each writes what the engine's own op writes.
 
+import { ooxmlTreesEqual } from '../../../store/package/ooxml-serialize.ts';
 import { bookmarkNameKey } from '../../../store/package/bookmark-names.ts';
 import { FIELD_ATOM_CHAR, isFldChar, isFldSimpleNode } from '../../../store/package/field-nodes.ts';
 import { findNode } from '../../../store/package/ooxml-edit.ts';
@@ -202,7 +203,7 @@ function engineRewrite(
   const after = findNode(scratch, paragraph.id);
   if (!after || after.kind === 'textValue')
     throw new OrderedRefusal('engine-refused', `${op(paragraph.id, fieldNodeId).op}: no field`);
-  if (after.children === paragraph.children) return null;
+  if (ooxmlTreesEqual(after, paragraph)) return null;
   return formOf(ctx, item, after.children);
 }
 

@@ -1,6 +1,7 @@
 // Legacy form fields (task 9.6): a check box's state, a drop-down's entry, a text field's
 // options and default, its result formatted when the user leaves it, and typing in its result.
 
+import { ooxmlTreesEqual } from '../../../store/package/ooxml-serialize.ts';
 import { findNode } from '../../../store/package/ooxml-edit.ts';
 import { isInlineRunContainer } from '../../../store/package/ooxml-shared.ts';
 import { parsedFieldSpansOf } from '../../../store/package/field-nodes.ts';
@@ -237,14 +238,14 @@ function containsId(node: OoxmlNode, id: string, depth = 0): boolean {
 
 /**
  * A form field edit: the engine's op on the view, and the field it wrote in place of the
- * field's items. Direct only. Returns the edit's suggestion.
+ * field's items. Direct only. Returns the edit's suggestion, or null when the op changes nothing.
  */
 export function editFormField(
   ctx: Ctx,
   p: OrderedViewParagraph,
   start: number,
   op: OrderedFormFieldOp
-): string {
+): string | null {
   // Word fills legacy form fields only in a document protected for forms, which turns tracking
   // off: ECMA-376 `ST_DocProtect` takes one value, and `CT_FFData` has no change record
   if (!ctx.direct)
@@ -258,6 +259,12 @@ export function editFormField(
   if (!field) throw new OrderedRefusal('unknown-address', `no form field at ${start}`);
   const typing = op.op === 'insertText' || op.op === 'deleteText';
   const result = engineResult(view, engineOp(op, p.id, field), typing, field);
+
+  // An op that leaves the paragraph as it shows changes nothing: no record
+  if (ooxmlTreesEqual(paragraphOf(result, p.id), paragraphOf(view, p.id))) {
+    return null;
+  }
+
   const nodes = fieldNodes(paragraphOf(result, p.id), field.fieldNodeId);
   const old = fieldItems(ctx, p, field);
   const suggestion = suggestionFor(ctx);

@@ -1,6 +1,7 @@
 // Equations (group 9.9): a new linear form for one equation, or one equation of a display
 // removed. An equation is one object (`m:oMath`, or a display `m:oMathPara`).
 
+import { ooxmlTreesEqual } from '../../../store/package/ooxml-serialize.ts';
 import { linearMathReplacementOmml } from '../../../store/package/omml-equation.ts';
 import { equationsOfAtom, isOmmlEquationAtom } from '../../../store/package/omml-display.ts';
 import type { OoxmlElement } from '../../../store/package/ooxml-tree.ts';
@@ -64,7 +65,8 @@ function nextObject(
 
 /**
  * Give the equation object `item` a new form for its `equation`-th equation (`linear`), or
- * remove that equation from its display (`linear` null). Returns the suggestion that holds it.
+ * remove that equation from its display (`linear` null). Returns the suggestion that holds it,
+ * or null when it shows that form already or the edit is direct.
  * The old object is struck and the new one inserted at its place, in one suggestion (a direct
  * edit settles it at once), so a decision or an undo never shows a mix. The new OMML comes from
  * the engine's own builder with ids from the change: every copy writes the same equation.
@@ -80,12 +82,14 @@ export function replaceEquation(
     throw new OrderedRefusal('invalid-edit', 'not an equation');
   if (isHidden(ctx.doc, item)) throw new OrderedRefusal('hidden-target', 'the equation');
   refuseLockedAt(ctx, item);
-  const piece: Piece = {
-    text: item.text || '￼',
-    face: null,
-    content: nextObject(ctx, node, equation, linear),
-    bare: true,
-  };
+  const content = nextObject(ctx, node, equation, linear);
+
+  // The equation it shows already changes nothing: no record
+  if (ooxmlTreesEqual(content, node)) {
+    return null;
+  }
+
+  const piece: Piece = { text: item.text || '￼', face: null, content, bare: true };
 
   // The index of the shown paragraph that holds the item: the shown marks before it
   const index = ctx.story.tree.before(item).marks;

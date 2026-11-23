@@ -1,6 +1,7 @@
 // A content control's new value: what the engine proposes, the old words struck and the new
 // words inserted. A link's new target is `links.ts`.
 
+import { ooxmlTreesEqual } from '../../../store/package/ooxml-serialize.ts';
 import type { OoxmlElement, OoxmlNode } from '../../../store/package/ooxml-tree.ts';
 import { contentControlTextOf } from '../../../store/package/content-control-nodes.ts';
 import { applyTreeOp } from '../../../store/store/tree-op-apply.ts';
@@ -48,13 +49,13 @@ function valueFace(control: OoxmlNode, depth = 0): OoxmlElement | null {
  * A control's new value: the engine sets it on the view, and its words and properties become
  * the suggestion's: the old words struck (your own pending words taken back), the new words
  * inserted at the control's end, and the new `w:sdtPr` shown while pending, with no change
- * record (Word records none).
+ * record (Word records none). A value the control shows already makes no suggestion (null).
  */
 export function setControlValue(
   ctx: Ctx,
   open: OrderedItem,
   value: string | ContentControlValueInput
-): string {
+): string | null {
   if (open.kind !== 'open' || (open.token !== 'sdt' && open.token !== 'sdtBlock'))
     throw new OrderedRefusal('unknown-control', open.space);
   const shell = open.node;
@@ -73,6 +74,12 @@ export function setControlValue(
   const control = viewNode(result.part, id);
   const sdtPr = childNamed(control, 'sdtPr');
   if (!sdtPr) throw new OrderedRefusal('engine-refused', 'the value removed the control');
+
+  // A value the control shows already changes nothing: no record
+  if (ooxmlTreesEqual(control, viewNode(view, id))) {
+    return null;
+  }
+
   const suggestion = suggestionFor(ctx);
   strikeOldValue(ctx, open, suggestion.id);
   const close = closeOf(ctx.story, open, ctx.doc);

@@ -10,7 +10,7 @@ import {
 } from '../../types.ts';
 import { address } from '../../values.ts';
 import { orderedKindSpec } from '../spec.ts';
-import { pressParagraphs, type ParagraphPress } from './paragraph-presses.ts';
+import { pressKeeps, pressParagraphs, type ParagraphPress } from './paragraph-presses.ts';
 
 const NUM_ID = /^\d{1,9}$/;
 
@@ -61,11 +61,17 @@ export const LIST_LEVEL_SPEC = orderedKindSpec<OrderedListLevelChange>({
   },
   apply(change, { edit }) {
     const ctx = contextOf(edit, []);
-    const sid = suggestionFor(ctx).id;
-    addListLevel(ctx, sid, change);
     const presses = change.marks.map(
       (mark): ParagraphPress => ({ mark, op: { op: 'setListLevel', level: change.level } })
     );
+
+    // Paragraphs at the level already change nothing: no declaration and no record
+    if (presses.every((press) => pressKeeps(ctx, press))) {
+      return { suggestions: [], replaced: [] };
+    }
+
+    const sid = suggestionFor(ctx).id;
+    addListLevel(ctx, sid, change);
     return pressParagraphs(edit, ctx, sid, presses);
   },
   policy: { text: false, properties: true },

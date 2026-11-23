@@ -9,7 +9,7 @@ import type {
   SourceCrop,
 } from '../../../store/package/drawing-projection.ts';
 import { findNode } from '../../../store/package/ooxml-edit.ts';
-import { canonicalOoxmlFingerprint } from '../../../store/package/ooxml-serialize.ts';
+import { ooxmlTreesEqual } from '../../../store/package/ooxml-serialize.ts';
 import type { OoxmlDrawingNode, OoxmlNode } from '../../../store/package/ooxml-tree.ts';
 import { EMU_PER_POINT } from '../../../store/package/drawing-package-edit.ts';
 import { buildTextboxDrawing } from '../../../store/package/textbox-drawing-builder.ts';
@@ -272,7 +272,7 @@ export function changeObject(
   // Ops that leave the object as it shows change nothing, so they make no record, as a format
   // press that changes no value makes none. A new image or link always changes it, so no
   // resource is left without its suggestion
-  if (canonicalOoxmlFingerprint(after) === canonicalOoxmlFingerprint(before)) {
+  if (ooxmlTreesEqual(after, before)) {
     return null;
   }
 
