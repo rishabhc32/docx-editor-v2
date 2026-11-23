@@ -82,7 +82,8 @@ function settleControl(doc: OrderedDocument, story: OrderedStory, open: OrderedI
     return;
   }
 
-  const hidden = !showsBlockPrompt(new ComposeContext(doc, story, {}), open);
+  const ctx = new ComposeContext(doc, story, {});
+  const hidden = !showsBlockPrompt(ctx, open);
 
   // Each prompt mark ends a paragraph of the prompt, with what was typed or put in it
   const paragraphs: { readonly mark: OrderedItem; readonly holds: boolean }[] = [];
@@ -101,8 +102,12 @@ function settleControl(doc: OrderedDocument, story: OrderedStory, open: OrderedI
       continue;
     }
 
-    // The prompt's own units hide with the prompt; anything else that shows is content
-    if (item.prompt === true && item.kind !== 'mark') continue;
+    // The prompt's own units hide with the prompt, and so does a control in it that goes with it
+    // (`hideBlockPrompt`); anything else that shows is content
+    if ((item.prompt === true && item.kind !== 'mark') || ctx.hiddenPrompts.has(item)) {
+      continue;
+    }
+
     if (!isHidden(doc, item)) holds = true;
   }
 

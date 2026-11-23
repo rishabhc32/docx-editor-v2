@@ -22,6 +22,7 @@ import { readOoxmlPackage, type OoxmlPackage } from '../../../store/package/ooxm
 import { serializeOoxmlPart, type OoxmlElement } from '../../../store/package/ooxml-tree.ts';
 import { isCardUnit, isOrderedItemHidden } from '../card-of.ts';
 import { orderedCardSeen } from '../change/apply-decide.ts';
+import { settlePromptMarks } from '../change/settle-prompts.ts';
 import { openOrderedCheckpoint, type OrderedWordFile } from '../client/open.ts';
 import { currentFace } from '../client/properties.ts';
 import { orderedPackageMedia, writeOrderedCheckpoint } from '../compose/checkpoint.ts';
@@ -266,7 +267,8 @@ function partsOf(bytes: Uint8Array): Record<string, string> {
 }
 
 /**
- * The Word file after `ids` are decided as `status`, each XML part by what it says (as a reopen
+ * The Word file after `ids` are decided as `status`, with a block prompt's marks settled as a
+ * decision settles them (`applyOrderedChange`), each XML part by what it says (as a reopen
  * compares decisions: `semanticBody`); the document is restored. A decision on a folded copy may
  * split a run where the room keeps one, or keep an empty `w:rPr`: the same meaning.
  */
@@ -281,6 +283,8 @@ function decidedFile(
     for (const id of ids) {
       setStatus(doc, id, status);
     }
+
+    settlePromptMarks(doc);
   });
   const read = readOoxmlPackage(orderedPackageBytes(doc, base, { blobs }), {});
   takeBack(doc, record);

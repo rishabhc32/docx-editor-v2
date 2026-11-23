@@ -44,8 +44,9 @@ const COURTS = p(
 const venue = (prompt: string) =>
   docx(p(t('Venue:')) + sdt('<w:id w:val="9203"/><w:showingPlcHdr/>', prompt) + p(t('Signed.')));
 
-/** The prompt of one paragraph. */
+/** The prompt of one paragraph, and of two, the combo box in the second. */
 const ONE = venue(COURTS);
+const TWO = venue(p(t('Terms apply.', FACE)) + COURTS);
 
 /** Each file, its prompt's paragraphs, and places in them: from the paragraph's start. */
 const FILES = [
@@ -60,6 +61,22 @@ const FILES = [
       ['the middle of the combo box', 1, 15],
       ['the end of the combo box', 1, 24],
       ['its end', 1, 43],
+    ],
+  },
+  {
+    name: 'two paragraphs',
+    file: TWO,
+    unchanged:
+      'Venue:¶[#9203?Terms apply.¶Courts at [#9204?Choose a city.] have jurisdiction.¶]Signed.¶',
+    places: [
+      ['the first paragraph, its start', 1, 0],
+      ['the first paragraph, its middle', 1, 5],
+      ['the first paragraph, its end', 1, 12],
+      ['the second paragraph, its start', 2, 0],
+      ['the start of the combo box', 2, 10],
+      ['the middle of the combo box', 2, 15],
+      ['the end of the combo box', 2, 24],
+      ['the second paragraph, its end', 2, 43],
     ],
   },
 ] as const;
@@ -139,6 +156,56 @@ async function folds(
   const { base } = openOrderedWordFile(file, { file: 1 });
   await checkFold(room.room.document, base, mediaStore(base), label);
 }
+
+describe('content over a block prompt of two paragraphs that holds a combo box', () => {
+  test("a party's typing in the first paragraph: rejected, the whole prompt is back", async () => {
+    const { room, olive, ben } = await seats(TWO, 'edit');
+    caretAt(ben, 1, 5);
+    surface(ben).type('Q');
+    await settle();
+    converged(room, [olive, ben]);
+    await everywhere([olive, ben], 'Venue:¶[#9203{+Ben:Q}¶]Signed.¶');
+    await folds(room, TWO, 'suggested');
+    const [card] = olive.editor.getReviewItems().filter((item) => item.kind === 'revision');
+    expect(olive.editor.rejectReviewItem(card?.key ?? '').ok).toBe(true);
+    await settle();
+    converged(room, [olive, ben]);
+    await everywhere([olive, ben], FILES[1].unchanged);
+    await folds(room, TWO, 'rejected');
+  });
+
+  test("the organiser's typing in the first paragraph: undo brings the prompt back", async () => {
+    const { room, olive, ben } = await seats(TWO, 'edit');
+    caretAt(olive, 1, 0);
+    surface(olive).type('Q');
+    await settle();
+    converged(room, [olive, ben]);
+    await everywhere([olive, ben], 'Venue:¶[#9203Q¶]Signed.¶');
+    surface(olive).undo();
+    await settle();
+    converged(room, [olive, ben]);
+    await everywhere([olive, ben], FILES[1].unchanged);
+    surface(olive).redo();
+    await settle();
+    converged(room, [olive, ben]);
+    await everywhere([olive, ben], 'Venue:¶[#9203Q¶]Signed.¶');
+    await folds(room, TWO, 'redone');
+  });
+
+  test('the organiser and a party type in the two paragraphs at the same time', async () => {
+    const { room, olive, ben } = await seats(TWO, 'edit');
+    caretAt(olive, 1, 5);
+    caretAt(ben, 2, 15);
+
+    // Both keys go out before either copy hears of the other: the organiser's comes first
+    surface(olive).type('X');
+    surface(ben).type('Y');
+    await settle();
+    converged(room, [olive, ben]);
+    await everywhere([olive, ben], 'Venue:¶[#9203X{+Ben:Y}¶]Signed.¶');
+    await folds(room, TWO, 'both');
+  });
+});
 
 describe('each edit at each place of a block prompt holding a combo box, as alone', () => {
   for (const { name: file, file: bytes, unchanged, places } of FILES) {
