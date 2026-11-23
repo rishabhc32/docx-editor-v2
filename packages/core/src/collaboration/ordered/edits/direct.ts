@@ -21,7 +21,7 @@ import { coveredMarkers } from '../placement.ts';
 import { asAuthor, type Ctx } from './context.ts';
 import { formatMark, joinParagraphs, paragraphOp, splitParagraph } from './marks.ts';
 import { deleteRow } from './tables.ts';
-import { deleteText, formatText, insertText, type Piece } from './text.ts';
+import { deleteText, formatText, insertText, type InsertOptions } from './text.ts';
 
 /** Accept a direct edit's own suggestion, marked as a direct edit's. */
 export function settle(doc: OrderedDocument, suggestion: string | null): void {
@@ -55,10 +55,11 @@ export function directInsert(
   p: OrderedViewParagraph,
   offset: number,
   text: string,
-  pieces?: readonly Piece[]
+  options: Pick<InsertOptions, 'pieces' | 'inside'> = {}
 ): void {
   const map = p.chars;
-  const what = pieces === undefined ? {} : { pieces, outsidePrompt: true };
+  const { pieces } = options;
+  const what = pieces === undefined ? options : { ...options, outsidePrompt: true };
   const before = pendingInsertion(ctx, map[offset - 1]);
   const after = pendingInsertion(ctx, map[offset]);
 

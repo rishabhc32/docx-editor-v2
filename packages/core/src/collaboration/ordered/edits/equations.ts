@@ -95,7 +95,7 @@ export function replaceEquation(
   if (ctx.direct) {
     // The struck object hides: the new one goes where it was
     directDelete(ctx, p, offset, offset + 1);
-    directInsert(ctx, paragraphAt(ctx, index), offset, '', [piece]);
+    directInsert(ctx, paragraphAt(ctx, index), offset, '', { pieces: [piece] });
     return null;
   }
 

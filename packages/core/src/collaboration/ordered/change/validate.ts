@@ -91,10 +91,11 @@ function ownEarlierChanges(f: Fields): string[] {
 
 const KINDS: Readonly<Record<OrderedCoreChangeKind, KindSpec>> = {
   insert: {
-    fields: [...EDIT, 'place', 'text'],
+    fields: [...EDIT, 'place', 'text', 'inside'],
     read: (f) => ({
       place: place(get(f, 'place'), fieldPath(f, 'place')),
       text: plainText(get(f, 'text'), fieldPath(f, 'text'), 1, LIMITS.text),
+      ...(f.has('inside') ? { inside: address(f.get('inside'), fieldPath(f, 'inside')) } : {}),
     }),
   },
   'insert-tab': {

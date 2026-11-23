@@ -1,0 +1,12 @@
+{
+  "impact": "compatible",
+  "fields": [],
+  "before": "In an ordered room, the editor's keyboard typing at the first or the last character of an inline content control named that control (the engine's inside), but the client dropped it, so the room put the text beside the control: after a prompt was typed over, every key from the second one left the control, and the page showed the room's version, not the editor alone's.",
+  "after": "An insert change carries the control's open item as an optional inside address when the keyboard types in an inline control; at that control's edge every copy puts the text in it, as the editor alone does. Other inserts are as before.",
+  "reason": "Every copy validates and applies the change with the same code, and the Yjs document format does not change. Ordered rooms admit only clients of their own code version and are not deployed yet, so no migration is needed.",
+  "tests": [
+    "packages/core/src/collaboration/ordered/__tests__/client/editor-controls-edge-typing.test.ts"
+  ],
+  "changeset": "ordered-typing-control-edge",
+  "migration": null
+}

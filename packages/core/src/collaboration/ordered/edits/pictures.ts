@@ -185,7 +185,7 @@ export function insertObject(
   // A run of its own with no run properties, as the engine writes a picture: tracked, a new
   // run; untracked, beside its neighbours' faces
   const piece = { text: '\uFFFC', content: node, face: null };
-  if (ctx.direct) directInsert(ctx, at.paragraph, at.offset, '', [piece]);
+  if (ctx.direct) directInsert(ctx, at.paragraph, at.offset, '', { pieces: [piece] });
   else insertText(ctx, at.paragraph, at.offset, '', { pieces: [piece], outsidePrompt: true });
 
   // The media part and its relationships (design D14) belong to the suggestion that holds the

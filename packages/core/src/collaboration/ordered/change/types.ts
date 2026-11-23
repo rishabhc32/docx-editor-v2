@@ -148,6 +148,11 @@ export interface OrderedInsertChange extends OrderedEditBase {
   readonly kind: 'insert';
   readonly place: OrderedChangePlace;
   readonly text: string;
+  /**
+   * The open item of the inline control the caret is in: at its edge the text goes in it, as
+   * the keyboard types on in a control (the engine's `inside`); other text goes beside it.
+   */
+  readonly inside?: OrderedChangeAddress;
 }
 
 /** Delete the units from `from` up to, not including, `to`. @public */

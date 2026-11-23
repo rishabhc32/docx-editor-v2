@@ -24,6 +24,7 @@ import { isWml, withChildren } from '../ooxml-nodes.ts';
 import {
   inRunMarkers,
   insertAtSite,
+  insideSite,
   promptSite,
   refuseLocked,
   siteAt,
@@ -90,6 +91,8 @@ export interface InsertOptions {
   readonly pieces?: readonly Piece[];
   /** A tab or a break: it never goes into a control's prompt (rule 7 is for typed text). */
   readonly outsidePrompt?: boolean;
+  /** The open item of the inline control the keyboard types in, at its edge too (`insideSite`). */
+  readonly inside?: OrderedItem;
 }
 
 /** Units of one space, in a row. */
@@ -128,7 +131,9 @@ export function insertText(
 ): string {
   refuseLocked(ctx, p, offset, offset);
   const site =
-    (options.outsidePrompt ? null : promptSite(ctx, p, offset)) ?? siteAt(ctx, p, offset);
+    (options.outsidePrompt ? null : promptSite(ctx, p, offset)) ??
+    (options.inside ? insideSite(ctx, p, offset, options.inside) : null) ??
+    siteAt(ctx, p, offset);
   const owner = site.neighbour ? pendingOwn(ctx, site.neighbour.item.by) : null;
 
   // Typing inside or beside your own pending text extends that suggestion

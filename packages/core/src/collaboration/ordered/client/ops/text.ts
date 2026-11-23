@@ -1,10 +1,12 @@
 // Text ops (task 6.1): typing, deletion, a tab, a break, and run formatting. Nothing in an op
-// is dropped: a field the format has no place for is a refusal, except the placement hints
-// `inside` and `bias`, whose meaning is the list's own placement rules (design D4).
+// is dropped: a field the format has no place for is a refusal, except the placement hint
+// `bias`, whose meaning is the list's own placement rules (design D4). Typing's `inside` goes
+// with the change: the keyboard types on in the control it is in, at its edge too.
 
 import { ORDERED_CHANGE_LIMITS } from '../../change/types.ts';
 import { addressOf, placeAt } from '../paragraphs.ts';
 import { markFormatProperties, runFormatProperties } from '../properties.ts';
+import { containerOf } from './containers.ts';
 import { formFieldTyping } from './controls.ts';
 import { translateResultRunFormat } from './fields.ts';
 import {
@@ -64,9 +66,22 @@ export const TEXT_OPS: OrderedOpTable<
         const p = batch.paragraph(op.paragraphId);
         const place = placeAt(p, op.offset);
 
+        // The inline control the keyboard types in; a block control holds the whole paragraph
+        const control =
+          op.inside === undefined
+            ? null
+            : containerOf(batch.doc, op.inside, ['sdt', 'sdtBlock']).open;
+        const inside = control?.token === 'sdt' ? { inside: addressOf(control) } : {};
+
         // Each chunk goes before the same place, so the chunks keep their order
         return chunks(op.text).map(
-          (text): OrderedChangeBody => ({ kind: 'insert', part: p.story.name, place, text })
+          (text): OrderedChangeBody => ({
+            kind: 'insert',
+            part: p.story.name,
+            place,
+            text,
+            ...inside,
+          })
         );
       };
     }),

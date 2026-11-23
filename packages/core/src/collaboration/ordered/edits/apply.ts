@@ -42,7 +42,12 @@ import {
 import { insertComment } from './comments.ts';
 import { copyText, moveText } from './move.ts';
 import { insertNote, typeInNewNote } from './notes.ts';
-import { resolveOrderedPlace, type OrderedPlace, type OrderedResolvedPlace } from './places.ts';
+import {
+  resolveOrderedPlace,
+  shownItemAt,
+  type OrderedPlace,
+  type OrderedResolvedPlace,
+} from './places.ts';
 import { retractSuggestion } from './retract.ts';
 import {
   columnOp,
@@ -61,7 +66,13 @@ import { deleteText, formatText, insertText } from './text.ts';
  * @public
  */
 export type OrderedEdit =
-  | { readonly kind: 'insert'; readonly at: OrderedPlace; readonly text: string }
+  /** Typed text; `inside` names the inline control a caret on its edge types into. */
+  | {
+      readonly kind: 'insert';
+      readonly at: OrderedPlace;
+      readonly text: string;
+      readonly inside?: OrderedPlace;
+    }
   /** A tab or a break: one object at `at`; a line break may clear floating objects. */
   | {
       readonly kind: 'insertBreak';
@@ -379,18 +390,22 @@ function run(ctx: Ctx, edit: OrderedEdit): (string | null)[] {
     case 'insert': {
       const text = checkText(edit.text);
       const at = resolve(ctx, edit.at);
+      const inside =
+        edit.inside === undefined
+          ? {}
+          : { inside: shownItemAt(ctx.doc, ctx.story, edit.inside, 'open', ['sdt']) };
       if (ctx.direct) {
-        directInsert(ctx, at.paragraph, at.offset, text);
+        directInsert(ctx, at.paragraph, at.offset, text, inside);
         return [];
       }
 
-      return [insertText(ctx, at.paragraph, at.offset, text)];
+      return [insertText(ctx, at.paragraph, at.offset, text, inside)];
     }
     case 'insertBreak': {
       const piece = breakPiece(ctx, edit.break, edit.clear);
       const at = resolve(ctx, edit.at);
       if (ctx.direct) {
-        directInsert(ctx, at.paragraph, at.offset, '', [piece]);
+        directInsert(ctx, at.paragraph, at.offset, '', { pieces: [piece] });
         return [];
       }
 

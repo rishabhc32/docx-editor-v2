@@ -66,7 +66,7 @@ Word revision ids (`w:id`) are the same on every copy, whenever the copy compose
 
 ### D4. Placement
 
-The engine decides where typed text lands near markers, deletions and containers (12 rules, `REPORT.md`, "Engine rules the matrix found"). `placement.ts` holds one copy of those rules. The item-kind matrix runs in CI against the engine; a difference fails the build, so drift is found when the engine changes. Where the engine and the list still differ for one edit, the client publishes the list's version of the paragraph, so the screen and the file always follow the list.
+The engine decides where typed text lands near markers, deletions and containers (12 rules, `REPORT.md`, "Engine rules the matrix found"). `placement.ts` holds one copy of those rules. The item-kind matrix runs in CI against the engine; a difference fails the build, so drift is found when the engine changes. Where the engine and the list still differ for one edit, the client publishes the list's version of the paragraph, so the screen and the file always follow the list. Typing names the inline control the caret is in (`insert` with `inside`, the engine's `inside`): at that control's first or last character the text goes in it (`insideSite`), as the editor alone's keyboard types on in a control; a paste, a tab or a break there goes beside it (rule 5). The room once put typed text there beside the control too, so after a prompt was typed over, every key from the second one left the control (`client/editor-controls-edge-typing.test.ts`).
 
 ### D5. Policies (decided)
 

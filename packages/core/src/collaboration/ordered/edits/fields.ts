@@ -90,7 +90,7 @@ export function insertPageField(
 ): string | null {
   const pieces = pageFieldPieces(ctx, field);
   if (ctx.direct) {
-    directInsert(ctx, at.paragraph, at.offset, '', pieces);
+    directInsert(ctx, at.paragraph, at.offset, '', { pieces });
     return null;
   }
 

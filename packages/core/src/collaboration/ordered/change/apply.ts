@@ -105,8 +105,10 @@ function editsOf(
   change: OrderedCoreEditChange
 ): OrderedEdit[] {
   switch (change.kind) {
-    case 'insert':
-      return [{ kind: 'insert', at: placeOfChange(change.place), text: change.text }];
+    case 'insert': {
+      const inside = change.inside === undefined ? {} : { inside: change.inside };
+      return [{ kind: 'insert', at: placeOfChange(change.place), text: change.text, ...inside }];
+    }
     case 'insert-tab':
       return [{ kind: 'insertBreak', at: placeOfChange(change.place), break: 'tab' }];
     case 'insert-break':

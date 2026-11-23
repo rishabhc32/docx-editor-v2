@@ -445,6 +445,45 @@ export function promptSite(ctx: Ctx, p: OrderedViewParagraph, offset: number): S
   return { after: null, before: closeOf(ctx.story, open, ctx.doc), neighbour: undefined, face };
 }
 
+/**
+ * Typing at an edge of the inline control the keyboard types in (the engine's `inside`): into
+ * it, after its last character or before its first, where rule 5 puts other text beside it.
+ * Null strictly inside it, where `siteAt` already places the text in it.
+ */
+export function insideSite(
+  ctx: Ctx,
+  p: OrderedViewParagraph,
+  offset: number,
+  open: OrderedItem
+): Site | null {
+  const segment = `c:${open.space}`;
+  const holds = (char: OrderedViewChar | undefined): char is OrderedViewChar =>
+    char !== undefined && segmentsOf(char.containers).includes(segment);
+  const previous = offset > 0 ? p.chars[offset - 1] : undefined;
+  const next = p.chars[offset];
+  if (holds(previous) && holds(next)) {
+    return null;
+  }
+
+  // At its end: right after its last character, or after a control inside it that ends there
+  if (holds(previous)) {
+    if (innermostSegment(previous.containers) !== segment) {
+      return { after: null, before: closeOf(ctx.story, open, ctx.doc), neighbour: previous };
+    }
+
+    const after = { item: previous.item, offset: previous.address.offset };
+    return { after, before: null, neighbour: previous, pastMarkers: true };
+  }
+
+  // At its start: before its first character, or before a control inside it that starts there
+  if (holds(next)) {
+    const first = innermostSegment(next.containers) === segment ? next.item : null;
+    return { after: null, before: first ?? ctx.story.tree.next(open), neighbour: next };
+  }
+
+  throw new OrderedRefusal('unknown-control', 'the place is not in the control');
+}
+
 /** Where a paragraph break goes, and the inline containers it splits (outermost first). */
 export interface BreakSite {
   readonly site: Site;
