@@ -296,8 +296,15 @@ function hideInlinePrompt(ctx: ComposeContext, open: OrderedItem, after: Iterabl
   const present = units.some((item) => !ctx.unshown(item));
   if (!present) return;
   ctx.unprompted.add(open.space);
-  for (const item of own) if (item.prompt) ctx.hiddenPrompts.add(item);
-  for (const item of going) ctx.hiddenPrompts.add(item);
+  for (const item of own) {
+    if (item.prompt) {
+      ctx.hiddenPrompts.add(item);
+    }
+  }
+
+  for (const item of going) {
+    ctx.hiddenPrompts.add(item);
+  }
 }
 
 /** Whether every unit of a control's prompt is gone, and it has one: Enter removed it for good. */
@@ -332,7 +339,9 @@ export function hideBlockPrompt(ctx: ComposeContext, open: OrderedItem): void {
   if (removed) ctx.promptRemoved.add(open.space);
   if (!present && !removed) return;
   ctx.unprompted.add(open.space);
-  for (const item of [...prompts, ...going]) ctx.hiddenPrompts.add(item);
+  for (const item of [...prompts, ...going]) {
+    ctx.hiddenPrompts.add(item);
+  }
 }
 
 /** Whether Enter removed a block control's prompt for good (policy 4): its every unit is gone. */
@@ -383,10 +392,17 @@ export function promptControlOf(story: OrderedStory, item: OrderedItem): Ordered
 function promptHolderOf(story: OrderedStory, open: OrderedItem): OrderedItem | null {
   let depth = 0;
   for (let at = story.tree.prev(open); at !== null; at = story.tree.prev(at)) {
-    if (at.kind === 'mark' && at.prompt !== true) return null;
-    if (at.kind === 'close') depth += 1;
-    else if (at.kind === 'open' && depth > 0) depth -= 1;
-    else if (at.kind === 'open' && at.prompt === true) return at;
+    if (at.kind === 'mark' && at.prompt !== true) {
+      return null;
+    }
+
+    if (at.kind === 'close') {
+      depth += 1;
+    } else if (at.kind === 'open' && depth > 0) {
+      depth -= 1;
+    } else if (at.kind === 'open' && at.prompt === true) {
+      return at;
+    }
   }
 
   return null;
@@ -405,7 +421,9 @@ export function promptUnitHidden(
   let control = promptControlOf(story, item);
   for (; control !== null; control = promptHolderOf(story, control)) {
     showsPrompt(ctx, control);
-    if (ctx.hiddenPrompts.has(item)) return true;
+    if (ctx.hiddenPrompts.has(item)) {
+      return true;
+    }
   }
 
   return false;

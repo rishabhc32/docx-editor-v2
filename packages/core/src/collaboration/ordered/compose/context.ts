@@ -262,7 +262,9 @@ export class ComposeContext {
   /** Whether the item shows nowhere in this drawing. */
   gone(item: OrderedItem): boolean {
     if (this.#objectGone || isHidden(this.doc, item)) return true;
-    if (this.hiddenPrompts.has(item)) return true;
+    if (this.hiddenPrompts.has(item)) {
+      return true;
+    }
 
     // A rejected Enter keeps the link or control it split in two (`isSplitEdge`)
     if (isSplitEdge(item)) return false;

@@ -95,7 +95,10 @@ export function replaceEquation(
   const index = ctx.story.tree.before(item).marks;
   const p = paragraphAt(ctx, index);
   const offset = p.chars.findIndex((char) => char.item === item);
-  if (offset < 0) throw new OrderedRefusal('hidden-target', 'the equation does not show');
+  if (offset < 0) {
+    throw new OrderedRefusal('hidden-target', 'the equation does not show');
+  }
+
   if (ctx.direct) {
     // The struck object hides: the new one goes where it was
     directDelete(ctx, p, offset, offset + 1);
