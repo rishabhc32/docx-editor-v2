@@ -221,7 +221,9 @@ function promptAround(
   prev: OrderedViewChar | undefined,
   next: OrderedViewChar | undefined
 ): string | null {
-  if (prev?.item.prompt && next?.item.prompt) return commonContainers(prev, next);
+  if (prev?.item.prompt && next?.item.prompt) {
+    return commonContainers(prev, next);
+  }
 
   // At the paragraph's start or end: the one side there is
   let edge: OrderedViewChar | undefined;

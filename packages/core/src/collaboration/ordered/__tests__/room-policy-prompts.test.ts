@@ -27,6 +27,7 @@ const FACE = '<w:rStyle w:val="PlaceholderText"/>';
 const PROMPT = 'Click or tap here to enter text.';
 const sdt = (props: string, content: string) =>
   `<w:sdt><w:sdtPr>${props}</w:sdtPr><w:sdtContent>${content}</w:sdtContent></w:sdt>`;
+
 /** The host's reproduction: a plain text control showing Word's default prompt. */
 const PLAIN = docx(
   p(t('Prompt: ') + sdt('<w:showingPlcHdr/><w:text/>', t(PROMPT, FACE))) + p(t('after'))
@@ -109,6 +110,7 @@ describe("typing over a prompt with another person's pending format (the host's 
       expect(formatCard()).toBe(true);
       expect(send(who, { kind: 'insert', ...EDIT, place: place(0), text: 'Q ' })).toBe('accepted');
       expect(textOf(doc, 0)).toBe('Prompt: Q ');
+
       // No card on a prompt that content replaced: the room, the save and the editor alone agree.
       // Bob's card is his typing now; the organiser's typing is direct
       const left = who === BOB ? 1 : 0;
@@ -219,11 +221,13 @@ describe('every kind of edit at every place by a prompt: nested exactly when the
         } catch (error) {
           if (!(error instanceof OrderedRefusal)) throw error;
         }
+
         const lost = bobs(doc) === 0 || bobs(reopened(saved(packageOf(place.file), doc))) === 0;
         rows.push(
           `${name}: ${nested ? 'nested' : 'allowed'}${nested === lost ? '' : ' (differs)'}`
         );
       }
+
       expect(rows.filter((row) => row.endsWith('(differs)'))).toEqual([]);
     });
 });
