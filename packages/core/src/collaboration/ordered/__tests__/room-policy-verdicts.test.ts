@@ -13,8 +13,10 @@ import { orderedPlaceAt, type OrderedPlace } from '../edits/places.ts';
 import { OrderedRoom } from '../room/room.ts';
 import { suggestionsOnlyPolicy } from '../room/suggestions-only.ts';
 import type { OrderedDocument } from '../model/types.ts';
+import { loadOrderedPackage } from '../load/load.ts';
 import { BODY, load, opens, addressOf } from './change-apply-fixture.ts';
 import { actor } from './room-harness.ts';
+import { docx, p, packageOf, t } from './word-fixtures.ts';
 
 const OLGA = actor('Olga', 'olga-1', 'organiser');
 const ANA = actor('Ana', 'ana-1', 'party');
@@ -23,11 +25,11 @@ const OTTO = actor('Otto', 'otto-1', 'organiser');
 const EDIT = { part: BODY, mode: 'suggest' } as const;
 
 /** A room on the change apply fixture: paragraph 0 reads "The fee is 100 USD.", 2 holds a control. */
-function setup() {
+function setup(document: OrderedDocument = load()) {
   const replaced: OrderedReplacedFormat[] = [];
   let tick = 0;
   const room = new OrderedRoom({
-    document: load(),
+    document,
     applyChange: (doc, change, ctx) => {
       replaced.push(...applyOrderedChange(doc, change, ctx).replaced);
     },
@@ -256,6 +258,50 @@ describe('the policy and today’s check', () => {
     expect(send(ANA, { kind: 'insert-row', ...EDIT, row: addressOf(second), where: 'below' })).toBe(
       'accepted'
     );
+  });
+
+  // r5 s2-short:2750. Ana's new row copies the shown cell properties of the row it goes above,
+  // Ben's struck one: its first cell continues the merge that starts above it, in the file's
+  // row. An accept and a reject of Ben's deletion leave her row as it was, so it is not inside
+  // his suggestion (today's check calls it nested: a fault of that check)
+  test('a new row in a vertical merge, above another person’s struck row, is beside it', () => {
+    const merged = (merge: string, text: string) =>
+      `<w:tc><w:tcPr><w:tcW w:w="3000" w:type="dxa"/>${merge}</w:tcPr>${p(t(text))}</w:tc>`;
+    const row = (merge: string, text: string) =>
+      `<w:tr>${merged(merge, text)}${merged('', `${text} fee`)}</w:tr>`;
+    const file = docx(
+      '<w:tbl><w:tblPr><w:tblW w:w="0" w:type="auto"/></w:tblPr>' +
+        '<w:tblGrid><w:gridCol w:w="3000"/><w:gridCol w:w="3000"/></w:tblGrid>' +
+        row('<w:vMerge w:val="restart"/>', 'Licence') +
+        row('<w:vMerge/>', 'Two') +
+        row('<w:vMerge/>', 'Three') +
+        '</w:tbl>' +
+        p(t('After.'))
+    );
+    const anasRow = (doc: OrderedDocument) =>
+      /<w:tr><w:trPr><w:ins [^>]*w:author="Ana"[^>]*\/><\/w:trPr>.*?<\/w:tr>/
+        .exec(serializeOoxmlPart(composeOrderedPart(doc, BODY).part))?.[0]
+        .replace(/ w:(id|date|paraId|textId)="[^"]*"/g, '');
+    for (const status of ['accepted', 'rejected'] as const) {
+      const { doc, send } = setup(loadOrderedPackage(packageOf(file)));
+      const second = () => addressOf(opens(doc, 'tr')[1]!);
+      expect(send(BEN, { kind: 'delete-row', ...EDIT, row: second() })).toBe('accepted');
+      expect(send(ANA, { kind: 'insert-row', ...EDIT, row: second(), where: 'above' })).toBe(
+        'accepted'
+      );
+      const before = anasRow(doc);
+      expect(before).toContain('<w:vMerge/>');
+      const card = orderedCardOf(doc, 'S:ben-1:1.1')?.suggestions ?? [];
+      expect(card).toEqual(['S:ben-1:1.1']);
+      const seen = card.map((id) => ({
+        suggestion: id,
+        version: doc.suggestions.get(id)?.version,
+      }));
+      expect(send(OLGA, { kind: 'decide', cards: [{ suggestions: seen }], status })).toBe(
+        'accepted'
+      );
+      expect({ status, row: anasRow(doc) }).toEqual({ status, row: before });
+    }
   });
 
   test('a column change cuts through another person’s new row', () => {
