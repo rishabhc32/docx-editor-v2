@@ -120,8 +120,8 @@ function checkPage(
 
 /**
  * One write to each of `sections`, for one suggestion: `into` when given, else the edit's own. A
- * suggested write that leaves a section as it shows (`sectionOpKeeps`) makes no record, so a
- * press that changes nothing makes no suggestion. Returns the suggestion that holds the writes,
+ * write that leaves a section as it shows (`sectionOpKeeps`) makes no record, so a press that
+ * changes nothing makes no suggestion, a direct one too. Returns the suggestion that holds the writes,
  * if any.
  */
 function addSectionWrites(
@@ -131,9 +131,9 @@ function addSectionWrites(
   into: OrderedSuggestion | null
 ): string | null {
   const shown = scratchCompose(ctx.doc, ctx.story, 'section');
-  const written = ctx.direct
-    ? sections
-    : sections.filter((section) => !sectionOpKeeps(shown, section.sectPr, op, ctx.attribution));
+  const written = sections.filter(
+    (section) => !sectionOpKeeps(shown, section.sectPr, op, ctx.attribution)
+  );
   if (written.length === 0) {
     return into?.id ?? null;
   }

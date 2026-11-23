@@ -88,6 +88,22 @@ describe('a party’s edit that changes nothing', () => {
     expect(doc.suggestions.size).toBe(suggestions);
   });
 
+  test('a direct page setup the sections have already passes; a new one is refused', () => {
+    const { doc, send } = setup();
+    const margin = (twips: number) => ({
+      kind: 'section-property',
+      part: BODY,
+      mode: 'edit',
+      sections: [],
+      page: { marginLeftTwips: twips },
+    });
+    expect(send(OLGA, margin(1800))).toBe('accepted');
+    const suggestions = doc.suggestions.size;
+    expect(send(ANA, margin(1800))).toBe('accepted');
+    expect(doc.suggestions.size).toBe(suggestions);
+    expect(send(ANA, margin(1440))).toBe('policy-direct/package');
+  });
+
   test('a watermark removal with no watermark passes; one with a watermark is refused (x68-long)', () => {
     const { doc, send } = setup();
     const remove = { kind: 'watermark', part: BODY, mode: 'edit', watermark: null };
