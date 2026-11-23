@@ -5,7 +5,7 @@ import type { OoxmlAttribute } from '../../../store/package/ooxml-tree.ts';
 import { isXmlNCName } from '../../../store/package/qname.ts';
 import { isValidXmlText } from '../../../store/package/sinks.ts';
 import { ORDERED_NAMESPACE_PATTERN } from '../change/ids.ts';
-import { at, int, Invalid, list, oneOf, plainFields, required, str } from '../change/read.ts';
+import { at, Invalid, list, oneOf, plainFields, required, str } from '../change/read.ts';
 import { suggestionId } from '../change/values.ts';
 import { isTripleAttribute, MAX_OTHER_ATTRIBUTES } from '../load/state.ts';
 import { readPerson } from './person.ts';

@@ -17,17 +17,8 @@ import { decodeOrderedServerMessage, encodeOrderedClientMessage } from '../proto
 import { ORDERED_PROTOCOL_VERSION, type OrderedServerMessage } from '../protocol/messages.ts';
 import { allowWritersPolicy } from '../room/policy.ts';
 import { OrderedRoom } from '../room/room.ts';
-import {
-  addressOf,
-  apply,
-  APPLY_FILE,
-  at,
-  BODY,
-  DATE,
-  EDIT,
-  opens,
-} from './change-apply-fixture.ts';
-import { withRoomFacts } from './checkpoint-fixture.ts';
+import { apply, APPLY_FILE, at, BODY, DATE } from './change-apply-fixture.ts';
+import { STYLE_RECORDS, withRoomFacts } from './checkpoint-fixture.ts';
 import { checkFold, checkpointBytes, folded, mediaStore } from './fold-check.ts';
 import { actor, snapshot } from './room-harness.ts';
 import { STYLED } from './style-revision-fixture.ts';
@@ -42,9 +33,8 @@ const suggestionsOf = (doc: OrderedDocument) =>
 
 /** STYLED with Ana's insertion (`S1`) accepted: a fold lists `S2` to `S7`, and no `S1`. */
 function styledWithS1Accepted() {
-  const room = openOrderedWordFile(STYLED, { file: 1 });
-  const cards = orderedSeenCards(room.document, ['S1']);
-  apply(room.document, 'olive:1', { kind: 'decide', cards, status: 'accepted' }, 'Olive');
+  const room = openOrderedWordFile(STYLE_RECORDS.source, { file: 1 });
+  STYLE_RECORDS.edit(room.document);
   return room;
 }
 
@@ -52,13 +42,6 @@ describe('a suggestion id across a fold', () => {
   test('every suggestion a fold keeps has its id, status and maker, after one fold and two', async () => {
     const room = openOrderedWordFile(APPLY_FILE, { file: 1 });
     const doc = withRoomFacts(room.document);
-
-    // Ben's control value accepted and Pia's pending: the untracked record names both
-    const cards = orderedSeenCards(doc, ['S:ben:1.1']);
-    apply(doc, 'olive:9', { kind: 'decide', cards, status: 'accepted' }, 'Olive');
-    const control = addressOf(opens(doc, 'sdt').at(-1)!);
-    const value = { kind: 'text', text: 'Gamma Ltd' } as const;
-    apply(doc, 'pia:2', { kind: 'control-value', ...EDIT, control, value }, 'Pia');
     const blobs = mediaStore(room.base);
     const once = await folded(doc, room.base, 2, blobs);
     const twice = await folded(once.document, once.base, 3, blobs);
@@ -69,7 +52,7 @@ describe('a suggestion id across a fold', () => {
     }
 
     // Every pending one but Ana's row height in her own new table, which a fold writes as part of
-    // the table, and the decided one the untracked record names
+    // the table, and Ben's accepted control value, which the untracked record names
     expect(suggestionsOf(twice.document).map(({ id, status }) => `${id} ${status}`)).toEqual([
       'S:quin:1.1 pending',
       'S:pia:1.1 pending',

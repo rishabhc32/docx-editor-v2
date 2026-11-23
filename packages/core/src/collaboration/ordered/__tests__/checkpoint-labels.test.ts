@@ -4,7 +4,6 @@
 
 import { describe, expect, test } from 'bun:test';
 import { strFromU8, strToU8, unzipSync, zipSync } from 'fflate';
-import type { OrderedChangePlace } from '../change/types.ts';
 import {
   openOrderedCheckpoint,
   openOrderedWordFile,
@@ -16,20 +15,26 @@ import { replaceItems } from '../model/mutations.ts';
 import { isTextBoxStoryName } from '../model/text-boxes.ts';
 import type { OrderedDocument } from '../model/types.ts';
 import { orderedUnitTyper } from '../model/typers.ts';
-import { orderedBlobHash } from '../protocol/blobs.ts';
 import {
-  addressOf,
   apply,
   APPLY_FILE,
   at,
   BODY,
   DIRECT,
   EDIT,
+  FOOTNOTES,
   textOf,
 } from './change-apply-fixture.ts';
-import { paragraph, withRoomFacts } from './checkpoint-fixture.ts';
+import {
+  insideAnas,
+  paragraph,
+  roomBlobs,
+  TYPED_BARE,
+  TYPED_RUNS,
+  withRoomFacts,
+} from './checkpoint-fixture.ts';
 import { checkFold, checkpointBytes, folded, foldPrint, mediaStore } from './fold-check.ts';
-import { bodyOf, docx, MATRIX_ITEMS, p, RED_PNG, t } from './word-fixtures.ts';
+import { p, t } from './word-fixtures.ts';
 
 /** A package with one of its entries edited as text. */
 function crafted(bytes: Uint8Array, entry: string, edit: (text: string) => string): Uint8Array {
@@ -214,183 +219,47 @@ describe('a run of two typers', () => {
   });
 });
 
-const PNG_MEDIA = {
-  sha256: orderedBlobHash(RED_PNG),
-  contentType: 'image/png',
-  size: RED_PNG.byteLength,
-} as const;
-
-/** A matrix item's file, and its item: in its second paragraph, after `Alpha `. */
-const matrixFile = (key: string) => docx(bodyOf(MATRIX_ITEMS.find((i) => i.key === key)!));
-
-/** The address of the first item drawn from an element of this local name. */
-const itemOf = (doc: OrderedDocument, localName: string, story = BODY) =>
-  addressOf(
-    [...doc.stories.get(story)!.tree.items()].find(
-      (item) => item.node?.kind !== 'textValue' && item.node?.localName === localName
-    )!
-  );
-
-/** Ana's pending words in APPLY_FILE's `Due` paragraph, and a place inside them. */
-function insideAnas(doc: OrderedDocument): OrderedChangePlace {
-  const due = paragraph(doc, 'Due');
-  apply(doc, 'ana:1', { kind: 'insert', ...EDIT, place: at(doc, due, 4), text: 'new words' });
-  return at(doc, due, 7);
-}
-
-/**
- * Units of each kind a room change types inside a pending insertion, and the element each is
- * drawn in: text and atoms in a run, a field's runs, a bare unit (a simple field, an equation:
- * an element kept whole is drawn as one), units hidden by their run, and units of a new cell
- * and a new text box (both of its copies). Olive types them. A prompt's units are never typed:
- * a control comes in by a direct edit only, accepted at once.
- */
-const UNIT_KINDS: readonly (readonly [string, Uint8Array, (doc: OrderedDocument) => void])[] = [
-  [
-    'text',
-    APPLY_FILE,
-    (doc) =>
-      apply(
-        doc,
-        'olive:1',
-        { kind: 'insert', ...DIRECT, place: insideAnas(doc), text: 'XY' },
-        'Olive'
-      ),
-  ],
-  [
-    'a tab',
-    APPLY_FILE,
-    (doc) => {
-      apply(doc, 'olive:1', { kind: 'insert-tab', ...DIRECT, place: insideAnas(doc) }, 'Olive');
-    },
-  ],
-  [
-    'a line break',
-    APPLY_FILE,
-    (doc) => {
-      const place = insideAnas(doc);
-      apply(doc, 'olive:1', { kind: 'insert-break', ...DIRECT, place, break: 'line' }, 'Olive');
-    },
-  ],
-  [
-    'a picture',
-    APPLY_FILE,
-    (doc) => {
-      const object = {
-        type: 'picture',
-        media: PNG_MEDIA,
-        extent: { cx: 914_400, cy: 457_200 },
-      } as const;
-      apply(
-        doc,
-        'olive:1',
-        { kind: 'insert-object', ...DIRECT, place: insideAnas(doc), object },
-        'Olive'
-      );
-    },
-  ],
-  [
-    'a note reference and its note',
-    APPLY_FILE,
-    (doc) => {
-      const body = { kind: 'insert-note', note: 'footnote', text: ' N' } as const;
-      apply(doc, 'olive:1', { ...body, ...EDIT, place: insideAnas(doc) }, 'Olive');
-    },
-  ],
-  [
-    'a complex field',
-    APPLY_FILE,
-    (doc) =>
-      apply(
-        doc,
-        'olive:1',
-        { kind: 'insert-field', ...DIRECT, place: insideAnas(doc), field: 'PAGE' },
-        'Olive'
-      ),
-  ],
-  [
-    'a simple field',
-    docx(p(t('Page ') + `<w:fldSimple w:instr=" PAGE ">${t('1')}</w:fldSimple>`)),
-    (doc) => {
-      const field = itemOf(doc, 'fldSimple');
-      apply(doc, 'olive:1', { kind: 'field-code', ...EDIT, field, code: 'NUMPAGES' }, 'Olive');
-    },
-  ],
-  [
-    'an equation',
-    matrixFile('math'),
-    (doc) => {
-      const object = itemOf(doc, 'oMath');
-      apply(
-        doc,
-        'olive:1',
-        { kind: 'equation', ...EDIT, object, equation: 0, linear: 'x^2' },
-        'Olive'
-      );
-    },
-  ],
-  [
-    'hidden text',
-    matrixFile('hidden'),
-    (doc) =>
-      apply(doc, 'olive:1', { kind: 'insert', ...EDIT, place: at(doc, 1, 8), text: 'XY' }, 'Olive'),
-  ],
-  [
-    'a new cell',
-    APPLY_FILE,
-    (doc) => {
-      const cell = itemOf(doc, 'tc');
-      apply(doc, 'ana:1', { kind: 'insert-column', ...EDIT, cell, where: 'right' });
-
-      // The new cell, right of the first
-      const place = at(doc, 5, 0);
-      apply(doc, 'olive:1', { kind: 'insert', ...DIRECT, place, text: 'XY' }, 'Olive');
-    },
-  ],
-  [
-    'a new text box',
-    APPLY_FILE,
-    (doc) => {
-      const object = { type: 'textbox', extent: { cx: 1_270_000 } } as const;
-      apply(doc, 'ana:1', { kind: 'insert-object', ...EDIT, place: at(doc, 0, 2), object });
-      const box = [...doc.stories.keys()].find(isTextBoxStoryName)!;
-      const place = at(doc, 0, 0, box);
-      apply(
-        doc,
-        'olive:1',
-        { kind: 'insert', part: box, mode: 'edit', place, text: 'XY' },
-        'Olive'
-      );
-    },
-  ],
-];
-
-/** How many units of the document Olive typed, by `orderedUnitTyper`. */
-function typedByOlive(doc: OrderedDocument): number {
-  let count = 0;
+/** Each unit Olive typed, by its story and what it shows. */
+function typedByOlive(doc: OrderedDocument): string[] {
+  const out: string[] = [];
   for (const story of doc.stories.values()) {
+    const where = isTextBoxStoryName(story.name) ? 'text box' : story.name;
     for (const item of story.tree.items()) {
+      const node = item.node?.kind === 'textValue' ? '' : (item.node?.localName ?? '');
       for (let k = 0; k < item.length; k += 1) {
         if (orderedUnitTyper(doc, item, item.offset + k)?.namespace === 'olive') {
-          count += 1;
+          // A complex field's unit has no node of its own
+          out.push(`${where} ${node || (item.pieces === undefined ? item.text[k] : 'field')}`);
         }
       }
     }
   }
 
-  return count;
+  return out.sort();
 }
 
 describe('who typed each unit kind', () => {
-  for (const [label, file, edit] of UNIT_KINDS) {
-    test(`${label}: the same after one fold and two`, async () => {
-      const { document: doc, base } = openOrderedWordFile(file, { file: 1 });
+  for (const { name, source, edit, typed } of [
+    {
+      ...TYPED_RUNS,
+      typed: [
+        ...[...'XXYY', 'br', 'drawing', 'field', 'footnoteReference', 'tab'].map(
+          (u) => `${BODY} ${u}`
+        ),
+        `${FOOTNOTES}  `,
+        `${FOOTNOTES} N`,
+        'text box X',
+        'text box Y',
+      ],
+    },
+    { ...TYPED_BARE, typed: ['X', 'Y', 'fldSimple', 'oMath'].map((u) => `${BODY} ${u}`) },
+  ]) {
+    test(`${name}: the same after one fold and two`, async () => {
+      const { document: doc, base } = openOrderedWordFile(source, { file: 1 });
       edit(doc);
-      const typed = typedByOlive(doc);
-      expect(typed).toBeGreaterThan(0);
-      const store = mediaStore(base);
-      const blobs = (hash: string) => (hash === PNG_MEDIA.sha256 ? RED_PNG : store(hash));
-      await checkFold(doc, base, blobs, label);
+      expect(typedByOlive(doc)).toEqual(typed);
+      const blobs = roomBlobs(base);
+      await checkFold(doc, base, blobs, name);
       const once = await folded(doc, base, 2, blobs);
       const twice = await folded(once.document, once.base, 3, blobs);
       expect([once.document, twice.document].map(typedByOlive)).toEqual([typed, typed]);
