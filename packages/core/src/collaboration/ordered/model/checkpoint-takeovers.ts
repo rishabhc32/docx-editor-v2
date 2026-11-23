@@ -2,6 +2,7 @@
 // names by label, and the properties it holds as XML.
 
 import { serializeOoxmlPart } from '../../../store/package/ooxml-serialize.ts';
+import { withRequiredNamespaceBindings } from '../../../store/store/tree-op-fragment.ts';
 import {
   readOoxmlPart,
   WML_NAMESPACE_URI,
@@ -73,9 +74,14 @@ const propertiesPart = (name: string) => ({
   contentType: 'application/xml',
 });
 
-/** Properties as the manifest holds them: XML text. */
-export const propertiesXml = (root: OoxmlElement): string =>
-  serializeOoxmlPart({ id: 'properties', ...propertiesPart(''), root });
+/**
+ * Properties as the manifest holds them: XML text, with each prefix they use declared on them, so
+ * a read gives back the prefixes of the part they came from (`w14:checkbox`, not a new one).
+ */
+export const propertiesXml = (root: OoxmlElement): string => {
+  const part = { id: 'properties', ...propertiesPart(''), root };
+  return serializeOoxmlPart(withRequiredNamespaceBindings(part, [root]));
+};
 
 /**
  * Properties the manifest holds, read from their XML text; else they are not a `w:` element of

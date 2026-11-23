@@ -6,9 +6,16 @@
 import { describe, test } from 'bun:test';
 import { openOrderedWordFile } from '../client/open.ts';
 import type { OrderedDocument } from '../model/types.ts';
-import { apply, at, EDIT, markOf } from './change-apply-fixture.ts';
+import { apply, at, EDIT, markOf, opens } from './change-apply-fixture.ts';
 import { checkFold, mediaStore } from './fold-check.ts';
-import { docx, MATRIX_EXTRAS, p, type PackageExtras } from './word-fixtures.ts';
+import {
+  alphaOmega,
+  docx,
+  MATRIX_EXTRAS,
+  MATRIX_ITEMS,
+  p,
+  type PackageExtras,
+} from './word-fixtures.ts';
 
 /** A run as Word writes it, with its revision session and its own properties. */
 const run = (text: string, rPr = '') =>
@@ -94,5 +101,27 @@ describe('a decision after a fold, on a new list', () => {
 
   test("in a file with lists of its own: the file's stay", async () => {
     await foldOf(ITEMS, newList, 'a new list, a numbering part', MATRIX_EXTRAS);
+  });
+});
+
+describe('a decision after a fold, beside a pending control value', () => {
+  // A check box's value record names elements of another namespace than the main one: a fold
+  // keeps their prefix, so the part a decision edits still reads
+  const xmlOf = (key: string) => MATRIX_ITEMS.find((item) => item.key === key)?.xml ?? '';
+
+  test('an accepted deletion empties a drop-down list beside a ticked check box', async () => {
+    await foldOf(
+      p(alphaOmega(xmlOf('dropdown'))) + p(alphaOmega(xmlOf('checkbox'))),
+      (doc) => {
+        apply(doc, 'ana:1', {
+          kind: 'control-value',
+          ...EDIT,
+          control: opens(doc, 'sdt')[1]!,
+          value: { kind: 'checkbox', checked: true },
+        });
+        apply(doc, 'bob:1', { kind: 'delete', ...EDIT, from: at(doc, 0, 6), to: at(doc, 0, 9) });
+      },
+      'a drop-down list beside a check box'
+    );
   });
 });
