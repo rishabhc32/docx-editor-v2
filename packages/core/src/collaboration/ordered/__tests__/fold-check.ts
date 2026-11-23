@@ -10,8 +10,9 @@
 //  - the record of a suggestion its author took back, with the units it inserted (`retracted`):
 //    only its redo reads them, as the undo history, which a fold does not keep. What the take-back
 //    leaves is compared: the file, the cards, the shown units and their labels;
-//  - a suggested note reference that a direct deletion removed: the room keeps its record only for
-//    that deletion's undo; the note shows nowhere and has no card;
+//  - the record of a suggestion that shows nowhere now: a direct or an accepted deletion took every
+//    unit it is on, or the note or text box it is in shows nowhere (`CardRead.isLeftOut`). The room
+//    keeps the record only for that change's undo; it has no card, and the file holds none of it;
 //  - a record its author made on their own new words or paragraph (`untracked`): it shows with no
 //    change record, so a fold writes it as part of them, and a decision keeps or takes it with
 //    them; only the undo of the change that made it reads it.
@@ -20,7 +21,7 @@ import { expect } from 'bun:test';
 import { strFromU8, unzipSync } from 'fflate';
 import { readOoxmlPackage, type OoxmlPackage } from '../../../store/package/ooxml-package.ts';
 import { serializeOoxmlPart, type OoxmlElement } from '../../../store/package/ooxml-tree.ts';
-import { isCardUnit, isOrderedItemHidden } from '../card-of.ts';
+import { CardRead, isCardUnit, isOrderedItemHidden } from '../card-of.ts';
 import { orderedCardSeen } from '../change/apply-decide.ts';
 import { settlePromptMarks } from '../change/settle-prompts.ts';
 import { openOrderedCheckpoint, type OrderedWordFile } from '../client/open.ts';
@@ -99,39 +100,63 @@ const xmlOf = (face: OoxmlElement | null): string =>
 /**
  * Whether an item shows: a prompt's units that content took the place of are the glossary's
  * placeholder after a fold, and show nowhere either way; a link's edges are no unit, as the room
- * labels them and a reopened link has no label.
+ * labels them and a reopened link has no label; a note or a text box compose leaves out shows
+ * nowhere.
  */
-const showsOn = (doc: OrderedDocument, item: OrderedItem): boolean =>
-  item.kind === 'zero'
-    ? !isOrderedItemHidden(doc, item) && !isMoveRange(item)
-    : isCardUnit(doc, item);
+const showsOn = (read: CardRead, story: OrderedStory, item: OrderedItem): boolean =>
+  !read.isLeftOut(item, story) &&
+  (item.kind === 'zero'
+    ? !isOrderedItemHidden(read.doc, item) && !isMoveRange(item)
+    : isCardUnit(read.doc, item));
 
 /** A move's range marker: a fold writes the file's own, which the room draws from the move. */
 const isMoveRange = (item: OrderedItem): boolean =>
   item.node?.kind !== 'textValue' && MOVE_RANGE.test(item.node?.localName ?? '');
 
 /**
- * The items a story's drawing hides with the prompts content took the place of, with the
- * controls those prompts held: a fold keeps them in the glossary only.
+ * The items a story's drawing leaves out: the prompts content took the place of, with the controls
+ * those prompts held (a fold keeps them in the glossary only), and the edges of a table whose every
+ * row is gone (compose leaves it out, as Word removes it).
  */
-function promptsHidden(doc: OrderedDocument, story: OrderedStory): ReadonlySet<OrderedItem> {
+function drawnNowhere(doc: OrderedDocument, story: OrderedStory): ReadonlySet<OrderedItem> {
   const ctx = new ComposeContext(doc, story, {});
+  const out = new Set<OrderedItem>();
+  const tables: { open: OrderedItem; rows: boolean }[] = [];
   for (const item of story.tree.items()) {
     if (item.kind === 'open' && item.prompt === true) {
       showsPrompt(ctx, item);
     }
+
+    if (item.token === 'tbl' && item.kind === 'open') {
+      tables.push({ open: item, rows: false });
+    } else if (item.token === 'tbl' && item.kind === 'close') {
+      const table = tables.pop();
+      if (table && !table.rows) {
+        out.add(table.open).add(item);
+      }
+    } else if (item.token === 'tr' && item.kind === 'open' && !isOrderedItemHidden(doc, item)) {
+      const table = tables.at(-1);
+      if (table) {
+        table.rows = true;
+      }
+    }
   }
 
-  return ctx.hiddenPrompts;
+  for (const item of ctx.hiddenPrompts) {
+    out.add(item);
+  }
+
+  return out;
 }
 
 /**
- * Pending suggestions, but for one its author took back (every item it labels is taken back) and
- * one only on a prompt that content took the place of: a fold keeps neither.
+ * Pending suggestions that show something: a fold keeps none whose every item shows nowhere
+ * (`isOrderedItemHidden`: taken back, taken away by a decision or a direct deletion, a prompt that
+ * content took the place of; or in a note or a text box compose leaves out).
  */
-function keptPending(doc: OrderedDocument): OrderedSuggestion[] {
-  const kept = (item: OrderedItem) =>
-    !item.retracted && !(item.prompt === true && isOrderedItemHidden(doc, item));
+function keptPending(read: CardRead): OrderedSuggestion[] {
+  const { doc } = read;
+  const kept = (item: OrderedItem) => !isOrderedItemHidden(doc, item) && !read.isLeftOut(item);
   return [...doc.suggestions.values()].filter(
     (s) =>
       s.status === 'pending' &&
@@ -187,7 +212,12 @@ export function foldPrint(doc: OrderedDocument, base: OoxmlPackage, blobs: FoldB
       by: key(by),
       dels: keys(item.dels),
       fmts: keys(roles.fmt),
-      replaced: keys(item.fmts.flatMap((f) => (f.replaced === undefined ? [] : [f.replaced]))),
+      // A decided record takes over nothing: a fold resolves it
+      replaced: keys(
+        item.fmts.flatMap((f) =>
+          f.replaced === undefined || key(f.suggestion) === null ? [] : [f.replaced]
+        )
+      ),
       // Records apply in their order of creation, whatever their place in the list
       props: keys(roles.prop).sort(),
       move: item.move !== null && (key(item.by) !== null || keys(item.dels).length > 0),
@@ -203,15 +233,17 @@ export function foldPrint(doc: OrderedDocument, base: OoxmlPackage, blobs: FoldB
       });
     });
   };
-  const pending = keptPending(doc);
+  const read = new CardRead(doc);
+  const pending = keptPending(read);
   const file = orderedPackageBytes(doc, base, { blobs });
   return {
+    // A story that shows nothing (a text box whose object went) is in no file
     stories: [...doc.stories]
-      .map(([name, story]) => {
-        const hidden = promptsHidden(doc, story);
-        const shown = story.tree.toArray().filter((i) => showsOn(doc, i) && !hidden.has(i));
+      .flatMap(([name, story]) => {
+        const hidden = drawnNowhere(doc, story);
+        const shown = story.tree.toArray().filter((i) => showsOn(read, story, i) && !hidden.has(i));
         const listed = shown.flatMap((item) => units(story, item));
-        return [storyLabel(name), ...listed].join('\n');
+        return listed.length === 0 ? [] : [[storyLabel(name), ...listed].join('\n')];
       })
       .sort(),
     suggestions: pending.map((s) => `${s.id} ${makerKey(s)}`).sort(),
@@ -240,7 +272,7 @@ export function foldPrint(doc: OrderedDocument, base: OoxmlPackage, blobs: FoldB
     partRevisions: [...doc.partRevisions]
       .filter(([id]) => key(id) !== null)
       .map(([id, r]) => JSON.stringify([key(id), r.part, r.element, r.styleId ?? null])),
-    view: viewOf(doc),
+    view: viewOf(read),
     revisions: revisionReads(doc, file),
     file: partsOf(file),
   };
@@ -281,15 +313,16 @@ type FoldBlobs = (sha256: string) => Uint8Array | undefined;
 const storyLabel = (name: string): string => (isTextBoxStoryName(name) ? 'text box' : name);
 
 /**
- * What each story's page shows: every character and its strike. A character's own face is left
- * out: a fold writes the decided formats into it, which the room keeps as records.
+ * What each story's page shows: every character and its strike, but for a note or a text box
+ * compose leaves out. A character's own face is left out: a fold writes the decided formats into
+ * it, which the room keeps as records.
  */
-function viewOf(doc: OrderedDocument): string[] {
+function viewOf(read: CardRead): string[] {
   const out: string[] = [];
-  for (const [name, story] of doc.stories) {
+  for (const [name, story] of read.doc.stories) {
     for (let k = 0; k < story.tree.summary.marks; k += 1) {
-      const view = orderedViewParagraph(doc, name, k);
-      if (view !== null) {
+      const view = orderedViewParagraph(read.doc, name, k);
+      if (view !== null && !read.isLeftOut(view.mark, story)) {
         out.push(view.chars.map((c) => `${c.ch}${c.deleted ? '-' : ''}`).join(''));
       }
     }
@@ -365,7 +398,7 @@ function withoutFoldedLinks(
 /** The ids of each maker's pending suggestions that a fold keeps. */
 function byMaker(doc: OrderedDocument): Map<string, string[]> {
   const out = new Map<string, string[]>();
-  for (const s of keptPending(doc)) {
+  for (const s of keptPending(new CardRead(doc))) {
     out.set(makerKey(s), [...(out.get(makerKey(s)) ?? []), s.id]);
   }
 
