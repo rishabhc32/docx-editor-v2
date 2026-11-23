@@ -4,6 +4,7 @@
 // before and after it. This policy gives the same verdict per change, except where that check
 // misreads the Word form (design D9 lists them).
 
+import { isBlockToken } from '../compose/blocks.ts';
 import { promptControlOf, promptShows } from '../compose/paragraph.ts';
 import {
   isHidden,
@@ -399,50 +400,76 @@ function breaksBlockPrompt(
   return false;
 }
 
-/** Whether a row, a cell, a table or a note that `id` inserted holds an item. */
+/**
+ * Whether a row, a cell, a table, a note, a text box or a block control that `id` inserted holds
+ * an item (`within`).
+ */
 const heldByNew = (item: OrderedItem, id: string): boolean =>
   item.within.by.includes(id) || (item.quiet && item.by === id);
 
 /**
+ * The open items of the controls and links that hold what comes right after an item, in its
+ * paragraph: from a container's open item on, up to its close item.
+ */
+function containersAfter(
+  doc: OrderedDocument,
+  story: OrderedStory,
+  from: OrderedItem
+): OrderedItem[] {
+  const out: OrderedItem[] = [];
+  let depth = 0;
+  for (let item: OrderedItem | null = from; item !== null; item = story.tree.prev(item)) {
+    if ((item.kind === 'mark' && !isHidden(doc, item)) || isBlockToken(item)) break;
+    if ((item.kind !== 'open' && item.kind !== 'close') || isHidden(doc, item)) continue;
+    if (item.kind === 'close') depth += 1;
+    else if (depth > 0) depth -= 1;
+    else out.push(item);
+  }
+
+  return out;
+}
+
+/**
  * Whether a caret's new items go inside another person's pending insertion, where Word nests
- * them in it: between two of its units (one run of theirs), or in a row, a cell, a table or a
- * note it made. A caret is where the change's new items go: past struck text, as the engine
- * types there (`OrderedCaret`). Beside their paragraph mark, a link's or a control's edge, or
- * between their deletion and their insertion, the new run sits beside their suggestions, as the
- * host's check reads the Word file. With no maker, inside anyone's (`insertedByOthers`).
+ * them in it: between two of its units (one run of theirs), in a row, a cell, a table, a note, a
+ * text box or a block control it made around the caret's paragraph, or in a control or a link it
+ * made, from its start on, whatever the words there are. A caret is where the change's new items
+ * go: past struck text, as the engine types there (`OrderedCaret`). Beside their paragraph mark,
+ * past a link's or a control's end, or between their deletion and their insertion, the new run
+ * sits beside their suggestions, as the host's check reads the Word file.
+ * With no maker, inside anyone's (`insertedByOthers`): a direct edit there is typed into that
+ * insertion as its author's (`directInsert`), as Word extends a tracked insertion with untracked
+ * typing, so it makes no suggestion of its own.
  */
 function caretInside(
   doc: OrderedDocument,
   maker: OrderedMaker | null,
-  caret: OrderedCaret
-): boolean {
-  const { before, at } = caret;
-  if (before === null) return false;
-  const around = new Set(insertedByOthers(doc, maker, at));
-  return insertedByOthers(doc, maker, before).some(
-    (id) =>
-      around.has(id) &&
-      ((isUnit(before) && isUnit(at)) || heldByNew(before, id) || heldByNew(at, id))
-  );
-}
-
-/**
- * Whether a direct edit at a caret types into a pending insertion, the author's own too: inside
- * it, or anywhere in a paragraph of a row, a note or a text box it made. The engine types it
- * there as that insertion's author (`directInsert`), as Word extends a tracked insertion with
- * untracked typing, so the edit makes no suggestion of its own.
- */
-function typesIntoInsertion(
-  doc: OrderedDocument,
   story: OrderedStory | null,
   caret: OrderedCaret
 ): boolean {
-  if (caretInside(doc, null, caret)) {
+  const { before, at } = caret;
+  if (before !== null && isUnit(before) && isUnit(at)) {
+    const around = new Set(insertedByOthers(doc, maker, at));
+    if (insertedByOthers(doc, maker, before).some((id) => around.has(id))) {
+      return true;
+    }
+  }
+
+  if (story === null) {
+    return false;
+  }
+
+  const mark = paragraphMarkOf(doc, story, at);
+  if (mark !== null && insertedByOthers(doc, maker, mark).some((id) => heldByNew(mark, id))) {
     return true;
   }
 
-  const mark = story === null ? null : paragraphMarkOf(doc, story, caret.at);
-  return mark !== null && insertedByOthers(doc, null, mark).some((id) => heldByNew(mark, id));
+  return (
+    before !== null &&
+    containersAfter(doc, story, before).some(
+      (open) => insertedByOthers(doc, maker, open).length > 0
+    )
+  );
 }
 
 /**
@@ -456,7 +483,7 @@ function caretNested(
   story: OrderedStory | null,
   caret: OrderedCaret
 ): boolean {
-  if (caretInside(doc, maker, caret)) {
+  if (caretInside(doc, maker, story, caret)) {
     return true;
   }
 
@@ -766,7 +793,7 @@ function checkEdit(input: OrderedPolicyInput, change: OrderedEditChange): Ordere
   if (held !== null) {
     const into =
       change.mode === 'edit' &&
-      touched.carets.some((c) => typesIntoInsertion(doc, touched.story, c));
+      touched.carets.some((c) => caretInside(doc, null, touched.story, c));
     return into ? held : ALLOW;
   }
 

@@ -121,6 +121,68 @@ describe('the policy and today’s check', () => {
     );
   });
 
+  // Today: Word nests the new run in the `w:sdt` or `w:hyperlink` that Ben's `w:ins` holds, so
+  // taking back Ana's words alone does not give Ben's container back as it was. Whatever the
+  // words around the caret are: Ben's other suggestion (r5 s25-long:387), or words a decision
+  // accepted (r4 s2-short:1923). Past the container's end her words sit beside it
+  const CONTAINERS = [
+    {
+      name: 'control',
+      // "fee" struck, and a copy of it in Ben's new control at 7
+      make: [{ kind: 'wrap-control', from: 4, to: 7, control: { type: 'date' } }],
+      xy: 8,
+      edges: [12, 7],
+    },
+    {
+      name: 'link',
+      // A suggested link holds its suggestion's own words: "abcd" at 4
+      make: [
+        { kind: 'insert', place: 4, text: 'abcd' },
+        { kind: 'insert-link', from: 4, to: 8, href: 'https://example.com/' },
+      ],
+      xy: 6,
+      edges: [10, 4],
+    },
+  ] as const;
+  for (const { name, make, xy, edges } of CONTAINERS) {
+    test(`typing in another person’s new ${name} around other words is inside it`, () => {
+      const { doc, send, at } = setup();
+      const places = (change: Record<string, unknown>) =>
+        Object.fromEntries(
+          Object.entries(change).map(([k, v]) => [k, typeof v === 'number' ? at(0, v) : v])
+        );
+      // Ben strikes "USD", makes the container, and adds "XY" in it to his deletion
+      expect(send(BEN, { kind: 'delete', ...EDIT, from: at(0, 15), to: at(0, 18) })).toBe(
+        'accepted'
+      );
+      for (const change of make) expect(send(BEN, { ...EDIT, ...places(change) })).toBe('accepted');
+      expect(
+        send(BEN, { kind: 'insert', ...EDIT, place: at(0, xy), text: 'XY', into: 'S:ben-1:1.1' })
+      ).toBe('accepted');
+      const typed = (n: number) =>
+        send(ANA, { kind: 'insert', ...EDIT, place: at(0, n), text: 'a' });
+
+      // Between Ben's container's words and "XY", and inside "XY" once accepted
+      expect(typed(xy)).toBe('policy-nested/nested');
+      const card = orderedCardOf(doc, 'S:ben-1:1.1')?.suggestions ?? [];
+      expect(card).toEqual(['S:ben-1:1.1']);
+      const seen = card.map((id) => ({
+        suggestion: id,
+        version: doc.suggestions.get(id)?.version,
+      }));
+      expect(
+        send(OLGA, { kind: 'decide', cards: [{ suggestions: seen }], status: 'accepted' })
+      ).toBe('accepted');
+      expect(typed(xy + 1)).toBe('policy-nested/nested');
+      // Past its end, beside it; from its start on, inside it
+      const [end, start] = edges;
+      expect({ end: typed(end), start: typed(start) }).toEqual({
+        end: 'accepted',
+        start: 'policy-nested/nested',
+      });
+    });
+  }
+
   test('a deletion of another person’s words that someone struck already does nothing there', () => {
     const { send, at, doc } = setup();
     expect(send(ANA, { kind: 'insert', ...EDIT, place: at(0, 4), text: 'abcd' })).toBe('accepted');
