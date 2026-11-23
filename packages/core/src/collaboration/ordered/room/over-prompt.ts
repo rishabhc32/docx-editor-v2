@@ -107,6 +107,19 @@ function promptAt(
 }
 
 /**
+ * Whether a caret is at a shown prompt: there the edits place their items by the prompt's rules,
+ * not at the caret (`promptSite`, `promptBreakSite`), so the room judges where they land once
+ * applied.
+ */
+export function atShownPrompt(
+  doc: OrderedDocument,
+  story: OrderedStory,
+  caret: OrderedCaret
+): boolean {
+  return promptAt(new ComposeContext(doc, story, {}), story, caret, true) !== null;
+}
+
+/**
  * Whether the change puts content in the control at a caret there, as the edits place it (the
  * room policy test checks each kind at each place against the save):
  *  - a control value or a building block fills the control;

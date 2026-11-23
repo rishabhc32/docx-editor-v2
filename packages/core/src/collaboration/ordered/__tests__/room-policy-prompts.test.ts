@@ -347,21 +347,22 @@ function venueVerdicts(file: Uint8Array, line: number, start: number, bold: stri
         throw new Error(`${name}: ${targets.code}`);
       }
 
-      const verdict = suggestionsOnlyPolicy().check({
-        actor: CY,
-        change,
-        touched: targets.touched,
-        document: doc,
-      });
-      const nested = !verdict.ok && verdict.code === 'policy-nested';
+      // As the room judges: before the apply, then on what it did
+      const policy = suggestionsOnlyPolicy();
+      const input = { actor: CY, change, touched: targets.touched, document: doc };
+      let verdict = policy.check(input);
       try {
-        apply(doc, 'cy-1:1', make(doc, where, line) as never, 'Cy');
+        const outcome = apply(doc, 'cy-1:1', make(doc, where, line) as never, 'Cy');
+        if (verdict.ok) {
+          verdict = policy.checkApplied?.(input, outcome) ?? verdict;
+        }
       } catch (error) {
         if (!(error instanceof OrderedRefusal)) {
           throw error;
         }
       }
 
+      const nested = !verdict.ok && verdict.code === 'policy-nested';
       const saves = bobsWords(reopened(saved(packageOf(file), doc)));
       const loses = bobsWords(doc) !== before || saves !== before;
       if (loses && !nested) {
@@ -383,14 +384,84 @@ describe('every kind of edit at every place of a prompt that holds a control wit
       test(`${control}: ${bob.name}`, () => {
         const file = venue(block, bob.outer, bob.inner);
         const { lost, kept } = venueVerdicts(file, line, start, bob.bold);
-        expect(lost).toEqual([]);
-
-        // In his new control, a deletion over its prompt and an edit at a caret in it are
-        // inside his insertion (`caretNested`), wherever the content lands: refused, never lost
-        if (bob.bold) {
-          expect(kept).toEqual([]);
-        }
+        expect({ lost, kept }).toEqual({ lost: [], kept: [] });
       });
     }
   }
+});
+
+describe("in another person's new control, the nested verdict follows what the edit does", () => {
+  /** Bob's words in the room and in its saved file, after Cy's `change`, and the verdict. */
+  function afterCy(file: Uint8Array, change: (doc: OrderedDocument) => Record<string, unknown>) {
+    const { doc, send } = roomOn(file);
+    const before = bobsWords(doc);
+    const verdict = send(CY, change(doc));
+    const kept = bobsWords(doc) === before;
+    const saves = bobsWords(reopened(saved(packageOf(file), doc))) === before;
+    return { verdict, kept, saves };
+  }
+
+  test('a deletion over the prompt of his new control strikes nothing: allowed', () => {
+    for (const [outer, inner] of [
+      [true, false],
+      [false, true],
+      [true, true],
+    ] as const) {
+      const file = venue(false, outer, inner);
+      const deletion = (doc: OrderedDocument) => ({
+        kind: 'delete',
+        ...EDIT,
+        from: at(doc, 0, 8),
+        to: at(doc, 0, 30),
+      });
+      expect([outer, inner, afterCy(file, deletion)]).toEqual([
+        outer,
+        inner,
+        { verdict: 'accepted', kept: true, saves: true },
+      ]);
+    }
+  });
+
+  test('typing in his new combo box goes to the end of the outer prompt: allowed', () => {
+    for (const { block, line, start } of VENUES) {
+      const typing = (doc: OrderedDocument) => ({
+        kind: 'insert',
+        ...EDIT,
+        place: at(doc, line, start + 15),
+        text: 'Q',
+      });
+      expect([block, afterCy(venue(block, false, true), typing)]).toEqual([
+        block,
+        { verdict: 'accepted', kept: true, saves: true },
+      ]);
+    }
+  });
+
+  test('a table at the prompt of his new control goes beside the paragraph: allowed', () => {
+    const table = (doc: OrderedDocument) => ({
+      kind: 'insert-table',
+      ...EDIT,
+      place: at(doc, 0, 12),
+      rows: 1,
+      columns: 1,
+      columnWidth: 2400,
+    });
+    expect(afterCy(venue(false, true, false), table)).toEqual({
+      verdict: 'accepted',
+      kept: true,
+      saves: true,
+    });
+  });
+
+  test('Enter in his new combo box meets the edit’s own refusal', () => {
+    const enter = (doc: OrderedDocument) => ({ kind: 'split', ...EDIT, place: at(doc, 0, 22) });
+    expect(afterCy(venue(false, false, true), enter).verdict).toBe(
+      'apply-refused/break-in-container'
+    );
+  });
+
+  test('content that lands in his new combo box is inside his insertion', () => {
+    const tab = (doc: OrderedDocument) => ({ kind: 'insert-tab', ...EDIT, place: at(doc, 0, 22) });
+    expect(afterCy(venue(false, false, true), tab).verdict).toBe('policy-nested/nested');
+  });
 });
