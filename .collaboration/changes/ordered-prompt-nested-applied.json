@@ -1,0 +1,10 @@
+{
+  "impact": "compatible",
+  "fields": [],
+  "before": "In an ordered room, a party's typing, table or Enter at a caret inside another person's new control at a shown prompt was refused as nested although the items landed elsewhere, and a deletion over that person's new prompt was refused although the deletion leaves a prompt as it is.",
+  "after": "At a shown prompt the room judges a party's edit once applied: new items that landed in another person's pending insertion, or a unit of their prompt the edit struck, are nested. Elsewhere the check before the apply is unchanged, and the applied check agrees with it.",
+  "reason": "Only the room's policy verdict changes; every copy applies and draws each change with the same code, and the Yjs document format and the change format do not change. Ordered rooms admit only clients of their own code version and are not deployed yet, so no migration is needed.",
+  "tests": ["packages/core/src/collaboration/ordered/__tests__/room-policy-prompts.test.ts"],
+  "changeset": "ordered-prompt-nested-applied",
+  "migration": null
+}
