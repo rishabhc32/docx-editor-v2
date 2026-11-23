@@ -9,6 +9,7 @@ import type {
   SourceCrop,
 } from '../../../store/package/drawing-projection.ts';
 import { findNode } from '../../../store/package/ooxml-edit.ts';
+import { canonicalOoxmlFingerprint } from '../../../store/package/ooxml-serialize.ts';
 import type { OoxmlDrawingNode, OoxmlNode } from '../../../store/package/ooxml-tree.ts';
 import { EMU_PER_POINT } from '../../../store/package/drawing-package-edit.ts';
 import { buildTextboxDrawing } from '../../../store/package/textbox-drawing-builder.ts';
@@ -238,13 +239,13 @@ function modelOp(ctx: Ctx, suggestion: string, op: OrderedObjectChangeOp): Order
  * for each op, in order, that compose runs with the engine's own op. Refused by name when the
  * edit is a suggestion (Word has no tracked form for it, `model/objects.ts`), the object no
  * longer shows, or the engine refuses an op on the object as it shows (a lock, a position on an
- * inline picture). Returns the direct suggestion.
+ * inline picture). Returns the direct suggestion, or null when the ops change nothing.
  */
 export function changeObject(
   ctx: Ctx,
   atom: OrderedItem,
   ops: readonly OrderedObjectChangeOp[]
-): string {
+): string | null {
   if (!ctx.direct)
     throw new OrderedRefusal('untracked-only', 'a picture property has no tracked form');
   if (atom.kind !== 'atom') throw new OrderedRefusal('invalid-edit', 'the target is no object');
@@ -252,12 +253,12 @@ export function changeObject(
   if (ops.length === 0) throw new OrderedRefusal('invalid-edit', 'a property change needs an op');
   refuseLockedAt(ctx, atom);
   const before = currentElement(ctx, atom);
-  const suggestion = newSuggestion(ctx.doc, ctx.attribution, ctx.ids.suggestion());
-  const made = ops.map((op) => modelOp(ctx, suggestion.id, op));
+  const id = ctx.ids.suggestion();
+  const made = ops.map((op) => modelOp(ctx, id, op));
 
   // The engine checks each op on the object as it shows, as the editor's own commit does
   let scratch = 0;
-  objectAfterOps(
+  const after = objectAfterOps(
     ctx.doc,
     ctx.story.part,
     before,
@@ -267,6 +268,15 @@ export function changeObject(
       throw new OrderedRefusal('engine-refused', `a picture property: ${reason}`);
     }
   );
+
+  // Ops that leave the object as it shows change nothing, so they make no record, as a format
+  // press that changes no value makes none. A new image or link always changes it, so no
+  // resource is left without its suggestion
+  if (canonicalOoxmlFingerprint(after) === canonicalOoxmlFingerprint(before)) {
+    return null;
+  }
+
+  const suggestion = newSuggestion(ctx.doc, ctx.attribution, id);
   const records: OrderedObjectRecord[] = made.map((op) => ({
     kind: 'object',
     suggestion: suggestion.id,
