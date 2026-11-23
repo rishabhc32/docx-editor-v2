@@ -203,7 +203,10 @@ function engineRewrite(
   const after = findNode(scratch, paragraph.id);
   if (!after || after.kind === 'textValue')
     throw new OrderedRefusal('engine-refused', `${op(paragraph.id, fieldNodeId).op}: no field`);
-  if (ooxmlTreesEqual(after, paragraph)) return null;
+  if (ooxmlTreesEqual(after, paragraph)) {
+    return null;
+  }
+
   return formOf(ctx, item, after.children);
 }
 
