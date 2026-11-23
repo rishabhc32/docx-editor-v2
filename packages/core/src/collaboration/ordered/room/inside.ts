@@ -44,8 +44,12 @@ export function paragraphMarkOf(
   story: OrderedStory,
   from: OrderedItem
 ): OrderedItem | null {
-  for (let at: OrderedItem | null = from; at !== null; at = story.tree.next(at))
-    if (at.kind === 'mark' && !isHidden(doc, at)) return at;
+  for (let at: OrderedItem | null = from; at !== null; at = story.tree.next(at)) {
+    if (at.kind === 'mark' && !isHidden(doc, at)) {
+      return at;
+    }
+  }
+
   return null;
 }
 
