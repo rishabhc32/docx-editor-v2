@@ -244,11 +244,11 @@ function addWatermark(
 /**
  * Set the document's watermark, or remove it (`null`), as one direct edit of a new suggestion,
  * which it returns; a removal with no watermark makes none. The change's story is the main
- * document's. A section that shows no header of a variant that
- * can paint gets a new one first; the old watermark goes from every header a section names; then
- * every header a section shows takes the new shape at the start of its first paragraph. In the
- * list a watermark is the item of its `w:pict`, so the edit hides old items and adds new ones,
- * and the organiser's undo (`revert`) shows the old ones again exactly.
+ * document's. A section that shows no header of a variant that can paint gets a new one first;
+ * the old watermark goes from every header a section names; then every header a section shows
+ * takes the new shape at the start of its first paragraph. In the list a watermark is the item
+ * of its `w:pict`, so the edit hides old items and adds new ones, and the organiser's undo
+ * (`revert`) shows the old ones again exactly.
  */
 export function setWatermark(ctx: Ctx, write: OrderedChangeWatermark | null): string | null {
   if (ctx.story.part.root.localName !== 'document')

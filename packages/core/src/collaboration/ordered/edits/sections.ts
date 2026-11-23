@@ -121,8 +121,8 @@ function checkPage(
 /**
  * One write to each of `sections`, for one suggestion: `into` when given, else the edit's own. A
  * write that leaves a section as it shows (`sectionOpKeeps`) makes no record, so a press that
- * changes nothing makes no suggestion, a direct one too. Returns the suggestion that holds the writes,
- * if any.
+ * changes nothing makes no suggestion, a direct one too. Returns the suggestion that holds the
+ * writes, if any.
  */
 function addSectionWrites(
   ctx: Ctx,
