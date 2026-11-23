@@ -1,0 +1,15 @@
+{
+  "impact": "compatible",
+  "fields": [],
+  "before": "The suggestions-only policy refused a party's format or property change over another person's pending insertion or deletion as nested, though Word writes its record in their revision mark and the host's check allows it. A direct object property change that left the object as it showed, and a watermark removal with no watermark, made a settled record, so a party's such edit was refused as a direct edit or a header change though no part changed. A party's words typed inside a control or a link that another person's pending suggestion inserted were allowed when the words around the caret were another suggestion's or accepted.",
+  "after": "A format or a property change is never nested; taking over another person's pending record stays refused. An object property change or a watermark removal that changes nothing makes no suggestion, and the policy judges a party's such edit once applied. A caret inside a control or a link that another person's pending suggestion inserted, from its start on, is nested, whatever the words around it, as a caret in their new row, cell, table, note, text box or block control is.",
+  "reason": "The Yjs document format, the ordered protocol and the checkpoint manifest do not change. The policy and the apply run the same code on every copy, and every copy of a room runs the same code version. Ordered rooms are not deployed yet.",
+  "tests": [
+    "packages/core/src/collaboration/ordered/__tests__/room-policy.test.ts",
+    "packages/core/src/collaboration/ordered/__tests__/room-policy-inert.test.ts",
+    "packages/core/src/collaboration/ordered/__tests__/room-policy-verdicts.test.ts",
+    "packages/core/src/collaboration/ordered/__tests__/client/editor-party-rules.test.ts"
+  ],
+  "changeset": "ordered-party-policy-d9",
+  "migration": null
+}
