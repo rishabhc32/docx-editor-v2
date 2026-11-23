@@ -205,7 +205,7 @@ export function loadFieldPiece(
 /**
  * A simple field the engine counts as one unit: its shell, its runs as pieces (revisions out,
  * each run with its own face), and the revisions as labels: the `w:ins` or `w:del` around its
- * runs, and the format records in them.
+ * runs, and the format records in them. Its face is its first run's, as a complex field's is.
  */
 export function simpleFieldAtom(
   state: LoadState,
@@ -214,6 +214,7 @@ export function simpleFieldAtom(
 ): {
   node: OoxmlElement;
   pieces: OrderedFieldPiece[];
+  face: OoxmlElement | null;
   by: string | null;
   dels: string[];
   fmts: OrderedFormatRecord[];
@@ -222,6 +223,7 @@ export function simpleFieldAtom(
   const dels: string[] = [];
   const fmts: OrderedFormatRecord[] = [];
   const pieces: OrderedFieldPiece[] = [];
+  let first: OoxmlElement | null | undefined;
   const take = (node: OoxmlNode): void => {
     if (node.kind !== 'run') {
       pieces.push({ node });
@@ -230,6 +232,10 @@ export function simpleFieldAtom(
 
     const rPr = childWhere(node, isRunProperties);
     const { face, fmts: found } = faceOf(state, rPr);
+    if (first === undefined) {
+      first = face;
+    }
+
     const records = addFormats(fmts, found);
     const restored = withDeletedTextRestored(
       withChildren(node, [...(face ? [face] : []), ...node.children.filter((c) => c !== rPr)])
@@ -248,5 +254,5 @@ export function simpleFieldAtom(
     } else take(child);
   }
 
-  return { node: shellOf(element), pieces, by, dels, fmts };
+  return { node: shellOf(element), pieces, face: first ?? null, by, dels, fmts };
 }

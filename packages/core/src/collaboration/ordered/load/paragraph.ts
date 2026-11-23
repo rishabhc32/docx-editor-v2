@@ -400,8 +400,11 @@ function loadOneUnitAtom(
     dels: [],
     fmts: [],
   };
+  let face: OoxmlElement | null = null;
   if (node.localName === 'fldSimple') {
-    atom = simpleFieldAtom(state, node, ctx);
+    const field = simpleFieldAtom(state, node, ctx);
+    atom = field;
+    face = field.face;
   } else if (node.localName === 'oMath' || node.localName === 'oMathPara') {
     atom = equationAtom(state, node, ctx.markKey);
   }
@@ -415,6 +418,7 @@ function loadOneUnitAtom(
     ...(atom.pieces ? { pieces: atom.pieces } : {}),
     run: node.id,
     bare: true,
+    face,
     by: atom.by ?? labels.by,
     dels: [...labels.dels, ...atom.dels],
     fmts: atom.fmts,

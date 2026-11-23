@@ -153,6 +153,30 @@ describe('a fold of a formatted field', () => {
   }
 });
 
+describe('a fold of a formatted simple field', () => {
+  // A simple field's run has its own face: a format over the field shows on top of it, so the
+  // room's face and the face read back after a fold agree, and words typed next to the field
+  // take it on every copy
+  const SIZED = '<w:rPr><w:sz w:val="28"/></w:rPr>';
+  const FIELD = `<w:fldSimple w:instr=" NUMPAGES "><w:r>${SIZED}<w:t>9</w:t></w:r></w:fldSimple>`;
+
+  test('a suggested format over a field with a sized run', async () => {
+    const { document: doc, base } = openOrderedWordFile(docx(p(t('Page of ') + FIELD)), {
+      file: 1,
+    });
+    apply(doc, 'olga:1', {
+      kind: 'format',
+      ...EDIT,
+      from: at(doc, 0, 5),
+      to: at(doc, 0, 9),
+      properties: [{ localName: 'color', attributes: { val: 'C00000' } }],
+    });
+    await checkFold(doc, base, mediaStore(base), 'a formatted simple field', (copy) => {
+      apply(copy, 'pia:1', { kind: 'insert', ...EDIT, place: at(copy, 0, 9), text: '!' }, 'Pia');
+    });
+  });
+});
+
 describe('a fold of a hidden prompt', () => {
   // A suggested format on a prompt that direct typing then filled: the glossary keeps the prompt
   // with its record, and an emptying after the fold gives it back with that record. The prompt
