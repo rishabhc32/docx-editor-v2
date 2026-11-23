@@ -23,6 +23,12 @@ const BINDING: OoxmlNamespaceBinding = {
 const isOurs = (item: { readonly namespaceUri: string }): boolean =>
   item.namespaceUri === CHECKPOINT_NAMESPACE;
 
+/** A part root that declares the namespace a checkpoint writes, once. */
+export const withCheckpointNamespace = (root: OoxmlElement): OoxmlElement =>
+  root.namespaceBindings.some(isOurs)
+    ? root
+    : { ...root, namespaceBindings: [...root.namespaceBindings, BINDING] };
+
 /** What the label walk gives each element: the labels so far, and whether the part holds ours. */
 interface Labelling {
   readonly wanted: ReadonlySet<string>;
@@ -54,8 +60,7 @@ export function withCheckpointLabels(
     labelling.marked = false;
     const root = labelled(part.root, labelling);
     if (labelling.marked) {
-      const namespaceBindings = [...root.namespaceBindings, BINDING];
-      out = withPart(out, { ...part, root: { ...root, namespaceBindings } });
+      out = withPart(out, { ...part, root: withCheckpointNamespace(root) });
     }
   }
 

@@ -22,6 +22,7 @@ import { isNotesStory, notesWithHiddenReferences } from './note-references.ts';
 import { withStoryBlocks } from './paragraph-ops.ts';
 import { composeParagraph, hideBlockPrompt, viewOfParagraph } from './paragraph.ts';
 import { withControlRecords, withRestoredPrompts } from './prompts.ts';
+import { withCheckpointNamespace } from '../model/checkpoint-labels.ts';
 
 /** A composed story. @public */
 export interface OrderedComposedStory {
@@ -67,6 +68,8 @@ interface StoryDrawing {
   readonly decisionEmptied: ReadonlySet<string>;
   /** The takeovers each change record holds, by the record's node id. */
   readonly takeovers: ReadonlyMap<string, HeldTakeovers>;
+  /** Whether the drawing put a typer on an element (a checkpoint's compose only). */
+  readonly typed: boolean;
 }
 
 /** A story's drawing. */
@@ -80,7 +83,12 @@ function composeStory(doc: OrderedDocument, name: string, options: ComposeOption
     reached: ctx.reached,
     prompts: ctx.prompts,
   };
-  return { composed, decisionEmptied: ctx.decisionEmptied, takeovers: ctx.takeovers };
+  return {
+    composed,
+    decisionEmptied: ctx.decisionEmptied,
+    takeovers: ctx.takeovers,
+    typed: ctx.typedAny,
+  };
 }
 
 /**
@@ -109,8 +117,13 @@ export function composeStoryPart(
   readonly composed: OrderedComposedStory;
   readonly takeovers: ReadonlyMap<string, HeldTakeovers>;
 } {
-  const { composed, decisionEmptied, takeovers } = composeStory(doc, name, options);
+  const { composed, decisionEmptied, takeovers, typed } = composeStory(doc, name, options);
   let part = withStoryBlocks(storyNamed(doc, name).part, composed.children);
+
+  // A typer's prefix bound before the edits below, which check the part
+  if (typed) {
+    part = { ...part, root: withCheckpointNamespace(part.root) };
+  }
 
   // A prompt's records show their decisions as the rest of the drawing does
   const status = (suggestion: string) => {

@@ -14,10 +14,20 @@ import { CHECKPOINT_NAMESPACE } from '../model/checkpoint.ts';
 import { isTextBoxStoryName } from '../model/text-boxes.ts';
 import type { OrderedDocument } from '../model/types.ts';
 import { orderedUnitTyper } from '../model/typers.ts';
-import { apply, APPLY_FILE, at, BODY, EDIT, FOOTNOTES } from './change-apply-fixture.ts';
+import {
+  addressOf,
+  apply,
+  APPLY_FILE,
+  at,
+  BODY,
+  DIRECT,
+  EDIT,
+  FOOTNOTES,
+  opens,
+} from './change-apply-fixture.ts';
 import { roomBlobs, TYPED_BARE, TYPED_RUNS, withRoomFacts } from './checkpoint-fixture.ts';
 import { checkFold, checkpointBytes, folded, foldPrint, mediaStore } from './fold-check.ts';
-import { p, t } from './word-fixtures.ts';
+import { docx, p, t } from './word-fixtures.ts';
 
 /** A package with one of its entries edited as text. */
 function crafted(bytes: Uint8Array, entry: string, edit: (text: string) => string): Uint8Array {
@@ -166,6 +176,30 @@ describe("a checkpoint's namespace", () => {
         reason: 'checkpoint-manifest',
       });
     }
+  });
+});
+
+describe('a part that holds a typer', () => {
+  // Found by the fold audit (run-2, quick-short-1): an edit after compose (a list control's last
+  // value following its text) refused a part whose typer's prefix was not declared yet
+  test("takes the engine's edits after compose: a combo box's last value follows its text", async () => {
+    const combo =
+      '<w:sdt><w:sdtPr><w:id w:val="7"/><w:comboBox w:lastValue="Acme">' +
+      '<w:listItem w:displayText="Acme" w:value="Acme"/></w:comboBox></w:sdtPr>' +
+      `<w:sdtContent>${t('Acme')}</w:sdtContent></w:sdt>`;
+    const { document: doc, base } = openOrderedWordFile(docx(p(t('Party: ') + combo)), { file: 1 });
+
+    // Olive's value, a record the last value follows, and Ana's letter typed in it, pending
+    const control = addressOf(opens(doc, 'sdt')[0]!);
+    const value = { kind: 'text', text: 'Beta' } as const;
+    apply(doc, 'olive:1', { kind: 'control-value', ...DIRECT, control, value }, 'Olive');
+    apply(doc, 'ana:1', { kind: 'insert', ...EDIT, place: at(doc, 0, 9), text: 'X' }, 'Ana');
+    const blobs = mediaStore(base);
+    const lastValue = (bytes: Uint8Array) =>
+      /w:lastValue="([^"]*)"/.exec(strFromU8(unzipSync(bytes)['word/document.xml']!))?.[1];
+    expect(lastValue(orderedPackageBytes(doc, base, { blobs }))).toBe('BeXta');
+    expect(lastValue(await checkpointBytes(doc, base, blobs))).toBe('BeXta');
+    await checkFold(doc, base, blobs, 'a combo box');
   });
 });
 

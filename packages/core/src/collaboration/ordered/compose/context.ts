@@ -133,6 +133,8 @@ export class ComposeContext {
   readonly decisionEmptied = new Set<string>();
   /** Controls a decision reached: their value record follows the text they show. */
   readonly reached: string[] = [];
+  /** Whether this drawing put a typer on an element: its part declares the namespace. */
+  typedAny = false;
   /** Prompt units of controls that hold content now, and the controls those prompts held. */
   readonly hiddenPrompts = new Set<OrderedItem>();
   /** Open item spaces of the controls whose prompt is hidden. */
@@ -215,6 +217,7 @@ export class ComposeContext {
       return element;
     }
 
+    this.typedAny = true;
     typers.set(typer.namespace, typer.person);
     const attribute = checkpointAttribute('typer', typer.namespace);
     return withAttributes(element, [...element.attributes, attribute]);
