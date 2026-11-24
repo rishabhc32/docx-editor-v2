@@ -1,0 +1,13 @@
+{
+  "impact": "compatible",
+  "fields": [],
+  "before": "A page setup that another person's suggested section break copied onto that person's new section joined the break's card, so its reject rejected the break too, where the editor alone and Word keep the break. After a fold, another person's section change record that stood in the file took the type the break gave the next section into its old properties, so the Word file said that person changed the break type.",
+  "after": "A section's record on a paragraph mark joins another person's insertion card only when every section the change sets is inside that insertion, as a table property record does. A page setup of several sections keeps its own card, and its reject leaves the break. A standing file record holds every write Word makes untracked, as a room record does, so a fold writes no type change into another person's record.",
+  "reason": "Change messages, the change log and its kinds keep their meaning, and the Yjs document format does not change. Cards and compose are read by every copy from the same change log with the same code version; an ordered room admits only clients of its own code version. Checkpoints keep their format. Ordered rooms are not deployed yet, so no room needs a migration. Exported Word files change only where the room disagreed with Word.",
+  "tests": [
+    "packages/core/src/collaboration/ordered/__tests__/section-break-type.test.ts",
+    "packages/core/src/collaboration/ordered/__tests__/client/editor-section-break-card.test.ts"
+  ],
+  "changeset": "ordered-section-break-card",
+  "migration": null
+}
