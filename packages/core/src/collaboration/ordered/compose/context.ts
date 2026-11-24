@@ -388,10 +388,14 @@ export class ComposeContext {
 
   /**
    * Whether the decisions so far change whether a unit reads as text, against the view with
-   * every suggestion pending. The engine updates a control's value record when they do.
+   * every suggestion pending. The engine updates a control's value record when they do. A
+   * prompt hides and shows with the content over it, which is no decision: typing over it
+   * writes no value record, in the engine too.
    */
   decided(item: OrderedItem): boolean {
-    if (item.gone || item.retracted) return false;
+    if (item.gone || item.retracted || item.prompt === true) {
+      return false;
+    }
 
     // A direct edit taken back (`revert`) decides nothing: the unit is as it was before it
     if (item.by !== null && this.revertedDirect(item.by)) return false;
