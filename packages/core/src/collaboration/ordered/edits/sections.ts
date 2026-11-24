@@ -41,7 +41,7 @@ import type {
 } from '../model/types.ts';
 import { refuseLockedAt } from '../placement.ts';
 import { pendingOwn, scratchCompose, suggestionFor, withNewIds, type Ctx } from './context.ts';
-import { withTakeOver } from './text.ts';
+import { withPropertyRecord } from './text.ts';
 
 /**
  * A story's sections as they show now, counted as the engine counts them, so a change that
@@ -70,17 +70,23 @@ export function sectionAt(
 }
 
 /**
- * The record list with `record` added. A pending record of another author on the same section
- * is taken over (policy 2: Word keeps one `w:sectPrChange` for each section); a direct edit
- * takes over none, and a section break's own record stays with its mark.
+ * The record list with `record` added, as for other properties (`withPropertyRecord`). A pending
+ * record of another author on the same section is taken over (policy 2: Word keeps one
+ * `w:sectPrChange` for each section); a direct write takes over none and names the pending
+ * records it was made over, whose reject takes it away. A section break's own record stays with
+ * its mark, and a header or footer reference is in no change record (`CT_SectPrBase`, ECMA-376
+ * Part 1, §17.13.5.32), so no reject takes it away.
  */
 function withSectionRecord(
   ctx: Ctx,
-  props: readonly OrderedPropertyRecord[],
+  holder: OrderedItem,
   record: OrderedSectionRecord
 ): OrderedPropertyRecord[] {
-  if (ctx.direct || record.untracked === true) return [...props, record];
-  return withTakeOver(ctx, props, record, (kept) => kept.target !== 'sectPr' || isOwnBreak(kept));
+  if (record.untracked === true || record.op.op === 'reference') {
+    return [...holder.props, record];
+  }
+
+  return withPropertyRecord(ctx, holder, record);
 }
 
 /** A section break's own record on its author's new mark: untracked, it is no change record. */
@@ -108,7 +114,7 @@ export function addSectionWrite(
     ...(flags.untracked === true ? { untracked: true } : {}),
     ...(flags.keptOnReject === true ? { keptOnReject: true } : {}),
   };
-  relabel(ctx.doc, ctx.story, holder, { props: withSectionRecord(ctx, holder.props, record) });
+  relabel(ctx.doc, ctx.story, holder, { props: withSectionRecord(ctx, holder, record) });
 }
 
 /** The engine's own check of a page setup write on one section as it shows now; refused by name. */

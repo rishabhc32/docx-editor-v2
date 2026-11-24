@@ -185,7 +185,7 @@ function holderOf(records: readonly AnyRecord[], suggestion: string): string | u
  * so): Word keeps one record, the properties before the first pending change, so the reject
  * takes the direct change away too. `keeps` names a rejected suggestion whose reject keeps them.
  */
-function madeOverRejected(
+export function madeOverRejected(
   ctx: ComposeContext,
   record: AnyRecord,
   records: readonly AnyRecord[],

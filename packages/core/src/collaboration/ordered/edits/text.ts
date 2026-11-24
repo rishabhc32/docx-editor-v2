@@ -434,8 +434,8 @@ export function withFormat(
 }
 
 /**
- * Policy 2 for property records: a change of a paragraph's (or a table's, a row's, a cell's)
- * properties takes over the pending records of other suggestions on the same properties, as
+ * Policy 2 for property records: a change of a paragraph's (or a table's, a row's, a cell's, a
+ * section's) properties takes over the pending records of other suggestions on the same properties, as
  * Word keeps one change record per properties element. The takeovers are reported.
  */
 export function withPropertyRecord(
@@ -455,7 +455,7 @@ export function withPropertyRecord(
       record.target !== 'pPr' ||
       holdsChangeRecord(shownParagraphProperties(ctx, item), 'pPrChange');
     const over = shows ? pendingSuggestionsOf(ctx, pending) : [];
-    const namesOver = record.kind === 'element' || record.kind === 'paragraphOp';
+    const namesOver = record.kind !== 'object';
     return [...props, over.length > 0 && namesOver ? { ...record, over } : record];
   }
 

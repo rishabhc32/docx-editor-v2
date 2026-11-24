@@ -41,7 +41,13 @@ import {
 } from '../ooxml-nodes.ts';
 import type { ComposeContext, DrawnTakeover } from './context.ts';
 import { withStoryBlocks } from './paragraph-ops.ts';
-import { acceptedAndPending, aroundPending, fileRecordAlone, noteTakeover } from './properties.ts';
+import {
+  acceptedAndPending,
+  aroundPending,
+  fileRecordAlone,
+  madeOverRejected,
+  noteTakeover,
+} from './properties.ts';
 
 type SectionRecord = OrderedElementRecord | OrderedSectionRecord;
 
@@ -246,7 +252,8 @@ export function sectionAfter(
     ctx,
     records.filter((r) => !kept(r))
   );
-  const accepted = [...records.filter(kept), ...shown.accepted].sort((a, b) => a.seq - b.seq);
+  const madeOver = shown.accepted.filter((r) => !madeOverRejected(ctx, r, records));
+  const accepted = [...records.filter(kept), ...madeOver].sort((a, b) => a.seq - b.seq);
   const pending = shown.pending;
   const rejected = records.filter((r) => isRejectedWrite(ctx, r));
   const decided = [...accepted, ...rejected].sort((a, b) => a.seq - b.seq);
@@ -308,17 +315,16 @@ export function sectionWithoutPendingWrites(
   holder: OrderedItem,
   base: OoxmlElement | null
 ): OoxmlElement | null {
+  const records = sectionRecordsOf(holder);
   const shown = (r: SectionRecord): boolean => {
     const status = statusOf(ctx.doc, r.suggestion);
     if (r.kind === 'sectionOp' && r.keptOnReject === true) return true;
     if (r.kind === 'sectionOp' && r.untracked === true) return status === 'pending';
-    return status === 'accepted' || isRejectedWrite(ctx, r);
+    if (status === 'accepted') return !madeOverRejected(ctx, r, records);
+    return isRejectedWrite(ctx, r);
   };
   let section = withoutSectionRecord(base);
-  const records = sectionRecordsOf(holder)
-    .filter(shown)
-    .sort((a, b) => a.seq - b.seq);
-  for (const record of records) {
+  for (const record of records.filter(shown).sort((a, b) => a.seq - b.seq)) {
     section = applyDecided(ctx, section, record);
   }
 
