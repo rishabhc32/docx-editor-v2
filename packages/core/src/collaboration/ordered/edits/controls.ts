@@ -83,7 +83,11 @@ export function setControlValue(
   const suggestion = suggestionFor(ctx);
   strikeOldValue(ctx, open, suggestion.id);
   const close = closeOf(ctx.story, open, ctx.doc);
-  const holder = valueSuggestion(ctx, open, suggestion.id);
+
+  // A direct edit types the new words into the pending insertion that put the control in, as its
+  // author's (`directInsert`), so a reject takes them with the control; else the edit's own
+  const holder =
+    ctx.direct && open.by !== null && insertedPending(ctx.doc, open) ? open.by : suggestion.id;
   const items = valueItems(ctx, control, open, holder);
   if (items.length > 0) insertItems(ctx.doc, ctx.story, ctx.story.tree.prev(close), items);
   noteOwnAddition(ctx, holder, unitsOf(ctx.story, items));
@@ -97,15 +101,6 @@ export function setControlValue(
     sdtPrRecord(ctx, suggestion.id, sdtPr, []);
   relabel(ctx.doc, ctx.story, open, { props: [...open.props, record] });
   return suggestion.id;
-}
-
-/**
- * The suggestion a control's new words go in: a direct edit types them into the pending insertion
- * that put the control in, as its author's (`directInsert`), so a reject takes them with the
- * control; otherwise the edit's own.
- */
-function valueSuggestion(ctx: Ctx, open: OrderedItem, own: string): string {
-  return ctx.direct && open.by !== null && insertedPending(ctx.doc, open) ? open.by : own;
 }
 
 /**
