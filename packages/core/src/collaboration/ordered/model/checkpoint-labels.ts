@@ -1,7 +1,7 @@
 // The attributes only a checkpoint's parts hold (design D14): a label on each element the
-// manifest names, the typer on each typed run, and the room run's number on each run drawn from
-// units. The writer puts the labels on after compose; every open takes all of them off before the
-// load.
+// manifest names, the typer on each typed run, the room run's number on each run drawn from
+// units, and a mark on properties drawn only for change records. The writer puts the labels on
+// after compose; every open takes all of them off before the load.
 
 import { glossaryPartOf } from '../../../store/package/building-blocks.ts';
 import { withPart, type OoxmlPackage } from '../../../store/package/ooxml-package.ts';
@@ -128,6 +128,8 @@ export interface CheckpointMarks {
   readonly typers: ReadonlyMap<string, string>;
   /** The room run's number each run and text element carries, by the element's node id. */
   readonly runs: ReadonlyMap<string, string>;
+  /** The node ids of the properties drawn only for change records (`oc:drawn`). */
+  readonly drawn: ReadonlySet<string>;
 }
 
 /**
@@ -139,15 +141,16 @@ export function withoutCheckpointMarks(pkg: OoxmlPackage): CheckpointMarks {
   const labels = new Map<string, OoxmlElement[]>();
   const typers = new Map<string, string>();
   const runs = new Map<string, string>();
+  const drawn = new Set<string>();
   let out = pkg;
   for (const part of pkg.parts.values()) {
-    const root = unmarked(part.root, labels, typers, runs);
+    const root = unmarked(part.root, labels, typers, runs, drawn);
     if (root !== part.root) {
       out = withPart(out, { ...part, root });
     }
   }
 
-  return { pkg: out, labels, typers, runs };
+  return { pkg: out, labels, typers, runs, drawn };
 }
 
 /** An element without the namespace's attributes and declarations, below it too. */
@@ -155,7 +158,8 @@ function unmarked(
   element: OoxmlElement,
   labels: Map<string, OoxmlElement[]>,
   typers: Map<string, string>,
-  runs: Map<string, string>
+  runs: Map<string, string>,
+  drawn: Set<string>
 ): OoxmlElement {
   let children: OoxmlNode[] | null = null;
   for (let k = 0; k < element.children.length; k += 1) {
@@ -164,7 +168,7 @@ function unmarked(
       continue;
     }
 
-    const next = unmarked(child, labels, typers, runs);
+    const next = unmarked(child, labels, typers, runs, drawn);
     if (next !== child) {
       children ??= [...element.children];
       children[k] = next;
@@ -189,6 +193,8 @@ function unmarked(
       typers.set(out.id, value);
     } else if (localName === 'run') {
       runs.set(out.id, value);
+    } else if (localName === 'drawn') {
+      drawn.add(out.id);
     }
   }
 

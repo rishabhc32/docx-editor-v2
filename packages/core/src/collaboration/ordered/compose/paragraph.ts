@@ -188,12 +188,13 @@ function markProperties(
     );
   let rPr = face;
   if (markers.length > 0) {
-    const runProperties = face ?? build(ctx.mint(), 'runProperties', 'rPr', [], []);
+    const runProperties = face ?? ctx.drawn(build(ctx.mint(), 'runProperties', 'rPr', [], []));
     rPr = withChildren(runProperties, [...markers, ...runProperties.children]);
   }
 
   if (!pPr && !rPr) return null;
-  return withMarkFace(pPr ?? build(ctx.mint(), 'paragraphProperties', 'pPr', [], []), rPr);
+  const written = withMarkFace(pPr ?? build(ctx.mint(), 'paragraphProperties', 'pPr', [], []), rPr);
+  return base === null ? ctx.drawn(written) : written;
 }
 
 /**

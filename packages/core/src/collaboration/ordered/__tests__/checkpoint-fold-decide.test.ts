@@ -7,7 +7,7 @@
 import { describe, expect, test } from 'bun:test';
 import { strFromU8, unzipSync } from 'fflate';
 import { orderedCardSeen } from '../change/apply-decide.ts';
-import { openOrderedWordFile } from '../client/open.ts';
+import { openOrderedWordFile, type OrderedWordFile } from '../client/open.ts';
 import { orderedPackageBytes } from '../compose/package.ts';
 import type { OrderedDocument } from '../model/types.ts';
 import {
@@ -28,6 +28,7 @@ import {
   MATRIX_EXTRAS,
   MATRIX_ITEMS,
   p,
+  t,
   type PackageExtras,
 } from './word-fixtures.ts';
 
@@ -485,4 +486,100 @@ describe("a suggestion's version after a fold", () => {
 
     expect(seenOf(twice.document)).toEqual([]);
   });
+});
+
+describe('a decision after a fold, on properties drawn for a change record', () => {
+  // Compose draws a `w:pPr` or a `w:rPr` where the paragraph or the run has none, only to hold a
+  // change record: a decision that takes the record away draws none again, after a fold too.
+  // The fold check reads an empty one as none, so this compares the decided body as written
+  const FILE = docx(p(t('First para.')) + p(t('Second para.')) + p(t('Third para.')));
+  const right = [{ localName: 'jc', attributes: { val: 'right' } }];
+  const SHAPES: [string, (doc: OrderedDocument) => void][] = [
+    ['a join', (doc) => apply(doc, 'ana:1', { kind: 'join', ...EDIT, mark: markOf(doc, 0) })],
+    [
+      'a paragraph format',
+      (doc) =>
+        apply(doc, 'ana:1', {
+          kind: 'paragraph-property',
+          ...EDIT,
+          marks: [markOf(doc, 2)],
+          properties: right,
+        }),
+    ],
+    [
+      'a paragraph mark format',
+      (doc) =>
+        apply(doc, 'ana:1', {
+          kind: 'mark-format',
+          ...EDIT,
+          marks: [markOf(doc, 2)],
+          properties: [{ localName: 'b' }],
+        }),
+    ],
+    [
+      'a run format',
+      (doc) =>
+        apply(doc, 'ana:1', {
+          kind: 'format',
+          ...EDIT,
+          from: at(doc, 0, 0),
+          to: at(doc, 0, 5),
+          properties: [{ localName: 'b' }],
+        }),
+    ],
+    [
+      'a paragraph break, and a format on the paragraph after it',
+      (doc) => {
+        apply(doc, 'ana:1', { kind: 'split', ...EDIT, place: at(doc, 1, 6) });
+        apply(
+          doc,
+          'olive:1',
+          { kind: 'paragraph-property', ...EDIT, marks: [markOf(doc, 2)], properties: right },
+          'Olive'
+        );
+      },
+    ],
+  ];
+
+  /** The body as written once the organiser decided every pending card. */
+  const decidedBody = (
+    { document: doc, base }: OrderedWordFile,
+    blobs: ReturnType<typeof mediaStore>,
+    status: 'accepted' | 'rejected'
+  ): string => {
+    let n = 0;
+    for (const { id, status: now } of [...doc.suggestions.values()]) {
+      const suggestions = now === 'pending' ? orderedCardSeen(doc, id) : null;
+      if (suggestions) {
+        n += 1;
+        apply(
+          doc,
+          `olive:${100 + n}`,
+          { kind: 'decide', cards: [{ suggestions }], status },
+          'Olive'
+        );
+      }
+    }
+
+    const xml = strFromU8(
+      unzipSync(orderedPackageBytes(doc, base, { blobs }))['word/document.xml']!
+    );
+    return xml.replace(/ (?:w14:paraId|w14:textId|w:id|w:date)="[^"]*"/g, '');
+  };
+
+  for (const [name, edit] of SHAPES) {
+    for (const status of ['accepted', 'rejected'] as const) {
+      test(`${name}, ${status}`, async () => {
+        const first = openOrderedWordFile(FILE, { file: 1 });
+        const blobs = mediaStore(first.base);
+        edit(first.document);
+        const once = await folded(first.document, first.base, 2, blobs);
+        const twice = await folded(once.document, once.base, 3, blobs);
+        const [live, ...copies] = [first, once, twice].map((copy) =>
+          decidedBody(copy, blobs, status)
+        );
+        expect(copies).toEqual([live, live]);
+      });
+    }
+  }
 });

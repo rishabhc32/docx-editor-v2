@@ -260,7 +260,10 @@ export function faceAfter(
   }
 
   if (children.length === 0 && !base) return null;
-  return withChildren(base ?? build(ctx.mint(), 'runProperties', 'rPr', [], []), children);
+  return withChildren(
+    base ?? ctx.drawn(build(ctx.mint(), 'runProperties', 'rPr', [], [])),
+    children
+  );
 }
 
 /** The given element's children for a property record, the kept children `keep` selects. */

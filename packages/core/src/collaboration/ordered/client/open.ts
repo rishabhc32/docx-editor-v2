@@ -18,6 +18,7 @@ import { recordFileMedia } from '../model/file-media.ts';
 import { orderedAuthorName, type OrderedPerson } from '../model/person.ts';
 import type { OrderedFileMedia } from '../model/resources.ts';
 import type { OrderedDocument } from '../model/types.ts';
+import { withoutDrawnProperties } from './drawn-properties.ts';
 import {
   withCheckpointLists,
   withCheckpointStyles,
@@ -182,6 +183,7 @@ function openCheckpointRead(pkg: OoxmlPackage, options: OrderedWordFileOptions):
     throw new OrderedWordFileError('checkpoint-manifest');
   }
 
+  withoutDrawnProperties(doc, marks.drawn);
   withCheckpointRuns(doc, marks.runs);
 
   // The versions the room gave, after every step above: an open is no write of a suggestion

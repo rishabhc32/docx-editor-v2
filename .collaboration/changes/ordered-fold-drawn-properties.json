@@ -1,0 +1,13 @@
+{
+  "impact": "compatible",
+  "fields": [],
+  "before": "A checkpoint wrote the `w:pPr` or `w:rPr` that compose draws only to hold a change record where the paragraph or the run has none, and its open read that container as the item's own, so a decision after the fold wrote an empty `<w:pPr/>` or `<w:rPr/>` where the room writes none.",
+  "after": "A checkpoint marks each such container with `oc:drawn=\"1\"` in its own namespace, and an open drops each marked one that is empty once its records are out, so a decision gives the same Word file live and after a fold.",
+  "reason": "Change messages, the change log and the Yjs document format do not change. The checkpoint gains one optional attribute in its own namespace; the manifest and its version 5 stay. An older reader drops the attribute as it drops every attribute of the namespace and reads the checkpoint as before; this reader reads a checkpoint without the attribute as before. Ordered rooms are not deployed yet, so no room needs a migration.",
+  "tests": [
+    "packages/core/src/collaboration/ordered/__tests__/checkpoint-fold-decide.test.ts",
+    "packages/core/src/collaboration/ordered/__tests__/checkpoint-golden.test.ts"
+  ],
+  "changeset": "ordered-fold-drawn-properties",
+  "migration": null
+}

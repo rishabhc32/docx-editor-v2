@@ -283,6 +283,23 @@ export class ComposeContext {
     return withAttributes(text, [...text.attributes, checkpointAttribute('run', number)]);
   }
 
+  /**
+   * Run or paragraph properties drawn only for change records, where the run or the paragraph
+   * has none, marked so when a checkpoint is drawn: an open reads them as none once a decision
+   * leaves them empty, as the room draws none then.
+   */
+  drawn(properties: OoxmlElement): OoxmlElement {
+    if (this.options.runs === undefined) {
+      return properties;
+    }
+
+    this.markedAny = true;
+    return withAttributes(properties, [
+      ...properties.attributes,
+      checkpointAttribute('drawn', '1'),
+    ]);
+  }
+
   /** Whether an item shows nowhere in this drawing, by its labels and the drawing's options. */
   unshown(item: OrderedItem): boolean {
     if (isHidden(this.doc, item)) return true;

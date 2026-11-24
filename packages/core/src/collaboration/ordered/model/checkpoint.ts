@@ -60,9 +60,12 @@ export const CHECKPOINT_NAMESPACE = 'https://docx-editor.dev/ordered-checkpoint'
 /** The prefix a checkpoint declares the namespace under, on each part root that may hold it. */
 export const CHECKPOINT_PREFIX = 'oc';
 
-/** A checkpoint's attribute: a label, a typer's namespace, or a room run's number. */
+/**
+ * A checkpoint's attribute: a label, a typer's namespace, a room run's number, or the mark of
+ * properties compose drew only for change records (`drawn`).
+ */
 export const checkpointAttribute = (
-  localName: 'label' | 'typer' | 'run',
+  localName: 'label' | 'typer' | 'run' | 'drawn',
   value: string
 ): OoxmlAttribute => ({
   kind: 'genericExtension',
