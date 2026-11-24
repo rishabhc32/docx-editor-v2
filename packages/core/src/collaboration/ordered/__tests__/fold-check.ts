@@ -15,7 +15,9 @@
 //    keeps the record only for that change's undo; it has no card, and the file holds none of it;
 //  - a record its author made on their own new words or paragraph (`untracked`): it shows with no
 //    change record, so a fold writes it as part of them, and a decision keeps or takes it with
-//    them; only the undo of the change that made it reads it.
+//    them; only the undo of the change that made it reads it. So does the type a suggested section
+//    break gives the next section (`keptOnReject`): Word writes it untracked, a fold writes it as
+//    the section's own, and every decision keeps it.
 
 import { expect } from 'bun:test';
 import { strFromU8, unzipSync } from 'fflate';
@@ -195,9 +197,13 @@ export function foldPrint(doc: OrderedDocument, base: OoxmlPackage, blobs: FoldB
     // A unit in a new row or note keeps its label in the room, where a load reads it from the
     // container
     const by = item.quiet ? null : item.by;
-    const recorded = (records: readonly { suggestion: string; untracked?: boolean }[]) =>
+    const recorded = (
+      records: readonly { suggestion: string; untracked?: boolean; keptOnReject?: boolean }[]
+    ) =>
       records
-        .filter((r) => r.untracked !== true || r.suggestion !== item.by)
+        .filter(
+          (r) => r.untracked !== true || (r.suggestion !== item.by && r.keptOnReject !== true)
+        )
         .map((r) => r.suggestion);
     const roles = {
       by: [by],

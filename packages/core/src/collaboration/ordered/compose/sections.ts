@@ -246,15 +246,21 @@ export function sectionAfter(
   const records = sectionRecordsOf(holder);
   if (records.length === 0) return base;
 
-  // A write Word makes untracked shows as a decided one, pending or rejected
+  // A write Word makes untracked shows as a decided one: a break's own section on its author's
+  // new mark while pending, the type it gives the next section pending or rejected
+  const untracked = (r: SectionRecord) => r.kind === 'sectionOp' && r.untracked === true;
   const kept = (r: SectionRecord) => r.kind === 'sectionOp' && r.keptOnReject === true;
   const shown = acceptedAndPending(
     ctx,
     records.filter((r) => !kept(r))
   );
   const acceptedNow = shown.accepted.filter((r) => !madeOverRejected(ctx, r, records));
-  const accepted = [...records.filter(kept), ...acceptedNow].sort((a, b) => a.seq - b.seq);
-  const pending = shown.pending;
+  const accepted = [
+    ...records.filter(kept),
+    ...shown.pending.filter(untracked),
+    ...acceptedNow,
+  ].sort((a, b) => a.seq - b.seq);
+  const pending = shown.pending.filter((r) => !untracked(r));
   const rejected = records.filter((r) => isRejectedWrite(ctx, r));
   const decided = [...accepted, ...rejected].sort((a, b) => a.seq - b.seq);
   const [earlier, later] = aroundPending(decided, pending);
@@ -263,12 +269,19 @@ export function sectionAfter(
     section = applyDecided(ctx, section, record);
   }
 
+  // A change record holds the section before the tracked writes, with every write Word makes
+  // untracked, a later one too: no reject takes those away
+  let held = section;
+  for (const record of later.filter(untracked)) {
+    held = applyDecided(ctx, held, record);
+  }
+
   // A file's record that stands holds the section before the writes drawn over it, as the
   // engine keeps a standing record (`withSectionChangeRecord`)
   const standing = pending.find(
     (r): r is OrderedElementRecord => r.kind === 'element' && r.fileRecord !== undefined
   )?.fileRecord;
-  const prior = (standing && firstElement(standing)?.children) ?? section?.children ?? [];
+  const prior = (standing && firstElement(standing)?.children) ?? held?.children ?? [];
   const taken: DrawnTakeover[] = [];
   for (const record of pending) {
     const before = section?.children ?? [];
@@ -282,7 +295,7 @@ export function sectionAfter(
 
   if (section === null) return null;
   const fileRecord = fileRecordAlone(accepted, pending);
-  const latest = pending.filter((r) => !(r.kind === 'sectionOp' && r.untracked === true)).at(-1);
+  const latest = pending.at(-1);
   const ids = holderIds(holder);
   let children = section.children.filter((c) => !isWml(c, 'sectPrChange'));
   if (fileRecord) children = [...children, fileRecord];
