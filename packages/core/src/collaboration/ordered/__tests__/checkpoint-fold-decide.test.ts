@@ -3,11 +3,12 @@
 // own; a decision that takes the suggestion away draws the room's run whole again. A new list's
 // definition goes with its suggestion.
 
-import { describe, test } from 'bun:test';
+import { describe, expect, test } from 'bun:test';
+import { strFromU8, unzipSync } from 'fflate';
 import { openOrderedWordFile } from '../client/open.ts';
 import type { OrderedDocument } from '../model/types.ts';
 import { apply, at, DIRECT, EDIT, markOf, opens } from './change-apply-fixture.ts';
-import { checkFold, mediaStore } from './fold-check.ts';
+import { checkFold, checkpointBytes, mediaStore } from './fold-check.ts';
 import {
   alphaOmega,
   bodyOf,
@@ -80,6 +81,40 @@ describe('a decision after a fold, on a suggestion inside a run', () => {
       },
       'a paragraph break inside a run'
     );
+  });
+});
+
+describe("a checkpoint's room run numbers", () => {
+  /** The room run numbers (`oc:run`) the main document of a checkpoint holds, in order. */
+  async function numbersOf(edit: (doc: OrderedDocument) => void) {
+    const body = p(run('Cloud and serverless.')) + p(run('Untouched.'));
+    const { document: doc, base } = openOrderedWordFile(docx(body), { file: 1 });
+    edit(doc);
+    const bytes = await checkpointBytes(doc, base, mediaStore(base));
+    const xml = strFromU8(unzipSync(bytes)['word/document.xml']!);
+    return {
+      numbers: [...xml.matchAll(/ oc:run="(\d+)"/g)].map((m) => m[1]),
+      declared: xml.includes('xmlns:oc='),
+    };
+  }
+
+  test('only on the pieces of a run a suggestion splits: each run and its text', async () => {
+    const { numbers, declared } = await numbersOf((doc) => {
+      apply(doc, 'ana:1', { kind: 'insert', ...EDIT, place: at(doc, 0, 6), text: 'net ' });
+    });
+    expect({ numbers, declared }).toEqual({
+      numbers: [numbers[0], numbers[1], numbers[0], numbers[1]],
+      declared: true,
+    });
+    expect(numbers[0]).not.toBe(numbers[1]);
+  });
+
+  test('none, and no namespace, where no suggestion splits a run', async () => {
+    const drawn = await numbersOf((doc) => {
+      const text = ' Yes.';
+      apply(doc, 'olive:1', { kind: 'insert', ...DIRECT, place: at(doc, 0, 21), text }, 'Olive');
+    });
+    expect(drawn).toEqual({ numbers: [], declared: false });
   });
 });
 

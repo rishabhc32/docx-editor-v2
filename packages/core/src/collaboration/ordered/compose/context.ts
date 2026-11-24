@@ -47,10 +47,17 @@ export interface ComposeOptions extends OrderedComposeOptions {
   /**
    * Set for a checkpoint: each run drawn from units carries the number of the run the room draws
    * them in, and each text element the number of the room's text element (`oc:run`), kept here
-   * by what no file holds. A pending suggestion may split a run of the room into pieces; an open
-   * joins them again.
+   * by what no file holds, with how many elements carry it. A pending suggestion may split a run
+   * of the room into pieces; an open joins them again. A number on one element joins nothing, and
+   * the checkpoint's label walk takes it off.
    */
-  readonly runs?: Map<string, string>;
+  readonly runs?: Map<string, RoomNumber>;
+}
+
+/** The number of a room run or text element in a checkpoint's drawing, and its elements. */
+export interface RoomNumber {
+  readonly number: string;
+  uses: number;
 }
 
 /** One shown unit of a paragraph's view. @public */
@@ -127,9 +134,15 @@ const roomRunOf = (unit: OrderedItem): string =>
   [unit.run, unit.face?.id ?? '', ...unit.fmts.map((record) => record.id)].join(' ');
 
 /** The number of a room run or text element in a checkpoint's drawing, the first time a new one. */
-function roomNumber(runs: Map<string, string>, key: string): string {
-  const number = runs.get(key) ?? String(runs.size);
-  runs.set(key, number);
+function roomNumber(runs: Map<string, RoomNumber>, key: string): string {
+  const known = runs.get(key);
+  if (known !== undefined) {
+    known.uses += 1;
+    return known.number;
+  }
+
+  const number = String(runs.size);
+  runs.set(key, { number, uses: 1 });
   return number;
 }
 

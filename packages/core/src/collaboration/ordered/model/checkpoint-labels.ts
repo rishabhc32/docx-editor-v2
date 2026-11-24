@@ -33,6 +33,8 @@ export const withCheckpointNamespace = (root: OoxmlElement): OoxmlElement =>
 /** What the label walk gives each element: the labels so far, and whether the part holds ours. */
 interface Labelling {
   readonly wanted: ReadonlySet<string>;
+  /** The room run numbers that join pieces: the walk takes every other one off. */
+  readonly joining: ReadonlySet<string>;
   readonly labels: Map<string, number>;
   marked: boolean;
 }
@@ -41,16 +43,18 @@ interface Labelling {
  * A composed package as a checkpoint writes it: a label on each element `wanted` names by node
  * id, each a number unique in the checkpoint, and the namespace declared on the root of each
  * part (a story or the glossary) that holds a label or another attribute compose wrote
- * (`marked`: it wrote one, a typer or a room run). Only the paths to a labelled element are made
- * again, and a package with nothing to mark is the same package. A text box's other copy takes the labels of its story when the package is
- * written.
+ * (`marked`: it wrote one, a typer or a room run). A room run's number stays only where `joining`
+ * names it: on one element it joins nothing. Only the paths to a changed element are made again,
+ * and a package with nothing to mark is the same package. A text box's other copy takes the labels
+ * of its story when the package is written.
  */
 export function withCheckpointLabels(
   pkg: OoxmlPackage,
   wanted: ReadonlySet<string>,
-  marked: boolean
+  marked: boolean,
+  joining: ReadonlySet<string>
 ): { readonly pkg: OoxmlPackage; readonly labels: ReadonlyMap<string, number> } {
-  const labelling: Labelling = { wanted, labels: new Map(), marked: false };
+  const labelling: Labelling = { wanted, joining, labels: new Map(), marked: false };
   if (wanted.size === 0 && !marked) {
     return { pkg, labels: labelling.labels };
   }
@@ -60,8 +64,15 @@ export function withCheckpointLabels(
   for (const part of [...orderedStoryParts(pkg).values(), ...(glossary ? [glossary] : [])]) {
     labelling.marked = false;
     const root = labelled(part.root, labelling);
-    if (labelling.marked) {
-      out = withPart(out, { ...part, root: withCheckpointNamespace(root) });
+    let declared = labelling.marked ? withCheckpointNamespace(root) : root;
+
+    // Compose declared the namespace for the attributes it wrote: a part left with none drops it
+    if (!labelling.marked && root.namespaceBindings.some(isOurs)) {
+      declared = { ...root, namespaceBindings: root.namespaceBindings.filter((b) => !isOurs(b)) };
+    }
+
+    if (declared !== part.root) {
+      out = withPart(out, { ...part, root: declared });
     }
   }
 
@@ -84,10 +95,17 @@ function labelled(element: OoxmlElement, labelling: Labelling): OoxmlElement {
     }
   }
 
-  const { wanted, labels } = labelling;
-  const out = children === null ? element : withChildren(element, children);
+  const { wanted, joining, labels } = labelling;
+  let out = children === null ? element : withChildren(element, children);
   if (element.attributes.some(isOurs)) {
-    labelling.marked = true;
+    const kept = element.attributes.filter(
+      (a) => !isOurs(a) || a.localName !== 'run' || joining.has(a.value)
+    );
+    if (kept.length !== element.attributes.length) {
+      out = withAttributes(out, kept);
+    }
+
+    labelling.marked ||= kept.some(isOurs);
   }
 
   if (!wanted.has(element.id) || labels.has(element.id)) {

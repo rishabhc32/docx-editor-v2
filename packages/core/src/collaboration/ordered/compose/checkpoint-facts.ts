@@ -30,6 +30,7 @@ import type {
   OrderedSuggestion,
 } from '../model/types.ts';
 import { attributeOf, eachElement, isWml } from '../ooxml-nodes.ts';
+import type { RoomNumber } from './context.ts';
 import type { OrderedPartTakeovers } from './package.ts';
 
 /**
@@ -97,7 +98,8 @@ interface UntrackedOpen {
 /**
  * The room facts of a document composed as `pkg`, whose change records hold `held` by takeover,
  * whose units the namespaces of `typers` typed and whose runs the room runs of `runs` number, and
- * the package with a label on each element they name. Each pending suggestion the file writes
+ * the package with a label on each element they name, and a room run's number only where it joins
+ * pieces. Each pending suggestion the file writes
  * marks for, or another fact names, is listed once, in the order the room made them, so a load
  * makes them in that order.
  */
@@ -106,7 +108,7 @@ export function checkpointFacts(
   pkg: OoxmlPackage,
   held: OrderedPartTakeovers,
   typers: ReadonlyMap<string, OrderedPerson>,
-  runs: ReadonlyMap<string, string>
+  runs: ReadonlyMap<string, RoomNumber>
 ): { readonly pkg: OoxmlPackage; readonly facts: CheckpointFacts } {
   const list = new SuggestionList(doc, writtenRevisionIds(pkg));
   for (const suggestion of doc.suggestions.values()) {
@@ -138,7 +140,15 @@ export function checkpointFacts(
     }
   }
 
-  const labelled = withCheckpointLabels(pkg, wanted, typers.size > 0 || runs.size > 0);
+  // A number joins pieces only when more than one element carries it
+  const joining = new Set<string>();
+  for (const { number, uses } of runs.values()) {
+    if (uses > 1) {
+      joining.add(number);
+    }
+  }
+
+  const labelled = withCheckpointLabels(pkg, wanted, typers.size > 0 || runs.size > 0, joining);
   const { labels } = labelled;
   const facts = inRoomOrder(list, {
     commentPersons: commentPersons(doc),

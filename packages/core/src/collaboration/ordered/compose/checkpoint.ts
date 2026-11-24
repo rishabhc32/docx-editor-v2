@@ -8,6 +8,7 @@ import type { OrderedPerson } from '../model/person.ts';
 import type { OrderedFileMedia, OrderedMediaReference } from '../model/resources.ts';
 import type { OrderedDocument } from '../model/types.ts';
 import { checkpointFacts } from './checkpoint-facts.ts';
+import type { RoomNumber } from './context.ts';
 import {
   composedWithoutMedia,
   orderedMediaOf,
@@ -71,7 +72,7 @@ export async function writeOrderedCheckpoint(
   options: OrderedPackageWriteOptions
 ): Promise<void> {
   const typers = new Map<string, OrderedPerson>();
-  const runs = new Map<string, string>();
+  const runs = new Map<string, RoomNumber>();
   const composed = composedWithoutMedia(doc, base, { typers, runs });
   const { media } = composed;
   const { pkg, facts } = checkpointFacts(doc, composed.pkg, composed.takeovers, typers, runs);
