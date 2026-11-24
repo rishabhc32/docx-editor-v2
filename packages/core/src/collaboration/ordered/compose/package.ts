@@ -20,7 +20,7 @@ import { withOrderedComments } from './comments.ts';
 import { composeStoryPart } from './compose.ts';
 import { withoutDroppedFurniture } from './furniture.ts';
 import { withDecidedPartRevisions } from './part-revisions.ts';
-import { withAttributedPrompts } from './prompts.ts';
+import { withDecidedPrompts } from './prompts.ts';
 import { withUniqueIds } from './unique-ids.ts';
 import { MEDIA_PLACE, withFileMediaBytes, withFileMediaPlaces } from './file-media.ts';
 import { withoutComments } from './without-comments.ts';
@@ -113,7 +113,7 @@ function composeWithMedia(
   }
 
   // The prompts a suggestion hid, kept as placeholder blocks in the glossary
-  pkg = withAttributedPrompts(withRetainedPrompts(pkg, prompts, new Set()), doc);
+  pkg = withDecidedPrompts(withRetainedPrompts(pkg, prompts, new Set()), doc);
   pkg = withoutUnusedLoadedMedia(pkg, doc);
 
   // The file's tracked changes outside the stories as the decisions leave them, before the

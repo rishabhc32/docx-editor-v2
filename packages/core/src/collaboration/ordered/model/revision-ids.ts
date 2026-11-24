@@ -180,9 +180,10 @@ export function fileMark(
 
 /**
  * The suggestion a file's revision mark was read for, by its `w:id`, author and date: the mark a
- * load kept for one of the suggestion's roles, or one a room checkpoint listed for it. Its date
+ * load kept for one of the suggestion's roles, or one a room checkpoint listed for it; or, for a
+ * prompt's record, the one the room wrote for its suggestion's role (`revisionIdFor`). Its date
  * is the suggestion's, or the one the load read when a change gave the suggestion another.
- * Undefined for a mark no load read.
+ * Undefined for a mark no load read and the room did not write.
  */
 export function suggestionOfRevision(
   doc: OrderedDocument,
@@ -191,12 +192,24 @@ export function suggestionOfRevision(
   const id = attributeOf(revision, 'id');
   const author = attributeOf(revision, 'author') ?? '';
   const date = attributeOf(revision, 'date');
-  for (const [suggestion, kept] of keptRevisionIds(doc)) {
-    const attributions = [
+  const made = (suggestion: string) =>
+    [
       doc.suggestions.get(suggestion)?.attribution,
       doc.revisionIds.reattributed.get(suggestion),
-    ];
-    if (kept === id && attributions.some((a) => a?.author === author && a.date === date)) {
+    ].some((a) => a?.author === author && a.date === date);
+  for (const [suggestion, kept] of keptRevisionIds(doc)) {
+    if (kept === id && made(suggestion)) {
+      return suggestion;
+    }
+  }
+
+  const role = PROMPT_RECORD_ROLES.get(revision.localName);
+  if (role === undefined) {
+    return undefined;
+  }
+
+  for (const suggestion of doc.suggestions.keys()) {
+    if (made(suggestion) && revisionIdFor(doc, suggestion, role) === id) {
       return suggestion;
     }
   }

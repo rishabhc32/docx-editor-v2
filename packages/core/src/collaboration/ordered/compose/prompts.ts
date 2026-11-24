@@ -26,6 +26,7 @@ import {
   contentControlPropertiesOf,
   findContentControl,
 } from '../../../store/store/tree-op-nodes.ts';
+import { statusOf } from '../model/document.ts';
 import { fileMark, PROMPT_RECORD_ROLES, suggestionOfRevision } from '../model/revision-ids.ts';
 import type { OrderedDocument, OrderedSuggestionStatus } from '../model/types.ts';
 import { attributeOf, childNamed, isWml, withChildren } from '../ooxml-nodes.ts';
@@ -122,27 +123,27 @@ export function withRestoredPrompts(
     part = decided.has(id)
       ? withDecisionPrompt(part, id, options)
       : withRestoredPrompt(part, id, options);
-    part = withPromptDecisions(doc, part, id, status);
+    const control = findContentControl(part, id);
+    part = withPromptDecisions(doc, part, control ? promptRecords(control) : [], status);
   }
 
   return part;
 }
 
 /**
- * `part` with the change records of a control's prompt under their suggestions' decisions, as
- * the engine decides them: accepted, the format stays with no record; rejected, the face before
- * it; pending, the record with its suggestion's attribution (`withAttributedRecord`). The
- * glossary keeps a prompt with its records while content fills the control, and a load reads
- * each as a suggestion (`readPromptRecords`).
+ * `part` with the change records of a prompt under their suggestions' decisions, as the engine
+ * decides them: accepted, the format stays with no record; rejected, the face before it;
+ * pending, the record with its suggestion's attribution (`withAttributedRecord`). The glossary
+ * keeps a prompt with its records while content fills the control, and a load reads each as a
+ * suggestion (`readPromptRecords`).
  */
 function withPromptDecisions(
   doc: OrderedDocument,
   part: OoxmlPart,
-  controlId: string,
+  records: readonly OoxmlElement[],
   status: (suggestion: string) => OrderedSuggestionStatus | null
 ): OoxmlPart {
-  const control = findContentControl(part, controlId);
-  for (const record of control ? promptRecords(control) : []) {
+  for (const record of records) {
     const suggestion = suggestionOfRevision(doc, record);
     const decision = suggestion === undefined ? null : status(suggestion);
     if (suggestion === undefined || decision === null) {
@@ -191,23 +192,18 @@ function withAttributedRecord(
 }
 
 /**
- * `pkg` with the prompts the glossary keeps written with their suggestions' attributions, as the
- * room shows them when the prompt shows again (`withPromptDecisions`).
+ * `pkg` with the prompts the glossary keeps under their suggestions' decisions, as the room shows
+ * them when the prompt shows again (`withPromptDecisions`): a decided record is no suggestion a
+ * load reads again.
  */
-export function withAttributedPrompts(pkg: OoxmlPackage, doc: OrderedDocument): OoxmlPackage {
+export function withDecidedPrompts(pkg: OoxmlPackage, doc: OrderedDocument): OoxmlPackage {
   const glossary = glossaryPartOf(pkg);
-  if (glossary === null || doc.revisionIds.reattributed.size === 0) {
+  if (glossary === null) {
     return pkg;
   }
 
-  let part = glossary;
-  for (const record of promptRecords(glossary.root)) {
-    const suggestion = suggestionOfRevision(doc, record);
-    if (suggestion !== undefined) {
-      part = withAttributedRecord(doc, part, record, suggestion);
-    }
-  }
-
+  const status = (suggestion: string) => statusOf(doc, suggestion);
+  const part = withPromptDecisions(doc, glossary, promptRecords(glossary.root), status);
   return part === glossary ? pkg : withPart(pkg, part);
 }
 
