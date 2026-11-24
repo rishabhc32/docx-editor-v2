@@ -5,6 +5,7 @@ import { orderedViewParagraph } from '../compose/compose.ts';
 import type { OrderedEditContext, OrderedReplacedFormat } from '../edits/context.ts';
 import { runOrderedEdit, type OrderedEdit, type OrderedEditOutcome } from '../edits/apply.ts';
 import { replyToComment, resolveComment } from '../edits/comments.ts';
+import { refuseMarkedEmptyFields } from '../edits/fields.ts';
 import { orderedPlaceAt, shownItemAt, type OrderedPlace } from '../edits/places.ts';
 import { retractSuggestion, undoOwnEdits } from '../edits/retract.ts';
 import { revertDirect } from '../edits/revert.ts';
@@ -317,6 +318,9 @@ export function applyOrderedChange(
   }
 
   const done = applyChange(doc, change, ctx);
+
+  // A suggestion's mark on a simple field with no result has no place in the Word file
+  refuseMarkedEmptyFields(doc, done.suggestions);
 
   // A control a decision emptied shows its prompt as units, so typing can replace it
   settleEmptiedControls(doc, ctx);

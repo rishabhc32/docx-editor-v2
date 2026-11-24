@@ -66,7 +66,9 @@ import type { OrderedItemAddress } from './types.ts';
  *   separator inside a link or another inline container, or a result that crosses a
  *   container's edge. No copy could compose the result.
  * - `untracked-only`: a suggestion of a change Word cannot track (a picture's size, crop,
- *   position, wrap, rotation, alt text, locks, link or image): only a direct edit makes it.
+ *   position, wrap, rotation, alt text, locks, link or image), or one that inserts or strikes a
+ *   simple field with no result, whose mark the Word file has no place for: only a direct edit
+ *   makes it.
  * - `locked`: a content control's lock (`w:lock`, ECMA-376 Part 1 §17.5.2.23) forbids the
  *   change, as the engine's `locked` does: an edit of the content of a `contentLocked` or
  *   `sdtContentLocked` control (a control inside one too), or the removal of an `sdtLocked` or

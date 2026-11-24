@@ -19,7 +19,12 @@ import {
 } from '../model/document.ts';
 import { insertItems, splitItem } from '../model/mutations.ts';
 import { OrderedRefusal } from '../model/refusal.ts';
-import type { OrderedFieldPiece, OrderedItem } from '../model/types.ts';
+import {
+  holdsRunFormat,
+  type OrderedDocument,
+  type OrderedFieldPiece,
+  type OrderedItem,
+} from '../model/types.ts';
 import { attributeOf, withChildren } from '../ooxml-nodes.ts';
 import { firstItemOf, isTableOfContents, refuseLocked } from '../placement.ts';
 import { strikeItems, suggestionFor, withNewIds, type Ctx } from './context.ts';
@@ -517,4 +522,29 @@ export function bookmarkParagraph(
   insertItems(ctx.doc, ctx.story, ctx.story.tree.prev(p.mark), [
     newMarkerItem(ctx, p, pair.end, { by: suggestion }),
   ]);
+}
+
+/**
+ * Refuse a pending suggestion that inserts or strikes a simple field with no result run: a
+ * `w:ins` or `w:del` cannot hold a `w:fldSimple` (`CT_RunTrackChange`, ECMA-376 Part 1
+ * §17.13.5), so its mark goes around the field's runs, and with none the Word file has no place
+ * for it (`untracked-only`). A direct edit adds or removes the field with no mark.
+ */
+export function refuseMarkedEmptyFields(
+  doc: OrderedDocument,
+  suggestions: readonly string[]
+): void {
+  for (const id of suggestions) {
+    if (!isPending(doc, id)) {
+      continue;
+    }
+
+    for (const item of doc.labelled.get(id) ?? []) {
+      const marked = item.by === id || item.dels.includes(id);
+      const field = item.node?.kind !== 'textValue' && item.node?.localName === 'fldSimple';
+      if (marked && field && !holdsRunFormat(item)) {
+        throw new OrderedRefusal('untracked-only', 'a simple field with no result has no mark');
+      }
+    }
+  }
 }
