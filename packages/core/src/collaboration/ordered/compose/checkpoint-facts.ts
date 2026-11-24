@@ -28,6 +28,7 @@ import { revisionIdsOf } from '../model/revision-ids.ts';
 import type {
   OrderedDocument,
   OrderedElementRecord,
+  OrderedItem,
   OrderedPropertyTarget,
   OrderedStory,
   OrderedSuggestion,
@@ -335,15 +336,42 @@ function commentPersons(doc: OrderedDocument): Map<string, OrderedPerson> {
 /**
  * Each container's open item that holds a pending record of some properties, untracked, or a
  * pending record with a change record, which does not say the children the record sets or the
- * cells it holds.
+ * cells it holds. A row's cells are one decision (`resetUnrecordedCells` reads the records of
+ * each): where a decided record of a row or a cell is kept, the row and each of its cells keep
+ * every record.
  */
 function recordsOpens(doc: OrderedDocument): RecordsOpen[] {
   const pending = (id: string) => doc.suggestions.get(id)?.status === 'pending';
+  const kept = (records: readonly OrderedElementRecord[]) =>
+    records.some((record) => record.untracked === true && pending(record.suggestion));
   const out: RecordsOpen[] = [];
   for (const story of doc.stories.values()) {
+    // The containers with records, each with the row it is or is a cell of: the innermost row
+    const found: {
+      readonly shell: OoxmlElement;
+      readonly open: OrderedItem;
+      readonly row: OrderedItem | undefined;
+      readonly byTarget: Map<OrderedPropertyTarget, OrderedElementRecord[]>;
+    }[] = [];
+    const rows: OrderedItem[] = [];
+    const whole = new Set<OrderedItem>();
     for (const open of story.tree.items()) {
+      if (open.token === 'tr' && open.kind === 'close') {
+        rows.pop();
+        continue;
+      }
+
+      if (open.token === 'tr') {
+        rows.push(open);
+      }
+
       const shell = open.node;
-      if (open.kind !== 'open' || shell === null || shell.kind === 'textValue') {
+      if (
+        open.kind !== 'open' ||
+        open.props.length === 0 ||
+        shell === null ||
+        shell.kind === 'textValue'
+      ) {
         continue;
       }
 
@@ -356,8 +384,19 @@ function recordsOpens(doc: OrderedDocument): RecordsOpen[] {
         }
       }
 
+      const row = open.token === 'tr' || open.token === 'tc' ? rows[rows.length - 1] : undefined;
+      const keptRecords = [...byTarget.values()].filter(kept).flat();
+      if (row !== undefined && keptRecords.some((record) => !pending(record.suggestion))) {
+        whole.add(row);
+      }
+
+      found.push({ shell, open, row, byTarget });
+    }
+
+    for (const { shell, open, row, byTarget } of found) {
+      const keepsAll = row !== undefined && whole.has(row);
       for (const [target, records] of byTarget) {
-        if (!records.some((record) => record.untracked === true && pending(record.suggestion))) {
+        if (!kept(records) && !(keepsAll && UNTRACKED_CONTAINERS.has(target))) {
           byTarget.delete(target);
         }
       }

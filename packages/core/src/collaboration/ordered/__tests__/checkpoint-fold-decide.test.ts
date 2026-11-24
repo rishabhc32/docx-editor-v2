@@ -372,6 +372,18 @@ describe("a fold of a table's records", () => {
       rowHeight(doc, 'bob:1', 1, '2026-10-28T09:06:00Z');
       await checkFold(doc, base, blobs, `${kind}, folded, then a row height`);
     });
+
+    // A rejected row record leaves the row's cells that hold a record as they are: the fold keeps
+    // the record on each cell, not only on the cells the column's pending widths are kept on
+    test(`${kind}, then a row height rejected`, async () => {
+      const { document: doc, base } = openOrderedWordFile(APPLY_FILE, { file: 1 });
+      column(doc, kind);
+      rowHeight(doc, 'bob:1', 0, '2026-10-28T09:06:00Z');
+      const suggestions = orderedCardSeen(doc, 'S:bob:1.1')!;
+      const decide = { kind: 'decide', cards: [{ suggestions }], status: 'rejected' } as const;
+      apply(doc, 'olive:1', decide, 'Olive');
+      await checkFold(doc, base, mediaStore(base), `${kind}, then a row height rejected`);
+    });
   }
 });
 
