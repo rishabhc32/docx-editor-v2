@@ -193,7 +193,10 @@ function insideOne(read: CardRead, id: string) {
   if (known !== undefined) return known;
   let one: string | null | undefined;
   for (const item of read.doc.labelled.get(id) ?? []) {
-    if (!read.isUnit(item) && !isSectionItem(item)) continue;
+    if (!read.isUnit(item) && !isSectionItem(item)) {
+      continue;
+    }
+
     const by = inserter(read.doc, item);
     one = one === undefined || one === by ? by : null;
     if (one === null) break;
