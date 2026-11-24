@@ -288,6 +288,27 @@ describe('the policy and today’s check', () => {
     });
   });
 
+  // Today: Enter in a link writes two `w:hyperlink` elements and marks only the new paragraph
+  // mark, so the part it split off holds the file's words in no one's insertion (r20
+  // quick-short-2:120 typed at its start)
+  test('typing in the part of the file’s link that another person’s Enter split off', () => {
+    for (const splitter of [OLGA, BEN]) {
+      const file = docx(p(`<w:hyperlink w:anchor="_Toc1">${t('Form Elements')}</w:hyperlink>`));
+      const { send, at, textOf } = setup(loadOrderedPackage(packageOf(file)));
+
+      // The Enter after "Form", then Ana's words at the second part's end, middle and start
+      expect(send(splitter, { kind: 'split', ...EDIT, place: at(0, 4) })).toBe('accepted');
+      const typed = (n: number) =>
+        send(ANA, { kind: 'insert', ...EDIT, place: at(1, n), text: 'a' });
+      expect({ end: typed(9), middle: typed(4), start: typed(0) }).toEqual({
+        end: 'accepted',
+        middle: 'accepted',
+        start: 'accepted',
+      });
+      expect(textOf(1)).toBe('a Eleamentsa');
+    }
+  });
+
   test('a deletion of another person’s words that someone struck already does nothing there', () => {
     const { send, at, doc } = setup();
     expect(send(ANA, { kind: 'insert', ...EDIT, place: at(0, 4), text: 'abcd' })).toBe('accepted');

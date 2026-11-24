@@ -198,6 +198,28 @@ describe('a party edit today’s check allows', () => {
     expect(editorTexts(olive)[0]).toBe('The abcfee is 100 USD.');
   });
 
+  // Today: Enter in a link writes two `w:hyperlink` elements and marks only the new paragraph
+  // mark, so Ana's `w:ins` in the part it split off is in the file's link, in no one's insertion
+  test('typing in the part of a link that another person’s Enter split off: the party’s own card', async () => {
+    const file = docx(p(`<w:hyperlink w:anchor="_Toc1">${t('Form Elements')}</w:hyperlink>`));
+    const { room, ana, ben, olive } = await people(file);
+    caretAt(ben, 0, 4);
+    surface(ben).splitParagraph();
+    await settle();
+    caretAt(ana, 1, 4);
+    surface(ana).type('X');
+    await settle();
+    converged(room, ana, ben, olive);
+    expect(cardsOf(room)).toEqual([['Ben'], ['Ana']]);
+    expect(editorTexts(olive)).toEqual(['Form', ' EleXments']);
+
+    // Rejected, her words go and his Enter stays
+    await decide(room, olive, 'Ana', 'rejected');
+    converged(room, ana, ben, olive);
+    expect(revisions(await savedBody(olive))).toEqual(['ins:Ben']);
+    expect(editorTexts(olive)).toEqual(['Form', ' Elements']);
+  });
+
   // Today: Word writes Ben's `w:pPrChange` beside Ana's `w:ins` on the paragraph mark, and the
   // take-back of Ben's record alone leaves the file as it was (allowed). It joins Ana's card
   test('a paragraph property on another person’s new paragraph: decided with it', async () => {

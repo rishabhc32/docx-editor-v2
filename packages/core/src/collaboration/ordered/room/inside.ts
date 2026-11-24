@@ -5,7 +5,7 @@
 import { isBlockToken } from '../compose/blocks.ts';
 import type { OrderedChangeOutcome } from '../change/apply.ts';
 import type { OrderedCaret, OrderedTouched } from '../change/targets.ts';
-import { isHidden, isPending, madeBy, pendingByOther } from '../model/document.ts';
+import { isHidden, isPending, isSplitEdge, madeBy, pendingByOther } from '../model/document.ts';
 import type { OrderedMaker } from '../model/person.ts';
 import {
   isUnit,
@@ -17,6 +17,8 @@ import {
 /**
  * Other people's pending suggestions that inserted an item or a container around it. With no
  * maker, everyone's: a direct edit is no one's suggestion, so every pending one is another's.
+ * The edge Enter put in to split a link or a control carries the Enter's suggestion, which is no
+ * insertion of the container: Word marks only the new paragraph mark.
  */
 export function insertedByOthers(
   doc: OrderedDocument,
@@ -26,7 +28,7 @@ export function insertedByOthers(
   const other = (id: string) =>
     maker === null ? isPending(doc, id) : pendingByOther(doc, id, maker);
   const out: string[] = [];
-  if (item.by !== null && other(item.by)) {
+  if (item.by !== null && !isSplitEdge(item) && other(item.by)) {
     out.push(item.by);
   }
 
