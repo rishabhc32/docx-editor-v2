@@ -9,24 +9,73 @@ import {
   isPending,
   itemAt,
   statusOf,
+  storyOfItem,
   suggestionOrNull,
 } from '../model/document.ts';
-import { relabel, settleDirect } from '../model/mutations.ts';
-import type {
-  OrderedDocument,
-  OrderedFormatWrite,
-  OrderedParagraphOp,
-  OrderedSuggestion,
+import { recordAdded, relabel, settleDirect } from '../model/mutations.ts';
+import {
+  isUnit,
+  type OrderedDocument,
+  type OrderedFormatWrite,
+  type OrderedItem,
+  type OrderedParagraphOp,
+  type OrderedStory,
+  type OrderedSuggestion,
 } from '../model/types.ts';
 import { coveredMarkers } from '../placement.ts';
 import { asAuthor, type Ctx } from './context.ts';
 import { formatMark, joinParagraphs, paragraphOp, splitParagraph } from './marks.ts';
 import { deleteRow } from './tables.ts';
-import { deleteText, formatText, insertText, type InsertOptions } from './text.ts';
+import { deleteText, formatText, insertText, unitsOf, type InsertOptions } from './text.ts';
 
-/** Accept a direct edit's own suggestion, marked as a direct edit's. */
+/**
+ * Accept a direct edit's own suggestion, marked as a direct edit's. Its words and objects in
+ * another person's pending new row, cell, note or text box are that container's (no marker of
+ * their own), as Word writes them there and a load reads them back; noted as units the change
+ * added to it, so its undo deletes them (`inverseOfDirect`). A move's words keep their move.
+ */
 export function settle(doc: OrderedDocument, suggestion: string | null): void {
-  if (isPending(doc, suggestion)) settleDirect(doc, suggestion);
+  if (!isPending(doc, suggestion)) {
+    return;
+  }
+
+  settleDirect(doc, suggestion);
+  const change = suggestion.slice(2, suggestion.lastIndexOf('.'));
+  for (const item of [...(doc.labelled.get(suggestion) ?? [])]) {
+    const story = storyOfItem(doc, item);
+    if (!story || !isUnit(item) || item.by !== suggestion || item.move !== null) {
+      continue;
+    }
+
+    const container = pendingContainerAround(doc, story, item);
+    if (container !== null) {
+      relabel(doc, story, item, { by: container, quiet: true });
+      recordAdded(doc, change, unitsOf(story, [item]));
+    }
+  }
+}
+
+/**
+ * The pending new row, cell, note or text box a unit sits in, if any: the innermost new row or
+ * cell around it, else the note or text box whose paragraph mark carries its insertion unmarked
+ * (`quiet`).
+ */
+function pendingContainerAround(
+  doc: OrderedDocument,
+  story: OrderedStory,
+  item: OrderedItem
+): string | null {
+  const container = innermostNewContainer(doc, item);
+  if (container !== null) {
+    return container;
+  }
+
+  let mark = story.tree.next(item);
+  while (mark && mark.kind !== 'mark') {
+    mark = story.tree.next(mark);
+  }
+
+  return mark?.quiet === true && isPending(doc, mark.by) ? mark.by : null;
 }
 
 /** The pending insertion that shows a character with its own marker, if any. */
@@ -34,20 +83,6 @@ function pendingInsertion(ctx: Ctx, char: OrderedViewChar | undefined): OrderedS
   if (!char || char.item.by === null || char.item.quiet) return null;
   if (!insertedPending(ctx.doc, char.item)) return null;
   return ctx.doc.suggestions.get(char.item.by) ?? null;
-}
-
-/**
- * The pending new row, cell, note or text box a paragraph sits in, if any: a new note's or text
- * box's paragraph mark carries its insertion unmarked (`quiet`), a new row's or cell's paragraphs
- * sit in it (`innermostNewContainer`).
- */
-function pendingContainerOf(ctx: Ctx, p: OrderedViewParagraph): OrderedSuggestion | null {
-  const container = p.mark.quiet ? p.mark.by : innermostNewContainer(ctx.doc, p.mark);
-  if (!isPending(ctx.doc, container)) {
-    return null;
-  }
-
-  return ctx.doc.suggestions.get(container) ?? null;
 }
 
 /** Type text (or one object, `pieces`) directly at a view offset. */
@@ -68,17 +103,6 @@ export function directInsert(
   // `w:ins`); undo takes those units back with a direct deletion
   if (before && after === before && map[offset - 1]?.address.space === map[offset]?.address.space) {
     insertText(asAuthor(ctx, before), p, offset, text, what);
-    return;
-  }
-
-  // In a paragraph of a pending row, cell, note or text box: the text is part of it (no marker of
-  // its own), as Word writes it there and a load reads it back
-  const container = pendingContainerOf(ctx, p);
-  if (
-    container &&
-    !map.some((c) => pendingInsertion(ctx, c) !== null && pendingInsertion(ctx, c) !== container)
-  ) {
-    insertText(asAuthor(ctx, container), p, offset, text, { quiet: true, ...what });
     return;
   }
 

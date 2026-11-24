@@ -204,6 +204,25 @@ describe("the organiser's undo of a direct edit inside a party's suggestion", ()
     converged(room, org, ana);
   });
 
+  test("words pasted in the party's new cell are part of it", async () => {
+    const { room, org, ana } = await seats();
+    caretAt(ana, indexOf(ana, 'Fee'), 0);
+    expect(tableCommand(ana, { type: 'insertColumn', where: 'right' }).ok).toBe(true);
+    await settle();
+    const before = editorXml(org);
+    caretAt(org, indexOf(org, 'Fee') + 1, 0);
+    await press(org, (s) => s.pasteRich('XY', '<b>XY</b>'));
+    expect(room.room.joinSnapshot(0).at(-1)?.kind).toBe('insert-fragment');
+    expect(holdersOf(room, 'XY')).toEqual(['Ana']);
+    converged(room, org, ana);
+    await press(org, (s) => s.undo());
+    expect(joined(editorXml(org))).toBe(joined(before));
+    converged(room, org, ana);
+    await press(org, (s) => s.redo());
+    expect(holdersOf(room, 'XY')).toEqual(['Ana']);
+    converged(room, org, ana);
+  });
+
   test("a footnote made in the party's new cell: its reference is part of it", async () => {
     const { room, org, ana } = await seats();
     caretAt(ana, indexOf(ana, 'Fee'), 0);

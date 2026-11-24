@@ -741,6 +741,47 @@ describe('who typed inside a new row, cell or note', () => {
       await checkFold(doc, base, mediaStore(base), label);
     });
   }
+
+  // Olive's direct paste in Ana's new row, cell or note: its words are the container's, as her
+  // typing is, and the read names Olive who pasted them
+  for (const [label, part, insert] of containers) {
+    test(`${label}: a direct paste's words are the container's`, async () => {
+      const { document: doc, base } = openOrderedWordFile(APPLY_FILE, { file: 1 });
+      const place = insert(doc);
+      const blocks = [{ e: 'w:p', c: [{ e: 'w:r', c: [{ e: 'w:t', c: ['XY'] }] }] }];
+      apply(
+        doc,
+        'olive:2',
+        { kind: 'insert-fragment', part, mode: 'edit', place, blocks },
+        'Olive'
+      );
+      const copies = await copiesOf(doc, base);
+      expect(copies.map((copy) => reads(copy, part, typed))).toEqual(
+        copies.map(() => [anas, anas])
+      );
+      await checkFold(doc, base, mediaStore(base), label);
+    });
+  }
+
+  // Ana's value in a plain text control: the engine's template wrote its words, and the read
+  // names Ana who set them, in the room and after each fold
+  test("a control's value: the read names who set it", async () => {
+    const { document: doc, base } = openOrderedWordFile(APPLY_FILE, { file: 1 });
+    const control = addressOf(opens(doc, 'sdt')[0]!);
+    apply(doc, 'ana:1', {
+      kind: 'control-value',
+      ...EDIT,
+      control,
+      value: { kind: 'text', text: 'XY' },
+    });
+    const ana = { namespace: 'ana', person: testPerson('Ana') };
+    const value = { holder: 'S:ana:1.1', typer: ana };
+    const copies = await copiesOf(doc, base);
+    expect(copies.map((copy) => reads(copy, BODY, typed))).toEqual(
+      copies.map(() => [value, value])
+    );
+    await checkFold(doc, base, mediaStore(base), 'a control value');
+  });
 });
 
 const W16DU = 'http://schemas.microsoft.com/office/word/2023/wordml/word16du';

@@ -4,7 +4,7 @@
 import { parseOrderedChangeId } from '../change/ids.ts';
 import { inserter } from './document.ts';
 import type { OrderedPerson } from './person.ts';
-import { isUnit, type OrderedDocument, type OrderedItem } from './types.ts';
+import { isUnit, loadedSpace, type OrderedDocument, type OrderedItem } from './types.ts';
 
 /** Units of one space that one room change typed: the offsets from `from` up to `to`. */
 export interface TypedRun {
@@ -42,12 +42,14 @@ export function orderedUnitTyper(
     return null;
   }
 
-  // A checkpoint's typer, else the change's: its units live in the space `i:<change id>.<k>`
+  // A checkpoint's typer, else the change's: it typed units in the space `i:<change id>.<k>`,
+  // and loaded those of the engine's template (a paste, a control's value) in the space of a
+  // paragraph it made, `n:<change id>.<k>`; a prompt is typed by no one
   const runs = LOADED.get(doc)?.get(item.space);
   const kept = runs?.find((run) => offset >= run.from && offset < run.to);
-  const change = item.space.startsWith('i:')
-    ? item.space.slice(2, item.space.lastIndexOf('.'))
-    : '';
+  const minted = loadedSpace(item.space)?.node ?? item.space;
+  const change =
+    item.prompt !== true && /^[in]:/.test(minted) ? minted.slice(2, minted.lastIndexOf('.')) : '';
   const namespace = kept?.typer ?? parseOrderedChangeId(change)?.namespace;
   const person = namespace === undefined ? undefined : doc.namespaces.get(namespace);
   if (namespace === undefined || person === undefined) {
