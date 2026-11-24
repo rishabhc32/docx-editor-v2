@@ -132,6 +132,16 @@ export function storyBlocksOf(part: OoxmlPart): readonly OoxmlNode[] {
   return body.children;
 }
 
+const LOADED = new WeakMap<OrderedDocument, OoxmlPackage>();
+
+/**
+ * The package a document was loaded from, which the settings writes go over
+ * (`compose/settings.ts`); null for a document loaded from none.
+ */
+export function loadedPackageOf(doc: OrderedDocument): OoxmlPackage | null {
+  return LOADED.get(doc) ?? null;
+}
+
 /**
  * Load a package's stories as one ordered document, with the prompts its glossary holds.
  *
@@ -151,6 +161,7 @@ export function loadOrderedPackage(
   recordFileLists(doc, pkg);
   recordFileStores(doc, pkg);
   recordFurniture(doc, pkg);
+  LOADED.set(doc, pkg);
 
   // After the stories, so their suggestion ids stay as they were
   loadPartRevisions(doc, pkg, options.suggestions);

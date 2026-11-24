@@ -3,7 +3,7 @@
 // (`edits/sections-watermark.ts`). A picture names its bytes by their SHA-256 (design D14): the
 // room refuses it while its storage lacks them.
 
-import { setWatermark, showsWatermark } from '../../../edits/sections-watermark.ts';
+import { setWatermark, watermarkChanges } from '../../../edits/sections-watermark.ts';
 import { storyNamed } from '../../../model/document.ts';
 import { OrderedRefusal } from '../../../model/refusal.ts';
 import type { OrderedDocument } from '../../../model/types.ts';
@@ -198,13 +198,16 @@ function headerStories(doc: OrderedDocument): string[] {
   return out;
 }
 
-/** Whether a watermark change writes a header part: a removal with no watermark writes none. */
+/**
+ * Whether a watermark change writes a header part: a removal with no watermark writes none, nor
+ * the watermark the headers show already.
+ */
 function changesFurniture(change: OrderedEditChange, doc: OrderedDocument): boolean {
   if (change.kind !== 'watermark') {
     return false;
   }
 
-  return change.watermark !== null || showsWatermark(doc, storyNamed(doc, change.part));
+  return watermarkChanges(doc, storyNamed(doc, change.part), change.watermark);
 }
 
 export const WATERMARK_SPEC = orderedKindSpec<OrderedWatermarkChange>({

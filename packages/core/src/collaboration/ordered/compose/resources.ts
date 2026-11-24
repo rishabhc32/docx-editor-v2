@@ -23,12 +23,7 @@ import {
   withRelationshipsPartFor,
 } from '../../../store/package/package-edit.ts';
 import { resolveRelationship } from '../../../store/package/relationships.ts';
-import { applyHeaderFooterLifecycleOp } from '../../../store/package/hf-lifecycle.ts';
-import { withDocumentProperties } from '../../../store/package/document-property-writes.ts';
-import {
-  writeDocumentNoteProperties,
-  writeNoteSeparatorReferences,
-} from '../../../store/package/note-lifecycle-props.ts';
+import { writeNoteSeparatorReferences } from '../../../store/package/note-lifecycle-props.ts';
 import {
   mergedPropertyChildren,
   PARAGRAPH_VOCABULARY,
@@ -64,6 +59,7 @@ import {
   wmlAttribute,
 } from '../ooxml-nodes.ts';
 import { customXmlBindingKey, hasCustomXml, withCustomXml } from './custom-xml.ts';
+import { withSettings } from './settings.ts';
 
 export const OFFICE_RELATIONSHIPS =
   'http://schemas.openxmlformats.org/officeDocument/2006/relationships';
@@ -876,33 +872,6 @@ function withoutBullets(element: OoxmlElement, leftOut: ReadonlySet<string>): Oo
   }
 
   return withChildren(element, children);
-}
-
-/** The settings writes of accepted suggestions, replayed in the order changes made them. */
-function withSettings(pkg: OoxmlPackage, doc: OrderedDocument): OoxmlPackage {
-  let next = pkg;
-  for (const resource of doc.resources.added.values()) {
-    if (resource.kind !== 'setting') continue;
-    if (doc.suggestions.get(resource.suggestion)?.status !== 'accepted') continue;
-    const { op } = resource;
-    if (op.op === 'setNoteProperties') {
-      next = writeDocumentNoteProperties(next, { ...op, scope: 'document' }) ?? next;
-      continue;
-    }
-
-    if (op.op === 'setDocumentProperties') {
-      next = withDocumentProperties(next, op.values) ?? next;
-      continue;
-    }
-
-    // The engine's own settings write (Protect Document; even and odd pages)
-    const applied = applyHeaderFooterLifecycleOp(next, op);
-
-    // The engine answers a write that changes nothing with a refusal; the package stays
-    if (applied.ok) next = applied.package;
-  }
-
-  return next;
 }
 
 /**

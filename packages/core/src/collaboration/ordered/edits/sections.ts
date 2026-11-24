@@ -136,7 +136,7 @@ function checkPage(
  * changes nothing makes no suggestion, a direct one too. Returns the suggestion that holds the
  * writes, if any.
  */
-function addSectionWrites(
+export function addSectionWrites(
   ctx: Ctx,
   sections: readonly OrderedSectionView[],
   op: OrderedSectionOp,

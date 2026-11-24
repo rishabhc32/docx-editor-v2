@@ -1,0 +1,10 @@
+{
+  "impact": "compatible",
+  "fields": [],
+  "before": "A direct `setting` change, a direct `note-properties` change, and a `watermark` change that wrote what the document had already each made a settled suggestion, so the suggestions-only policy refused a party's as a direct edit or a header change.",
+  "after": "Such a change makes no suggestion and no resource. A setting and the document's note properties are compared with the loaded file's settings under the accepted settings writes, a section's note properties with the section as it shows, and a watermark with the shapes every header it paints shows.",
+  "reason": "Change messages, the change log and its kinds keep their meaning, and the Yjs document format does not change. The room refuses fewer changes, and a change that changes nothing adds nothing to the log's effect; every copy applies the change log with the same code version, so the copies agree. Checkpoints do not change. Ordered rooms are not deployed yet, so no room needs a migration.",
+  "tests": ["packages/core/src/collaboration/ordered/__tests__/room-policy-inert.test.ts"],
+  "changeset": "ordered-direct-setting-no-op",
+  "migration": null
+}

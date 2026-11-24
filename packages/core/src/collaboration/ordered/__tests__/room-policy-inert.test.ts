@@ -4,6 +4,7 @@
 // suggestion. Found in the multi-party acceptance run (s2-short, x68-long).
 
 import { describe, expect, test } from 'bun:test';
+import { writeOrderedPackage } from '../compose/package.ts';
 import { loadOrderedPackage } from '../load/load.ts';
 import type { OrderedDocument, OrderedItem } from '../model/types.ts';
 import { OrderedRoom } from '../room/room.ts';
@@ -69,10 +70,10 @@ const TEXT_WATERMARK = {
   heightPt: 100,
 } as const;
 
-function setup() {
+function setup(file = FILE) {
   let tick = 0;
   const room = new OrderedRoom({
-    document: loadOrderedPackage(packageOf(FILE)),
+    document: loadOrderedPackage(packageOf(file)),
     applyChange: realApply,
     policy: suggestionsOnlyPolicy(),
     now: () => Date.UTC(2026, 10, 23) + 1000 * tick++,
@@ -98,6 +99,32 @@ function setup() {
     return { space: view.mark.space, offset: view.mark.offset };
   };
   return { room, doc, send, at, markOf };
+}
+
+/** The Word file the document writes now, over `FILE`. */
+async function saved(doc: OrderedDocument): Promise<Uint8Array> {
+  const chunks: Uint8Array[] = [];
+  await writeOrderedPackage(doc, packageOf(FILE), {
+    media: async (sha256) => {
+      throw new Error(`no media is read: ${sha256}`);
+    },
+    write: async (chunk) => {
+      chunks.push(chunk);
+    },
+    comments: 'keep',
+  });
+  return new Uint8Array(Buffer.concat(chunks));
+}
+
+/** The block item that holds the body's own section. */
+function bodySection(doc: OrderedDocument): { space: string; offset: number } {
+  for (const item of doc.stories.get(BODY)?.tree.items() ?? []) {
+    if (item.kind === 'zero' && item.block === true && item.node?.kind === 'generic') {
+      return { space: item.space, offset: item.offset };
+    }
+  }
+
+  throw new Error('no section');
 }
 
 /** The shown atom whose element is a drawing. */
@@ -249,7 +276,103 @@ describe('a party’s edit that changes nothing', () => {
     expect(doc.suggestions.size).toBe(0);
     expect(send(OLGA, { ...remove, watermark: TEXT_WATERMARK })).toBe('accepted');
     expect(send(ANA, remove)).toBe('policy-furniture/furniture');
-    expect(send(ANA, { ...remove, watermark: TEXT_WATERMARK })).toBe('policy-furniture/furniture');
+    const other = { ...TEXT_WATERMARK, text: 'COPY' };
+    expect(send(ANA, { ...remove, watermark: other })).toBe('policy-furniture/furniture');
     expect(doc.suggestions.size).toBe(1);
+  });
+
+  // Each written by the organiser, then sent by the party with the same values and with others,
+  // live and in the file saved and opened again
+  test('a setting, note properties or a watermark it has already passes; a new one is refused', async () => {
+    type Make = (doc: OrderedDocument, other: boolean) => Record<string, unknown>;
+    const KINDS: [string, Make][] = [
+      [
+        'protection',
+        (_doc, other) => ({
+          kind: 'setting',
+          setting: { op: 'setDocumentProtection', enforce: !other },
+        }),
+      ],
+      [
+        'even and odd pages',
+        (_doc, other) => ({
+          kind: 'setting',
+          setting: { op: 'setSectionFurnitureOptions', evenAndOddHeaders: !other },
+        }),
+      ],
+      [
+        'document properties',
+        (_doc, other) => ({
+          kind: 'setting',
+          setting: { op: 'setDocumentProperties', values: { title: other ? 'Other' : 'Deal' } },
+        }),
+      ],
+      [
+        'notes in the settings',
+        (_doc, other) => ({
+          kind: 'note-properties',
+          footnote: { numFmt: other ? 'upperRoman' : 'lowerRoman' },
+        }),
+      ],
+      [
+        'notes in a section',
+        (doc, other) => ({
+          kind: 'note-properties',
+          section: { body: bodySection(doc) },
+          footnote: { numFmt: other ? 'upperRoman' : 'lowerRoman' },
+        }),
+      ],
+      [
+        'watermark',
+        (_doc, other) => ({
+          kind: 'watermark',
+          watermark: { ...TEXT_WATERMARK, text: other ? 'COPY' : 'DRAFT' },
+        }),
+      ],
+    ];
+    const live = setup();
+    const direct = (make: Make, doc: OrderedDocument, other: boolean) => ({
+      ...make(doc, other),
+      part: BODY,
+      mode: 'edit',
+    });
+
+    // A protection the file does not have, lifted, changes nothing either
+    const off = { kind: 'setting', setting: { op: 'setDocumentProtection', enforce: false } };
+    expect(live.send(ANA, { ...off, part: BODY, mode: 'edit' })).toBe('accepted');
+    expect(live.doc.suggestions.size).toBe(0);
+    for (const [, make] of KINDS) {
+      expect(live.send(OLGA, direct(make, live.doc, false))).toBe('accepted');
+    }
+
+    const reopened = setup(await saved(live.doc));
+    for (const [room, { doc, send }] of [
+      ['live', live],
+      ['reopened', reopened],
+    ] as const) {
+      const verdicts: Record<string, string[]> = {};
+      for (const [kind, make] of KINDS) {
+        const suggestions = doc.suggestions.size;
+        const same = send(ANA, direct(make, doc, false));
+        expect({ room, kind, made: doc.suggestions.size - suggestions }).toEqual({
+          room,
+          kind,
+          made: 0,
+        });
+        verdicts[kind] = [same, send(ANA, direct(make, doc, true))];
+      }
+
+      expect({ room, verdicts }).toEqual({
+        room,
+        verdicts: {
+          protection: ['accepted', 'policy-direct/package'],
+          'even and odd pages': ['accepted', 'policy-direct/package'],
+          'document properties': ['accepted', 'policy-direct/package'],
+          'notes in the settings': ['accepted', 'policy-direct/package'],
+          'notes in a section': ['accepted', 'policy-direct/package'],
+          watermark: ['accepted', 'policy-furniture/furniture'],
+        },
+      });
+    }
   });
 });

@@ -1,5 +1,6 @@
 // The `setting` change kind (group 9.10): a write to the settings part, replayed at compose.
 
+import { settingKeeps } from '../../../compose/settings.ts';
 import { contextOf, suggestionFor } from '../../../edits/context.ts';
 import { settle } from '../../../edits/direct.ts';
 import { addSetting } from '../../../edits/resources.ts';
@@ -33,6 +34,12 @@ export const SETTING_SPEC = orderedKindSpec<OrderedSettingChange>({
     if (edit.direct !== true)
       throw new OrderedRefusal('invalid-edit', 'Word records no settings change as a suggestion');
     const ctx = contextOf(edit, []);
+
+    // A write of what the settings say already changes nothing: no record
+    if (settingKeeps(ctx.doc, change.setting)) {
+      return { suggestions: [], replaced: [] };
+    }
+
     const suggestion = suggestionFor(ctx).id;
     addSetting(ctx, suggestion, change.setting);
     settle(ctx.doc, suggestion);
