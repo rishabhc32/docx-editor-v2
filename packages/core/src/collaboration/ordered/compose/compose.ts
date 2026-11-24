@@ -66,6 +66,8 @@ interface StoryDrawing {
   readonly composed: OrderedComposedStory;
   /** The emptied controls a decision on a suggestion emptied. */
   readonly decisionEmptied: ReadonlySet<string>;
+  /** Controls whose value record the words a reject took away stated. */
+  readonly stale: ReadonlySet<string>;
   /** The takeovers each change record holds, by the record's node id. */
   readonly takeovers: ReadonlyMap<string, HeldTakeovers>;
   /** Whether the drawing put a checkpoint's attribute on an element (a checkpoint's only). */
@@ -86,6 +88,7 @@ function composeStory(doc: OrderedDocument, name: string, options: ComposeOption
   return {
     composed,
     decisionEmptied: ctx.decisionEmptied,
+    stale: ctx.stale,
     takeovers: ctx.takeovers,
     marked: ctx.markedAny,
   };
@@ -117,7 +120,7 @@ export function composeStoryPart(
   readonly composed: OrderedComposedStory;
   readonly takeovers: ReadonlyMap<string, HeldTakeovers>;
 } {
-  const { composed, decisionEmptied, takeovers, marked } = composeStory(doc, name, options);
+  const { composed, decisionEmptied, stale, takeovers, marked } = composeStory(doc, name, options);
   let part = withStoryBlocks(storyNamed(doc, name).part, composed.children);
 
   // A checkpoint's prefix bound before the edits below, which check the part
@@ -131,7 +134,7 @@ export function composeStoryPart(
     return now === 'pending' && options.pending === 'reject' ? 'rejected' : now;
   };
   part = withRestoredPrompts(doc, part, composed.emptied, decisionEmptied, status);
-  part = withControlRecords(part, composed.reached);
+  part = withControlRecords(part, composed.reached, stale);
   return { part, composed, takeovers };
 }
 

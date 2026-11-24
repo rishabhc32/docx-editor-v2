@@ -1,0 +1,12 @@
+{
+  "impact": "compatible",
+  "fields": [],
+  "before": "A reject of a list or date value proposed over words that state no value (a date control showing Soon) kept the proposed value's record (w:fullDate, w:lastValue) in the editor alone and after a save or a fold, where the live room gave back the file's record.",
+  "after": "A decision that leaves words stating no value clears a record that the inserted words it took away stated, in the editor alone and in the room after a save or a fold; the room reads the record with the engine's own rule.",
+  "reason": "Change messages, the change log and its kinds keep their meaning, and the Yjs document format and the checkpoint format do not change. Only the composed Word file after such a reject changes, and it now equals across the editor alone, the room and a fold. An ordered room admits only clients of its own code version.",
+  "tests": [
+    "packages/core/src/collaboration/ordered/__tests__/client/editor-controls-value-fold.test.ts"
+  ],
+  "changeset": "control-reject-stale-value-record",
+  "migration": null
+}

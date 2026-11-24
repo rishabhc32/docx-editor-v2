@@ -548,7 +548,7 @@ function paragraphsIn(control: OoxmlNode): number {
   return count;
 }
 
-interface RecordEdits {
+export interface RecordEdits {
   checked?: boolean;
   lastValue?: string | null;
   fullDate?: string | null;
@@ -582,7 +582,9 @@ function recordEdits(before: OoxmlElement, after: OoxmlElement): RecordEdits {
     return {};
   }
 
-  return valueRecordEdits(after);
+  // Words that state no value keep the record, but one the inserted words it took away stated
+  const stale = recordStatesText(before, wordsOf(before, true));
+  return valueRecordEdits(after, stale);
 }
 
 /**
@@ -590,10 +592,16 @@ function recordEdits(before: OoxmlElement, after: OoxmlElement): RecordEdits {
  * stores: words over its prompt, which left that record (`proposedProperties`).
  */
 function fillsPromptBesideRecord(control: OoxmlElement): boolean {
-  const own = outsideInsertions(contentControlContentOf(control)?.children ?? [], 0);
   return (
-    storesValueRecord(control) && contentControlTextOf(control) !== '' && inlineTextOf(own) === ''
+    storesValueRecord(control) &&
+    contentControlTextOf(control) !== '' &&
+    wordsOf(control, false) === ''
   );
+}
+
+/** The words a control shows in pending insertions (`inserted`), or outside them. */
+function wordsOf(control: OoxmlElement, inserted: boolean): string {
+  return inlineTextOf(contentNodes(contentControlContentOf(control)?.children ?? [], inserted, 0));
 }
 
 /** Whether a list or date control stores a value record (`w:lastValue`, `w:fullDate`). */
@@ -602,14 +610,22 @@ export function storesValueRecord(control: OoxmlElement): boolean {
   return (summary.lastValue ?? summary.date?.fullDate) !== undefined;
 }
 
-/** The nodes of a control's content outside pending insertions, its paragraphs opened. */
-function outsideInsertions(nodes: readonly OoxmlNode[], depth: number): OoxmlNode[] {
+/** A control's content nodes in pending insertions (`inserted`) or outside them, paragraphs opened. */
+function contentNodes(nodes: readonly OoxmlNode[], inserted: boolean, depth: number): OoxmlNode[] {
   return nodes.flatMap((node) => {
-    if (node.kind === 'textValue' || node.kind === 'revisionInsert' || depth > MAX_DEPTH) {
+    if (node.kind === 'textValue' || depth > MAX_DEPTH) {
       return [];
     }
 
-    return node.kind === 'paragraph' ? outsideInsertions(node.children, depth + 1) : [node];
+    if (node.kind === 'revisionInsert') {
+      return inserted ? [node] : [];
+    }
+
+    if (node.kind === 'paragraph') {
+      return contentNodes(node.children, inserted, depth + 1);
+    }
+
+    return inserted ? [] : [node];
   });
 }
 
@@ -617,25 +633,25 @@ function outsideInsertions(nodes: readonly OoxmlNode[], depth: number): OoxmlNod
  * The value record a list or date control's content states: `w:lastValue` the value of the item
  * it shows, or a combo box's own text, and `w:fullDate` the date it shows, read back through its
  * format as Word reads it after a decision. A control showing its prompt holds no value. Text
- * that names no item and no date leaves the record as it is.
+ * that names no item and no date leaves the record as it is, but for a `stale` one: words the
+ * decision took away stated it.
  */
-function valueRecordEdits(control: OoxmlElement): RecordEdits {
+export function valueRecordEdits(control: OoxmlElement, stale: boolean): RecordEdits {
   const summary = contentControlSummaryOf(control);
-  const text = contentControlTextOf(control);
-  if (summary.type === 'dropDownList' || summary.type === 'comboBox') {
-    if (summary.showingPlaceholder) {
-      return summary.lastValue === undefined ? {} : { lastValue: null };
-    }
-
-    const value = statedValue(summary, text);
-    return value === undefined || value === summary.lastValue ? {} : { lastValue: value };
+  const list = summary.type === 'dropDownList' || summary.type === 'comboBox';
+  if (!list && summary.type !== 'date') {
+    return {};
   }
 
-  if (summary.type !== 'date') return {};
-  const current = summary.date?.fullDate;
-  if (summary.showingPlaceholder) return current === undefined ? {} : { fullDate: null };
-  const fullDate = statedValue(summary, text);
-  return fullDate === undefined || fullDate === current ? {} : { fullDate };
+  const current = list ? summary.lastValue : summary.date?.fullDate;
+  const prompted = summary.showingPlaceholder;
+  const stated = prompted ? undefined : statedValue(summary, contentControlTextOf(control));
+  const next = stated ?? (prompted || stale ? undefined : current);
+  if (next === current) {
+    return {};
+  }
+
+  return list ? { lastValue: next ?? null } : { fullDate: next ?? null };
 }
 
 /**

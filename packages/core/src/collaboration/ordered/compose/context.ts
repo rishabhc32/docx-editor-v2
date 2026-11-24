@@ -165,6 +165,8 @@ export class ComposeContext {
   readonly decisionEmptied = new Set<string>();
   /** Controls a decision reached: their value record follows the text they show. */
   readonly reached: string[] = [];
+  /** Controls whose value record the words a reject took away stated: words of no value clear it. */
+  readonly stale = new Set<string>();
   /** Whether this drawing put a checkpoint's attribute on an element: its part declares it. */
   markedAny = false;
   /** Prompt units of controls that hold content now, and the controls those prompts held. */
@@ -438,6 +440,13 @@ export class ComposeContext {
   struckBy(item: OrderedItem): string | null {
     if (this.options.pending === 'reject') return null;
     return pendingDeleters(this.doc, item)[0] ?? null;
+  }
+
+  /** The words of a unit whose insertion a reject took away, as a control reads its text, or ''. */
+  rejectedWords(item: OrderedItem): string {
+    const found = item.by === null ? undefined : this.doc.suggestions.get(item.by);
+    const rejected = found?.status === 'rejected' && found.direct !== true;
+    return rejected && !item.gone && item.kind === 'text' && item.instr !== true ? item.text : '';
   }
 
   /** Whether an accept decided the item's insertion: a suggestion's, not a direct edit's. */

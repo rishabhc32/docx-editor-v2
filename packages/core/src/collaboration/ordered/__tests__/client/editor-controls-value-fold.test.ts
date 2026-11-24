@@ -16,7 +16,9 @@
 // showed it; it goes in the control's paragraph, as the editor alone writes it. A value picked over
 // a prompt beside a stored value once wrote its own record over the stored one, so a reject, and
 // the organiser's undo of a direct pick in the room, showed the prompt with no value: the stored
-// value now stays while a pick is pending, and an accept reads the new one from the words.
+// value now stays while a pick is pending, and an accept reads the new one from the words. A date
+// picked over words that state no date, rejected, once kept the picked date's record in the
+// editor alone and after a fold, and a date control with no format showed 2026-09-15 in the room.
 
 import { afterEach, describe, expect, test } from 'bun:test';
 import { createDocxEditor } from '../../../../editor/docx-editor.ts';

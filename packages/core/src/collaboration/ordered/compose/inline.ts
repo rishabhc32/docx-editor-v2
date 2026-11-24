@@ -8,7 +8,10 @@ import {
   type OoxmlNode,
 } from '../../../store/package/ooxml-tree.ts';
 import { withDeletedTextRestored } from '../../../store/store/revision-rebuild-helpers.ts';
-import { storesValueRecord } from '../../../store/store/tracked-content-control-value.ts';
+import {
+  recordStatesText,
+  storesValueRecord,
+} from '../../../store/store/tracked-content-control-value.ts';
 import { build, textNode } from '../../../store/store/tree-op-tracked.ts';
 import { MOVE_RANGE } from '../load/moves.ts';
 import { isSplitEdge, movedAwayBy, statusOf } from '../model/document.ts';
@@ -56,6 +59,8 @@ interface Box {
   own: boolean;
   /** A unit in it shows as a suggestion's insertion an accept decided. */
   accepted: boolean;
+  /** The words of insertions a reject took away in it. */
+  rejected: string;
   /** The pending insertion of a new control, drawn as one `w:ins` around the control. */
   cover?: string;
 }
@@ -151,6 +156,7 @@ function newBox(open: OrderedItem | null, cover: string | null = null): Box {
     struck: false,
     own: false,
     accepted: false,
+    rejected: '',
     ...(cover === null ? {} : { cover }),
   };
 }
@@ -231,6 +237,11 @@ function noteUnit(ctx: ComposeContext, boxes: readonly Box[], item: OrderedItem)
   // A decided insertion or deletion reaches every control around it
   if (ctx.decided(item)) for (const b of boxes) b.reached = true;
   if (ctx.decidedAway(item)) for (const b of boxes) b.decided = true;
+  const rejected = ctx.rejectedWords(item);
+  for (const b of boxes) {
+    b.rejected += rejected;
+  }
+
   if (ctx.gone(item)) return;
   const struck = ctx.struckBy(item) !== null;
   const accepted = ctx.acceptedInsertion(item);
@@ -427,6 +438,10 @@ function closeBox(ctx: ComposeContext, done: Box, into: Box): void {
     // Words that filled its prompt beside a record it stores, once accepted, give the record, as
     // the engine reads it back (`fillsPromptBesideRecord`)
     const filled = done.accepted && !done.own && storesValueRecord(container);
+    if (recordStatesText(container, done.rejected)) {
+      ctx.stale.add(container.id);
+    }
+
     if (done.reached || emptied || valued || filled) {
       ctx.reached.push(container.id);
     }

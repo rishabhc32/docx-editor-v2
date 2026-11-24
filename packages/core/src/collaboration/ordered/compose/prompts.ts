@@ -18,9 +18,9 @@ import {
   withRestoredPrompt,
 } from '../../../store/store/content-control-prompt-restore.ts';
 import {
-  parseContentControlDate,
-  parseIsoDate,
-} from '../../../store/store/content-control-dates.ts';
+  valueRecordEdits,
+  type RecordEdits,
+} from '../../../store/store/tracked-content-control-value.ts';
 import { editedProperties, wmlElement } from '../../../store/store/tree-op-content-controls.ts';
 import {
   contentControlPropertiesOf,
@@ -217,55 +217,43 @@ function promptRecords(node: OoxmlNode): OoxmlElement[] {
   return [...(own ? [node] : []), ...node.children.flatMap(promptRecords)];
 }
 
-/** `part` with each control's value record (`w:lastValue`, `w:fullDate`) following its text. */
-export function withControlRecords(part: OoxmlPart, controls: readonly string[]): OoxmlPart {
+/**
+ * `part` with each control's value record (`w:lastValue`, `w:fullDate`, `w14:checked`) following
+ * its text; a `stale` one (`ComposeContext.stale`) goes where its text states no value.
+ */
+export function withControlRecords(
+  part: OoxmlPart,
+  controls: readonly string[],
+  stale: ReadonlySet<string> = new Set()
+): OoxmlPart {
   for (const id of controls) {
     const control = findContentControl(part, id);
-    if (!control) continue;
-    const edits = valueRecordEdits(control);
-    if (
-      edits.lastValue === undefined &&
-      edits.fullDate === undefined &&
-      edits.checked === undefined
-    )
+    const properties = control ? contentControlPropertiesOf(control) : undefined;
+    if (!control || !properties) {
       continue;
-    const properties = contentControlPropertiesOf(control);
-    if (!properties) continue;
+    }
+
+    const summary = summaryOf(control);
+    const edits =
+      summary.type === 'checkbox'
+        ? checkboxEdits(summary, contentControlTextOf(control))
+        : valueRecordEdits(control, stale.has(id));
+    if (Object.keys(edits).length === 0) {
+      continue;
+    }
+
     const edited = editedProperties(properties, edits, createNodeIdAllocator(part));
     const written = replaceNode(part, properties.id, edited);
-    if (written.ok) part = written.part;
+    if (written.ok) {
+      part = written.part;
+    }
   }
 
   return part;
 }
 
-/** The value record writes that bring a control's record in step with its text. */
-interface ValueRecordEdits {
-  lastValue?: string | null;
-  fullDate?: string | null;
-  checked?: boolean;
-}
-
-function valueRecordEdits(control: OoxmlElement): ValueRecordEdits {
-  const summary = summaryOf(control);
-  const text = contentControlTextOf(control);
-  if (summary.type === 'dropDownList' || summary.type === 'comboBox')
-    return listValueEdits(summary, text);
-  if (summary.type === 'checkbox') return checkboxEdits(summary, text);
-  if (summary.type === 'date') return dateEdits(summary, text);
-  return {};
-}
-
-/** A list's last value: the value of the item it shows (a combo box's own text). */
-function listValueEdits(summary: ContentControlProperties, text: string): ValueRecordEdits {
-  if (summary.showingPlaceholder) return summary.lastValue === undefined ? {} : { lastValue: null };
-  const item = summary.listItems.find((candidate) => candidate.displayText === text);
-  const value = item?.value ?? (summary.type === 'comboBox' ? text : undefined);
-  return value === undefined || value === summary.lastValue ? {} : { lastValue: value };
-}
-
 /** A check box's state: it follows the glyph the control shows. */
-function checkboxEdits(summary: ContentControlProperties, text: string): ValueRecordEdits {
+function checkboxEdits(summary: ContentControlProperties, text: string): RecordEdits {
   const box = summary.checkbox;
   const glyph = (state: { readonly value: string } | undefined) =>
     state === undefined ? undefined : String.fromCodePoint(Number.parseInt(state.value, 16) || 0);
@@ -277,17 +265,4 @@ function checkboxEdits(summary: ContentControlProperties, text: string): ValueRe
   }
 
   return checked === undefined || checked === box?.checked ? {} : { checked };
-}
-
-/** A date's full date: the date it shows, in the century of the one before. */
-function dateEdits(summary: ContentControlProperties, text: string): ValueRecordEdits {
-  const current = summary.date?.fullDate;
-  if (summary.showingPlaceholder) return current === undefined ? {} : { fullDate: null };
-  const previous = current === undefined ? null : parseIsoDate(current);
-  const century = previous ? Math.floor(previous.year / 100) * 100 : undefined;
-  const shown = parseContentControlDate(text, summary.date?.dateFormat, century);
-  if (!shown) return {};
-  const pad = (value: number, width: number) => String(value).padStart(width, '0');
-  const fullDate = `${pad(shown.year, 4)}-${pad(shown.month, 2)}-${pad(shown.day, 2)}T00:00:00Z`;
-  return fullDate === current ? {} : { fullDate };
 }
