@@ -1,0 +1,12 @@
+{
+  "impact": "compatible",
+  "fields": [],
+  "before": "A party's undo of an edit of their own new words (more words typed into them, a line pasted, a format, a deletion of part of them) took that edit back after the organiser had accepted or rejected the suggestion: the room took the typed words or the format off the accepted words for everyone while the decision stood. The organiser's undo of words typed directly inside a party's insertion deleted them after the insertion was accepted. An undo the room refused left its redo, which typed the words a second time.",
+  "after": "The room refuses the take-back of an own edit when a suggestion that inserted an item it changes is decided (not-pending): the units it typed, the formats it gave, the items it shows again. A page refuses the undo of a step whose suggestion someone decided, and the organiser's undo of words typed inside an insertion decided since (no-inverse, decided), and sends nothing. A room's refusal of a person's change clears that person's redo steps.",
+  "reason": "Change messages, the change log and its kinds keep their meaning, and the Yjs document format does not change. The room refuses more retract changes; every copy applies the change log with the same code version, so the copies agree; an ordered room admits only clients of its own code version. Checkpoints do not change. Ordered rooms are not deployed yet, so no room needs a migration.",
+  "tests": [
+    "packages/core/src/collaboration/ordered/__tests__/client/editor-decided-cards.test.ts"
+  ],
+  "changeset": "ordered-undo-after-decision",
+  "migration": null
+}
