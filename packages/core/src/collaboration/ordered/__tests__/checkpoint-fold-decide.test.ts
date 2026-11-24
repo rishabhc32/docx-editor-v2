@@ -17,7 +17,7 @@ import {
   markOf,
   opens,
 } from './change-apply-fixture.ts';
-import { checkFold, checkpointBytes, mediaStore } from './fold-check.ts';
+import { checkFold, checkpointBytes, folded, mediaStore } from './fold-check.ts';
 import {
   alphaOmega,
   bodyOf,
@@ -226,11 +226,13 @@ describe('a decision after a fold, beside a pending control value', () => {
 });
 
 describe("a fold of a table's records", () => {
+  const ANA_1 = '2026-10-28T09:01:00Z';
+
   // Two dates: each is decided on its own
   test('two row heights of one person on a row with no properties', async () => {
     const { document: doc, base } = openOrderedWordFile(APPLY_FILE, { file: 1 });
     for (const [id, heightTwips, date] of [
-      ['ana:1', 300, '2026-10-28T09:01:00Z'],
+      ['ana:1', 300, ANA_1],
       ['ana:2', 480, '2026-10-28T09:02:00Z'],
     ] as const) {
       const on = [addressOf(opens(doc, 'tr')[0]!)];
@@ -240,4 +242,50 @@ describe("a fold of a table's records", () => {
 
     await checkFold(doc, base, mediaStore(base), 'two row heights');
   });
+
+  // A row height records each cell and the grid, and sets nothing there: a decision on a column
+  // gives back or gives on the widths the column holds, after a fold too
+  const rowHeight = (doc: OrderedDocument, id: string, row: number, date: string) => {
+    const on = [addressOf(opens(doc, 'tr')[row]!)];
+    const op = { op: 'setTableRowHeight', heightTwips: 480 } as const;
+    apply(doc, id, { kind: 'table-property', ...EDIT, on, op }, 'Bob', date);
+  };
+  const column = (doc: OrderedDocument, kind: 'insert-column' | 'delete-column') => {
+    const cell = addressOf(opens(doc, 'tc')[1]!);
+    const body =
+      kind === 'insert-column'
+        ? ({ kind, ...EDIT, cell, where: 'left' } as const)
+        : ({ kind, ...EDIT, cell } as const);
+    apply(doc, 'ana:1', body, 'Ana', ANA_1);
+  };
+
+  for (const kind of ['insert-column', 'delete-column'] as const) {
+    test(`${kind}, then a row height on each row`, async () => {
+      const { document: doc, base } = openOrderedWordFile(APPLY_FILE, { file: 1 });
+      column(doc, kind);
+      rowHeight(doc, 'bob:1', 0, '2026-10-28T09:06:00Z');
+      rowHeight(doc, 'bob:2', 1, '2026-10-28T09:07:00Z');
+      await checkFold(doc, base, mediaStore(base), `${kind}, then row heights`);
+    });
+
+    // The room's shape: the later row height is made on a folded copy
+    test(`${kind} and a row height, folded, then a row height on the other row`, async () => {
+      const first = openOrderedWordFile(APPLY_FILE, { file: 1 });
+      const blobs = mediaStore(first.base);
+      column(first.document, kind);
+      rowHeight(first.document, 'bob:1', 0, '2026-10-28T09:06:00Z');
+      const { document: doc, base } = await folded(first.document, first.base, 2, blobs);
+      rowHeight(doc, 'bob:2', 1, '2026-10-28T09:07:00Z');
+      await checkFold(doc, base, blobs, `${kind}, folded, then a row height`);
+    });
+
+    test(`${kind}, folded, then a row height`, async () => {
+      const first = openOrderedWordFile(APPLY_FILE, { file: 1 });
+      const blobs = mediaStore(first.base);
+      column(first.document, kind);
+      const { document: doc, base } = await folded(first.document, first.base, 2, blobs);
+      rowHeight(doc, 'bob:1', 1, '2026-10-28T09:06:00Z');
+      await checkFold(doc, base, blobs, `${kind}, folded, then a row height`);
+    });
+  }
 });

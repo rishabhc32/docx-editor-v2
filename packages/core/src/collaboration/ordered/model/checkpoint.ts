@@ -23,7 +23,13 @@ import {
   type CheckpointSuggestion,
 } from './checkpoint-suggestions.ts';
 import { readTakeovers, takeoversJson, type CheckpointTakeover } from './checkpoint-takeovers.ts';
-import { readUntracked, untrackedJson, type CheckpointUntracked } from './checkpoint-untracked.ts';
+import {
+  readChangeRecords,
+  readUntracked,
+  untrackedJson,
+  type CheckpointChangeRecords,
+  type CheckpointUntracked,
+} from './checkpoint-untracked.ts';
 import { referencedMediaType } from './file-media.ts';
 import { readPerson, type OrderedPerson } from './person.ts';
 import { OrderedRefusal } from './refusal.ts';
@@ -70,9 +76,10 @@ export const checkpointAttribute = (
  * The room facts a checkpoint's manifest keeps, which Word has no place for: each pending
  * suggestion whole, and each decided one another section names; the person of each room comment
  * by its `w:id`; the records each change record holds by takeover; the person of each namespace
- * the parts name as a typer; the records Word writes no change record for, decided or not; and
- * the list definitions and styles changes added. Every section names a suggestion by its place in
- * `suggestions`, and an element of the file by its label.
+ * the parts name as a typer; the records Word writes no change record for, decided or not; what
+ * the room holds of a record that its change record does not say; and the list definitions and
+ * styles changes added. Every section names a suggestion by its place in `suggestions`, and an
+ * element of the file by its label.
  */
 export interface CheckpointFacts {
   readonly suggestions: readonly CheckpointSuggestion[];
@@ -80,6 +87,7 @@ export interface CheckpointFacts {
   readonly takeovers: readonly CheckpointTakeover[];
   readonly namespacePersons: ReadonlyMap<string, OrderedPerson>;
   readonly untracked: readonly CheckpointUntracked[];
+  readonly changeRecords: readonly CheckpointChangeRecords[];
   readonly lists: readonly CheckpointList[];
   readonly styles: readonly CheckpointStyle[];
 }
@@ -126,6 +134,7 @@ export function checkpointManifestBytes(
       takeovers: takeoversJson(facts.takeovers),
       namespaces: [...facts.namespacePersons].map(([namespace, person]) => ({ namespace, person })),
       untracked: untrackedJson(facts.untracked),
+      changeRecords: facts.changeRecords,
       lists: facts.lists,
       styles: facts.styles,
     })
@@ -211,7 +220,9 @@ function factsOf(manifest: Record<string, unknown>): CheckpointFacts {
     takeovers: readTakeovers(manifest.takeovers, count),
     namespacePersons: readNamespaces(manifest.namespaces),
     untracked: readUntracked(manifest.untracked, count),
-    // A section a checkpoint of this version may not hold yet
+    // Sections a checkpoint of this version may not hold yet
+    changeRecords:
+      manifest.changeRecords === undefined ? [] : readChangeRecords(manifest.changeRecords, count),
     lists: manifest.lists === undefined ? [] : readLists(manifest.lists, count),
     styles: manifest.styles === undefined ? [] : readStyles(manifest.styles, count),
   };

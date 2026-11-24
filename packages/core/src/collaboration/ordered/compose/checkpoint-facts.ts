@@ -15,9 +15,12 @@ import {
   type CheckpointTaken,
   type CheckpointTakeover,
 } from '../model/checkpoint-takeovers.ts';
-import type {
-  CheckpointUntracked,
-  CheckpointUntrackedRecord,
+import {
+  UNTRACKED_CONTAINERS,
+  type CheckpointChangeRecord,
+  type CheckpointChangeRecords,
+  type CheckpointUntracked,
+  type CheckpointUntrackedRecord,
 } from '../model/checkpoint-untracked.ts';
 import type { OrderedPerson } from '../model/person.ts';
 import { orderedResourceShows } from '../model/resources.ts';
@@ -88,8 +91,11 @@ class SuggestionList {
   }
 }
 
-/** A container's open item, with each of its properties that a record changes untracked. */
-interface UntrackedOpen {
+/**
+ * A container's open item, with each of its properties that a record changes untracked, and the
+ * other pending records whose room facts a change record does not say.
+ */
+interface RecordsOpen {
   readonly story: OrderedStory;
   readonly shell: OoxmlElement;
   /**
@@ -97,6 +103,8 @@ interface UntrackedOpen {
    * by takeover: a record taken by an untracked one is listed, as no change record holds it.
    */
   readonly byTarget: ReadonlyMap<OrderedPropertyTarget, readonly OrderedElementRecord[]>;
+  /** Each other pending record that sets some children or holds a table's cells. */
+  readonly recorded: readonly OrderedElementRecord[];
 }
 
 /**
@@ -123,8 +131,8 @@ export function checkpointFacts(
   }
 
   // A label on each change record that holds a takeover, and on each container and cell an
-  // untracked record names
-  const opens = untrackedOpens(doc);
+  // untracked or table record names
+  const opens = recordsOpens(doc);
   const wanted = new Set<string>();
   for (const records of held.values()) {
     for (const id of records.keys()) {
@@ -132,9 +140,9 @@ export function checkpointFacts(
     }
   }
 
-  for (const { story, shell, byTarget } of opens) {
+  for (const { story, shell, byTarget, recorded } of opens) {
     wanted.add(shell.id);
-    for (const records of byTarget.values()) {
+    for (const records of [...byTarget.values(), recorded]) {
       for (const space of records.flatMap((record) => record.tableCells ?? [])) {
         const cell = cellShell(story, space);
         if (cell !== undefined) {
@@ -159,6 +167,7 @@ export function checkpointFacts(
     takeovers: checkpointTakeovers(doc, held, labels, list),
     namespacePersons: typers,
     untracked: checkpointUntracked(doc, opens, labels, list),
+    changeRecords: checkpointChangeRecords(doc, opens, labels, list),
     lists: checkpointLists(doc, pkg, list),
     styles: checkpointStyles(doc, pkg, list),
   });
@@ -297,6 +306,14 @@ function inRoomOrder(
         replaced: r.replaced === undefined ? undefined : renumbered(r.replaced),
       })),
     })),
+    changeRecords: facts.changeRecords.map((c) => ({
+      ...c,
+      records: c.records.map((r) => ({
+        ...r,
+        suggestion: renumbered(r.suggestion),
+        replaced: r.replaced === undefined ? undefined : renumbered(r.replaced),
+      })),
+    })),
     lists: facts.lists.map((l) => ({ ...l, suggestion: renumbered(l.suggestion) })),
     styles: facts.styles.map((s) => ({ ...s, suggestion: renumbered(s.suggestion) })),
   };
@@ -314,10 +331,14 @@ function commentPersons(doc: OrderedDocument): Map<string, OrderedPerson> {
   return persons;
 }
 
-/** Each container's open item that holds a pending record of some properties, untracked. */
-function untrackedOpens(doc: OrderedDocument): UntrackedOpen[] {
+/**
+ * Each container's open item that holds a pending record of some properties, untracked, or a
+ * pending record with a change record, which does not say the children the record sets or the
+ * cells it holds.
+ */
+function recordsOpens(doc: OrderedDocument): RecordsOpen[] {
   const pending = (id: string) => doc.suggestions.get(id)?.status === 'pending';
-  const out: UntrackedOpen[] = [];
+  const out: RecordsOpen[] = [];
   for (const story of doc.stories.values()) {
     for (const open of story.tree.items()) {
       const shell = open.node;
@@ -340,8 +361,17 @@ function untrackedOpens(doc: OrderedDocument): UntrackedOpen[] {
         }
       }
 
-      if (byTarget.size > 0) {
-        out.push({ story, shell, byTarget });
+      const recorded = open.props.filter(
+        (record): record is OrderedElementRecord =>
+          record.kind === 'element' &&
+          (record.merge !== undefined || record.tableCells !== undefined) &&
+          record.untracked !== true &&
+          UNTRACKED_CONTAINERS.has(record.target) &&
+          pending(record.suggestion) &&
+          !byTarget.get(record.target)?.includes(record)
+      );
+      if (byTarget.size > 0 || recorded.length > 0) {
+        out.push({ story, shell, byTarget, recorded });
       }
     }
   }
@@ -356,7 +386,7 @@ function untrackedOpens(doc: OrderedDocument): UntrackedOpen[] {
  */
 function checkpointUntracked(
   doc: OrderedDocument,
-  opens: readonly UntrackedOpen[],
+  opens: readonly RecordsOpen[],
   labels: ReadonlyMap<string, number>,
   list: SuggestionList
 ): CheckpointUntracked[] {
@@ -369,27 +399,11 @@ function checkpointUntracked(
 
     for (const [target, records] of byTarget) {
       const listed: CheckpointUntrackedRecord[] = [];
-      for (const {
-        suggestion,
-        element,
-        untracked,
-        merge,
-        recordUnchanged,
-        tableCells,
-        replaced,
-      } of records) {
-        const made = doc.suggestions.get(suggestion);
-        const taken = replaced === undefined ? undefined : doc.suggestions.get(replaced);
-        if (made !== undefined && (replaced === undefined || taken !== undefined)) {
-          listed.push({
-            suggestion: list.indexOf(made),
-            element,
-            untracked,
-            merge,
-            recordUnchanged,
-            tableCells: tableCells && cellLabels(story, tableCells, labels),
-            replaced: taken && list.indexOf(taken),
-          });
+      for (const record of records) {
+        const kept = changeRecordOf(doc, story, record, labels, list);
+        if (kept !== undefined) {
+          const { element, untracked, recordUnchanged } = record;
+          listed.push({ ...kept, element, untracked, recordUnchanged });
         }
       }
 
@@ -404,6 +418,61 @@ function checkpointUntracked(
   }
 
   return out;
+}
+
+/** What the room holds of each pending record with a change record, by the label on its container. */
+function checkpointChangeRecords(
+  doc: OrderedDocument,
+  opens: readonly RecordsOpen[],
+  labels: ReadonlyMap<string, number>,
+  list: SuggestionList
+): CheckpointChangeRecords[] {
+  const out: CheckpointChangeRecords[] = [];
+  for (const { story, shell, recorded } of opens) {
+    const label = labels.get(shell.id);
+    if (label === undefined) {
+      continue;
+    }
+
+    const byTarget = new Map<OrderedPropertyTarget, CheckpointChangeRecord[]>();
+    for (const record of recorded) {
+      const kept = changeRecordOf(doc, story, record, labels, list);
+      if (kept !== undefined) {
+        byTarget.set(record.target, [...(byTarget.get(record.target) ?? []), kept]);
+      }
+    }
+
+    for (const [target, records] of byTarget) {
+      out.push({ label, target, records });
+    }
+  }
+
+  return out;
+}
+
+/**
+ * What the manifest keeps of a record that no change record says; undefined when its suggestion,
+ * or the one it was taken from, is not the document's.
+ */
+function changeRecordOf(
+  doc: OrderedDocument,
+  story: OrderedStory,
+  { suggestion, replaced, merge, tableCells }: OrderedElementRecord,
+  labels: ReadonlyMap<string, number>,
+  list: SuggestionList
+): CheckpointChangeRecord | undefined {
+  const made = doc.suggestions.get(suggestion);
+  const taken = replaced === undefined ? undefined : doc.suggestions.get(replaced);
+  if (made === undefined || (replaced !== undefined && taken === undefined)) {
+    return undefined;
+  }
+
+  return {
+    suggestion: list.indexOf(made),
+    replaced: taken && list.indexOf(taken),
+    merge,
+    tableCells: tableCells && cellLabels(story, tableCells, labels),
+  };
 }
 
 /** The node id of a cell's shell, by the cell's space. */

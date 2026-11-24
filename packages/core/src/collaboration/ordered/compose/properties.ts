@@ -130,15 +130,25 @@ export function noteTakeover(
 
 /**
  * The file's own change record, when it is the one record drawn: pending, alone, with nothing
- * accepted under it. Written back as the file had it (a record's copy can hold what the
- * engine's writer leaves out, such as a cell's old `w:cellDel`).
+ * accepted under it, and giving the whole properties. Written back as the file had it (a
+ * record's copy can hold what the engine's writer leaves out, such as a cell's old `w:cellDel`).
+ * A record that sets only some children (`merge`) shows the container's own others, and load
+ * made those the nodes of the file's record: it takes a record of copies, as a room's record does.
  */
 export function fileRecordAlone(
   accepted: readonly AnyRecord[],
   pending: readonly AnyRecord[]
 ): OoxmlElement | undefined {
   const [only, ...more] = pending;
-  if (!only || more.length > 0 || accepted.length > 0) return undefined;
+  if (
+    !only ||
+    more.length > 0 ||
+    accepted.length > 0 ||
+    ('merge' in only && only.merge !== undefined)
+  ) {
+    return undefined;
+  }
+
   return 'fileRecord' in only ? only.fileRecord : undefined;
 }
 

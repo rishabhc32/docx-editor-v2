@@ -27,7 +27,7 @@ import {
 import { withCheckpointRuns } from './room-runs.ts';
 import { withCheckpointTakeovers } from './takeovers.ts';
 import { withCheckpointTypers } from './typers.ts';
-import { withCheckpointUntracked } from './untracked.ts';
+import { withCheckpointChangeRecords, withCheckpointUntracked } from './untracked.ts';
 
 /** How to open a room's Word file. @public */
 export interface OrderedWordFileOptions {
@@ -172,6 +172,7 @@ function openCheckpointRead(pkg: OoxmlPackage, options: OrderedWordFileOptions):
     !withCheckpointStyles(doc, styles.taken, listedIds) ||
     !withCheckpointTakeovers(doc, marks.labels, facts.takeovers, listedIds) ||
     !withCheckpointUntracked(doc, marks.labels, facts.untracked, listedIds) ||
+    !withCheckpointChangeRecords(doc, marks.labels, facts.changeRecords, listedIds) ||
     !withCheckpointTypers(doc, marks.typers, facts.namespacePersons) ||
     !facts.suggestions.every(
       ({ id, record }) => record === undefined || doc.partRevisions.has(id)

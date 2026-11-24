@@ -1,7 +1,12 @@
-// A checkpoint's records with no change record back in the document (design D14).
+// A checkpoint's records with no change record, and what the room holds of a record with one,
+// back in the document (design D14).
 
 import type { OoxmlElement, OoxmlNode } from '../../../store/package/ooxml-tree.ts';
-import { UNTRACKED_CONTAINERS, type CheckpointUntracked } from '../model/checkpoint-untracked.ts';
+import {
+  UNTRACKED_CONTAINERS,
+  type CheckpointChangeRecords,
+  type CheckpointUntracked,
+} from '../model/checkpoint-untracked.ts';
 import { createOrderedItem, storyOfAddress } from '../model/document.ts';
 import { replaceItems } from '../model/mutations.ts';
 import {
@@ -11,6 +16,7 @@ import {
   type OrderedItem,
   type OrderedPropertyRecord,
   type OrderedPropertyTarget,
+  type OrderedStory,
 } from '../model/types.ts';
 import { withMergedChildren } from '../compose/properties.ts';
 import { isWml, withChildren } from '../ooxml-nodes.ts';
@@ -30,21 +36,10 @@ export function withCheckpointUntracked(
   untracked: readonly CheckpointUntracked[],
   listedIds: readonly string[]
 ): boolean {
-  // The open item of the container of this local name that a label is on, and its story
-  const opened = (label: number, container: string) => {
-    const found = (labels.get(String(label)) ?? []).flatMap((element) => {
-      const space = tokenSpace(doc.file, element.id);
-      const story = storyOfAddress(doc, { space, offset: 0 });
-      const open = story?.spaces.get(space)?.[0];
-      return story === null || open?.kind !== 'open' || !isWml(element, container)
-        ? []
-        : [{ story, open }];
-    });
-    return found.length === 1 ? found[0] : undefined;
-  };
   for (const entry of untracked) {
     const container = UNTRACKED_CONTAINERS.get(entry.target);
-    const found = container === undefined ? undefined : opened(entry.label, container);
+    const found =
+      container === undefined ? undefined : labelledOpen(doc, labels, entry.label, container);
     const shell = found?.open.node;
     if (
       found === undefined ||
@@ -55,8 +50,7 @@ export function withCheckpointUntracked(
       return false;
     }
 
-    const cellOf = (cell: number) => opened(cell, 'tc')?.open.space;
-    const records = restoredRecords(doc, entry, listedIds, cellOf);
+    const records = restoredRecords(doc, entry, listedIds, labels);
     if (records === null) {
       return false;
     }
@@ -69,6 +63,96 @@ export function withCheckpointUntracked(
 }
 
 /**
+ * Each listed change record's facts back on the record the file loaded: the children it sets and
+ * the cells it holds. The loaded record is the one of the target with the suggestion and the one
+ * it was taken from, in their order on the container; so this runs after the takeovers. False
+ * when the container, a cell or a record is not there.
+ */
+export function withCheckpointChangeRecords(
+  doc: OrderedDocument,
+  labels: ReadonlyMap<string, readonly OoxmlElement[]>,
+  changeRecords: readonly CheckpointChangeRecords[],
+  listedIds: readonly string[]
+): boolean {
+  for (const { label, target, records } of changeRecords) {
+    const container = UNTRACKED_CONTAINERS.get(target);
+    const found = container === undefined ? undefined : labelledOpen(doc, labels, label, container);
+    if (found === undefined) {
+      return false;
+    }
+
+    const props = [...found.open.props];
+    const given = new Set<number>();
+    for (const record of records) {
+      const suggestion = listedIds[record.suggestion];
+      const replaced = record.replaced === undefined ? undefined : listedIds[record.replaced];
+      const at = props.findIndex(
+        (r, k) =>
+          !given.has(k) &&
+          r.kind === 'element' &&
+          r.target === target &&
+          r.suggestion === suggestion &&
+          r.replaced === replaced
+      );
+      const loaded = props[at];
+      const tableCells =
+        record.tableCells === undefined ? undefined : cellSpaces(doc, labels, record.tableCells);
+      if (
+        (record.replaced !== undefined && replaced === undefined) ||
+        loaded?.kind !== 'element' ||
+        tableCells === null
+      ) {
+        return false;
+      }
+
+      given.add(at);
+      props[at] = { ...loaded, merge: record.merge, tableCells };
+    }
+
+    replaceItems(doc, found.story, [found.open], [createOrderedItem({ ...found.open, props })]);
+  }
+
+  return true;
+}
+
+/** The open item of the container of this local name that a label is on, and its story. */
+function labelledOpen(
+  doc: OrderedDocument,
+  labels: ReadonlyMap<string, readonly OoxmlElement[]>,
+  label: number,
+  container: string
+): { readonly story: OrderedStory; readonly open: OrderedItem } | undefined {
+  const found = (labels.get(String(label)) ?? []).flatMap((element) => {
+    const space = tokenSpace(doc.file, element.id);
+    const story = storyOfAddress(doc, { space, offset: 0 });
+    const open = story?.spaces.get(space)?.[0];
+    return story === null || open?.kind !== 'open' || !isWml(element, container)
+      ? []
+      : [{ story, open }];
+  });
+  return found.length === 1 ? found[0] : undefined;
+}
+
+/** The spaces of the cells the labels name; null when one is not there. */
+function cellSpaces(
+  doc: OrderedDocument,
+  labels: ReadonlyMap<string, readonly OoxmlElement[]>,
+  cells: readonly number[]
+): string[] | null {
+  const spaces: string[] = [];
+  for (const cell of cells) {
+    const space = labelledOpen(doc, labels, cell, 'tc')?.open.space;
+    if (space === undefined) {
+      return null;
+    }
+
+    spaces.push(space);
+  }
+
+  return spaces;
+}
+
+/**
  * The manifest's records of a container's properties as the document's, each with its
  * suggestion's order and its table's cells; null when a suggestion or a cell is not there.
  */
@@ -76,7 +160,7 @@ function restoredRecords(
   doc: OrderedDocument,
   { target, records }: CheckpointUntracked,
   listedIds: readonly string[],
-  cellOf: (cell: number) => string | undefined
+  labels: ReadonlyMap<string, readonly OoxmlElement[]>
 ): OrderedElementRecord[] | null {
   const restored: OrderedElementRecord[] = [];
   for (const record of records) {
@@ -91,14 +175,9 @@ function restoredRecords(
       return null;
     }
 
-    const cells: string[] = [];
-    for (const cell of record.tableCells ?? []) {
-      const space = cellOf(cell);
-      if (space === undefined) {
-        return null;
-      }
-
-      cells.push(space);
+    const cells = cellSpaces(doc, labels, record.tableCells ?? []);
+    if (cells === null) {
+      return null;
     }
 
     restored.push({
