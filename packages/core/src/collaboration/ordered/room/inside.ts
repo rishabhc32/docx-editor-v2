@@ -183,7 +183,8 @@ function landingOf(
  * Whether a party's edit reached inside another person's pending insertion or deletion, once
  * applied: new items landed in it (`caretInside` at each run), it struck a unit of their prompt,
  * or it wrote a format record in a run of theirs. At a prompt the edits place and strike by the
- * prompt's rules, not by the caret or the range, so the checks before the apply leave it;
+ * prompt's rules, and at a link's or a control's start they place beside it or in it by the
+ * placement rules, not by the caret or the range, so the checks before the apply leave them;
  * elsewhere this agrees with them. A format that changes nothing there writes no record, so the
  * host's check finds nothing of the party's in their revision mark.
  */

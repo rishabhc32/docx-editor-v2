@@ -4,6 +4,7 @@
 // before and after it. This policy gives the same verdict per change, except where that check
 // misreads the Word form (design D9 lists them).
 
+import { isBlockToken } from '../compose/blocks.ts';
 import { promptControlOf, promptShows } from '../compose/paragraph.ts';
 import {
   isHidden,
@@ -370,9 +371,13 @@ function caretNested(
   story: OrderedStory | null,
   caret: OrderedCaret
 ): boolean {
-  // At a shown prompt the items land by the prompt's rules: judged once applied (`appliedNested`)
-  const atPrompt = story !== null && atShownPrompt(doc, story, caret);
-  if (!atPrompt && caretInside(doc, maker, story, caret)) {
+  // At a link's or a control's start the items go beside it, or in a control the keyboard types
+  // in (`siteAt`, `insideSite`), and at a shown prompt by the prompt's rules: judged once applied
+  // (`appliedNested`)
+  const { before } = caret;
+  const atStart = before !== null && before.kind === 'open' && !isBlockToken(before);
+  const placed = atStart || (story !== null && atShownPrompt(doc, story, caret));
+  if (!placed && caretInside(doc, maker, story, caret)) {
     return true;
   }
 

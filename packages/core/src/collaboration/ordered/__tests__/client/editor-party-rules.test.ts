@@ -159,6 +159,34 @@ describe('a party edit today’s check allows', () => {
     expect(editorTexts(olive)[0]).toBe('The fee is 100y200 USD.');
   });
 
+  // Today: the editor types at a link's start beside it, as the editor alone does, so Ana's
+  // `w:ins` is next to Ben's new link and taking it back leaves his link as it was (r7
+  // quick-short:273). Between his words it is inside his insertion
+  test('typing at the start of another person’s new link: beside it, the party’s own card', async () => {
+    const { room, ana, ben, olive } = await people(FILE);
+    caretAt(ben, 0, 4);
+    run(ben, { type: 'insertHyperlink', href: 'https://example.com/', text: 'abc' });
+    await settle();
+    caretAt(ana, 0, 5);
+    surface(ana).type('Y');
+    await settle();
+    expect(refused(ana)).toEqual(['ordered-refused/nested']);
+    caretAt(ana, 0, 4);
+    surface(ana).type('X');
+    await settle();
+    converged(room, ana, ben, olive);
+    expect(cardsOf(room)).toEqual([['Ana'], ['Ben']]);
+    const body = await savedBody(olive);
+    expect(revisions(body)).toEqual(['ins:Ana', 'ins:Ben']);
+    expect(body.indexOf('w:author="Ana"')).toBeLessThan(body.indexOf('<w:hyperlink'));
+
+    // Rejected, her words go and his link stays whole
+    await decide(room, olive, 'Ana', 'rejected');
+    converged(room, ana, ben, olive);
+    expect(revisions(await savedBody(olive))).toEqual(['ins:Ben']);
+    expect(editorTexts(olive)[0]).toBe('The abcfee is 100 USD.');
+  });
+
   // Today: Word writes Ben's `w:pPrChange` beside Ana's `w:ins` on the paragraph mark, and the
   // take-back of Ben's record alone leaves the file as it was (allowed). It joins Ana's card
   test('a paragraph property on another person’s new paragraph: decided with it', async () => {

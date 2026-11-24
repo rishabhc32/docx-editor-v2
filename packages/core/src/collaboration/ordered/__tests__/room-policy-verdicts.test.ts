@@ -126,7 +126,7 @@ describe('the policy and today’s check', () => {
   // Today: Word nests the new run in the `w:sdt` or `w:hyperlink` that Ben's `w:ins` holds, so
   // taking back Ana's words alone does not give Ben's container back as it was. Whatever the
   // words around the caret are: Ben's other suggestion (r5 s25-long:387), or words a decision
-  // accepted (r4 s2-short:1923). Past the container's end her words sit beside it
+  // accepted (r4 s2-short:1923). Past the container's end and at its start her words sit beside it
   const CONTAINERS = [
     {
       name: 'control',
@@ -181,14 +181,110 @@ describe('the policy and today’s check', () => {
       ).toBe('accepted');
       expect(typed(xy + 1)).toBe('policy-nested/nested');
 
-      // Past its end, beside it; from its start on, inside it
+      // Past its end and at its start the engine types beside it (r7 quick-short:273)
       const [end, start] = edges;
       expect({ end: typed(end), start: typed(start) }).toEqual({
         end: 'accepted',
-        start: 'policy-nested/nested',
+        start: 'accepted',
       });
     });
   }
+
+  // Today: at a link's or a control's start the engine puts the new items beside it, so the host's
+  // check finds Ana's `w:ins` next to Ben's container (r7 quick-short:273)
+  test('every edit at the start of another person’s new link is beside it', () => {
+    const { doc, send, at, textOf } = setup();
+    const first = () =>
+      orderedViewParagraph(doc, BODY, 0)?.chars.findIndex((c) => c.containers !== '') ?? -1;
+    const start = () => ({ ...EDIT, place: at(0, first()) });
+
+    // The organiser strikes "fee", and Ben types "abcd" after it and links them
+    expect(send(OLGA, { kind: 'delete', ...EDIT, from: at(0, 4), to: at(0, 7) })).toBe('accepted');
+    expect(send(BEN, { kind: 'insert', ...EDIT, place: at(0, 7), text: 'abcd' })).toBe('accepted');
+    expect(
+      send(BEN, {
+        kind: 'insert-link',
+        ...EDIT,
+        from: at(0, 7),
+        to: at(0, 11),
+        href: 'https://example.com/',
+      })
+    ).toBe('accepted');
+    expect(send(ANA, { kind: 'insert', ...start(), text: 'X' })).toBe('accepted');
+    expect(send(ANA, { kind: 'insert-tab', ...start() })).toBe('accepted');
+    expect(send(ANA, { kind: 'insert-break', ...start(), break: 'line' })).toBe('accepted');
+    const xml = serializeOoxmlPart(composeOrderedPart(doc, BODY).part);
+    const link = /<w:hyperlink\b.*?<\/w:hyperlink>/s.exec(xml)?.[0] ?? '';
+    expect({
+      ana: xml.includes('w:author="Ana"'),
+      inLink: link.includes('w:author="Ana"'),
+    }).toEqual({ ana: true, inLink: false });
+
+    // Between Ben's words it is inside his insertion
+    expect(send(ANA, { kind: 'insert', ...EDIT, place: at(0, first() + 1), text: 'Y' })).toBe(
+      'policy-nested/nested'
+    );
+    expect(send(ANA, { kind: 'split', ...start() })).toBe('accepted');
+    expect(textOf(1)?.startsWith('abcd')).toBe(true);
+  });
+
+  // Today: the keyboard's `inside` types at a control's edge in it, inside Ben's insertion; else
+  // the words sit beside his control. In a control, a link's start is in the control
+  test('at the edges of another person’s new control and link, the words are judged where they land', () => {
+    const { doc, send, at } = setup();
+    // "fee" struck, a copy of it in Ben's new control at 7, and "ee" of the copy in his new link
+    const wrap = {
+      kind: 'wrap-control',
+      from: at(0, 4),
+      to: at(0, 7),
+      control: { type: 'richText' },
+    };
+    expect(send(BEN, { ...EDIT, ...wrap })).toBe('accepted');
+    const link = {
+      kind: 'insert-link',
+      from: at(0, 8),
+      to: at(0, 10),
+      href: 'https://example.com/',
+    };
+    expect(send(BEN, { ...EDIT, ...link })).toBe('accepted');
+    const control = addressOf(opens(doc, 'sdt')[0]!);
+    const typed = (n: number, inside?: OrderedPlace) =>
+      send(ANA, { kind: 'insert', ...EDIT, place: at(0, n), text: 'a', ...(inside && { inside }) });
+
+    expect({ link: typed(8), start: typed(7, control), end: typed(10, control) }).toEqual({
+      link: 'policy-nested/nested',
+      start: 'policy-nested/nested',
+      end: 'policy-nested/nested',
+    });
+    expect({ end: typed(10), start: typed(7) }).toEqual({ end: 'accepted', start: 'accepted' });
+  });
+
+  test('typing at the start of another person’s new link in the file’s control is in the control', () => {
+    const file = docx(
+      p(
+        t('Party: ') +
+          '<w:sdt><w:sdtPr><w:id w:val="5"/></w:sdtPr><w:sdtContent>' +
+          `${t('Acme')}</w:sdtContent></w:sdt>`
+      )
+    );
+    const { doc, send, at } = setup(loadOrderedPackage(packageOf(file)));
+    // Ben's "abc" in the control, after "Ac", and his link over them
+    expect(send(BEN, { kind: 'insert', ...EDIT, place: at(0, 9), text: 'abc' })).toBe('accepted');
+    const link = {
+      kind: 'insert-link',
+      from: at(0, 9),
+      to: at(0, 12),
+      href: 'https://example.com/',
+    };
+    expect(send(BEN, { ...EDIT, ...link })).toBe('accepted');
+    const control = addressOf(opens(doc, 'sdt')[0]!);
+    const typed = (inside?: OrderedPlace) =>
+      send(ANA, { kind: 'insert', ...EDIT, place: at(0, 9), text: 'a', ...(inside && { inside }) });
+    expect({ plain: typed(), inside: typed(control) }).toEqual({
+      plain: 'accepted',
+      inside: 'accepted',
+    });
+  });
 
   test('a deletion of another person’s words that someone struck already does nothing there', () => {
     const { send, at, doc } = setup();
