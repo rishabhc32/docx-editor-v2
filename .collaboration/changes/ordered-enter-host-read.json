@@ -1,0 +1,12 @@
+{
+  "impact": "no-impact",
+  "fields": [],
+  "before": "After Enter in an ordered room, a host read of the layout during the room's version of the Enter (page geometry, review item positions) laid the pages out before the session set where the caret goes. The caret stayed on the engine's own new paragraph, which the room does not know, and every later key was refused as out-of-step.",
+  "after": "The session sets the caret's move from the list's version before the editor takes it, so the layout that a host read causes moves the caret to the new paragraph, and typing goes on.",
+  "reason": "Only when the local session computes the caret move changes. Change messages, the change log, checkpoints and the room's rules do not change; no shared state or update changes.",
+  "tests": [
+    "packages/core/src/collaboration/ordered/__tests__/client/editor-enter-host-read.test.ts"
+  ],
+  "changeset": "ordered-enter-host-read",
+  "migration": null
+}
