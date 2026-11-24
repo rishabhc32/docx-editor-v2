@@ -44,6 +44,7 @@ function setup(body = p(t(SENTENCE)) + p(t('Second paragraph.'))) {
     const refusal = result.refused[0];
     return refusal ? `${refusal.code}${refusal.reason ? `/${refusal.reason}` : ''}` : 'accepted';
   };
+
   /** The place before the n-th shown character of paragraph `index`, now. */
   const at = (index: number, n: number): OrderedPlace => {
     const view = orderedViewParagraph(doc, BODY, index);
@@ -61,6 +62,7 @@ function setup(body = p(t(SENTENCE)) + p(t('Second paragraph.'))) {
 
     return { space: view.mark.space, offset: view.mark.offset };
   };
+
   /** The open item of the n-th container of a kind. */
   const open = (token: string, n = 0): OrderedPlace => {
     const items = doc.stories
@@ -275,6 +277,7 @@ describe('a party’s format on another person’s tracked words', () => {
     expect(
       send(ANA, { kind: 'paragraph-property', ...EDIT, marks: [markOf(0)], properties: [centre] })
     ).toBe('accepted');
+
     // Words around Cy's struck mark: the mark's record and records on plain words
     expect(send(ANA, format(at(0, 50), at(1, 6), COLOUR))).toBe('accepted');
 
@@ -303,6 +306,7 @@ describe('a party’s format on another person’s tracked words', () => {
     expect(
       table.send(ANA, { kind: 'table-property', ...EDIT, on: [table.open('tr')], op: height })
     ).toBe('accepted');
+
     // Words in Cy's struck row: the row's marker is the row's, not a `w:del` around them
     expect(table.send(ANA, table.format(table.at(1, 0), table.at(1, 4)))).toBe('accepted');
     const inserted = setup();
