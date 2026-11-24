@@ -29,7 +29,7 @@ import {
 } from './context.ts';
 import { controlPropertiesRecord, sdtPrRecord } from './control-shell.ts';
 import { takeBackNotesOf } from './note-body.ts';
-import { struckAlready } from './text.ts';
+import { noteOwnAddition, struckAlready, unitsOf } from './text.ts';
 import { shellId, templateItems, viewNode, viewPart } from './templates.ts';
 
 /** The first run's properties in a control's content, as the engine wrote its value. */
@@ -83,8 +83,10 @@ export function setControlValue(
   const suggestion = suggestionFor(ctx);
   strikeOldValue(ctx, open, suggestion.id);
   const close = closeOf(ctx.story, open, ctx.doc);
-  const items = valueItems(ctx, control, open, suggestion.id);
+  const holder = valueSuggestion(ctx, open, suggestion.id);
+  const items = valueItems(ctx, control, open, holder);
   if (items.length > 0) insertItems(ctx.doc, ctx.story, ctx.story.tree.prev(close), items);
+  noteOwnAddition(ctx, holder, unitsOf(ctx.story, items));
 
   // The record sets only the children the value changed (its last value, its date, its
   // check box state), so a change of the control's title or tag stays whatever its order; the
@@ -95,6 +97,15 @@ export function setControlValue(
     sdtPrRecord(ctx, suggestion.id, sdtPr, []);
   relabel(ctx.doc, ctx.story, open, { props: [...open.props, record] });
   return suggestion.id;
+}
+
+/**
+ * The suggestion a control's new words go in: a direct edit types them into the pending insertion
+ * that put the control in, as its author's (`directInsert`), so a reject takes them with the
+ * control; otherwise the edit's own.
+ */
+function valueSuggestion(ctx: Ctx, open: OrderedItem, own: string): string {
+  return ctx.direct && open.by !== null && insertedPending(ctx.doc, open) ? open.by : own;
 }
 
 /**

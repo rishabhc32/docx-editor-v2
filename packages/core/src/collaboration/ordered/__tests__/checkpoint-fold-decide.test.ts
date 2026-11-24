@@ -227,6 +227,89 @@ describe('a decision after a fold, beside a pending control value', () => {
   });
 });
 
+describe('a decision after a fold, on a value in a pending control', () => {
+  // A direct value in a control a pending insertion put in is part of that insertion (design
+  // D9): a reject takes the control with its value, live as after a fold. A party's value in its
+  // own pending control is a suggestion of its own
+  const WRAPS = [
+    ['date', { kind: 'date', iso: '2026-09-15' }],
+    ['comboBox', { kind: 'text', text: 'Net 30' }],
+    ['plainText', { kind: 'text', text: 'Acme' }],
+    ['richText', { kind: 'text', text: 'Acme' }],
+  ] as const;
+  const wrapped = (
+    doc: OrderedDocument,
+    type: (typeof WRAPS)[number][0],
+    who: string,
+    mode: typeof EDIT | typeof DIRECT
+  ) => {
+    const wrap = { from: at(doc, 0, 6), to: at(doc, 0, 12), control: { type, tag: 'c.86' } };
+    apply(doc, `${who}:1`, { kind: 'wrap-control', ...EDIT, ...wrap }, who);
+    return { ...mode, control: opens(doc, 'sdt')[0]! };
+  };
+
+  for (const [type, value] of WRAPS) {
+    test(`the organiser's direct value in her own suggested ${type} wrap`, async () => {
+      await foldOf(
+        p(run('Line: Revenue')),
+        (doc) => {
+          const control = wrapped(doc, type, 'Olive', DIRECT);
+          apply(doc, 'Olive:2', { kind: 'control-value', ...control, value }, 'Olive');
+        },
+        `a direct value in a suggested ${type} wrap`
+      );
+    });
+
+    test(`a party's suggested value in its own suggested ${type} wrap`, async () => {
+      await foldOf(
+        p(run('Line: Revenue')),
+        (doc) => {
+          apply(doc, 'Ana:2', { kind: 'control-value', ...wrapped(doc, type, 'Ana', EDIT), value });
+        },
+        `a suggested value in a suggested ${type} wrap`
+      );
+    });
+  }
+
+  const ITEMS =
+    '<w:listItem w:displayText="Net 30" w:value="30"/>' +
+    '<w:listItem w:displayText="Net 60" w:value="60"/>';
+  const CHECK_BOX =
+    '<w14:checkbox><w14:checked w14:val="0"/>' +
+    '<w14:checkedState w14:val="2612" w14:font="MS Gothic"/>' +
+    '<w14:uncheckedState w14:val="2610" w14:font="MS Gothic"/></w14:checkbox>';
+  const ANAS = [
+    [
+      'date',
+      '<w:date><w:dateFormat w:val="M/d/yyyy"/></w:date>',
+      { kind: 'date', iso: '2026-09-15' },
+    ],
+    ['drop-down', `<w:dropDownList>${ITEMS}</w:dropDownList>`, { kind: 'listItem', value: '60' }],
+    ['combo box', `<w:comboBox>${ITEMS}</w:comboBox>`, { kind: 'text', text: 'Net 90' }],
+    ['check box', CHECK_BOX, { kind: 'checkbox', checked: true }],
+    ['plain text', '<w:text/>', { kind: 'text', text: 'Beta' }],
+    ['rich text', '', { kind: 'text', text: 'Beta' }],
+  ] as const;
+
+  for (const [kind, props, value] of ANAS) {
+    test(`the organiser's direct value in another person's pending ${kind} control`, async () => {
+      await foldOf(
+        p(
+          run('Term: ') +
+            '<w:ins w:id="1" w:author="Ana" w:date="2026-10-28T07:00:00Z"><w:sdt><w:sdtPr>' +
+            `<w:id w:val="5"/>${props}</w:sdtPr><w:sdtContent>${run('Net 30')}</w:sdtContent>` +
+            '</w:sdt></w:ins>'
+        ),
+        (doc) => {
+          const control = opens(doc, 'sdt')[0]!;
+          apply(doc, 'Olive:1', { kind: 'control-value', ...DIRECT, control, value }, 'Olive');
+        },
+        `a direct value in a pending ${kind} control`
+      );
+    });
+  }
+});
+
 describe("a fold of a table's records", () => {
   const ANA_1 = '2026-10-28T09:01:00Z';
 

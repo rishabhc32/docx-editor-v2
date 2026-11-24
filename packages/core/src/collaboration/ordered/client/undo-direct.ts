@@ -1,6 +1,6 @@
 // The organiser's undo and redo of direct edits (tasks 6.7, 9.12).
 
-import { isHidden, isPending } from '../model/document.ts';
+import { isHidden, isPending, itemsAddedBy } from '../model/document.ts';
 import { BLOCK_TOKENS, type OrderedDocument, type OrderedItem } from '../model/types.ts';
 import {
   isOrderedEditChange,
@@ -46,32 +46,21 @@ export function madeBy(doc: OrderedDocument, changeId: string, direct = true): s
 }
 
 /**
- * The shown units a change typed into other suggestions: units of its spaces it did not label. A
- * refusal by name when such a suggestion is decided: a decision is final.
+ * The shown units a change typed into other suggestions (`doc.added`). A refusal by name when
+ * such a suggestion is decided: a decision is final.
  */
-function typedInside(
-  doc: OrderedDocument,
-  change: OrderedChange,
-  own: ReadonlySet<string>
-): OrderedItem[] {
-  if (!isOrderedEditChange(change)) return [];
-  const story = doc.stories.get(change.part);
-  if (!story) return [];
+function typedInside(doc: OrderedDocument, change: OrderedChange): OrderedItem[] {
   const out: OrderedItem[] = [];
-  for (let k = 1; k <= ORDERED_CHANGE_LIMITS.targets; k += 1) {
-    const items = story.spaces.get(`i:${change.id}.${k}`);
-    if (!items) break;
-    for (const item of items) {
-      if (item.by === null || own.has(item.by) || isHidden(doc, item)) {
-        continue;
-      }
-
-      if (!isPending(doc, item.by)) {
-        throw noInverse('decided');
-      }
-
-      out.push(item);
+  for (const item of itemsAddedBy(doc, change.id)) {
+    if (item.by === null || isHidden(doc, item)) {
+      continue;
     }
+
+    if (!isPending(doc, item.by)) {
+      throw noInverse('decided');
+    }
+
+    out.push(item);
   }
 
   return out;
@@ -142,8 +131,9 @@ function reverts(ids: readonly string[], status: 'accepted' | 'rejected'): Order
  * (`revert`): typed text goes, deleted text and the pending insertions it struck show again,
  * Enter joins back, a join splits again, a format or a paragraph property goes off, inside
  * another person's pending insertion too (a direct edit lays its own settled record there).
- * Text the organiser typed inside another person's pending insertion belongs to that insertion,
- * so a direct deletion of exactly those units takes it back. The inverse is read from the list
+ * Text the organiser typed inside another person's pending insertion, and a control's value set
+ * in a control a pending insertion put in, belong to that insertion, so a direct deletion of
+ * exactly those units takes them back. The inverse is read from the list
  * as it is now, so another person's suggestion inside the text stays as it is.
  */
 export function inverseOfDirect(
@@ -178,7 +168,7 @@ export function inverseOfDirect(
       reject.push(id);
     }
 
-    deletions.push(...deletionsOf(doc, change.part, typedInside(doc, change, new Set(made))));
+    deletions.push(...deletionsOf(doc, change.part, typedInside(doc, change)));
   }
 
   // Empty when nothing of the step shows any more (another person took back the insertion
