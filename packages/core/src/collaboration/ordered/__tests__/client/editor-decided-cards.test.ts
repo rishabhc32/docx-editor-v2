@@ -336,7 +336,10 @@ describe('one card on the page is decided whole', () => {
 
         // The card's marks name every suggestion; its first mark alone names one piece
         const [card] = pageCards(olive);
-        if (card?.item.kind !== 'revision') throw new Error('no revision card');
+        if (card?.item.kind !== 'revision') {
+          throw new Error('no revision card');
+        }
+
         const named = (addresses: typeof card.item.addresses) =>
           addresses.flatMap((address) =>
             orderedSuggestionsOfRevision(doc, { part: BODY, ...address })
