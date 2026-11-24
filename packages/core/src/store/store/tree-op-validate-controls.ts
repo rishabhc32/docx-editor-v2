@@ -40,7 +40,6 @@ import {
   effectiveContentLockAt,
   effectiveLockOf,
   findContentControl,
-  formatSdtDateDisplay,
   innermostContentControlAround,
   isBoundAt,
   isBoundContentControl,
@@ -49,6 +48,7 @@ import {
   isShowingPlaceholder,
   isTemporaryControl,
   leavesInlineContainer,
+  normalizeSdtFullDate,
   listItemsOf,
   parseCheckboxValue,
 } from './tree-op-nodes.ts';
@@ -350,7 +350,7 @@ export function validateSetContentControlValue(
         : 'unsupported';
     }
     case 'date': {
-      if (formatSdtDateDisplay(value, undefined) === null) return 'invalidArgs';
+      if (normalizeSdtFullDate(value) === null) return 'invalidArgs';
       return textWritable();
     }
     case 'picture':

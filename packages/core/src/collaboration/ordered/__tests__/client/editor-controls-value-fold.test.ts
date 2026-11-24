@@ -162,6 +162,12 @@ const CASES = [
     [6, 6],
     pick('60'),
   ],
+  [
+    'a date in a date picker with no format',
+    line('<w:date><w:lid w:val="en-US"/></w:date>', t('Soon')),
+    [6, 6],
+    pick('2026-09-15'),
+  ],
   ['a check box ticked', line(CHECK_BOX, t('☐', GLYPH_FONT)), [6, 6], pick('true')],
   [
     "typing over a plain text control's prompt",

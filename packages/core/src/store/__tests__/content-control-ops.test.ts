@@ -101,6 +101,12 @@ const DATE = parseDoc(
     `<w:sdtContent><w:r><w:t>2020-01-02</w:t></w:r></w:sdtContent></w:sdt></w:p>`
 );
 
+/** A date control with no `w:dateFormat`: Word shows it in the application's default form. */
+const UNFORMATTED_DATE = parseDoc(
+  `<w:p><w:sdt><w:sdtPr><w:date><w:lid w:val="en-US"/></w:date></w:sdtPr>` +
+    `<w:sdtContent><w:r><w:t>Soon</w:t></w:r></w:sdtContent></w:sdt></w:p>`
+);
+
 describe('setContentControlValue writes the value each type accepts', () => {
   test('a plain-text control takes a string and keeps its run formatting', () => {
     const id = controlIds(PLAIN_TEXT)[0]!;
@@ -230,6 +236,17 @@ describe('setContentControlValue writes the value each type accepts', () => {
         value: { kind: 'text', text: 'x' },
       })
     ).toBe('unknown-content-control');
+  });
+
+  test("a date with no format shows Word's en-US default, whichever form the value takes", () => {
+    const controlId = controlIds(UNFORMATTED_DATE)[0]!;
+    for (const value of ['2026-09-15', { kind: 'date', iso: '2026-09-15' }] as const) {
+      const next = apply(UNFORMATTED_DATE, { op: 'setContentControlValue', controlId, value });
+      expect(contentControlTextOf(controlOf(next))).toBe('9/15/2026');
+      expect(contentControlPropertiesOf(controlOf(next)).date?.fullDate).toBe(
+        '2026-09-15T00:00:00Z'
+      );
+    }
   });
 });
 

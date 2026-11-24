@@ -33,7 +33,14 @@ const MONTH_NAMES = [
 ];
 
 /**
- * Format a date the way the control's own `w:dateFormat` asks.
+ * The form of a date control with no `w:dateFormat`: the application's default (ECMA-376,
+ * `w:dateFormat`), which an en-US Word writes as `M/d/yyyy`.
+ */
+const DEFAULT_DATE_FORMAT = 'M/d/yyyy';
+
+/**
+ * Format a date the way the control's own `w:dateFormat` asks, or in the default form when it
+ * names none. A format too long to be one Word writes gives the ISO date.
  *
  * A BOUNDED token substitution over the patterns Word writes, not a locale engine: the format
  * comes out of an untrusted file, so it is walked once, left to right, with no backtracking and
@@ -41,10 +48,14 @@ const MONTH_NAMES = [
  */
 export function formatContentControlDate(
   date: { year: number; month: number; day: number },
-  pattern: string | undefined
+  dateFormat: string | undefined
 ): string {
   const iso = `${String(date.year).padStart(4, '0')}-${String(date.month).padStart(2, '0')}-${String(date.day).padStart(2, '0')}`;
-  if (!pattern || pattern.length === 0 || pattern.length > 64) return iso;
+  const pattern = dateFormat || DEFAULT_DATE_FORMAT;
+  if (pattern.length > 64) {
+    return iso;
+  }
+
   let out = '';
   let index = 0;
   while (index < pattern.length) {
@@ -84,10 +95,14 @@ export function formatContentControlDate(
  */
 export function parseContentControlDate(
   text: string,
-  pattern: string | undefined,
+  dateFormat: string | undefined,
   century = 2000
 ): { year: number; month: number; day: number } | null {
-  if (!pattern || pattern.length === 0 || pattern.length > 64) return parseIsoDate(text);
+  const pattern = dateFormat || DEFAULT_DATE_FORMAT;
+  if (pattern.length > 64) {
+    return parseIsoDate(text);
+  }
+
   const fields: Record<DateField, number | null> = { y: null, M: null, d: null };
   let at = 0;
   let index = 0;

@@ -232,6 +232,28 @@ test('creates a real date-picker control and preserves its type after reopen', a
   }
 });
 
+test('a date-picker control with no format shows a date as an en-US Word does', async () => {
+  const runtime = await serverRuntime(docx(p('Effective date: [Date]')));
+  try {
+    await runtime.run(async (context) => {
+      const range = context.document.body.search('[Date]').getFirst();
+      await context.sync();
+      const control = range.insertContentControl('DatePicker');
+      await context.sync();
+      control.setValue({ kind: 'date', iso: '2026-09-15' });
+      await context.sync();
+      control.load('text');
+      await context.sync();
+      expect(control.text).toBe('9/15/2026');
+    });
+    const xml = await mainXmlOf(runtime);
+    expect(xml).toContain('w:fullDate="2026-09-15T00:00:00Z"');
+    expect(xml).not.toContain('w:dateFormat');
+  } finally {
+    runtime.dispose();
+  }
+});
+
 test('controls created in one batch each answer their own control', async () => {
   const runtime = await serverRuntime(docx(p('First') + p('Second')));
   try {

@@ -1,0 +1,14 @@
+{
+  "impact": "compatible",
+  "fields": [],
+  "before": "A date control with no w:dateFormat showed a date picked in the editor alone as M/d/yyyy, and the same date set in a room, through the editing API or after a fold as the ISO date (2026-09-15), because the string value and the typed value used two formatters.",
+  "after": "One formatter writes every date value, and a date control with no w:dateFormat shows the date as M/d/yyyy, the default an en-US Word writes, in the editor alone, the room, the editing API and after a fold. w:fullDate stays the ISO date.",
+  "reason": "Change messages, the change log and its kinds keep their meaning, and the Yjs document format and the checkpoint format do not change. Only the shown text of a date value in a control with no format changes, and it now equals across the editor alone, the room and a fold. An ordered room admits only clients of its own code version.",
+  "tests": [
+    "packages/core/src/collaboration/ordered/__tests__/client/editor-controls-direct-value.test.ts",
+    "packages/core/src/collaboration/ordered/__tests__/client/editor-controls-value-fold.test.ts",
+    "packages/core/src/store/__tests__/content-control-ops.test.ts"
+  ],
+  "changeset": "control-date-default-format",
+  "migration": null
+}

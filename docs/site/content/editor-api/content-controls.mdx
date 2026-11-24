@@ -48,6 +48,8 @@ Use the loaded `subtype` to choose an operation. It uses DOCX terms such as `pla
 
 `ContentControl.insertText()` supports text-like controls. Date, checkbox, and other typed controls refuse with `NotSupported`. Use the editor's calendar or the documented `setValue()` extension to set a date.
 
+A date control shows its date in its own `w:dateFormat`. If the control has no `w:dateFormat`, it shows the date as `M/d/yyyy`, as an en-US Word does. The `w:fullDate` value is the ISO date in every case.
+
 `insertText(text, location)` accepts `Replace`, `Start`, or `End` and returns a `Range`. Replacement uses the control's value path, including placeholder and temporary-wrapper handling. Sync before using that returned range. `text`, `placeholderShown`, and `temporary` are loaded read-only properties.
 
 For an existing placeholder, prefer replacing the control value. For untracked range edits, a range covering the complete prompt can also replace it. The runtime returns `NotSupported` if a replacement would consume prompt text outside its target or an insertion starts away from the prompt start. The first insertion at the prompt start consumes the placeholder text.

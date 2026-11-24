@@ -63,10 +63,11 @@ const anasControl = (props: string, content: string) =>
 
 /**
  * Each wrap: its label, the control type, and the value set in it. A date picker the wrap makes
- * has no `w:dateFormat`, where the editor's string date and the room's typed date read apart:
- * `checkpoint-fold-decide.test.ts` folds that one.
+ * has no `w:dateFormat`: the room once wrote its date as `2026-09-15` where the editor alone wrote
+ * `9/15/2026`, Word's en-US default.
  */
 const WRAPS = [
+  ['a date picker', 'date', '2026-09-15'],
   ['a combo box', 'comboBox', 'Net 30'],
   ['a plain text control', 'plainText', 'Acme'],
   ['a rich text control', 'richText', 'Acme'],
