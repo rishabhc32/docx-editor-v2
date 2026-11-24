@@ -17,6 +17,7 @@ import { mergedPropertyChildren, RUN_VOCABULARY } from '../../../store/store/tre
 import { build } from '../../../store/store/tree-op-tracked.ts';
 import {
   CT_TCPR_SEQUENCE,
+  CT_TBLPR_SEQUENCE,
   CT_TRPR_SEQUENCE,
 } from '../../../store/store/tree-op-table-properties.ts';
 import {
@@ -281,8 +282,10 @@ function applyProperties(
 /** The key of a properties child a merge record names: its namespace URI and local name. */
 export const propertyKey = (node: OoxmlElement): string => `${node.namespaceUri} ${node.localName}`;
 
-/** The schema's order of a row's or a cell's properties children. */
+/** The schema's order of a table's, a row's or a cell's properties children. */
 const SEQUENCES: Partial<Record<OrderedPropertyTarget, readonly string[]>> = {
+  tblPr: CT_TBLPR_SEQUENCE,
+  tblPrEx: CT_TBLPR_SEQUENCE,
   trPr: CT_TRPR_SEQUENCE,
   tcPr: CT_TCPR_SEQUENCE,
 };

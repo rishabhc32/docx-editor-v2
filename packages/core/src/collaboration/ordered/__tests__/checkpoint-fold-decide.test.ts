@@ -363,6 +363,27 @@ describe("a fold of a table's records", () => {
     await checkFold(doc, base, mediaStore(base), "a row height, then the organiser's column");
   });
 
+  // The same for the organiser's table alignment: it goes in the schema's place, before borders
+  test("a row height, then the organiser's table alignment", async () => {
+    const cell = (text: string) =>
+      `<w:tc><w:tcPr><w:tcW w:w="3000" w:type="dxa"/></w:tcPr>${p(run(text))}</w:tc>`;
+    const table =
+      '<w:tbl><w:tblPr><w:tblW w:w="0" w:type="auto"/><w:tblBorders>' +
+      '<w:top w:val="single" w:sz="4" w:space="0" w:color="auto"/></w:tblBorders></w:tblPr>' +
+      '<w:tblGrid><w:gridCol w:w="3000"/><w:gridCol w:w="3000"/></w:tblGrid>' +
+      `<w:tr>${cell('Fee')}${cell('Due')}</w:tr></w:tbl>`;
+    const { document: doc, base } = openOrderedWordFile(docx(table + p(run('After.'))), {
+      file: 1,
+    });
+    const on = [addressOf(opens(doc, 'tr')[0]!)];
+    const op = { op: 'setTableRowHeight', heightTwips: 480 } as const;
+    apply(doc, 'ana:1', { kind: 'table-property', ...EDIT, on, op }, 'Ana', ANA_1);
+    const align = { op: 'setTableProperties', justification: 'center' } as const;
+    const tbl = [addressOf(opens(doc, 'tbl')[0]!)];
+    apply(doc, 'olive:1', { kind: 'table-property', ...DIRECT, on: tbl, op: align }, 'Olive');
+    await checkFold(doc, base, mediaStore(base), "a row height, then the organiser's alignment");
+  });
+
   // A row height records each cell and the grid, and sets nothing there: a decision on a column
   // gives back or gives on the widths the column holds, after a fold too
   const rowHeight = (doc: OrderedDocument, id: string, row: number, date: string) => {
