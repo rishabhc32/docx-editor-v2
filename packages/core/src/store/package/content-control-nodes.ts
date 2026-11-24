@@ -729,7 +729,11 @@ export function inlineTextOf(
       text += node.value;
       return;
     }
-    if ((node.kind === 'deletedText' && !struck) || node.kind === 'instrText') return;
+
+    if ((node.kind === 'deletedText' && !struck) || node.kind === 'instrText') {
+      return;
+    }
+
     if (node.kind === 'tab') {
       text += '\t';
       return;
