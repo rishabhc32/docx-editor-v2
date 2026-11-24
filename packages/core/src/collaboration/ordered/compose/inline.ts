@@ -373,7 +373,7 @@ const METADATA_KEYS = new Set(
  * A record of a control's value (its words, a list's last value, a date, a check box), not only
  * of its title, tag or lock: the value records follow the text the control shows.
  */
-function isValueRecord(record: OrderedPropertyRecord): boolean {
+export function isValueRecord(record: OrderedPropertyRecord): boolean {
   if (record.target !== 'sdtPr') return false;
   const merge = record.kind === 'element' ? record.merge : undefined;
   return merge === undefined || merge.length === 0 || merge.some((key) => !METADATA_KEYS.has(key));

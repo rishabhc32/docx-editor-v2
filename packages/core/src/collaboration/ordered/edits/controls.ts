@@ -2,49 +2,22 @@
 // words inserted. A link's new target is `links.ts`.
 
 import { ooxmlTreesEqual } from '../../../store/package/ooxml-serialize.ts';
-import type { OoxmlElement, OoxmlNode } from '../../../store/package/ooxml-tree.ts';
-import { contentControlTextOf } from '../../../store/package/content-control-nodes.ts';
+import type { OoxmlElement } from '../../../store/package/ooxml-tree.ts';
 import { liveRuns } from '../../../store/store/tracked-content-control-value.ts';
 import { applyTreeOp } from '../../../store/store/tree-op-apply.ts';
 import type { ContentControlValueInput } from '../../../store/store/tree-op-content-controls.ts';
 import { build } from '../../../store/store/tree-op-tracked.ts';
-import { createOrderedItem, insertedPending } from '../model/document.ts';
+import { insertedPending } from '../model/document.ts';
 import { insertItems, relabel } from '../model/mutations.ts';
 import { engineRefusal, OrderedRefusal } from '../model/refusal.ts';
 import { isUnit, type OrderedItem } from '../model/types.ts';
-import {
-  childNamed,
-  childWhere,
-  isControlContent,
-  isRunProperties,
-  isWml,
-} from '../ooxml-nodes.ts';
+import { childNamed, childWhere, isControlContent, isWml } from '../ooxml-nodes.ts';
 import { closeOf, itemsInside } from '../placement.ts';
-import {
-  pendingOwn,
-  strikeItems,
-  suggestionFor,
-  takeBack,
-  withNewIds,
-  type Ctx,
-} from './context.ts';
+import { pendingOwn, strikeItems, suggestionFor, takeBack, type Ctx } from './context.ts';
 import { controlPropertiesRecord, sdtPrRecord } from './control-shell.ts';
 import { takeBackNotesOf } from './note-body.ts';
 import { noteOwnAddition, struckAlready, unitsOf } from './text.ts';
 import { shellId, templateItems, viewNode, viewPart } from './templates.ts';
-
-/** The first run's properties in a control's content, as the engine wrote its value. */
-function valueFace(control: OoxmlNode, depth = 0): OoxmlElement | null {
-  if (control.kind === 'textValue' || depth > 16) return null;
-  if (control.kind === 'run') return childWhere(control, isRunProperties) ?? null;
-  for (const child of control.children) {
-    if (child.kind === 'textValue' || isWml(child, 'sdtPr')) continue;
-    const found = valueFace(child, depth + 1);
-    if (found) return found;
-  }
-
-  return null;
-}
 
 /**
  * A control's new value: the engine sets it on the view, and its words and properties become
@@ -90,7 +63,11 @@ export function setControlValue(
   const holder =
     ctx.direct && open.by !== null && insertedPending(ctx.doc, open) ? open.by : suggestion.id;
   const items = valueItems(ctx, control, open, holder);
-  if (items.length > 0) insertItems(ctx.doc, ctx.story, ctx.story.tree.prev(close), items);
+
+  // At the control's end: in a block control, in its paragraph, before the mark
+  const last = ctx.story.tree.prev(close);
+  const end = open.token === 'sdtBlock' && last?.kind === 'mark' ? ctx.story.tree.prev(last) : last;
+  if (items.length > 0) insertItems(ctx.doc, ctx.story, end, items);
   noteOwnAddition(ctx, holder, unitsOf(ctx.story, items));
 
   // The record sets only the children the value changed (its last value, its date, its
@@ -128,10 +105,10 @@ function strikeOldValue(ctx: Ctx, open: OrderedItem, suggestion: string): void {
 }
 
 /**
- * The value's items: the runs the engine wrote in the control, loaded as a paragraph would be
- * (a check box's symbol is an object), inserted by the suggestion. Only the runs the value shows
- * (`liveRuns`), as the engine proposes a value: the struck words the write kept beside it are the
- * control's items already.
+ * The value's items: the runs the engine wrote in the control (in a block control, in its one
+ * paragraph), loaded as a paragraph would be (a check box's symbol is an object), inserted by the
+ * suggestion. Only the runs the value shows (`liveRuns`), as the engine proposes a value: the
+ * struck words the write kept beside it are the control's items already.
  */
 function valueItems(
   ctx: Ctx,
@@ -144,27 +121,8 @@ function valueItems(
     return [];
   }
 
-  if (content.children.some((c) => c.kind === 'paragraph' || isWml(c, 'p'))) {
-    // A block control's value: its text, in the first run's face
-    const display = contentControlTextOf(control);
-    const face = valueFace(control);
-    if (display.length === 0) return [];
-    const space = ctx.ids.units();
-    return [
-      createOrderedItem({
-        space,
-        kind: 'text',
-        length: display.length,
-        text: display,
-        face: face ? withNewIds(ctx, face) : null,
-        run: space,
-        by: suggestion,
-        within: open.within,
-      }),
-    ];
-  }
-
-  const paragraph = build(ctx.ids.node(), 'paragraph', 'p', [], liveRuns(content));
+  const block = childWhere(content, (c) => c.kind === 'paragraph' || isWml(c, 'p'));
+  const paragraph = build(ctx.ids.node(), 'paragraph', 'p', [], liveRuns(block ?? content));
   return templateItems(ctx, paragraph, suggestion, isUnit).map(
     (item): OrderedItem => ({ ...item, by: suggestion, within: open.within })
   );

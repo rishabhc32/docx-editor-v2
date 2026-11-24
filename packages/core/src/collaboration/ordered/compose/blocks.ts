@@ -11,7 +11,7 @@ import { REVISION_ROLE } from '../model/revision-ids.ts';
 import { BLOCK_TOKENS, type OrderedDocument, type OrderedItem } from '../model/types.ts';
 import { isWml, withChildren } from '../ooxml-nodes.ts';
 import type { ComposeContext, OrderedViewParagraph } from './context.ts';
-import { controlContent } from './inline.ts';
+import { controlContent, isValueRecord } from './inline.ts';
 import { isNotesStory, noteKeyOf, notesWithHiddenReferences } from './note-references.ts';
 import {
   composeParagraph,
@@ -42,6 +42,10 @@ interface Builder {
   drawn: boolean;
   /** A decision on a suggestion took a unit in it away (`ComposeContext.decidedAway`). */
   decided: boolean;
+  /** A decision changed whether a unit in it reads as text (`ComposeContext.decided`). */
+  reached: boolean;
+  /** A unit in it shows struck by a pending suggestion. */
+  struck: boolean;
   /** A table's cells a column decision removed (`table-columns.ts`). */
   removed?: RemovedCell[];
   /** A row's drawn cells and their open items (`row-cells.ts`). */
@@ -199,6 +203,8 @@ function newBuilder(open: OrderedItem | null): Builder {
     hadUnits: false,
     drawn: false,
     decided: false,
+    reached: false,
+    struck: false,
   };
 }
 
@@ -225,12 +231,17 @@ function closeBlock(ctx: ComposeContext, builder: Builder, open: OrderedItem, in
   if (builder.touched) into.touched = true;
 }
 
-/** What a paragraph drawn in a block tells it: touched, held units, drew units, decided. */
+/**
+ * What a paragraph drawn in a block tells it: touched, held units, drew units, decided, reached,
+ * struck.
+ */
 function noteParagraph(builder: Builder, drawn: DrawnParagraph): void {
   if (drawn.touched) builder.touched = true;
   if (drawn.hadUnits) builder.hadUnits = true;
   if (drawn.drawn) builder.drawn = true;
   if (drawn.decided) builder.decided = true;
+  if (drawn.reached) builder.reached = true;
+  if (drawn.struck) builder.struck = true;
 }
 
 /** A cell a column decision removed: drawn for its table to remove by the engine's rule. */
@@ -263,10 +274,15 @@ function blockElement(ctx: ComposeContext, builder: Builder): OoxmlNode {
     // A decision that takes a paragraph of an empty control away empties it too, as the engine's
     const removed = ctx.promptRemoved.has(open.space);
     const prompts = removed ? builder.decided : !ctx.unprompted.has(open.space);
-    if ((builder.hadUnits || builder.decided) && !builder.drawn && prompts) {
+    const emptied = (builder.hadUnits || builder.decided) && !builder.drawn && prompts;
+    if (emptied) {
       ctx.emptied.push(shell.id);
       if (builder.decided) ctx.decisionEmptied.add(shell.id);
     }
+
+    // Its value record follows what it shows, as an inline control's (`closeBox`)
+    const valued = !builder.struck && open.props.some(isValueRecord);
+    if (builder.reached || emptied || valued) ctx.reached.push(shell.id);
 
     // Enter removes a prompt for good, with no glossary block, unless a suggestion had filled it
     // before and its words went for good: the engine kept it in the glossary then

@@ -11,7 +11,9 @@
 // where the room kept it: the value the file holds stays, and only one the words wrote goes. A date
 // over another person's struck, formatted words once copied those words, with their format record,
 // into the party's new value: a fold made the copied record that person's, and their format joined
-// the party's card. The editor alone inserts only the words the value shows.
+// the party's card. The editor alone inserts only the words the value shows. A date in a block date
+// picker once went after the control's paragraph mark, where no paragraph holds it, so no copy
+// showed it; it goes in the control's paragraph, as the editor alone writes it.
 
 import { afterEach, describe, expect, test } from 'bun:test';
 import { createDocxEditor } from '../../../../editor/docx-editor.ts';
@@ -50,6 +52,14 @@ const line = (props: string, content: string) =>
         `<w:sdt><w:sdtPr><w:id w:val="5"/>${props}</w:sdtPr><w:sdtContent>${content}` +
         `</w:sdtContent></w:sdt>${t(' end.')}`
     ) + p(t('Signed.'))
+  );
+
+/** "Term:", a block control with the properties and one paragraph of content, "Signed.". */
+const block = (props: string, content: string) =>
+  docx(
+    p(t('Term:')) +
+      `<w:sdt><w:sdtPr><w:id w:val="5"/>${props}</w:sdtPr><w:sdtContent>${p(content)}` +
+      `</w:sdtContent></w:sdt>${p(t('Signed.'))}`
   );
 
 const ITEMS =
@@ -186,6 +196,21 @@ const CASES = [
       STRUCK + t('1/2/2026')
     ),
     [6, 6],
+    pick('2026-03-04'),
+  ],
+  [
+    'a date in a block date picker',
+    block(`<w:date w:fullDate="2026-01-02T00:00:00Z">${DATE_FORMAT}</w:date>`, t('1/2/2026')),
+    [0, 0],
+    pick('2026-03-04'),
+  ],
+  [
+    "a date over another person's struck, formatted words in a block date picker",
+    block(
+      `<w:date w:fullDate="2026-01-02T00:00:00Z">${DATE_FORMAT}</w:date>`,
+      STRUCK + t('1/2/2026')
+    ),
+    [0, 0],
     pick('2026-03-04'),
   ],
   [

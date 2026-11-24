@@ -33,6 +33,10 @@ export interface DrawnParagraph {
   readonly drawn: boolean;
   /** A decision on a suggestion took a unit in it away (`ComposeContext.decidedAway`). */
   readonly decided: boolean;
+  /** A decision changed whether a unit in it reads as text (`ComposeContext.decided`). */
+  readonly reached: boolean;
+  /** A unit in it shows struck by a pending suggestion. */
+  readonly struck: boolean;
 }
 
 /** Draw one paragraph: the items since the last shown mark, and its mark. */
@@ -42,12 +46,7 @@ export function composeParagraph(
   mark: OrderedItem,
   blocks: readonly OrderedItem[]
 ): DrawnParagraph {
-  const { view, shell, touched, hadUnits, drawn, decided } = viewOfParagraph(
-    ctx,
-    buffer,
-    mark,
-    blocks
-  );
+  const { view, shell, touched, ...seen } = viewOfParagraph(ctx, buffer, mark, blocks);
   const home = mark.home;
   const original = home === undefined ? undefined : ctx.doc.originals.get(home);
   if (
@@ -57,12 +56,12 @@ export function composeParagraph(
     isWhole(buffer, home, mark) &&
     textBoxesUntouched(ctx, buffer)
   )
-    return { node: original, view, touched: false, hadUnits, drawn, decided };
+    return { node: original, view, touched: false, ...seen };
   ctx.home = shell.id;
   const pPr = markProperties(ctx, mark, shell);
   ctx.paragraphKey = mark.space;
   const node = withChildren(shell, [...(pPr ? [pPr] : []), ...composeInline(ctx, buffer)]);
-  return { node, view, touched: true, hadUnits, drawn, decided };
+  return { node, view, touched: true, ...seen };
 }
 
 /** A paragraph's view, its mark's paragraph node, and what its drawing tells the blocks. */
@@ -92,6 +91,8 @@ export function viewOfParagraph(
   let hadUnits = false;
   let drawn = false;
   let decided = false;
+  let reached = false;
+  let struck = false;
   const kept = keptLinkEdges(ctx, buffer);
   for (const item of buffer) {
     if (isLabelled(item) || item.home !== home) touched = true;
@@ -109,9 +110,11 @@ export function viewOfParagraph(
     if (!isUnit(item)) continue;
     hadUnits = true;
     if (ctx.decidedAway(item)) decided = true;
+    if (ctx.decided(item)) reached = true;
     if (ctx.gone(item)) continue;
     drawn = true;
     const deleted = ctx.struckBy(item) !== null;
+    struck ||= deleted;
     const within = containers.join('>');
     for (let k = 0; k < item.length; k += 1) {
       chars.push({
@@ -126,7 +129,7 @@ export function viewOfParagraph(
   }
 
   const view: OrderedViewParagraph = { id: shell.id, mark, chars, items: buffer, blocks };
-  return { view, shell, touched, hadUnits, drawn, decided };
+  return { view, shell, touched, hadUnits, drawn, decided, reached, struck };
 }
 
 /** Every unit of the loaded paragraph is here, in one piece. */
