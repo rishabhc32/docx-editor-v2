@@ -346,17 +346,30 @@ export function addStyleElement(
   suggestion: string,
   element: OoxmlElement
 ): OrderedStyleResource {
+  const resource = styleElementResource(ctx.ids.resource(), suggestion, element);
+  if (resource === null)
+    throw new OrderedRefusal('invalid-edit', 'a pasted style needs an id and a known type');
+  addOrderedResource(ctx.doc, resource);
+  return resource;
+}
+
+/** A whole `w:style` as a style resource; null with no id or no known type. */
+export function styleElementResource(
+  key: string,
+  suggestion: string,
+  element: OoxmlElement
+): OrderedStyleResource | null {
   const attribute = (name: string) => element.attributes.find((a) => a.localName === name)?.value;
   const styleId = attribute('styleId');
   const type = attribute('type') ?? 'paragraph';
   if (styleId === undefined || (type !== 'paragraph' && type !== 'character' && type !== 'table'))
-    throw new OrderedRefusal('invalid-edit', 'a pasted style needs an id and a known type');
+    return null;
   const basedOn = childValue(element, 'basedOn');
   const next = childValue(element, 'next');
   const link = childValue(element, 'link');
-  const resource: OrderedStyleResource = {
+  return {
     kind: 'style',
-    key: ctx.ids.resource(),
+    key,
     suggestion,
     styleId,
     type,
@@ -368,6 +381,4 @@ export function addStyleElement(
     run: [],
     element,
   };
-  addOrderedResource(ctx.doc, resource);
-  return resource;
 }

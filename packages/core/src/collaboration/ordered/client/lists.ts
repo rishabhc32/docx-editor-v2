@@ -1,9 +1,10 @@
-// A checkpoint's list definitions back to their suggestions (design D14).
+// A checkpoint's list definitions and styles back to their suggestions (design D14).
 
 import { withPart, type OoxmlPackage } from '../../../store/package/ooxml-package.ts';
-import type { OoxmlNode } from '../../../store/package/ooxml-tree.ts';
+import type { OoxmlElement, OoxmlNode, OoxmlPart } from '../../../store/package/ooxml-tree.ts';
 import { withoutPart } from '../../../store/package/package-edit.ts';
-import type { CheckpointList } from '../model/checkpoint-lists.ts';
+import { styleElementResource } from '../edits/resources.ts';
+import type { CheckpointList, CheckpointStyle } from '../model/checkpoint-lists.ts';
 import { orderedListNumber, type OrderedListResource } from '../model/resources.ts';
 import type { OrderedDocument } from '../model/types.ts';
 import { attributeOf, isWml, withChildren } from '../ooxml-nodes.ts';
@@ -70,13 +71,66 @@ export function withoutCheckpointLists(
     children.splice(Math.min(abstractAt, numAt), 1);
   }
 
+  const out = withPartChildren(pkg, part, children);
+  return out === null ? null : { pkg: out, taken };
+}
+
+/** A style taken out of a checkpoint's file, for its suggestion. */
+export interface TakenStyle {
+  /** The suggestion, by its place in the manifest's list. */
+  readonly suggestion: number;
+  readonly key: string;
+  readonly element: OoxmlElement;
+}
+
+/**
+ * A checkpoint's package without the styles the manifest lists, and each `w:style` as the room
+ * wrote it. A styles part that holds nothing else goes too. Null when the file does not hold one
+ * of them.
+ */
+export function withoutCheckpointStyles(
+  pkg: OoxmlPackage,
+  styles: readonly CheckpointStyle[]
+): { readonly pkg: OoxmlPackage; readonly taken: readonly TakenStyle[] } | null {
+  if (styles.length === 0) {
+    return { pkg, taken: [] };
+  }
+
+  const part = [...pkg.parts.values()].find((candidate) => isWml(candidate.root, 'styles'));
+  if (part === undefined) {
+    return null;
+  }
+
+  const children = [...part.root.children];
+  const taken: TakenStyle[] = [];
+  for (const { suggestion, key, styleId } of styles) {
+    const at = placeOf(children, 'style', 'styleId', styleId);
+    const element = children[at];
+    if (element === undefined || element.kind === 'textValue') {
+      return null;
+    }
+
+    taken.push({ suggestion, key, element });
+    children.splice(at, 1);
+  }
+
+  const out = withPartChildren(pkg, part, children);
+  return out === null ? null : { pkg: out, taken };
+}
+
+/** A package with a part's children; a part left with no element goes. Null when it cannot. */
+function withPartChildren(
+  pkg: OoxmlPackage,
+  part: OoxmlPart,
+  children: readonly OoxmlNode[]
+): OoxmlPackage | null {
   const out = withPart(pkg, { ...part, root: withChildren(part.root, children) });
   if (children.some((child) => child.kind !== 'textValue')) {
-    return { pkg: out, taken };
+    return out;
   }
 
   const removed = withoutPart(out, part.name);
-  return removed.ok ? { pkg: removed.pkg, taken } : null;
+  return removed.ok ? removed.pkg : null;
 }
 
 /**
@@ -104,6 +158,29 @@ export function withCheckpointLists(
       levels: [],
       definition,
     });
+  }
+
+  return true;
+}
+
+/**
+ * Give each taken style back to its suggestion, by the ids of the suggestions the manifest lists
+ * (`listedIds`), as a pasted style is held. False when a suggestion is not listed or a style has
+ * no id or no known type.
+ */
+export function withCheckpointStyles(
+  doc: OrderedDocument,
+  taken: readonly TakenStyle[],
+  listedIds: readonly string[]
+): boolean {
+  for (const { suggestion, key, element } of taken) {
+    const id = listedIds[suggestion];
+    const resource = id === undefined ? null : styleElementResource(key, id, element);
+    if (resource === null) {
+      return false;
+    }
+
+    doc.resources.added.set(key, resource);
   }
 
   return true;

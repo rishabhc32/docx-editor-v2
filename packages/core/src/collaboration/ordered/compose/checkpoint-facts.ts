@@ -7,7 +7,7 @@ import type { OoxmlPackage } from '../../../store/package/ooxml-package.ts';
 import type { OoxmlElement } from '../../../store/package/ooxml-tree.ts';
 import { orderedStoryParts } from '../load/load.ts';
 import type { CheckpointFacts } from '../model/checkpoint.ts';
-import type { CheckpointList } from '../model/checkpoint-lists.ts';
+import type { CheckpointList, CheckpointStyle } from '../model/checkpoint-lists.ts';
 import type { CheckpointSuggestion } from '../model/checkpoint-suggestions.ts';
 import { withCheckpointLabels } from '../model/checkpoint-labels.ts';
 import {
@@ -31,6 +31,7 @@ import type {
 } from '../model/types.ts';
 import { attributeOf, eachElement, isWml } from '../ooxml-nodes.ts';
 import type { RoomNumber } from './context.ts';
+import { styleResourceKeyOf } from './resources.ts';
 import type { OrderedPartTakeovers } from './package.ts';
 
 /**
@@ -159,6 +160,7 @@ export function checkpointFacts(
     namespacePersons: typers,
     untracked: checkpointUntracked(doc, opens, labels, list),
     lists: checkpointLists(doc, pkg, list),
+    styles: checkpointStyles(doc, pkg, list),
   });
   return { pkg: labelled.pkg, facts };
 }
@@ -195,6 +197,39 @@ function checkpointLists(
       orderedResourceShows(doc, resource)
     ) {
       out.push({ suggestion: list.indexOf(suggestion), key: resource.key });
+    }
+  }
+
+  return out;
+}
+
+/**
+ * Each style a change added that the file holds as compose drew it (its suggestion pending or
+ * accepted): all of them, so an open gives them back in the room's order.
+ */
+function checkpointStyles(
+  doc: OrderedDocument,
+  pkg: OoxmlPackage,
+  list: SuggestionList
+): CheckpointStyle[] {
+  const written = new Set<string>();
+  for (const part of pkg.parts.values()) {
+    if (isWml(part.root, 'styles')) {
+      for (const child of part.root.children) {
+        const key = child.kind === 'textValue' ? undefined : styleResourceKeyOf(child);
+        if (key !== undefined && isWml(child, 'style')) {
+          written.add(key);
+        }
+      }
+    }
+  }
+
+  const out: CheckpointStyle[] = [];
+  for (const resource of doc.resources.added.values()) {
+    const suggestion = doc.suggestions.get(resource.suggestion);
+    if (resource.kind === 'style' && written.has(resource.key) && suggestion !== undefined) {
+      const { key, styleId } = resource;
+      out.push({ suggestion: list.indexOf(suggestion), key, styleId });
     }
   }
 
@@ -263,6 +298,7 @@ function inRoomOrder(
       })),
     })),
     lists: facts.lists.map((l) => ({ ...l, suggestion: renumbered(l.suggestion) })),
+    styles: facts.styles.map((s) => ({ ...s, suggestion: renumbered(s.suggestion) })),
   };
 }
 

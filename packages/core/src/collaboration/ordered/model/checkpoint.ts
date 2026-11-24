@@ -8,7 +8,12 @@ import { XML_HARD_MAX_BYTES } from '../../../store/package/xml-reader.ts';
 import { DEFAULT_ZIP_LIMITS } from '../../../store/package/zip.ts';
 import { at, attempt, Invalid, isForbiddenKey, plainFields, required } from '../change/read.ts';
 import { sha256 } from '../change/resources.ts';
-import { readLists, type CheckpointList } from './checkpoint-lists.ts';
+import {
+  readLists,
+  readStyles,
+  type CheckpointList,
+  type CheckpointStyle,
+} from './checkpoint-lists.ts';
 import {
   readNamedOnce,
   readNamespace,
@@ -66,7 +71,7 @@ export const checkpointAttribute = (
  * suggestion whole, and each decided one another section names; the person of each room comment
  * by its `w:id`; the records each change record holds by takeover; the person of each namespace
  * the parts name as a typer; the records Word writes no change record for, decided or not; and
- * the list definitions changes added. Every section names a suggestion by its place in
+ * the list definitions and styles changes added. Every section names a suggestion by its place in
  * `suggestions`, and an element of the file by its label.
  */
 export interface CheckpointFacts {
@@ -76,6 +81,7 @@ export interface CheckpointFacts {
   readonly namespacePersons: ReadonlyMap<string, OrderedPerson>;
   readonly untracked: readonly CheckpointUntracked[];
   readonly lists: readonly CheckpointList[];
+  readonly styles: readonly CheckpointStyle[];
 }
 
 /**
@@ -121,6 +127,7 @@ export function checkpointManifestBytes(
       namespaces: [...facts.namespacePersons].map(([namespace, person]) => ({ namespace, person })),
       untracked: untrackedJson(facts.untracked),
       lists: facts.lists,
+      styles: facts.styles,
     })
   );
   if (bytes.byteLength > XML_HARD_MAX_BYTES) {
@@ -206,6 +213,7 @@ function factsOf(manifest: Record<string, unknown>): CheckpointFacts {
     untracked: readUntracked(manifest.untracked, count),
     // A section a checkpoint of this version may not hold yet
     lists: manifest.lists === undefined ? [] : readLists(manifest.lists, count),
+    styles: manifest.styles === undefined ? [] : readStyles(manifest.styles, count),
   };
 }
 

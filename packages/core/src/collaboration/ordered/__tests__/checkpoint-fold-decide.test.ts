@@ -1,7 +1,7 @@
 // A decision after a fold gives the Word file the same decision gives in the room (design D14).
 // A pending suggestion splits the run it sits in, and a fold writes each piece as a run of its
 // own; a decision that takes the suggestion away draws the room's run whole again. A new list's
-// definition goes with its suggestion. A table record keeps what it took from another.
+// definition or style goes with its suggestion. A table record keeps what it took from another.
 
 import { describe, expect, test } from 'bun:test';
 import { strFromU8, unzipSync } from 'fflate';
@@ -169,6 +169,36 @@ describe('a decision after a fold, on a new list', () => {
         listOn(doc, 0);
       },
       'a new list beside a direct one'
+    );
+  });
+});
+
+describe('a decision after a fold, on a pasted style', () => {
+  const STYLE = {
+    e: 'w:style',
+    a: { 'w:type': 'paragraph', 'w:styleId': 'PastedClause' },
+    c: [
+      { e: 'w:name', a: { 'w:val': 'Pasted Clause' } },
+      { e: 'w:rPr', c: [{ e: 'w:i' }] },
+    ],
+  } as const;
+  const BLOCK = {
+    e: 'w:p',
+    c: [
+      { e: 'w:pPr', c: [{ e: 'w:pStyle', a: { 'w:val': 'PastedClause' } }] },
+      { e: 'w:r', c: [{ e: 'w:t', c: ['Pasted.'] }] },
+    ],
+  } as const;
+
+  test('whole paragraphs with their style: a reject takes the style away', async () => {
+    await foldOf(
+      p(run('Cloud and serverless.')),
+      (doc) => {
+        const place = at(doc, 0, 6);
+        const paste = { place, blocks: [BLOCK], styles: [STYLE], whole: true };
+        apply(doc, 'ana:1', { kind: 'insert-fragment', ...EDIT, ...paste });
+      },
+      'a pasted style'
     );
   });
 });
