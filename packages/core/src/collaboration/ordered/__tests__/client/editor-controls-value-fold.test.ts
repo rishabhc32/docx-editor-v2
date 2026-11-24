@@ -73,6 +73,12 @@ const CASES = [
     typing('unless'),
   ],
   [
+    "an item over a combo box's prompt",
+    line(`<w:showingPlcHdr/><w:comboBox>${ITEMS}</w:comboBox>`, t('Choose an item.', FACE)),
+    [6, 6],
+    pick('60'),
+  ],
+  [
     "an item over a drop-down list's prompt",
     line(`<w:showingPlcHdr/><w:dropDownList>${ITEMS}</w:dropDownList>`, t('Choose an item.', FACE)),
     [6, 6],

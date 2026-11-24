@@ -67,10 +67,16 @@ function controlValueOf(
   if (typeof value !== 'string') return value;
   if (!open.node) throw new OrderedClientRefusal('ordered-refused', 'out-of-step', 'a control');
 
-  // The editor's string form means what the control's type says, as the engine reads it
-  switch (contentControlPropertiesOf(open.node).type) {
+  // The editor's string form means what the control's type says, as the engine reads it: a
+  // combo box's names an item by its value, or else is the combo box's own text
+  const properties = contentControlPropertiesOf(open.node);
+  switch (properties.type) {
     case 'dropDownList':
       return { kind: 'listItem', value };
+    case 'comboBox':
+      return properties.listItems.some((item) => item.value === value)
+        ? { kind: 'listItem', value }
+        : { kind: 'text', text: value };
     case 'checkbox': {
       const checked = parseCheckboxValue(value);
       if (checked === null)
