@@ -2458,6 +2458,7 @@ export interface OrderedRevisionIds {
     readonly byRole: Map<string, string>;
     readonly fileIds: Set<string>;
     readonly listed: Map<string, readonly string[]>;
+    readonly reattributed: Map<string, OrderedAttribution>;
 }
 
 // @public
