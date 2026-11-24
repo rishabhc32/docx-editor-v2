@@ -11,7 +11,7 @@ import { withDeletedTextRestored } from '../../../store/store/revision-rebuild-h
 import { build, textNode } from '../../../store/store/tree-op-tracked.ts';
 import { MOVE_RANGE } from '../load/moves.ts';
 import { isSplitEdge, movedAwayBy, statusOf } from '../model/document.ts';
-import { REVISION_ROLE } from '../model/revision-ids.ts';
+import { fileMark, REVISION_ROLE } from '../model/revision-ids.ts';
 import {
   isUnit,
   type OrderedFieldPiece,
@@ -288,8 +288,17 @@ export function composeInline(ctx: ComposeContext, buffer: readonly OrderedItem[
 
     if (item.kind === 'zero' && !item.inRun) {
       flush();
-      if (item.node && item.moveRange) box().children.push(item.node);
-      else if (item.node) place(ctx, box().children, decidedRunShell(ctx, item, item.node), item);
+      if (item.node && item.moveRange) {
+        // A range start says who moved, as the move's wrappers do; its end has only a `w:id`
+        const by = moveRangeEdge(item)?.start === true ? item.by : null;
+        const node = item.node;
+        box().children.push(
+          by === null || node.kind === 'textValue' ? node : fileMark(ctx.doc, node, by)
+        );
+      } else if (item.node) {
+        place(ctx, box().children, decidedRunShell(ctx, item, item.node), item);
+      }
+
       continue;
     }
 

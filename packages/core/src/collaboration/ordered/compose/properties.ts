@@ -24,8 +24,9 @@ import {
   type PropertyChangeContainer,
 } from '../../../store/store/tree-op-tracked-properties.ts';
 import { isPending, statusOf } from '../model/document.ts';
-import { REVISION_ROLE } from '../model/revision-ids.ts';
+import { fileMark, REVISION_ROLE } from '../model/revision-ids.ts';
 import type {
+  OrderedDocument,
   OrderedElementRecord,
   OrderedFormatRecord,
   OrderedFormatWrite,
@@ -131,11 +132,13 @@ export function noteTakeover(
 /**
  * The file's own change record, when it is the one record drawn: pending, alone, with nothing
  * accepted under it, and giving the whole properties. Written back as the file had it (a
- * record's copy can hold what the engine's writer leaves out, such as a cell's old `w:cellDel`).
- * A record that sets only some children (`merge`) shows the container's own others, and load
- * made those the nodes of the file's record: it takes a record of copies, as a room's record does.
+ * record's copy can hold what the engine's writer leaves out, such as a cell's old `w:cellDel`),
+ * with its suggestion's attribution (`fileMark`). A record that sets only some children
+ * (`merge`) shows the container's own others, and load made those the nodes of the file's
+ * record: it takes a record of copies, as a room's record does.
  */
 export function fileRecordAlone(
+  doc: OrderedDocument,
   accepted: readonly AnyRecord[],
   pending: readonly AnyRecord[]
 ): OoxmlElement | undefined {
@@ -149,7 +152,9 @@ export function fileRecordAlone(
     return undefined;
   }
 
-  return 'fileRecord' in only ? only.fileRecord : undefined;
+  return 'fileRecord' in only && only.fileRecord !== undefined
+    ? fileMark(doc, only.fileRecord, only.suggestion)
+    : undefined;
 }
 
 /**
@@ -232,7 +237,7 @@ export function faceAfter(
   // A decided change made after a pending one shows on top, and the record keeps the original
   for (const record of later) children = applyFormat(record, children, ctx.mint);
   const latest = pending[pending.length - 1];
-  const own = fileRecordAlone(shown.accepted, pending);
+  const own = fileRecordAlone(ctx.doc, shown.accepted, pending);
   if (own) children = [...children, own];
   else if (latest) {
     // One record: the original, under the latest author (the engine's rule)
@@ -343,7 +348,7 @@ export function paragraphPropertiesAfter(
     : null;
   const [earlier, later] = aroundPending(shownAccepted(ctx, accepted, records), pending);
   for (const record of earlier) current = withDecidedMarkRecord(ctx, current, record, keptByMark);
-  const own = fileRecordAlone(accepted, pending);
+  const own = fileRecordAlone(ctx.doc, accepted, pending);
   const taken: DrawnTakeover[] = [];
   for (const record of pending) {
     const before = current?.children ?? [];
@@ -454,38 +459,48 @@ const recordKey = (node: OoxmlElement): string =>
   ].join('\u0000');
 
 /**
- * A paragraph's `w:pPr` without its file's own numbering records whose suggestions are decided
- * (`load/properties.ts`): a decision either way removes the record from `w:numPr` and keeps the
- * list, as the engine's and Word's do. A copy in a change record stays, as the engine leaves it.
+ * A paragraph's `w:pPr` with its file's own numbering records (`load/properties.ts`) as their
+ * suggestions stand: a decision either way removes the record from `w:numPr` and keeps the list,
+ * as the engine's and Word's do; a pending one takes its suggestion's attribution (`fileMark`).
+ * A copy in a change record stays, as the engine leaves it.
  */
-export function withoutDecidedNumbering(
+export function withNumberingRecords(
   ctx: ComposeContext,
   mark: OrderedItem,
   pPr: OoxmlElement | null
 ): OoxmlElement | null {
-  const decided = new Set(
+  const suggestions = new Map(
     mark.props.flatMap((p) =>
-      p.kind === 'element' &&
-      p.target === 'numPr' &&
-      p.fileRecord !== undefined &&
-      (ctx.options.pending === 'reject' || statusOf(ctx.doc, p.suggestion) !== 'pending')
-        ? [recordKey(p.fileRecord)]
+      p.kind === 'element' && p.target === 'numPr' && p.fileRecord !== undefined
+        ? [[recordKey(p.fileRecord), p.suggestion] as const]
         : []
     )
   );
   const numPr = pPr?.children.find((c) => isWml(c, 'numPr'));
-  if (!pPr || decided.size === 0 || !numPr || numPr.kind === 'textValue') return pPr;
-  const kept = numPr.children.filter(
-    (c) =>
-      c.kind === 'textValue' ||
-      !(isWml(c, 'ins') || isWml(c, 'numberingChange')) ||
-      !decided.has(recordKey(c))
-  );
-  if (kept.length === numPr.children.length) return pPr;
-  const drawn = withChildren(numPr, kept);
+  if (!pPr || suggestions.size === 0 || !numPr || numPr.kind === 'textValue') {
+    return pPr;
+  }
+
+  const drawn = numPr.children.flatMap((c) => {
+    if (c.kind === 'textValue' || !(isWml(c, 'ins') || isWml(c, 'numberingChange'))) {
+      return [c];
+    }
+
+    const suggestion = suggestions.get(recordKey(c));
+    if (suggestion === undefined) {
+      return [c];
+    }
+
+    const decided = ctx.options.pending === 'reject' || statusOf(ctx.doc, suggestion) !== 'pending';
+    return decided ? [] : [fileMark(ctx.doc, c, suggestion)];
+  });
+  if (drawn.length === numPr.children.length && drawn.every((c, k) => c === numPr.children[k])) {
+    return pPr;
+  }
+
   return withChildren(
     pPr,
-    pPr.children.map((c) => (c === numPr ? drawn : c))
+    pPr.children.map((c) => (c === numPr ? withChildren(numPr, drawn) : c))
   );
 }
 
@@ -680,7 +695,7 @@ function containerAfter(ctx: ComposeContext, open: OrderedItem, child: OoxmlNode
 
   // The record names the author of the latest change it records
   const latest = pending.filter((p) => p.untracked !== true).at(-1);
-  const own = fileRecordAlone(under, pending);
+  const own = fileRecordAlone(ctx.doc, under, pending);
   const container = CONTAINERS[target];
   if (own) inner = [...inner, own];
   else if (latest && container !== null) {

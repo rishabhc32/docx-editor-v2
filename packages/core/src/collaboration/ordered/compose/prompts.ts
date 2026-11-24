@@ -6,7 +6,9 @@ import {
   orderedContentControlProperties,
   type ContentControlProperties,
 } from '../../../store/package/content-control-nodes.ts';
+import { glossaryPartOf } from '../../../store/package/building-blocks.ts';
 import { createNodeIdAllocator, findNode, replaceNode } from '../../../store/package/ooxml-edit.ts';
+import { withPart, type OoxmlPackage } from '../../../store/package/ooxml-package.ts';
 import { applyTreeOp } from '../../../store/store/tree-op-apply.ts';
 import { build } from '../../../store/store/tree-op-tracked.ts';
 import type { OoxmlElement, OoxmlNode, OoxmlPart } from '../../../store/package/ooxml-tree.ts';
@@ -24,7 +26,7 @@ import {
   contentControlPropertiesOf,
   findContentControl,
 } from '../../../store/store/tree-op-nodes.ts';
-import { PROMPT_RECORD_ROLES, suggestionOfRevision } from '../model/revision-ids.ts';
+import { fileMark, PROMPT_RECORD_ROLES, suggestionOfRevision } from '../model/revision-ids.ts';
 import type { OrderedDocument, OrderedSuggestionStatus } from '../model/types.ts';
 import { attributeOf, childNamed, isWml, withChildren } from '../ooxml-nodes.ts';
 import type { ComposeContext } from './context.ts';
@@ -129,8 +131,9 @@ export function withRestoredPrompts(
 /**
  * `part` with the change records of a control's prompt under their suggestions' decisions, as
  * the engine decides them: accepted, the format stays with no record; rejected, the face before
- * it; pending, the record as it is. The glossary keeps a prompt with its records while content
- * fills the control, and a load reads each as a suggestion (`readPromptRecords`).
+ * it; pending, the record with its suggestion's attribution (`withAttributedRecord`). The
+ * glossary keeps a prompt with its records while content fills the control, and a load reads
+ * each as a suggestion (`readPromptRecords`).
  */
 function withPromptDecisions(
   doc: OrderedDocument,
@@ -142,7 +145,12 @@ function withPromptDecisions(
   for (const record of control ? promptRecords(control) : []) {
     const suggestion = suggestionOfRevision(doc, record);
     const decision = suggestion === undefined ? null : status(suggestion);
-    if (decision === null || decision === 'pending') {
+    if (suggestion === undefined || decision === null) {
+      continue;
+    }
+
+    if (decision === 'pending') {
+      part = withAttributedRecord(doc, part, record, suggestion);
       continue;
     }
 
@@ -160,6 +168,47 @@ function withPromptDecisions(
   }
 
   return part;
+}
+
+/**
+ * `part` with a prompt's change record written with its suggestion's attribution (`fileMark`):
+ * a record the glossary kept carries the one the load read.
+ */
+function withAttributedRecord(
+  doc: OrderedDocument,
+  part: OoxmlPart,
+  record: OoxmlElement,
+  suggestion: string
+): OoxmlPart {
+  const marked = fileMark(doc, record, suggestion);
+  if (marked === record) {
+    return part;
+  }
+
+  // The edit moves its node index to the root it builds: give it a root of its own
+  const written = replaceNode({ ...part, root: { ...part.root } }, record.id, marked);
+  return written.ok ? written.part : part;
+}
+
+/**
+ * `pkg` with the prompts the glossary keeps written with their suggestions' attributions, as the
+ * room shows them when the prompt shows again (`withPromptDecisions`).
+ */
+export function withAttributedPrompts(pkg: OoxmlPackage, doc: OrderedDocument): OoxmlPackage {
+  const glossary = glossaryPartOf(pkg);
+  if (glossary === null || doc.revisionIds.reattributed.size === 0) {
+    return pkg;
+  }
+
+  let part = glossary;
+  for (const record of promptRecords(glossary.root)) {
+    const suggestion = suggestionOfRevision(doc, record);
+    if (suggestion !== undefined) {
+      part = withAttributedRecord(doc, part, record, suggestion);
+    }
+  }
+
+  return part === glossary ? pkg : withPart(pkg, part);
 }
 
 /** The change records under a node that a prompt can hold (`PROMPT_RECORD_ROLES`). */

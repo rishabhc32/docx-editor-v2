@@ -130,7 +130,7 @@ export function containerShell(
  * keep the list, as Word retains `w:numPr` either way (Word for Mac on a `w:numberingChange`,
  * 2026-10-29). The record stays in the paragraph's properties, so a later list edit keeps,
  * drops or copies it as the engine's does; compose removes it once its suggestion is decided
- * (`withoutDecidedNumbering`). A malformed one stays file content, as the engine leaves it.
+ * (`withNumberingRecords`). A malformed one stays file content, as the engine leaves it.
  */
 function numberingRecords(state: LoadState, pPr: OoxmlElement): OrderedPropertyRecord[] {
   const numPr = childNamed(pPr, 'numPr');

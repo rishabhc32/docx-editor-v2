@@ -337,11 +337,23 @@ function partRecordKeyOf(part: string, node: OoxmlElement): string {
   );
 }
 
-/** The suggestions of the change records outside the stories, by `partRecordKey`. */
+/**
+ * The suggestions of the change records outside the stories, by `partRecordKey`: a pending
+ * record shows with its suggestion's author and date, also after a change gave it another
+ * (`withDecidedPartRevisions`).
+ */
 function partRecordIndex(doc: OrderedDocument): Map<string, string> {
   const index = new Map<string, string>();
-  for (const [id, { part, element, revision }] of doc.partRevisions)
-    index.set(partRecordKey(part, element, revision), id);
+  for (const [id, { part, element, revision }] of doc.partRevisions) {
+    const attribution = doc.suggestions.get(id)?.attribution;
+    if (attribution !== undefined) {
+      index.set(
+        partRecordKey(part, element, tripleOf(revision.id, attribution.author, attribution.date)),
+        id
+      );
+    }
+  }
+
   return index;
 }
 

@@ -5,7 +5,7 @@
 // writes the part with the decided records resolved (`compose/part-revisions.ts`).
 
 import type { OoxmlPackage } from '../../../store/package/ooxml-package.ts';
-import type { OoxmlNode, OoxmlPart } from '../../../store/package/ooxml-tree.ts';
+import type { OoxmlElement, OoxmlNode, OoxmlPart } from '../../../store/package/ooxml-tree.ts';
 import { stylesPartOf } from '../../../store/package/ooxml-indexes.ts';
 import {
   collectRevisionSites,
@@ -35,6 +35,18 @@ function stylesOfNodes(part: OoxmlPart): Map<string, string> {
   }
 
   return out;
+}
+
+/** A change record's `w:id`, author and date; undefined for one with no `w:id` or author. */
+export function recordRevision(node: OoxmlElement): OrderedPartRevision['revision'] | undefined {
+  const id = attributeOf(node, 'id');
+  const author = attributeOf(node, 'author');
+  if (id === undefined || author === undefined) {
+    return undefined;
+  }
+
+  const date = attributeOf(node, 'date');
+  return { id, author, ...(date === undefined ? {} : { date }) };
 }
 
 /** A site the engine decides both ways: a property record with an author and old properties. */
@@ -77,10 +89,11 @@ export function loadPartRevisions(
   for (const site of collectRevisionSites(part)) {
     const id = attributeOf(site.node, 'id');
     if (id !== undefined) reserveFileRevisionId(doc, id);
-    const author = attributeOf(site.node, 'author');
-    if (id === undefined || author === undefined) continue;
-    const date = attributeOf(site.node, 'date');
-    const revision = { id, author, ...(date === undefined ? {} : { date }) };
+    const revision = recordRevision(site.node);
+    if (revision === undefined) {
+      continue;
+    }
+
     const key = revisionGroupKey(revision, site.node.localName);
     const known = groups.get(key);
     if (known) {

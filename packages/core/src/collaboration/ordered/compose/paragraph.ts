@@ -17,7 +17,7 @@ import { ComposeContext, type OrderedViewChar, type OrderedViewParagraph } from 
 import { composeInline } from './inline.ts';
 import { keptLinkEdges } from './kept-links.ts';
 import { isNotesStory } from './note-references.ts';
-import { faceAfter, paragraphPropertiesAfter, withoutDecidedNumbering } from './properties.ts';
+import { faceAfter, paragraphPropertiesAfter, withNumberingRecords } from './properties.ts';
 import { withMarkSection } from './sections.ts';
 import { textBoxesUntouched } from './text-boxes.ts';
 
@@ -151,7 +151,7 @@ function markProperties(
   shell: OoxmlElement
 ): OoxmlElement | null {
   const base = childWhere(shell, isParagraphProperties) ?? null;
-  const after = withoutDecidedNumbering(ctx, mark, paragraphPropertiesAfter(ctx, mark, base));
+  const after = withNumberingRecords(ctx, mark, paragraphPropertiesAfter(ctx, mark, base));
   const pPr = ctx.fresh(withMarkSection(ctx, mark, after));
 
   // A split's new mark takes the face of the mark it split: that one keeps the ids

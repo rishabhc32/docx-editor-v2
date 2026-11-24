@@ -119,14 +119,20 @@ export class RevisionReader {
 
   /**
    * A reader of a prompt the glossary kept: a mark a load read or a room checkpoint listed is its
-   * suggestion's, as a reopen reads it, and every other one is `fixed`.
+   * suggestion's, as a reopen reads it, also with the attribution the load read when a change
+   * gave the suggestion another (`suggestionOfRevision`), and every other one is `fixed`.
    */
   static forPrompt(doc: OrderedDocument, fixed: string): RevisionReader {
     const reader = new RevisionReader(doc, fixed);
     for (const [id, revision] of keptRevisionIds(doc)) {
-      const attribution = doc.suggestions.get(id)?.attribution;
-      if (attribution) {
-        reader.addListed(id, attribution, [revision]);
+      const attributions = [
+        doc.suggestions.get(id)?.attribution,
+        doc.revisionIds.reattributed.get(id),
+      ];
+      for (const attribution of attributions) {
+        if (attribution) {
+          reader.addListed(id, attribution, [revision]);
+        }
       }
     }
 

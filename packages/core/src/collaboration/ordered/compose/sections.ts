@@ -294,7 +294,7 @@ export function sectionAfter(
   }
 
   if (section === null) return null;
-  const fileRecord = fileRecordAlone(accepted, pending);
+  const fileRecord = fileRecordAlone(ctx.doc, accepted, pending);
   const latest = pending.at(-1);
   const ids = holderIds(holder);
   let children = section.children.filter((c) => !isWml(c, 'sectPrChange'));

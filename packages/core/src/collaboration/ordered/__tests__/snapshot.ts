@@ -63,6 +63,7 @@ export function snapshot(doc: OrderedDocument, withIdentity = true): unknown {
       byRole: [...doc.revisionIds.byRole].sort(([a], [b]) => (a < b ? -1 : 1)),
       attributesByRole: [...doc.revisionIds.attributesByRole.keys()].sort(),
       fileIds: [...doc.revisionIds.fileIds].sort(),
+      reattributed: [...doc.revisionIds.reattributed].sort(([a], [b]) => (a < b ? -1 : 1)),
     },
     movesWithRanges: [...doc.movesWithRanges].sort(),
     paraIds: [...doc.paraIds].sort(),

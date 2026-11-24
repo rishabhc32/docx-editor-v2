@@ -41,6 +41,7 @@ export function createOrderedDocument(file = 0): OrderedDocument {
       byRole: new Map(),
       attributesByRole: new Map(),
       fileIds: new Set(),
+      reattributed: new Map(),
       listed: new Map(),
     },
     placeholders: new Map(),

@@ -514,6 +514,11 @@ export interface OrderedRevisionIds {
   /** Every revision `w:id` the loaded parts hold. */
   readonly fileIds: Set<string>;
   /**
+   * The suggestions a change gave another attribution (`setAttribution`), each with the one it
+   * had before, which the file's own marks carry: compose writes the new one on them.
+   */
+  readonly reattributed: Map<string, OrderedAttribution>;
+  /**
    * The `w:id`s a room checkpoint lists for each suggestion it makes, those of a part the room
    * does not load among them (a prompt's records in the glossary), in the checkpoint's order.
    */

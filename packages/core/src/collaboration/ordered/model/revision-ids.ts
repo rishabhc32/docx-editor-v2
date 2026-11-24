@@ -7,7 +7,8 @@ import {
   type OoxmlElement,
 } from '../../../store/package/ooxml-tree.ts';
 import { fnv1a32 } from '../../../store/package/para-id.ts';
-import { attributeOf } from '../ooxml-nodes.ts';
+import { revisionAttributes } from '../../../store/store/tree-op-tracked.ts';
+import { attributeOf, withAttributes } from '../ooxml-nodes.ts';
 import { isHidden, storyOfItem } from './document.ts';
 import type { OrderedDocument, OrderedItem, OrderedStory } from './types.ts';
 
@@ -90,6 +91,10 @@ export function revisionIdFor(doc: OrderedDocument, suggestion: string, role: st
   }
 }
 
+/** Whether an attribute names a revision mark: its `w:id`, or a move range's `w:name`. */
+const isMarkName = (a: OoxmlAttribute): boolean =>
+  a.namespaceUri === WML_NAMESPACE_URI && (a.localName === 'id' || a.localName === 'name');
+
 /**
  * Keep a file's revision mark for a suggestion's role: its `w:id`, and its other attributes
  * past the id and a move range's name (the first mark seen wins).
@@ -109,13 +114,7 @@ export function seedRevisionId(
     doc.revisionIds.byRole.set(k, id.value);
     doc.revisionIds.attributesByRole.set(
       k,
-      mark.attributes.filter(
-        (a) =>
-          !(
-            a.namespaceUri === WML_NAMESPACE_URI &&
-            (a.localName === 'id' || a.localName === 'name')
-          )
-      )
+      mark.attributes.filter((a) => !isMarkName(a))
     );
   }
 
@@ -139,32 +138,65 @@ export function adoptRevisionRoles(doc: OrderedDocument, from: string, to: strin
   }
 }
 
-/** The file's own attributes of a suggestion's mark for a role, past its id, if it had one. */
+/**
+ * The file's own attributes of a suggestion's mark for a role, past its id, if it had one and
+ * the suggestion keeps the attribution the load read.
+ */
 export function seededAttributes(
   doc: OrderedDocument,
   suggestion: string,
   role: string
 ): readonly OoxmlAttribute[] | undefined {
+  if (doc.revisionIds.reattributed.has(suggestion)) {
+    return undefined;
+  }
+
   return doc.revisionIds.attributesByRole.get(key(suggestion, role));
 }
 
 /**
+ * A mark the file wrote for a suggestion (a change record, a move range's start, a prompt's
+ * record in the glossary): as the file had it while the suggestion keeps the attribution the
+ * load read; else with its own `w:id` and `w:name`, and the suggestion's author, date and other
+ * attributes.
+ */
+export function fileMark(
+  doc: OrderedDocument,
+  mark: OoxmlElement,
+  suggestion: string
+): OoxmlElement {
+  const attribution = doc.suggestions.get(suggestion)?.attribution;
+  if (attribution === undefined || !doc.revisionIds.reattributed.has(suggestion)) {
+    return mark;
+  }
+
+  const [, ...stamp] = revisionAttributes('', attribution);
+  return withAttributes(mark, [
+    ...mark.attributes.filter(isMarkName),
+    ...stamp,
+    ...(attribution.attributes ?? []),
+  ]);
+}
+
+/**
  * The suggestion a file's revision mark was read for, by its `w:id`, author and date: the mark a
- * load kept for one of the suggestion's roles, or one a room checkpoint listed for it. Undefined
- * for a mark no load read.
+ * load kept for one of the suggestion's roles, or one a room checkpoint listed for it. Its date
+ * is the suggestion's, or the one the load read when a change gave the suggestion another.
+ * Undefined for a mark no load read.
  */
 export function suggestionOfRevision(
   doc: OrderedDocument,
   revision: OoxmlElement
 ): string | undefined {
   const id = attributeOf(revision, 'id');
+  const author = attributeOf(revision, 'author') ?? '';
+  const date = attributeOf(revision, 'date');
   for (const [suggestion, kept] of keptRevisionIds(doc)) {
-    const attribution = doc.suggestions.get(suggestion)?.attribution;
-    if (
-      kept === id &&
-      attribution?.author === (attributeOf(revision, 'author') ?? '') &&
-      attribution.date === attributeOf(revision, 'date')
-    ) {
+    const attributions = [
+      doc.suggestions.get(suggestion)?.attribution,
+      doc.revisionIds.reattributed.get(suggestion),
+    ];
+    if (kept === id && attributions.some((a) => a?.author === author && a.date === date)) {
       return suggestion;
     }
   }
