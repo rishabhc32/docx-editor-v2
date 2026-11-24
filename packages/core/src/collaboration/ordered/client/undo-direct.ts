@@ -1,6 +1,6 @@
 // The organiser's undo and redo of direct edits (tasks 6.7, 9.12).
 
-import { isHidden } from '../model/document.ts';
+import { isHidden, isPending } from '../model/document.ts';
 import { BLOCK_TOKENS, type OrderedDocument, type OrderedItem } from '../model/types.ts';
 import {
   isOrderedEditChange,
@@ -45,7 +45,10 @@ export function madeBy(doc: OrderedDocument, changeId: string, direct = true): s
   return out;
 }
 
-/** The shown units a change typed into other suggestions: units of its spaces it did not label. */
+/**
+ * The shown units a change typed into other suggestions: units of its spaces it did not label. A
+ * refusal by name when such a suggestion is decided: a decision is final.
+ */
 function typedInside(
   doc: OrderedDocument,
   change: OrderedChange,
@@ -58,8 +61,17 @@ function typedInside(
   for (let k = 1; k <= ORDERED_CHANGE_LIMITS.targets; k += 1) {
     const items = story.spaces.get(`i:${change.id}.${k}`);
     if (!items) break;
-    for (const item of items)
-      if (item.by !== null && !own.has(item.by) && !isHidden(doc, item)) out.push(item);
+    for (const item of items) {
+      if (item.by === null || own.has(item.by) || isHidden(doc, item)) {
+        continue;
+      }
+
+      if (!isPending(doc, item.by)) {
+        throw noInverse('decided');
+      }
+
+      out.push(item);
+    }
   }
 
   return out;

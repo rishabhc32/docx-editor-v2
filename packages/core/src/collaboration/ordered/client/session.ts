@@ -231,9 +231,14 @@ export class OrderedSessionBase implements EditorCollaborationSession {
   /**
    * The room's refusal of an own change, reported once for the user action that made it: the
    * first refusal names the cause; the action's later changes, refused because they need the
-   * first one, are taken back without a report of their own.
+   * first one, are taken back without a report of their own. The redo steps go: a refused undo
+   * took nothing back, so its redo would make the words a second time.
    */
   protected reportRefusal(report: OrderedClientRefusalReport): void {
+    if (report.change !== undefined) {
+      this.history.clearRedo();
+    }
+
     const action = report.change === undefined ? undefined : this.#actions.get(report.change);
     if (action !== undefined) {
       if (this.#reportedActions.has(action)) {

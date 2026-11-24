@@ -1,7 +1,7 @@
 // Undo in a room is a new change that takes back the author's own suggestion, so it never
 // touches another person's text.
 
-import { storyOfItem, statusOf, suggestionsOf } from '../model/document.ts';
+import { itemsAddedBy, storyOfItem, statusOf, suggestionsOf } from '../model/document.ts';
 import { forgetAdded, isolateUnits, relabel } from '../model/mutations.ts';
 import { sameMaker, type OrderedMaker } from '../model/person.ts';
 import { OrderedRefusal } from '../model/refusal.ts';
@@ -130,16 +130,21 @@ export function retractSuggestion(
  * show again (`taken`), the units they typed into those suggestions are taken back
  * (`doc.added`), and the formats they gave those words come off (a format record's `change`).
  * The validator keeps `changes` to the sender's own namespace. Refused while a suggestion that
- * inserted an item to show again is decided. Returns the suggestions the items carry.
+ * inserted an item it changes is decided: a decision is final. Returns the suggestions the items
+ * carry.
  */
 export function undoOwnEdits(doc: OrderedDocument, changes: readonly string[]): string[] {
   const undone = new Set(changes);
   const edited = new Set(changes.flatMap((change) => [...(doc.ownEdited.get(change) ?? [])]));
-  const shown = [...edited].filter((item) => item.taken && undone.has(item.taken));
-  for (const item of shown)
-    for (const inserter of [item.by, ...item.within.by])
-      if (inserter !== null && statusOf(doc, inserter) !== 'pending')
+  const added = changes.flatMap((change) => itemsAddedBy(doc, change));
+  for (const item of [...edited, ...added]) {
+    for (const inserter of [item.by, ...item.within.by]) {
+      if (inserter !== null && statusOf(doc, inserter) !== 'pending') {
         throw new OrderedRefusal('not-pending', inserter);
+      }
+    }
+  }
+
   const carried = new Set<string>();
   const write = (story: OrderedStory, item: OrderedItem, change: Partial<OrderedItemLabels>) => {
     relabel(doc, story, item, change);

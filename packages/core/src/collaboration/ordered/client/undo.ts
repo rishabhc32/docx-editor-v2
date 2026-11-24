@@ -1,6 +1,7 @@
 // Undo and redo of the person's own steps, as the session runs them (tasks 6.3, 6.7 and 9.12).
 
 import { isOrderedEditChange, type OrderedChange } from '../change/types.ts';
+import { statusOf } from '../model/document.ts';
 import type { OrderedDocument } from '../model/types.ts';
 import type { OrderedHistory, OrderedHistoryCommit, OrderedHistoryStep } from './history.ts';
 import { inverseOfDirect, madeBy } from './undo-direct.ts';
@@ -58,6 +59,11 @@ export function undoOwnStep(writer: OrderedHistoryWriter): boolean {
     }
 
     return true;
+  }
+
+  // A decision is final: a step whose suggestions someone decided has no inverse
+  if ([...step.suggestions].some((id) => (statusOf(replica.doc, id) ?? 'pending') !== 'pending')) {
+    return refuseStep(writer, 'no-inverse', 'decided');
   }
 
   const commit = ownEditCommit(replica.doc, step);

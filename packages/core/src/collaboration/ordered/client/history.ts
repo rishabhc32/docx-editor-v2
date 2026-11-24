@@ -308,6 +308,11 @@ export class OrderedHistory {
     return this.#redo.pop() ?? null;
   }
 
+  /** Forget the undone steps: what they would make again no longer follows the room. */
+  clearRedo(): void {
+    this.#redo.length = 0;
+  }
+
   /** The selection the last undo restores, when it took back the step's last commit alone. */
   restoreSelection(selection: CollaborationLocalSelection | null): void {
     this.#restored = selection;
