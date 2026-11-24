@@ -426,6 +426,7 @@ describe('a tracked move of words that hold a note reference', () => {
         const result = editor.exec({ type: 'resolveAllReviewChanges', action, scope: 'document' });
         expect(result.ok).toBe(true);
         const after = await saved(editor);
+
         // The note's one reference: in the first paragraph, or after the second's own
         expect(ids(after.document, 'footnoteReference')).toEqual(
           action === 'reject' ? ['1', '2'] : ['2', '1']
