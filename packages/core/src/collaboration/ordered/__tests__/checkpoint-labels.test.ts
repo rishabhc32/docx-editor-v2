@@ -232,6 +232,7 @@ describe('who typed each unit kind', () => {
         ),
         `${FOOTNOTES}  `,
         `${FOOTNOTES} N`,
+        `${FOOTNOTES} footnoteRef`,
         'text box X',
         'text box Y',
       ],
