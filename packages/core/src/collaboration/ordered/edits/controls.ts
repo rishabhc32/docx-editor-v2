@@ -69,7 +69,10 @@ export function setControlValue(
   // At the control's end: in a block control, in its paragraph, before the mark
   const last = ctx.story.tree.prev(close);
   const end = open.token === 'sdtBlock' && last?.kind === 'mark' ? ctx.story.tree.prev(last) : last;
-  if (items.length > 0) insertItems(ctx.doc, ctx.story, end, items);
+  if (items.length > 0) {
+    insertItems(ctx.doc, ctx.story, end, items);
+  }
+
   noteOwnAddition(ctx, holder, unitsOf(ctx.story, items));
 
   // The record sets only the children the value changed (its last value, its date, its

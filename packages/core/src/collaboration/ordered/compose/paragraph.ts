@@ -110,7 +110,10 @@ export function viewOfParagraph(
     if (!isUnit(item)) continue;
     hadUnits = true;
     if (ctx.decidedAway(item)) decided = true;
-    if (ctx.decided(item)) reached = true;
+    if (ctx.decided(item)) {
+      reached = true;
+    }
+
     if (ctx.gone(item)) continue;
     drawn = true;
     const deleted = ctx.struckBy(item) !== null;

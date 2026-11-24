@@ -80,8 +80,14 @@ function pendingContainerAround(
 
 /** The pending insertion that shows a character with its own marker, if any. */
 function pendingInsertion(ctx: Ctx, char: OrderedViewChar | undefined): OrderedSuggestion | null {
-  if (!char || char.item.by === null || char.item.quiet) return null;
-  if (!insertedPending(ctx.doc, char.item)) return null;
+  if (!char || char.item.by === null || char.item.quiet) {
+    return null;
+  }
+
+  if (!insertedPending(ctx.doc, char.item)) {
+    return null;
+  }
+
   return ctx.doc.suggestions.get(char.item.by) ?? null;
 }
 

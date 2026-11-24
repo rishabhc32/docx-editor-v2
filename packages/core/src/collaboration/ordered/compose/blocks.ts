@@ -240,8 +240,13 @@ function noteParagraph(builder: Builder, drawn: DrawnParagraph): void {
   if (drawn.hadUnits) builder.hadUnits = true;
   if (drawn.drawn) builder.drawn = true;
   if (drawn.decided) builder.decided = true;
-  if (drawn.reached) builder.reached = true;
-  if (drawn.struck) builder.struck = true;
+  if (drawn.reached) {
+    builder.reached = true;
+  }
+
+  if (drawn.struck) {
+    builder.struck = true;
+  }
 }
 
 /** A cell a column decision removed: drawn for its table to remove by the engine's rule. */
@@ -282,7 +287,9 @@ function blockElement(ctx: ComposeContext, builder: Builder): OoxmlNode {
 
     // Its value record follows what it shows, as an inline control's (`closeBox`)
     const valued = !builder.struck && open.props.some(isValueRecord);
-    if (builder.reached || emptied || valued) ctx.reached.push(shell.id);
+    if (builder.reached || emptied || valued) {
+      ctx.reached.push(shell.id);
+    }
 
     // Enter removes a prompt for good, with no glossary block, unless a suggestion had filled it
     // before and its words went for good: the engine kept it in the glossary then

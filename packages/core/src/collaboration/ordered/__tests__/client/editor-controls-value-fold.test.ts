@@ -65,6 +65,7 @@ const block = (props: string, content: string) =>
 const ITEMS =
   '<w:listItem w:displayText="Net 30" w:value="30"/><w:listItem w:displayText="Net 60" w:value="60"/>';
 const DATE_FORMAT = '<w:dateFormat w:val="M/d/yyyy"/><w:lid w:val="en-US"/>';
+
 /** Words of a date that Cy struck and formatted, as a file holds them. */
 const STRUCK =
   '<w:del w:id="1" w:author="Cy" w:date="2026-01-01T00:00:00Z"><w:r><w:rPr><w:caps/>' +
