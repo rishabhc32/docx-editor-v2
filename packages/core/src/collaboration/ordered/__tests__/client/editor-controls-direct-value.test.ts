@@ -8,6 +8,10 @@
 // so a reject takes the control with its value, and an accept keeps both. The room once kept the
 // value as settled text in the control and the wrapped words hidden in it: a reject live left the
 // value as plain text, where the file, the fold and the editor alone left the words as they were.
+//
+// A party's suggested value in its own suggested wrap is part of the wrap's insertion too, as the
+// editor alone writes one insertion: the room once made it a second suggestion, a `w:ins` of the
+// same author inside the wrap's.
 
 import { afterEach, describe, expect, test } from 'bun:test';
 import { createDocxEditor } from '../../../../editor/docx-editor.ts';
@@ -100,6 +104,14 @@ const value =
     expect(surface(person).contentControls.setValue(id, text)).toBe(true);
   };
 
+/** Set the first control's value as a suggestion. */
+const suggestedValue =
+  (text: string): Act =>
+  (person) => {
+    const id = surface(person).layout().contentControls?.[0]?.id ?? '';
+    expect(surface(person).contentControls.setValue(id, text)).toBe(true);
+  };
+
 const undo: Act = (person) => surface(person).undo();
 const redo: Act = (person) => surface(person).redo();
 
@@ -123,14 +135,15 @@ function decideAll(person: Person, decision: Decision): void {
 function alone(
   file: Uint8Array,
   steps: readonly Act[],
-  decision: Decision
+  decision: Decision,
+  author: string
 ): { readonly edited: string; readonly decided: string } {
   const container = document.createElement('div');
   document.body.append(container);
   const editor = createDocxEditor({
     container,
     document: file,
-    author: 'Olive',
+    author,
     mode: 'suggesting',
     modules: [reviewTestModule()],
   });
@@ -192,19 +205,20 @@ async function foldedBytes(
 }
 
 /**
- * The organiser's steps in a room on `file`, decided live, on the save reopened and on the
- * room folded once and twice, each as the editor alone.
+ * The steps of the organiser, or of Ben, a party, in a room on `file`, decided live, on the save
+ * reopened and on the room folded once and twice, each as the editor alone.
  */
 async function check(
   label: string,
   file: Uint8Array,
   steps: readonly Act[],
-  decision: Decision
+  decision: Decision,
+  actor: 'olive' | 'ben' = 'olive'
 ): Promise<void> {
-  const expected = alone(file, steps, decision);
   const seated = await seats(file, 1);
+  const expected = alone(file, steps, decision, seated[actor].name);
   for (const act of steps) {
-    act(seated.olive);
+    act(seated[actor]);
     await settle();
   }
 
@@ -243,6 +257,16 @@ describe("the organiser's direct value in their own suggested wrap, as the edito
     for (const decision of ['accept', 'reject'] as const) {
       test(`${label}, ${decision}ed`, async () => {
         await check(label, LINE, [wrap(type), value(text)], decision);
+      });
+    }
+  }
+});
+
+describe("a party's suggested value in its own suggested wrap, as the editor alone", () => {
+  for (const [label, type, text] of WRAPS) {
+    for (const decision of ['accept', 'reject'] as const) {
+      test(`${label}, ${decision}ed`, async () => {
+        await check(label, LINE, [wrap(type), suggestedValue(text)], decision, 'ben');
       });
     }
   }

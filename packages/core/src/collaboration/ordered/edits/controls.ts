@@ -54,7 +54,9 @@ export function setControlValue(
     return null;
   }
 
-  const suggestion = suggestionFor(ctx);
+  // A value in a control the author's own pending suggestion put in is part of that suggestion,
+  // as the engine writes it inside the author's own insertion
+  const suggestion = suggestionFor(ctx, pendingOwn(ctx, open.by));
   strikeOldValue(ctx, open, suggestion.id);
   const close = closeOf(ctx.story, open, ctx.doc);
 
