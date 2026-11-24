@@ -1,13 +1,14 @@
 {
   "impact": "compatible",
   "fields": [],
-  "before": "A checkpoint kept only Word's change record of a pending table record. A table op records each cell it does not change and sets nothing there, and notes the cells the table showed; Word's record gives the whole properties and no cells. A reject of a column after a fold then kept the widths the column lent.",
-  "after": "The manifest's changeRecords section keeps, for each pending table, row or cell record that a change record holds, by the label on its container, the children it sets (merge), the cells it holds (tableCells) and the record it took (replaced). An open gives them back to the record the file loaded. A record that sets only some children writes a change record of copies, as a room's record does. A decision after a fold gives the same Word file as in the room.",
-  "reason": "Change messages, the change log and its kinds keep their meaning, and the Yjs document format does not change. The checkpoint format only adds a section: an older reader skips changeRecords and reads each record as Word's change record says, as before. Ordered rooms are not deployed yet, so no room needs a migration. Exported Word files do not change.",
+  "before": "A checkpoint kept only Word's change record of a pending table record. A table op records each cell it does not change and sets nothing there, and notes the cells the table showed; Word's record gives the whole properties and no cells. A reject of a column after a fold then kept the widths the column lent. The open counted its own restores of records on the suggestions they name, so a decision naming the version the room showed was refused as stale after a fold.",
+  "after": "The manifest's changeRecords section keeps, for each pending table, row or cell record that a change record holds, by the label on its container, the children it sets (merge), the cells it holds (tableCells) and the record it took (replaced). An open gives them back to the record the file loaded. A record that sets only some children writes a change record of copies, as a room's record does. Each listed suggestion keeps its version (version, left out for 0), and the open sets it after every open step. A decision after a fold gives the same Word file as in the room, and one naming the room's versions applies.",
+  "reason": "Change messages, the change log and its kinds keep their meaning, and the Yjs document format does not change. The checkpoint format only adds a section and a field: an older reader skips changeRecords and reads each record as Word's change record says, and ignores a suggestion's version, as before. Ordered rooms are not deployed yet, so no room needs a migration. Exported Word files do not change.",
   "tests": [
     "packages/core/src/collaboration/ordered/__tests__/checkpoint-fold-decide.test.ts",
     "packages/core/src/collaboration/ordered/__tests__/checkpoint-fold.test.ts",
-    "packages/core/src/collaboration/ordered/__tests__/checkpoint-golden.test.ts"
+    "packages/core/src/collaboration/ordered/__tests__/checkpoint-golden.test.ts",
+    "packages/core/src/collaboration/ordered/__tests__/checkpoint.test.ts"
   ],
   "changeset": "ordered-table-records-fold",
   "migration": null
