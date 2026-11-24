@@ -1,0 +1,13 @@
+{
+  "impact": "compatible",
+  "fields": [],
+  "before": "The suggestions-only policy refused a party's words in the part of a link or a content control that another person's pending Enter split off as nested, though Word marks only the new paragraph mark there and the host's check allows them.",
+  "after": "The edge that Enter puts in to split a link or a control is no insertion of the container, so a party's words in the part it split off are judged as words in the file's container and allowed.",
+  "reason": "Change messages, the change log and its kinds keep their meaning, and the Yjs document format does not change. The room refuses fewer changes; every copy applies the change log with the same code version, so the copies agree. Checkpoints do not change. Ordered rooms are not deployed yet, so no room needs a migration.",
+  "tests": [
+    "packages/core/src/collaboration/ordered/__tests__/room-policy-verdicts.test.ts",
+    "packages/core/src/collaboration/ordered/__tests__/client/editor-party-rules.test.ts"
+  ],
+  "changeset": "ordered-party-split-link",
+  "migration": null
+}
