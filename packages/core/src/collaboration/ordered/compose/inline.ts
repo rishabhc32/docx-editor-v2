@@ -251,7 +251,7 @@ export function composeInline(ctx: ComposeContext, buffer: readonly OrderedItem[
   const flushText = (build: RunBuild): void => {
     if (!build.text) return;
     const text = textElement(ctx, build.text, build.textShell, build.deleted, build.textHomed);
-    build.content.push(ctx.ofRoomText(text, build.item, build.textShell, build.textHomed));
+    build.content.push(ctx.ofRoomText(text, build.item, build.textShell));
     build.text = '';
   };
   const flush = (): void => {

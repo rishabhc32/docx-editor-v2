@@ -269,21 +269,16 @@ export class ComposeContext {
 
   /**
    * A text element of `unit`'s run, numbered for a checkpoint by the room's text element: the
-   * text form the room draws it from (`shell`) and whether that keeps its id (`homed`), which a
-   * fold does not keep, as each run read back is drawn in the paragraph it was read in.
+   * text form the room draws it from (`shell`). A piece a pending paragraph break moved out of its
+   * own paragraph takes the same number, so a reject draws the pieces as one element again.
    */
-  ofRoomText(
-    text: OoxmlNode,
-    unit: OrderedItem,
-    shell: OoxmlElement | undefined,
-    homed: boolean
-  ): OoxmlNode {
+  ofRoomText(text: OoxmlNode, unit: OrderedItem, shell: OoxmlElement | undefined): OoxmlNode {
     const runs = this.options.runs;
     if (runs === undefined || text.kind === 'textValue') {
       return text;
     }
 
-    const key = `text ${roomRunOf(unit)} ${shell?.id ?? ''} ${homed}`;
+    const key = `text ${roomRunOf(unit)} ${shell?.id ?? ''}`;
     const number = roomNumber(runs, key);
     return withAttributes(text, [...text.attributes, checkpointAttribute('run', number)]);
   }

@@ -8,6 +8,7 @@ import { describe, expect, test } from 'bun:test';
 import { strFromU8, unzipSync } from 'fflate';
 import { orderedCardSeen } from '../change/apply-decide.ts';
 import { openOrderedWordFile } from '../client/open.ts';
+import { orderedPackageBytes } from '../compose/package.ts';
 import type { OrderedDocument } from '../model/types.ts';
 import {
   addressOf,
@@ -118,6 +119,28 @@ describe("a checkpoint's room run numbers", () => {
       declared: true,
     });
     expect(numbers[0]).not.toBe(numbers[1]);
+  });
+
+  // The piece after the break is drawn in another paragraph than its own while the break is
+  // pending; a reject draws both pieces in one text element again, live and after a fold
+  test('a paragraph break inside a run, rejected: one text element', async () => {
+    const { document: doc, base } = openOrderedWordFile(docx(p(run('Cloud and serverless.'))), {
+      file: 1,
+    });
+    const blobs = mediaStore(base);
+    apply(doc, 'bob:1', { kind: 'split', ...EDIT, place: at(doc, 0, 6) }, 'Bob');
+    const once = await folded(doc, base, 2, blobs);
+    const twice = await folded(once.document, once.base, 3, blobs);
+    const texts = [{ document: doc, base }, once, twice].map((copy) => {
+      const suggestions = orderedCardSeen(copy.document, 'S:bob:1.1')!;
+      const decide = { kind: 'decide', cards: [{ suggestions }], status: 'rejected' } as const;
+      apply(copy.document, 'olive:1', decide, 'Olive');
+      const bytes = orderedPackageBytes(copy.document, copy.base, { blobs });
+      const xml = strFromU8(unzipSync(bytes)['word/document.xml']!);
+      return [...xml.matchAll(/<w:t(?: [^>]*)?>([^<]*)<\/w:t>/g)].map((m) => m[1]);
+    });
+    const one = ['Cloud and serverless.'];
+    expect(texts).toEqual([one, one, one]);
   });
 
   test('none, and no namespace, where no suggestion splits a run', async () => {
