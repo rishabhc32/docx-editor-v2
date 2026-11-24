@@ -703,18 +703,16 @@ export function findContentControl(root: OoxmlNode, nodeId: string): ContentCont
  *
  * A manual line break is left out unless `lineBreak` names the text to report it as.
  * With that option, column breaks report U+000E so callers cannot silently discard them.
- * `struck` reads `w:delText` too: the words a control holds, shown or struck.
  */
-export function contentControlTextOf(
-  control: OoxmlNode,
-  lineBreak?: string,
-  struck = false
-): string {
+export function contentControlTextOf(control: OoxmlNode, lineBreak?: string): string {
   const content = contentControlContentNodeOf(control);
-  return content ? inlineTextOf(content.children, lineBreak, struck) : '';
+  return content ? inlineTextOf(content.children, lineBreak) : '';
 }
 
-/** The plain text inline nodes hold, read as {@link contentControlTextOf} reads a control's. */
+/**
+ * The plain text inline nodes hold, read as {@link contentControlTextOf} reads a control's.
+ * `struck` reads `w:delText` too: the words they hold, shown or struck.
+ */
 export function inlineTextOf(
   nodes: readonly OoxmlNode[],
   lineBreak?: string,

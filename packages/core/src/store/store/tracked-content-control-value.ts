@@ -10,6 +10,7 @@ import {
   contentControlPropertiesOf as contentControlSummaryOf,
   contentControlTextOf,
   contentControlsIn,
+  inlineTextOf,
   type ContentControlProperties,
 } from '../package/content-control-nodes.ts';
 import { parseContentControlDate, parseIsoDate } from './content-control-dates.ts';
@@ -517,7 +518,8 @@ function recordEdits(before: OoxmlElement, after: OoxmlElement): RecordEdits {
   // that showed, none struck, and did not state the record, which is the file's
   const shown = contentControlTextOf(before);
   const typedOver =
-    shown === contentControlTextOf(before, undefined, true) && !recordStatesText(before, shown);
+    shown === inlineTextOf(contentControlContentOf(before)?.children ?? [], undefined, true) &&
+    !recordStatesText(before, shown);
   if (isShowingPlaceholder(after) && typedOver) {
     return {};
   }
