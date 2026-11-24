@@ -1,0 +1,14 @@
+{
+  "impact": "compatible",
+  "fields": [],
+  "before": "A party's suggested content control value copied another person's struck words, with their format records, into the new value, which the editor alone never writes; after a fold the copied record was that person's, and their format joined the party's card. The organiser's words typed in a party's new table cell, and a footnote the organiser made in a party's new row or cell, had a settled record of their own that a fold does not keep, so a reader of the labels found them in the party's card only after a fold.",
+  "after": "A content control value inserts only the words the value shows, as the editor alone does. The organiser's words in a party's new cell are part of the cell, as in a new row, note or text box, and a direct footnote's reference goes where a direct picture or field goes, so its labels read the same live and after one and two folds.",
+  "reason": "Change messages, the change log and its kinds keep their meaning, and the Yjs document format does not change. Applying a control value or a direct note or typing in a new cell gives other items, but every copy applies the change log with the same code version, so the copies agree. Checkpoints keep their format. Ordered rooms are not deployed yet, so no room needs a migration.",
+  "tests": [
+    "packages/core/src/collaboration/ordered/__tests__/client/editor-controls-value-fold.test.ts",
+    "packages/core/src/collaboration/ordered/__tests__/checkpoint-fold.test.ts",
+    "packages/core/src/collaboration/ordered/__tests__/client/editor-direct-undo-inside.test.ts"
+  ],
+  "changeset": "ordered-fold-cards-values-notes",
+  "migration": null
+}
