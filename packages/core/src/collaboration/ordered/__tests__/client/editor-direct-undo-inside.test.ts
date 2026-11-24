@@ -2,8 +2,11 @@
 // 9.12): a format inside the party's insertion, a property of the party's new paragraph, the
 // party's new row deleted. A direct edit lays its own settled record on those units, so its undo
 // turns that record off exactly and leaves the party's suggestion as it was; a decision on the
-// party's suggestion gives one result whether it comes before or after the undo. Real editors,
-// one room; after every step both copies equal the room and both screens show their lists.
+// party's suggestion gives one result whether it comes before or after the undo. Words typed in
+// the party's new cell are part of it, as in a new row: they once had a record of their own in the
+// room, which a fold does not keep, so a reader of the labels found them in the party's cell only
+// after a fold. Real editors, one room; after every step both copies equal the room and both
+// screens show their lists.
 
 import { afterEach, describe, expect, test } from 'bun:test';
 import type { EditorCommand } from '../../../../contracts/editor.ts';
@@ -11,6 +14,7 @@ import { planTableCommand } from '../../../../editor/table-command-plan.ts';
 import type { OrderedLocalRoom } from '../../client/local-room.ts';
 import { docx, p, t } from '../word-fixtures.ts';
 import {
+  BODY,
   caretAt,
   closeAll,
   editorTexts,
@@ -97,6 +101,14 @@ const indexOf = (person: Person, text: string): number => {
   return index;
 };
 
+/** The authors of the suggestions that hold the room's units of `text`, by their own label. */
+const holdersOf = (room: OrderedLocalRoom, text: string): string[] => {
+  const doc = room.room.document;
+  return [...(doc.stories.get(BODY)?.tree.items() ?? [])]
+    .filter((item) => item.text !== '' && text.includes(item.text))
+    .map((item) => doc.suggestions.get(item.by ?? '')?.attribution.author ?? 'none');
+};
+
 /** Ana types "XYZ" at the start of the second paragraph: her pending insertion. */
 async function anaTypes(ana: Person): Promise<void> {
   caretAt(ana, 1, 0);
@@ -160,6 +172,35 @@ describe("the organiser's undo of a direct edit inside a party's suggestion", ()
     converged(room, org, ana);
     await press(org, (s) => s.redo());
     expect(rows(ana)).toBe(2);
+    converged(room, org, ana);
+  });
+
+  test("words typed in the party's new cell are part of it, and go with it", async () => {
+    const { room, org, ana } = await seats();
+    caretAt(ana, indexOf(ana, 'Fee'), 0);
+    expect(tableCommand(ana, { type: 'insertColumn', where: 'right' }).ok).toBe(true);
+    await settle();
+    const before = editorXml(org);
+
+    // The organiser's caret in the party's new cell, right of "Fee"
+    caretAt(org, indexOf(org, 'Fee') + 1, 0);
+    await press(org, (s) => s.insertPlainText('XY'));
+    expect(holdersOf(room, 'XY')).toEqual(['Ana']);
+    converged(room, org, ana);
+    await press(org, (s) => s.undo());
+    expect(joined(editorXml(org))).toBe(joined(before));
+    converged(room, org, ana);
+    await press(org, (s) => s.redo());
+    expect(holdersOf(room, 'XY')).toEqual(['Ana']);
+    converged(room, org, ana);
+
+    // A reject of the party's column takes the words with it
+    const column = [...room.room.document.suggestions.values()].find(
+      (s) => s.attribution.author === 'Ana'
+    );
+    expect(org.handle.session.requestDecision(column?.id ?? '', 'rejected')).not.toBeNull();
+    await settle();
+    expect(editorTexts(ana)).not.toContain('XY');
     converged(room, org, ana);
   });
 

@@ -626,17 +626,17 @@ describe('a fold of a move with words inside it', () => {
   });
 });
 
-describe('who typed inside a new row or note', () => {
-  // The typer of each unit Olive typed (`XY`) in a part
-  const typersOf = (doc: OrderedDocument, part: string) =>
+describe('who typed inside a new row, cell or note', () => {
+  // The units Olive typed (`XY`) in a part
+  const typed = (doc: OrderedDocument, part: string) =>
     [...(doc.stories.get(part)?.tree.items() ?? [])].flatMap((item) =>
-      [...item.text].flatMap((ch, k) =>
-        ch === 'X' || ch === 'Y' ? [orderedUnitTyper(doc, item, item.offset + k)] : []
-      )
+      [...item.text].flatMap((ch, k) => (ch === 'X' || ch === 'Y' ? [{ item, k }] : []))
     );
 
-  // Ana's new row or note, and Olive's direct typing in it: the row's or the note's mark covers
-  // the words, and the read names Olive in the room and after each fold
+  // Ana's new row, cell or note, and Olive's direct typing in it: the container covers the
+  // words, as Word writes them with no mark of their own, so a reader of the labels finds them
+  // in Ana's insertion (their own label, else the new row or cell around them) and the read names
+  // Olive who typed them, in the room and after each fold
   for (const [label, part, insert] of [
     [
       'a new row',
@@ -651,6 +651,21 @@ describe('who typed inside a new row or note', () => {
 
         // The new row's first cell
         return at(doc, 6, 0);
+      },
+    ],
+    [
+      'a new cell',
+      BODY,
+      (doc: OrderedDocument) => {
+        apply(doc, 'ana:1', {
+          kind: 'insert-column',
+          ...EDIT,
+          cell: addressOf(opens(doc, 'tc')[0]!),
+          where: 'right',
+        });
+
+        // The new column's first cell, after A1
+        return at(doc, 5, 0);
       },
     ],
     [
@@ -679,7 +694,13 @@ describe('who typed inside a new row or note', () => {
       const twice = await folded(once.document, once.base, 3, blobs);
       const copies = [doc, once.document, twice.document];
       const olive = { namespace: 'olive', person: testPerson('Olive') };
-      expect(copies.map((copy) => typersOf(copy, part))).toEqual(copies.map(() => [olive, olive]));
+      const reads = (copy: OrderedDocument) =>
+        typed(copy, part).map(({ item, k }) => ({
+          holder: item.by ?? item.within.by.at(-1) ?? null,
+          typer: orderedUnitTyper(copy, item, item.offset + k),
+        }));
+      const ana = { holder: 'S:ana:1.1', typer: olive };
+      expect(copies.map(reads)).toEqual(copies.map(() => [ana, ana]));
       await checkFold(doc, base, blobs, label);
     });
   }

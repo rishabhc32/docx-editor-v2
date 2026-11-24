@@ -4,6 +4,7 @@
 
 import type { OrderedViewChar, OrderedViewParagraph } from '../compose/context.ts';
 import {
+  innermostNewContainer,
   insertedPending,
   isPending,
   itemAt,
@@ -36,17 +37,17 @@ function pendingInsertion(ctx: Ctx, char: OrderedViewChar | undefined): OrderedS
 }
 
 /**
- * The pending new row, note or text box a paragraph sits in, if any: a new note's or text box's
- * paragraph mark carries its insertion unmarked (`quiet`), a new row's paragraphs sit in its row.
+ * The pending new row, cell, note or text box a paragraph sits in, if any: a new note's or text
+ * box's paragraph mark carries its insertion unmarked (`quiet`), a new row's or cell's paragraphs
+ * sit in it (`innermostNewContainer`).
  */
 function pendingContainerOf(ctx: Ctx, p: OrderedViewParagraph): OrderedSuggestion | null {
-  const row = [...p.blocks].reverse().find((block) => block.token === 'tr');
-  const container = p.mark.quiet ? p.mark : row;
-  if (!container || container.by === null || !insertedPending(ctx.doc, container)) {
+  const container = p.mark.quiet ? p.mark.by : innermostNewContainer(ctx.doc, p.mark);
+  if (!isPending(ctx.doc, container)) {
     return null;
   }
 
-  return ctx.doc.suggestions.get(container.by) ?? null;
+  return ctx.doc.suggestions.get(container) ?? null;
 }
 
 /** Type text (or one object, `pieces`) directly at a view offset. */
@@ -70,8 +71,8 @@ export function directInsert(
     return;
   }
 
-  // In a paragraph of a pending row, note or text box: the text is part of it (no marker of its
-  // own), as Word writes it there and a load reads it back
+  // In a paragraph of a pending row, cell, note or text box: the text is part of it (no marker of
+  // its own), as Word writes it there and a load reads it back
   const container = pendingContainerOf(ctx, p);
   if (
     container &&
