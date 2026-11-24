@@ -347,8 +347,10 @@ export function addStyleElement(
   element: OoxmlElement
 ): OrderedStyleResource {
   const resource = styleElementResource(ctx.ids.resource(), suggestion, element);
-  if (resource === null)
+  if (resource === null) {
     throw new OrderedRefusal('invalid-edit', 'a pasted style needs an id and a known type');
+  }
+
   addOrderedResource(ctx.doc, resource);
   return resource;
 }
@@ -362,8 +364,10 @@ export function styleElementResource(
   const attribute = (name: string) => element.attributes.find((a) => a.localName === name)?.value;
   const styleId = attribute('styleId');
   const type = attribute('type') ?? 'paragraph';
-  if (styleId === undefined || (type !== 'paragraph' && type !== 'character' && type !== 'table'))
+  if (styleId === undefined || (type !== 'paragraph' && type !== 'character' && type !== 'table')) {
     return null;
+  }
+
   const basedOn = childValue(element, 'basedOn');
   const next = childValue(element, 'next');
   const link = childValue(element, 'link');
