@@ -1,0 +1,10 @@
+{
+  "impact": "compatible",
+  "fields": [],
+  "before": "Where a fold kept a decided record of a table row or cell (beside a pending column's widths), it kept it only on the cells that hold the pending widths. The reopened room read the decided record as a reject over the row's other cells, which hold no record, and reset them to no properties.",
+  "after": "Where a fold keeps a decided record of a row or a cell, the checkpoint keeps every record of that row and each of its cells, so the reopened room resets the same cells the live room does.",
+  "reason": "The checkpoint manifest's format and fields do not change: it lists more containers in its existing untracked list, which every reader of this format reads. Change messages, the change log and the Yjs document format do not change. An ordered room admits only clients of its own code version.",
+  "tests": ["packages/core/src/collaboration/ordered/__tests__/checkpoint-fold-decide.test.ts"],
+  "changeset": "ordered-fold-row-records",
+  "migration": null
+}

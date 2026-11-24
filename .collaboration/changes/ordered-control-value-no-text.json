@@ -1,0 +1,12 @@
+{
+  "impact": "compatible",
+  "fields": [],
+  "before": "In an ordered room, a decision on content in a list or date control that reads as no text (a field's code, a field with no result) rewrote the value the control stores from its text. The editor alone and a fold kept the stored value, so the room's file and the file after a fold differed.",
+  "after": "A decision reaches a control's value record only through units that read as the control's text, as the editor alone reads it (contentControlTextOf). The room, compose after any decision and a fold write the same stored value.",
+  "reason": "Change messages, the change log and its kinds keep their meaning, and the Yjs document format does not change. Only the composed Word file changes, and it now equals the editor alone and the file a checkpoint reads back. An ordered room admits only clients of its own code version, so old and new clients never apply one log together.",
+  "tests": [
+    "packages/core/src/collaboration/ordered/__tests__/client/editor-controls-value-fold.test.ts"
+  ],
+  "changeset": "ordered-control-value-no-text",
+  "migration": null
+}
