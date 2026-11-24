@@ -45,7 +45,10 @@ const NOTE_REFERENCE =
   '<w:r><w:rPr><w:rStyle w:val="FootnoteReference"/></w:rPr><w:footnoteReference w:id="1"/></w:r>';
 const NOTED = docx(p(t('The fee') + NOTE_REFERENCE + t(' is due.')), MATRIX_EXTRAS);
 const textBox = MATRIX_ITEMS.find((item) => item.key === 'textbox');
-if (!textBox) throw new Error('no text box item');
+if (!textBox) {
+  throw new Error('no text box item');
+}
+
 const BOXED = docx(bodyOf(textBox), MATRIX_EXTRAS);
 const HEADED = docx(
   p(t('The fee is 100 USD.')) +
@@ -69,7 +72,10 @@ function caretIn(person: Person, paragraphId: string, offset: number): void {
 function caretAtText(person: Person, start: string, offset?: number): void {
   const texts = editorTexts(person);
   const index = texts.findIndex((text) => text.startsWith(start));
-  if (index < 0) throw new Error(`no paragraph ${start}`);
+  if (index < 0) {
+    throw new Error(`no paragraph ${start}`);
+  }
+
   caretAt(person, index, offset ?? texts[index]!.length);
 }
 
@@ -113,11 +119,17 @@ const SHAPES: readonly Shape[] = [
     file: BOXED,
     place: (person) => {
       const match = person.editor.findMatches('Box text')[0];
-      if (!match?.scope) throw new Error('no text box match');
+      if (!match?.scope) {
+        throw new Error('no text box match');
+      }
+
       expect(surface(person).setActiveScope(match.scope)).toBe(true);
       const [story] = textboxStoriesInPart(surface(person).session.part());
       const paragraph = story ? storyParagraphs(story.root)[0] : undefined;
-      if (!paragraph) throw new Error('no text box paragraph');
+      if (!paragraph) {
+        throw new Error('no text box paragraph');
+      }
+
       caretIn(person, paragraph.id, 'Box text'.length);
     },
   },
@@ -131,7 +143,10 @@ const SHAPES: readonly Shape[] = [
         rId: 'rIdHeader1',
       });
       const first = ids[0];
-      if (first === undefined) throw new Error('no header paragraph');
+      if (first === undefined) {
+        throw new Error('no header paragraph');
+      }
+
       caretIn(person, first, 'Header text.'.length);
     },
   },
@@ -145,6 +160,7 @@ for (const shape of SHAPES) {
       const ana = await join(room, 'Ana', options);
       const org = await join(room, 'Org', { ...options, mode: 'edit', login: ORGANISER });
       const person = who === 'party' ? ana : org;
+
       // As a page placing its review cards does
       person.editor.on('change', () => {
         person.editor.getPageGeometry();
