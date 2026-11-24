@@ -232,6 +232,7 @@ describe('the policy and today’s check', () => {
   // the words sit beside his control. In a control, a link's start is in the control
   test('at the edges of another person’s new control and link, the words are judged where they land', () => {
     const { doc, send, at } = setup();
+
     // "fee" struck, a copy of it in Ben's new control at 7, and "ee" of the copy in his new link
     const wrap = {
       kind: 'wrap-control',
@@ -268,6 +269,7 @@ describe('the policy and today’s check', () => {
       )
     );
     const { doc, send, at } = setup(loadOrderedPackage(packageOf(file)));
+
     // Ben's "abc" in the control, after "Ac", and his link over them
     expect(send(BEN, { kind: 'insert', ...EDIT, place: at(0, 9), text: 'abc' })).toBe('accepted');
     const link = {
