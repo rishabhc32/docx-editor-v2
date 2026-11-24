@@ -706,7 +706,11 @@ export function findContentControl(root: OoxmlNode, nodeId: string): ContentCont
  */
 export function contentControlTextOf(control: OoxmlNode, lineBreak?: string): string {
   const content = contentControlContentNodeOf(control);
-  if (!content) return '';
+  return content ? inlineTextOf(content.children, lineBreak) : '';
+}
+
+/** The plain text inline nodes hold, read as {@link contentControlTextOf} reads a control's. */
+export function inlineTextOf(nodes: readonly OoxmlNode[], lineBreak?: string): string {
   let text = '';
   let visited = 0;
   const walk = (node: OoxmlNode, depth: number): void => {
@@ -738,7 +742,7 @@ export function contentControlTextOf(control: OoxmlNode, lineBreak?: string): st
     }
     for (const child of node.children) walk(child, depth + 1);
   };
-  for (const child of content.children) walk(child, 0);
+  for (const node of nodes) walk(node, 0);
   return text;
 }
 

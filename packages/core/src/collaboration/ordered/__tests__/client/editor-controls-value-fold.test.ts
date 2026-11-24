@@ -4,7 +4,9 @@
 // after one and two folds. A control's own record of its value (`w:lastValue`, `w:fullDate`,
 // `w14:checked`) is what the editor alone writes. The room once wrote a combo box's typed text
 // as its last value while the typing was pending: a fold made that value the file's own, so a
-// reject after the fold kept it where the same reject live left none.
+// reject after the fold kept it where the same reject live left none. A reject of a page field in
+// a combo box's typed value once wrote that text as the value live, though a field's code reads as
+// no text: the editor alone and a fold keep the value.
 
 import { afterEach, describe, expect, test } from 'bun:test';
 import { createDocxEditor } from '../../../../editor/docx-editor.ts';
@@ -64,6 +66,15 @@ const pick = (value: string) => (person: Person) => {
   expect(surface(person).contentControls.setValue(id, value)).toBe(true);
 };
 
+/** A page field after "Term: Net", through the editing API's lane: its code is no text. */
+const pageField = (person: Person) => {
+  const result = surface(person).applyAutomationOps(() => {
+    const paragraphId = surface(person).session.paragraphIds()[0] ?? '';
+    return [{ op: 'insertPageField', paragraphId, offset: 9, field: 'PAGE' }];
+  });
+  expect(result.committed).toBe(true);
+};
+
 /** Each case: its label, the Word file, the caret in the first paragraph, and the party's edit. */
 const CASES = [
   [
@@ -108,6 +119,12 @@ const CASES = [
     line(`<w:comboBox w:lastValue="30">${ITEMS}</w:comboBox>`, t('Net 30')),
     [9, 9],
     typing('-day'),
+  ],
+  [
+    "a page field in a combo box's typed value",
+    line(`<w:comboBox w:lastValue="60">${ITEMS}</w:comboBox>`, t('Net 60 days')),
+    [9, 9],
+    pageField,
   ],
   [
     "typing in the middle of a date picker's date",

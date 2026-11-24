@@ -1,6 +1,7 @@
 // What one compose knows and keeps: the document, the story, the options, the ids it placed,
 // and how each item reads in this drawing (gone, struck, inserted).
 
+import { inlineTextOf } from '../../../store/package/content-control-nodes.ts';
 import type { OoxmlAttribute, OoxmlElement, OoxmlNode } from '../../../store/package/ooxml-tree.ts';
 import { revisionAttributes } from '../../../store/store/tree-op-tracked.ts';
 import { cloneWithNewIds } from '../../../store/store/tree-op-nodes.ts';
@@ -401,7 +402,18 @@ export class ComposeContext {
     if (item.by !== null && this.revertedDirect(item.by)) return false;
     const before = !item.dels.some((deleter) => !this.revertedDirect(deleter));
     const now = !this.gone(item) && this.struckBy(item) === null;
-    return before !== now;
+    if (before === now) {
+      return false;
+    }
+
+    // A field's code, a field with no result or a picture reads as no text, as the engine reads it
+    if (item.kind === 'text') {
+      return item.instr !== true;
+    }
+
+    const nodes =
+      item.pieces?.map((piece) => piece.node) ?? (item.node === null ? [] : [item.node]);
+    return inlineTextOf(nodes) !== '';
   }
 
   /** A direct edit's suggestion its author took back. */
