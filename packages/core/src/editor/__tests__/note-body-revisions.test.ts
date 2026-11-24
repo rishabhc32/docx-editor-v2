@@ -408,3 +408,31 @@ describe("Word's own new note", () => {
     });
   });
 });
+
+describe('a tracked move of words that hold a note reference', () => {
+  // As a room writes it: both halves name note 1, whose body is not marked
+  const STAMP = 'w:author="Olive" w:date="2026-11-24T12:00:00Z"';
+  const moved = `${reference(1)}<w:r><w:t xml:space="preserve"> one</w:t></w:r>`;
+  const movedBody =
+    `<w:p><w:r><w:t>Alpha</w:t></w:r><w:moveFromRangeStart w:id="11" ${STAMP} w:name="move1"/>` +
+    `<w:moveFrom w:id="12" ${STAMP}>${moved}</w:moveFrom><w:moveFromRangeEnd w:id="11"/></w:p>` +
+    `<w:p><w:r><w:t>Beta</w:t></w:r>${reference(2)}` +
+    `<w:moveToRangeStart w:id="13" ${STAMP} w:name="move1"/>` +
+    `<w:moveTo w:id="14" ${STAMP}>${moved}</w:moveTo><w:moveToRangeEnd w:id="13"/></w:p>`;
+
+  test('a reject keeps the note with the source; an accept keeps it with the copy', async () => {
+    for (const action of ['accept', 'reject'] as const) {
+      await withEditor(docx(movedBody), async (editor) => {
+        const result = editor.exec({ type: 'resolveAllReviewChanges', action, scope: 'document' });
+        expect(result.ok).toBe(true);
+        const after = await saved(editor);
+        // The note's one reference: in the first paragraph, or after the second's own
+        expect(ids(after.document, 'footnoteReference')).toEqual(
+          action === 'reject' ? ['1', '2'] : ['2', '1']
+        );
+        expect(noteNamed(after.footnotes, 1)).toContain('First note');
+        expect(noteNamed(after.footnotes, 2)).toContain('Second note');
+      });
+    }
+  });
+});
