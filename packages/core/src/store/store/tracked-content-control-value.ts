@@ -513,8 +513,12 @@ function recordEdits(before: OoxmlElement, after: OoxmlElement): RecordEdits {
     return {};
   }
 
-  // A prompt shown again clears the record its words stated, not one the file held beside it
-  if (isShowingPlaceholder(after) && !recordStatesText(before, contentControlTextOf(before))) {
+  // A prompt shown again clears the record, but for a reject of typing over the prompt: words
+  // that showed, none struck, and did not state the record, which is the file's
+  const shown = contentControlTextOf(before);
+  const typedOver =
+    shown === contentControlTextOf(before, undefined, true) && !recordStatesText(before, shown);
+  if (isShowingPlaceholder(after) && typedOver) {
     return {};
   }
 
@@ -573,8 +577,8 @@ function statedValue(summary: ContentControlProperties, text: string): string | 
 
 /**
  * Whether a list or date control's value record states what `text` shows: the words that wrote
- * it. A decision that takes those words away and shows the prompt again clears the record; a
- * record the file held beside its prompt, which typing over the prompt left, stays.
+ * it. A reject of typing over a prompt keeps a record the words do not state, as the file held
+ * it beside its prompt; a decision that takes other words away clears it, as Word reads it back.
  */
 export function recordStatesText(control: OoxmlElement, text: string): boolean {
   const summary = contentControlSummaryOf(control);

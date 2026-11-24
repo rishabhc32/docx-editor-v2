@@ -387,9 +387,9 @@ export function controlScratch(
 /**
  * The control as the engine's emptying edit or decision leaves it, drawn from its paragraph as
  * compose draws it, or null when it shows no prompt then. A decision reads its value record back
- * from its prompt, as the engine does: a list or a date showing its prompt holds no value, when
- * the words that went stated it. A record they do not state (the file's, beside its prompt) and
- * a direct edit leave the record as it was.
+ * from its prompt, as the engine does: a list or a date showing its prompt holds no value. A
+ * reject of typing over the prompt that did not state the record (the file's, beside its prompt)
+ * and a direct edit leave the record as it was.
  */
 function promptedControl(
   doc: OrderedDocument,
@@ -413,13 +413,14 @@ function promptedControl(
     return null;
   }
 
-  // A field's code is no text of the control, as the engine reads it
+  // A reject of typing over the prompt: no word that went was struck, and they did not state the
+  // record. A field's code is no text of the control, as the engine reads it
   const words = emptied.went.filter((unit) => unit.kind === 'text' && unit.instr !== true);
-  const went = words.map((unit) => unit.text).join('');
-  const read =
-    emptied.decided && recordStatesText(shell, went)
-      ? withControlRecords(prompted, [shell.id])
-      : prompted;
+  const struck = emptied.went.some((unit) =>
+    unit.dels.some((id) => statusOf(doc, id) !== 'rejected')
+  );
+  const typedOver = !struck && !recordStatesText(shell, words.map((unit) => unit.text).join(''));
+  const read = emptied.decided && !typedOver ? withControlRecords(prompted, [shell.id]) : prompted;
   return findContentControl(read, shell.id) ?? null;
 }
 
