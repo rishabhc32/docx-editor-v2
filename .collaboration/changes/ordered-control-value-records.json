@@ -1,0 +1,13 @@
+{
+  "impact": "no-impact",
+  "fields": [],
+  "before": "In an ordered room, typing over a combo box's prompt wrote the typed text as the box's w:lastValue while it was pending, which the editor alone does not write; a fold made that value the file's own, so a reject after the fold kept it. A decision that showed a list's or a date's prompt again kept the loaded control's value record. A combo box pick showed the item's value. A decided format on a prompt that typing hid stayed in the glossary as a pending record, which a fold read as a suggestion with no person and no card.",
+  "after": "The room writes a control's value record as the editor alone does: none for typing over a prompt, the item's for a pick, and none once a decision shows the prompt again. A prompt record in the glossary follows its suggestion's decision, so a fold reads no decided record as a suggestion.",
+  "reason": "Only what compose and the settle after a decision write in the Word file and the checkpoint changes. Change messages, the change log and the checkpoint manifest keep their fields; a reader skips nothing new, and a checkpoint written before reads as before.",
+  "tests": [
+    "packages/core/src/collaboration/ordered/__tests__/client/editor-controls-value-fold.test.ts",
+    "packages/core/src/collaboration/ordered/__tests__/prompt-records-fold.test.ts"
+  ],
+  "changeset": "ordered-control-value-records",
+  "migration": null
+}
