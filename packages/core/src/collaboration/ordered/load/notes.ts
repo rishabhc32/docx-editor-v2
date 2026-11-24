@@ -68,16 +68,18 @@ function* notesWithOwner(
 }
 
 /**
- * A note whose citing reference a suggestion inserts is a new note: give its own content the
- * suggestion that inserted its reference. Word draws the new note's runs in a `w:ins` of their own
- * under the reference's author and date, and its paragraph marks plain (an older file drew the
+ * A note whose every citing reference a suggestion inserts is a new note: give its own content
+ * the suggestion that inserted its reference. Word draws the new note's runs in a `w:ins` of their
+ * own under the reference's author and date, and its paragraph marks plain (an older file drew the
  * whole note plain), so the notes part alone cannot say so. The plain items take the suggestion
  * (unmarked, as the note's paragraph marks are), and so do the items of an insertion with the
  * reference's author and date (the note's runs, joined with their `w:id`s). Text typed in it at
- * another time keeps its own label.
+ * another time keeps its own label. A note that a reference of the file's own text cites is no
+ * new note, though a suggestion inserts another reference to it: a move's copy of a reference
+ * names the note its source names (null in `cited`).
  */
 export function linkNewNotes(doc: OrderedDocument): void {
-  const cited = new Map<string, string>();
+  const cited = new Map<string, string | null>();
   for (const story of doc.stories.values()) {
     if (isNotesStory(story)) {
       continue;
@@ -85,7 +87,7 @@ export function linkNewNotes(doc: OrderedDocument): void {
 
     for (const item of story.tree.items()) {
       const key = referenceKeyOf(item);
-      if (key !== undefined && item.by !== null) {
+      if (key !== undefined && cited.get(key) !== null) {
         cited.set(key, item.by);
       }
     }
