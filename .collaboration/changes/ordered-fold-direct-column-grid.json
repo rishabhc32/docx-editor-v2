@@ -1,0 +1,10 @@
+{
+  "impact": "compatible",
+  "fields": [],
+  "before": "A direct change made over a pending table, row or cell record (the organiser's column over a party's row height) shows in Word's change record and in no room record after a fold. The open restored the pending record as one that sets nothing, so the reopened room wrote the table's grid from before the column.",
+  "after": "An open gives a restored record that holds the file's change record the children where the file's properties differ from the container's own, so the reopened room writes the grid the live room writes, and a decision gives or takes the direct change with the record, as the live room does.",
+  "reason": "The checkpoint manifest's format and fields do not change; an open reads its existing records with one more rule. Change messages, the change log and the Yjs document format do not change. An ordered room admits only clients of its own code version.",
+  "tests": ["packages/core/src/collaboration/ordered/__tests__/checkpoint-fold-decide.test.ts"],
+  "changeset": "ordered-fold-direct-column-grid",
+  "migration": null
+}
