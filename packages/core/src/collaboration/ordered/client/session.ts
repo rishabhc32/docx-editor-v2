@@ -722,6 +722,10 @@ export class OrderedSessionBase implements EditorCollaborationSession {
     }
 
     this.#dirty.clear();
+
+    // Where the selection goes is known from the list before the editor takes its version: a
+    // host read during the apply lays the pages out, and that layout must find the move
+    this.#carry.carry(doc, hold);
     let result = this.#apply(port, pkg);
     if (!result.ok) {
       pkg = publisher.full();
@@ -729,13 +733,15 @@ export class OrderedSessionBase implements EditorCollaborationSession {
     }
 
     if (!result.ok) {
+      this.#carry.carry(doc, null);
       this.setStatus('error', 'remote-apply-failed', result.reason.slice(0, 200));
       return;
     }
 
-    if (this.statusState.snapshot().reason?.code === 'remote-apply-failed')
+    if (this.statusState.snapshot().reason?.code === 'remote-apply-failed') {
       this.setStatus(this.reconnecting ? 'disconnected' : 'ready');
-    this.#carry.carry(doc, hold);
+    }
+
     this.notifySelections();
   }
 

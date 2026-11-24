@@ -289,7 +289,7 @@ export class OrderedSelectionCarry {
       : null;
   }
 
-  /** After a publish: the held places as the editor's points now. */
+  /** For a publish: the held places as the editor's points in the list's version; none for null. */
   carry(doc: OrderedDocument, held: HeldSelection | null): void {
     this.#move = null;
     if (!held) return;
