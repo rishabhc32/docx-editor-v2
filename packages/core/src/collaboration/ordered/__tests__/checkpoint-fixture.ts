@@ -183,3 +183,60 @@ export const STYLE_RECORDS: CheckpointRoom = {
     apply(doc, 'olive:1', { kind: 'decide', cards, status: 'accepted' }, 'Olive');
   },
 };
+
+/** A suggestion inside a run: the checkpoint numbers the pieces of the room's run (`oc:run`). */
+export const SPLIT_RUN: CheckpointRoom = {
+  name: 'split room run',
+  source: docx(
+    p('<w:r w:rsidR="00A96A35"><w:rPr><w:sz w:val="24"/></w:rPr><w:t>Cloud.</w:t></w:r>')
+  ),
+  edit: (doc) => {
+    apply(doc, 'ana:1', { kind: 'insert', ...EDIT, place: at(doc, 0, 3), text: 'u' });
+  },
+};
+
+/**
+ * Whole paragraphs pasted with their list and style: the checkpoint gives each back to the paste
+ * (sections `lists` and `styles`).
+ */
+export const PASTED_LIST: CheckpointRoom = {
+  name: 'pasted list and style',
+  source: docx(p(t('Cloud.'))),
+  edit: (doc) => {
+    const pPr = {
+      e: 'w:pPr',
+      c: [
+        { e: 'w:pStyle', a: { 'w:val': 'PastedClause' } },
+        {
+          e: 'w:numPr',
+          c: [
+            { e: 'w:ilvl', a: { 'w:val': '0' } },
+            { e: 'w:numId', a: { 'w:val': '#0' } },
+          ],
+        },
+      ],
+    };
+    const level = {
+      e: 'w:lvl',
+      a: { 'w:ilvl': '0' },
+      c: [
+        { e: 'w:numFmt', a: { 'w:val': 'lowerLetter' } },
+        { e: 'w:lvlText', a: { 'w:val': '(%1)' } },
+      ],
+    };
+    const style = {
+      e: 'w:style',
+      a: { 'w:type': 'paragraph', 'w:styleId': 'PastedClause' },
+      c: [{ e: 'w:name', a: { 'w:val': 'Pasted Clause' } }],
+    };
+    apply(doc, 'ana:1', {
+      kind: 'insert-fragment',
+      ...EDIT,
+      place: at(doc, 0, 0),
+      blocks: [{ e: 'w:p', c: [pPr, { e: 'w:r', c: [{ e: 'w:t', c: ['Pasted.'] }] }] }],
+      whole: true,
+      lists: [{ abstract: { e: 'w:abstractNum', c: [level] } }],
+      styles: [style],
+    });
+  },
+};
