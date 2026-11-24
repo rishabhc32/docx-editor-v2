@@ -36,9 +36,15 @@ const FILE = docx(
 /** Each section of a save: its properties, then the author of its change record, if any. */
 function sectionsOf(bytes: Uint8Array): string[][] {
   const read = readOoxmlPackage(bytes, {});
-  if (!read.ok) throw new Error(read.reason);
+  if (!read.ok) {
+    throw new Error(read.reason);
+  }
+
   const main = read.package.parts.get(read.package.mainDocumentPart);
-  if (!main) throw new Error('no main part');
+  if (!main) {
+    throw new Error('no main part');
+  }
+
   return collectSectionPropertyNodes(main.root).map((section) =>
     (section?.children ?? []).flatMap((child) => {
       if (child.kind === 'textValue') {
@@ -57,7 +63,10 @@ function sectionsOf(bytes: Uint8Array): string[][] {
 /** Decide the first revision card, as the organiser does. */
 function decide(editor: Editor, decision: 'accept' | 'reject'): void {
   const [card] = editor.getReviewItems().filter((item) => item.kind === 'revision');
-  if (!card) throw new Error('no card');
+  if (!card) {
+    throw new Error('no card');
+  }
+
   const done =
     decision === 'accept' ? editor.acceptReviewItem(card.key) : editor.rejectReviewItem(card.key);
   expect(done.ok).toBe(true);
@@ -99,7 +108,10 @@ async function alone(step: (editor: Editor) => void): Promise<Uint8Array> {
     editor.surface?.setAuthor('Olive');
     editor.surface?.setEditingMode('edit');
     const [first] = editor.surface?.session.paragraphIds() ?? [];
-    if (first === undefined) throw new Error('no paragraph');
+    if (first === undefined) {
+      throw new Error('no paragraph');
+    }
+
     editor.surface?.setSelection({
       anchor: { paragraphId: first, offset: 5 },
       head: { paragraphId: first, offset: 5 },

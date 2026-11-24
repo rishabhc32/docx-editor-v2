@@ -318,9 +318,18 @@ export function sectionWithoutPendingWrites(
   const records = sectionRecordsOf(holder);
   const shown = (r: SectionRecord): boolean => {
     const status = statusOf(ctx.doc, r.suggestion);
-    if (r.kind === 'sectionOp' && r.keptOnReject === true) return true;
-    if (r.kind === 'sectionOp' && r.untracked === true) return status === 'pending';
-    if (status === 'accepted') return !madeOverRejected(ctx, r, records);
+    if (r.kind === 'sectionOp' && r.keptOnReject === true) {
+      return true;
+    }
+
+    if (r.kind === 'sectionOp' && r.untracked === true) {
+      return status === 'pending';
+    }
+
+    if (status === 'accepted') {
+      return !madeOverRejected(ctx, r, records);
+    }
+
     return isRejectedWrite(ctx, r);
   };
   let section = withoutSectionRecord(base);
