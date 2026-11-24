@@ -1,12 +1,14 @@
 // The organiser's undo and redo of a direct edit (task 6.7): the suggestions the edit made and
 // accepted at once turn rejected (taken back) or accepted again (made again). Nothing moves:
 // every item the edit labelled shows exactly as before or after it, and the cards of other
-// people's suggestions around those items are seen again (their versions move up).
+// people's suggestions around those items are seen again (their versions move up). A section
+// break settles the records on its section (`settleRevertedBreaks`).
 
 import { setStatus, touchNeighbours } from '../model/mutations.ts';
 import { sameMaker, type OrderedMaker } from '../model/person.ts';
 import { OrderedRefusal } from '../model/refusal.ts';
 import type { OrderedDocument } from '../model/types.ts';
+import { settleRevertedBreaks } from './sections.ts';
 
 /**
  * Turn `maker`'s direct suggestion to `status`. Refused when it is not theirs, not a direct
@@ -29,5 +31,6 @@ export function revertDirect(
   if (found.status !== from)
     throw new OrderedRefusal('stale-revert', `${suggestion} is ${found.status}`);
   setStatus(doc, suggestion, status);
+  settleRevertedBreaks(doc, suggestion);
   touchNeighbours(doc, suggestion);
 }

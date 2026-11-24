@@ -20,7 +20,13 @@ import {
   sectionWithoutPendingWrites,
   type OrderedSectionView,
 } from '../compose/sections.ts';
-import { insertedPending, itemAt, pendingByOther, statusOf } from '../model/document.ts';
+import {
+  insertedPending,
+  itemAt,
+  pendingByOther,
+  statusOf,
+  storyOfItem,
+} from '../model/document.ts';
 import { nextSeq, relabel } from '../model/mutations.ts';
 import type { OrderedMaker } from '../model/person.ts';
 import { addressLabel, OrderedRefusal } from '../model/refusal.ts';
@@ -310,16 +316,7 @@ export function insertSectionBreak(
     untracked: onOwnMark,
   });
 
-  // The pending tracked writes on the section go with its copy, under their own suggestions
-  // (an untracked one is in the copy already)
-  for (const record of sectionRecordsOf(governing.holder)) {
-    if (statusOf(ctx.doc, record.suggestion) === 'pending' && !isOwnBreak(record)) {
-      relabel(ctx.doc, ctx.story, mark, {
-        props: [...mark.props, { ...record, seq: nextSeq(ctx.doc) }],
-      });
-    }
-  }
-
+  copyPendingWrites(ctx.doc, ctx.story, governing.holder, mark);
   if (type !== undefined && breakTypeOf(governing) !== type)
     addSectionWrite(
       ctx,
@@ -329,6 +326,53 @@ export function insertSectionBreak(
       onOwnMark ? { untracked: true, keptOnReject: true } : {}
     );
   return suggestion.id;
+}
+
+/**
+ * The pending tracked writes on the section `from` holds go with its copy on `mark`, under their
+ * own suggestions (an untracked one is in the copy already), as the engine's clone keeps the
+ * section's change record.
+ */
+function copyPendingWrites(
+  doc: OrderedDocument,
+  story: OrderedStory,
+  from: OrderedItem,
+  mark: OrderedItem
+): void {
+  for (const record of sectionRecordsOf(from)) {
+    if (statusOf(doc, record.suggestion) === 'pending' && !isOwnBreak(record)) {
+      relabel(doc, story, mark, { props: [...mark.props, { ...record, seq: nextSeq(doc) }] });
+    }
+  }
+}
+
+/**
+ * The section breaks of a direct `suggestion` its author took back or made again (`revert`).
+ * Taken back, a break takes every other record on its section with it: they write on a section
+ * that is gone, as the editor's undo takes the section with its change record. Made again, it
+ * copies the pending tracked writes of the section it cuts again, as the break did.
+ */
+export function settleRevertedBreaks(doc: OrderedDocument, suggestion: string): void {
+  const breaks = [...(doc.labelled.get(suggestion) ?? [])].filter((item) =>
+    sectionRecordsOf(item).some(
+      (record) =>
+        record.suggestion === suggestion && record.kind === 'sectionOp' && record.op.op === 'mark'
+    )
+  );
+  for (const mark of breaks) {
+    const story = storyOfItem(doc, mark);
+    if (story === null) {
+      continue;
+    }
+
+    if (statusOf(doc, suggestion) === 'rejected') {
+      const props = mark.props.filter((r) => r.target !== 'sectPr' || r.suggestion === suggestion);
+      relabel(doc, story, mark, { props });
+    } else {
+      const others = sectionsOfStory(doc, story).filter((section) => section.holder !== mark);
+      copyPendingWrites(doc, story, governingSection(story, others, mark).holder, mark);
+    }
+  }
 }
 
 /**
