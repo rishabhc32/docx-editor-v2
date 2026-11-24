@@ -6,7 +6,7 @@
 
 import { describe, expect, test } from 'bun:test';
 import { zipSync, strToU8 } from 'fflate';
-import { canonicalOoxmlFingerprint } from '../package/ooxml-tree.ts';
+import { canonicalOoxmlFingerprint, serializeOoxmlPart } from '../package/ooxml-tree.ts';
 import { diffSemanticDigests, semanticDigest } from '../package/ooxml-digest.ts';
 import { readOoxmlPackage, writeOoxmlPackage } from '../package/ooxml-package.ts';
 import {
@@ -486,6 +486,29 @@ describe('setSectionFurnitureOptions', () => {
     const pkg = store.currentPackage();
     expect(pkg.parts.has('/word/settings.xml')).toBe(true);
     expect(resolveHeaderFooterPartsBySection(pkg)[0]!.evenAndOddHeaders).toBe(true);
+  });
+
+  // Word reads `settings.xml` in `CT_Settings` order and reports members out of sequence as
+  // damaged: the flag goes after `w:defaultTabStop` and before `w:characterSpacingControl`
+  test('writes evenAndOddHeaders in its place in the settings, the same each time', () => {
+    const settingsXml = () =>
+      serializeOoxmlPart(store.currentPackage().parts.get('/word/settings.xml')!);
+    const store = openStore(
+      build({
+        rels: `<Relationship Id="rIdSet" Type="${R}/settings" Target="settings.xml"/>`,
+        settings:
+          `<w:settings xmlns:w="${W}"><w:zoom w:percent="100"/><w:defaultTabStop w:val="720"/>` +
+          '<w:characterSpacingControl w:val="doNotCompress"/><w:compat/><w:rsids/></w:settings>',
+      })
+    );
+    const on = { op: 'setSectionFurnitureOptions', evenAndOddHeaders: true } as const;
+    expect(store.applyLifecycleOp(on).ok).toBe(true);
+    const once = settingsXml();
+    expect(once).toContain(
+      '<w:defaultTabStop w:val="720"/><w:evenAndOddHeaders/><w:characterSpacingControl'
+    );
+    expect(store.applyLifecycleOp(on).ok).toBe(true);
+    expect(settingsXml()).toBe(once);
   });
 
   test('hostile distances and empty options are refused', () => {

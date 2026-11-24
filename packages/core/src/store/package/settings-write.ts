@@ -174,6 +174,43 @@ const SETTINGS_BEFORE_PROTECTION: ReadonlySet<string> = new Set([
   'doNotTrackFormatting',
 ]);
 
+/** `CT_Settings` members that precede `w:evenAndOddHeaders`. */
+export const SETTINGS_BEFORE_EVEN_AND_ODD_HEADERS: ReadonlySet<string> = new Set([
+  ...SETTINGS_BEFORE_PROTECTION,
+  'documentProtection',
+  'autoFormatOverride',
+  'styleLockTheme',
+  'styleLockQFSet',
+  'defaultTabStop',
+  'autoHyphenation',
+  'consecutiveHyphenLimit',
+  'hyphenationZone',
+  'doNotHyphenateCaps',
+  'showEnvelope',
+  'summaryLength',
+  'clickAndTypeStyle',
+  'defaultTableStyle',
+]);
+
+/**
+ * Where a new `CT_Settings` member goes among `children`: after the last of the members that
+ * precede it (`before`), so the part stays in schema order. Namespace-checked: a `w14:zoom` is
+ * not the `w:zoom` the sequence is about.
+ */
+export function settingsMemberPlace(
+  children: readonly OoxmlNode[],
+  before: ReadonlySet<string>
+): number {
+  let at = 0;
+  for (const [index, child] of children.entries()) {
+    if (child.kind !== 'textValue' && child.namespaceUri === W && before.has(child.localName)) {
+      at = index + 1;
+    }
+  }
+
+  return at;
+}
+
 /**
  * Enforce filling-in-forms protection, or lift whatever protection is enforced.
  *
@@ -249,19 +286,7 @@ export function applyDocumentProtection(
   if (existing) {
     children.splice(children.indexOf(existing), 1, element);
   } else {
-    let at = 0;
-    for (const [index, child] of children.entries()) {
-      // Namespace-checked: a `w14:zoom` is not the `w:zoom` this sequence is about, and
-      // counting it would move the insertion point past a member that does not precede us.
-      if (
-        child.kind !== 'textValue' &&
-        child.namespaceUri === W &&
-        SETTINGS_BEFORE_PROTECTION.has(child.localName)
-      ) {
-        at = index + 1;
-      }
-    }
-    children.splice(at, 0, element);
+    children.splice(settingsMemberPlace(children, SETTINGS_BEFORE_PROTECTION), 0, element);
   }
   const replaced = replaceChildren(settings, settings.root.id, children);
   if (!replaced.ok) return refuse('tree-invariant', 'settings');

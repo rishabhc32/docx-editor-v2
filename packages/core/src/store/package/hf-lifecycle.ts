@@ -41,6 +41,8 @@ import type { RevisionAttributionInput } from '../store/tree-op-types.ts';
 import {
   applyDocumentProtection,
   sectionElement,
+  SETTINGS_BEFORE_EVEN_AND_ODD_HEADERS,
+  settingsMemberPlace,
   settingsPartForWrite,
   wmlAttribute,
 } from './settings-write.ts';
@@ -796,12 +798,13 @@ function setEvenAndOddHeaders(pkg: OoxmlPackage, enabled: boolean): OoxmlPackage
   const { package: next, settings } = located;
 
   const nextId = createNodeIdAllocator(settings);
-  let children = settings.root.children.filter(
+  const children = settings.root.children.filter(
     (child) => child.kind === 'textValue' || child.localName !== 'evenAndOddHeaders'
   );
   if (enabled) {
+    // In its place: Word reports a `settings.xml` with members out of sequence as damaged
     const node = sectionElement(nextId(), 'evenAndOddHeaders', [], []);
-    children = [...children, node];
+    children.splice(settingsMemberPlace(children, SETTINGS_BEFORE_EVEN_AND_ODD_HEADERS), 0, node);
   }
   const replaced = replaceChildren(settings, settings.root.id, children);
   if (!replaced.ok) return null;
