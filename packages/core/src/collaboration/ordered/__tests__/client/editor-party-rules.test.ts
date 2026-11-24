@@ -212,12 +212,35 @@ describe('a party edit today’s check allows', () => {
     converged(room, ana, ben, olive);
     expect(cardsOf(room)).toEqual([['Ben'], ['Ana']]);
     expect(editorTexts(olive)).toEqual(['Form', ' EleXments']);
+    expect(revisions(await savedBody(olive))).toEqual(['ins:Ben', 'ins:Ana']);
 
-    // Rejected, her words go and his Enter stays
+    // Her undo takes her words back alone, and his Enter stays
+    surface(ana).undo();
+    await settle();
+    converged(room, ana, ben, olive);
+    expect(cardsOf(room)).toEqual([['Ben']]);
+    expect(editorTexts(olive)).toEqual(['Form', ' Elements']);
+    surface(ana).redo();
+    await settle();
+    converged(room, ana, ben, olive);
+    expect(cardsOf(room)).toEqual([['Ben'], ['Ana']]);
+    expect(revisions(await savedBody(olive))).toEqual(['ins:Ben', 'ins:Ana']);
+
+    // His undo takes his Enter back alone: one link again, her words in it and hers
+    surface(ben).undo();
+    await settle();
+    converged(room, ana, ben, olive);
+    expect(cardsOf(room)).toEqual([['Ana']]);
+    expect(editorTexts(olive)).toEqual(['Form EleXments']);
+    const body = await savedBody(olive);
+    expect(revisions(body)).toEqual(['ins:Ana']);
+    expect(body.split('<w:hyperlink ').length).toBe(2);
+
+    // Rejected, her words go and the link stays whole
     await decide(room, olive, 'Ana', 'rejected');
     converged(room, ana, ben, olive);
-    expect(revisions(await savedBody(olive))).toEqual(['ins:Ben']);
-    expect(editorTexts(olive)).toEqual(['Form', ' Elements']);
+    expect(revisions(await savedBody(olive))).toEqual([]);
+    expect(editorTexts(olive)).toEqual(['Form Elements']);
   });
 
   // Today: Word writes Ben's `w:pPrChange` beside Ana's `w:ins` on the paragraph mark, and the
