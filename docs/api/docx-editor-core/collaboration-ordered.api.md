@@ -2601,6 +2601,7 @@ export interface OrderedSectionRecord {
     readonly kind: 'sectionOp';
     // (undocumented)
     readonly op: OrderedSectionOp;
+    readonly over?: readonly string[];
     readonly replaced?: string;
     // (undocumented)
     readonly seq: number;
