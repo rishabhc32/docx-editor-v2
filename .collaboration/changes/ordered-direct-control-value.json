@@ -2,7 +2,7 @@
   "impact": "compatible",
   "fields": [],
   "before": "In an ordered room, the organiser's direct value in a content control that a pending suggestion inserted was settled text of its own inside that control. A reject of the suggestion live removed the control and left the value as plain text, where the Word file, a fold and the editor alone read the value as part of the insertion and gave the wrapped words back.",
-  "after": "The value's new words join the pending insertion that put the control in, as its author's, as the organiser's direct typing inside a pending insertion does. The strike of the old words and the control's record stay her settled edit, and her undo takes the value back exactly.",
+  "after": "The value's new words join the pending insertion that put the control in, as its author's, as the organiser's direct typing inside a pending insertion does. The strike of the old words and the control's record stay the organiser's settled edit, and the undo takes the value back exactly.",
   "reason": "Change messages, the change log and its kinds keep their meaning, and the Yjs document format does not change. The apply is deterministic and uses the change's own ids, so every copy that applies the same log makes the same list, which equals what the Word file and a checkpoint written before read back. An ordered room admits only clients of its own code version, so old and new clients never apply one log together.",
   "tests": [
     "packages/core/src/collaboration/ordered/__tests__/checkpoint-fold-decide.test.ts",

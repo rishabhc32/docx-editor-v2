@@ -249,7 +249,7 @@ describe('a decision after a fold, on a value in a pending control', () => {
   };
 
   for (const [type, value] of WRAPS) {
-    test(`the organiser's direct value in her own suggested ${type} wrap`, async () => {
+    test(`the organiser's direct value in their own suggested ${type} wrap`, async () => {
       await foldOf(
         p(run('Line: Revenue')),
         (doc) => {

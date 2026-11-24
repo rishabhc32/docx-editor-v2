@@ -1,5 +1,5 @@
 // The organiser's direct value in a control that a pending suggestion put in, with real editors
-// and one ordered room, against the editor alone: in her own suggested wrap (undone and redone
+// and one ordered room, against the editor alone: in their own suggested wrap (undone and redone
 // too) and in another person's pending control. Each is accepted and rejected live, after a save
 // and reopen, and after one and two folds.
 //
@@ -37,10 +37,12 @@ afterEach(closeAll);
 const LINE = docx(p(t('Line: Revenue')) + p(t('Signed.')));
 
 const ITEMS =
-  '<w:listItem w:displayText="Net 30" w:value="30"/><w:listItem w:displayText="Net 60" w:value="60"/>';
+  '<w:listItem w:displayText="Net 30" w:value="30"/>' +
+  '<w:listItem w:displayText="Net 60" w:value="60"/>';
 const DATE_FORMAT = '<w:dateFormat w:val="M/d/yyyy"/><w:lid w:val="en-US"/>';
 const CHECK_BOX =
-  '<w14:checkbox><w14:checked w14:val="0"/><w14:checkedState w14:val="2612" w14:font="MS Gothic"/>' +
+  '<w14:checkbox><w14:checked w14:val="0"/>' +
+  '<w14:checkedState w14:val="2612" w14:font="MS Gothic"/>' +
   '<w14:uncheckedState w14:val="2610" w14:font="MS Gothic"/></w14:checkbox>';
 
 /** "Term: <control> end." with the control inserted by Ana's pending suggestion. */
@@ -190,7 +192,7 @@ async function foldedBytes(
 }
 
 /**
- * The organiser's steps in a room on `file`, decided by her live, on the save reopened and on the
+ * The organiser's steps in a room on `file`, decided live, on the save reopened and on the
  * room folded once and twice, each as the editor alone.
  */
 async function check(
@@ -236,7 +238,7 @@ async function check(
   }
 }
 
-describe("the organiser's direct value in her own suggested wrap, as the editor alone", () => {
+describe("the organiser's direct value in their own suggested wrap, as the editor alone", () => {
   for (const [label, type, text] of WRAPS) {
     for (const decision of ['accept', 'reject'] as const) {
       test(`${label}, ${decision}ed`, async () => {
@@ -246,7 +248,7 @@ describe("the organiser's direct value in her own suggested wrap, as the editor 
   }
 });
 
-describe("the organiser's direct value in her own suggested wrap, undone, as alone", () => {
+describe("the organiser's direct value in their own suggested wrap, undone, as alone", () => {
   const steps = [wrap('plainText'), value('Acme')];
   for (const [label, more] of [
     ['undone', [undo]],
