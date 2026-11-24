@@ -1,0 +1,13 @@
+{
+  "impact": "compatible",
+  "fields": [],
+  "before": "A suggestion given a new date (the attribution change) kept the file's old w:date on the marks a load read from the file: change records, list records, move range starts, style records and a prompt's records in the glossary. A checkpoint listed the new date, so an open read the marks as a new suggestion with no person and left the listed one labelling nothing; its maker's take-back was refused. A suggested deletion or insertion of a simple field with no result showed a card, and the checkpoint wrote the field with no mark, so the card was lost.",
+  "after": "Compose writes a suggestion's current attribution on every mark of it, the file's own marks too, once a change gave it a new one, so the Word file, the checkpoint's list and an open agree. A prompt the glossary kept is read back as that suggestion's when its control empties. A suggestion that inserts or strikes a simple field with no result is refused before it applies (untracked-only); a direct edit still removes the field.",
+  "reason": "Change messages, the change log and its kinds keep their meaning, and the Yjs document format and the checkpoint format do not change. Every copy applies the same refusal and writes the same marks with the same code version; an ordered room admits only clients of its own code version. Ordered rooms are not deployed yet, so no room needs a migration. Exported Word files differ only in the date written on a re-dated suggestion's marks.",
+  "tests": [
+    "packages/core/src/collaboration/ordered/__tests__/checkpoint-fold-attribution.test.ts",
+    "packages/core/src/collaboration/ordered/__tests__/field-deletion-fold.test.ts"
+  ],
+  "changeset": "ordered-fold-marks",
+  "migration": null
+}
