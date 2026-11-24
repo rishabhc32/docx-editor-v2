@@ -5,6 +5,7 @@
   "after": "A note that a reference of the file's own text cites is no new note, so a reload keeps it the file's: a reject keeps the note with the source, an accept with the copy, live and after any number of folds, and the card reads the same.",
   "reason": "Change messages, the change log and its kinds keep their meaning, and the Yjs document format does not change. The change is in how a checkpoint is read: the labels a reload gives now equal the live room's, so every copy that opens the same checkpoint makes the same list. An ordered room admits only clients of its own code version, so old and new clients never apply one log together.",
   "tests": [
+    "packages/core/src/collaboration/ordered/__tests__/client/editor-moved-note.test.ts",
     "packages/core/src/collaboration/ordered/__tests__/note-moves-fold.test.ts",
     "packages/core/src/editor/__tests__/note-body-revisions.test.ts"
   ],
