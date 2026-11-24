@@ -6,7 +6,9 @@
 // as its last value while the typing was pending: a fold made that value the file's own, so a
 // reject after the fold kept it where the same reject live left none. A reject of a page field in
 // a combo box's typed value once wrote that text as the value live, though a field's code reads as
-// no text: the editor alone and a fold keep the value.
+// no text: the editor alone and a fold keep the value. A reject of typing over a prompt the file
+// shows beside a stored value once took that value away in the editor alone and after a fold,
+// where the room kept it: the value the file holds stays, and only one the words wrote goes.
 
 import { afterEach, describe, expect, test } from 'bun:test';
 import { createDocxEditor } from '../../../../editor/docx-editor.ts';
@@ -100,6 +102,42 @@ const CASES = [
     line(`<w:showingPlcHdr/><w:date>${DATE_FORMAT}</w:date>`, t('Click to enter a date.', FACE)),
     [6, 6],
     pick('2026-03-04'),
+  ],
+  [
+    "typing over a date picker's prompt with a stored date",
+    line(
+      `<w:showingPlcHdr/><w:date w:fullDate="2026-06-30T00:00:00Z">${DATE_FORMAT}</w:date>`,
+      t('Click to enter a date.', FACE)
+    ),
+    [6, 28],
+    typing('soon'),
+  ],
+  [
+    "a date over a date picker's prompt with a stored date",
+    line(
+      `<w:showingPlcHdr/><w:date w:fullDate="2026-06-30T00:00:00Z">${DATE_FORMAT}</w:date>`,
+      t('Click to enter a date.', FACE)
+    ),
+    [6, 6],
+    pick('2026-03-04'),
+  ],
+  [
+    "typing over a combo box's prompt with a stored value",
+    line(
+      `<w:showingPlcHdr/><w:comboBox w:lastValue="30">${ITEMS}</w:comboBox>`,
+      t('Choose an item.', FACE)
+    ),
+    [6, 21],
+    typing('unless'),
+  ],
+  [
+    "an item over a drop-down list's prompt with a stored value",
+    line(
+      `<w:showingPlcHdr/><w:dropDownList w:lastValue="30">${ITEMS}</w:dropDownList>`,
+      t('Choose an item.', FACE)
+    ),
+    [6, 6],
+    pick('60'),
   ],
   ['a check box ticked', line(CHECK_BOX, t('☐', GLYPH_FONT)), [6, 6], pick('true')],
   [

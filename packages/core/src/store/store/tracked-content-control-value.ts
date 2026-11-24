@@ -10,6 +10,7 @@ import {
   contentControlPropertiesOf as contentControlSummaryOf,
   contentControlTextOf,
   contentControlsIn,
+  type ContentControlProperties,
 } from '../package/content-control-nodes.ts';
 import { parseContentControlDate, parseIsoDate } from './content-control-dates.ts';
 import {
@@ -508,7 +509,14 @@ function recordEdits(before: OoxmlElement, after: OoxmlElement): RecordEdits {
   const unchanged =
     contentControlTextOf(after) === contentControlTextOf(before) &&
     isShowingPlaceholder(after) === isShowingPlaceholder(before);
-  return unchanged ? {} : valueRecordEdits(after);
+  if (unchanged) return {};
+
+  // A prompt shown again clears the record its words stated, not one the file held beside it
+  if (isShowingPlaceholder(after) && !recordStatesText(before, contentControlTextOf(before))) {
+    return {};
+  }
+
+  return valueRecordEdits(after);
 }
 
 /**
@@ -525,23 +533,48 @@ function valueRecordEdits(control: OoxmlElement): RecordEdits {
       return summary.lastValue === undefined ? {} : { lastValue: null };
     }
 
-    const item = summary.listItems.find((candidate) => candidate.displayText === text);
-    const value = item?.value ?? (summary.type === 'comboBox' ? text : undefined);
+    const value = statedValue(summary, text);
     return value === undefined || value === summary.lastValue ? {} : { lastValue: value };
   }
 
   if (summary.type !== 'date') return {};
   const current = summary.date?.fullDate;
   if (summary.showingPlaceholder) return current === undefined ? {} : { fullDate: null };
+  const fullDate = statedValue(summary, text);
+  return fullDate === undefined || fullDate === current ? {} : { fullDate };
+}
+
+/**
+ * The value `text` states in a list or date control: the value of the item it shows (a combo
+ * box's own text), or the date it shows through the control's format; undefined when none.
+ */
+function statedValue(summary: ContentControlProperties, text: string): string | undefined {
+  if (summary.type !== 'date') {
+    const item = summary.listItems.find((candidate) => candidate.displayText === text);
+    return item?.value ?? (summary.type === 'comboBox' ? text : undefined);
+  }
 
   // A two-digit year stays in the century the record already names.
+  const current = summary.date?.fullDate;
   const previous = current === undefined ? null : parseIsoDate(current);
   const century = previous ? Math.floor(previous.year / 100) * 100 : undefined;
   const shown = parseContentControlDate(text, summary.date?.dateFormat, century);
-  if (!shown) return {};
+  if (!shown) return undefined;
   const year = String(shown.year).padStart(4, '0');
   const month = String(shown.month).padStart(2, '0');
   const day = String(shown.day).padStart(2, '0');
-  const fullDate = `${year}-${month}-${day}T00:00:00Z`;
-  return fullDate === current ? {} : { fullDate };
+  return `${year}-${month}-${day}T00:00:00Z`;
+}
+
+/**
+ * Whether a list or date control's value record states what `text` shows: the words that wrote
+ * it. A decision that takes those words away and shows the prompt again clears the record; a
+ * record the file held beside its prompt, which typing over the prompt left, stays.
+ */
+export function recordStatesText(control: OoxmlElement, text: string): boolean {
+  const summary = contentControlSummaryOf(control);
+  const list = summary.type === 'dropDownList' || summary.type === 'comboBox';
+  if (!list && summary.type !== 'date') return false;
+  const value = statedValue(summary, text);
+  return value !== undefined && value === (list ? summary.lastValue : summary.date?.fullDate);
 }

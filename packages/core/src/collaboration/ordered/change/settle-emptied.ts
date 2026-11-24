@@ -7,6 +7,7 @@ import {
   withDecisionPrompt,
   withRestoredPrompt,
 } from '../../../store/store/content-control-prompt-restore.ts';
+import { recordStatesText } from '../../../store/store/tracked-content-control-value.ts';
 import { findContentControl } from '../../../store/store/tree-op-nodes.ts';
 import { build } from '../../../store/store/tree-op-tracked.ts';
 import { isBlockToken } from '../compose/blocks.ts';
@@ -386,8 +387,9 @@ export function controlScratch(
 /**
  * The control as the engine's emptying edit or decision leaves it, drawn from its paragraph as
  * compose draws it, or null when it shows no prompt then. A decision reads its value record back
- * from its prompt, as the engine does: a list or a date showing its prompt holds no value. A
- * direct edit leaves the record as it was.
+ * from its prompt, as the engine does: a list or a date showing its prompt holds no value, when
+ * the words that went stated it. A record they do not state (the file's, beside its prompt) and
+ * a direct edit leave the record as it was.
  */
 function promptedControl(
   doc: OrderedDocument,
@@ -411,7 +413,13 @@ function promptedControl(
     return null;
   }
 
-  const read = emptied.decided ? withControlRecords(prompted, [shell.id]) : prompted;
+  // A field's code is no text of the control, as the engine reads it
+  const words = emptied.went.filter((unit) => unit.kind === 'text' && unit.instr !== true);
+  const went = words.map((unit) => unit.text).join('');
+  const read =
+    emptied.decided && recordStatesText(shell, went)
+      ? withControlRecords(prompted, [shell.id])
+      : prompted;
   return findContentControl(read, shell.id) ?? null;
 }
 
