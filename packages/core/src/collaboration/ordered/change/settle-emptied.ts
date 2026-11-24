@@ -15,6 +15,7 @@ import { ComposeContext } from '../compose/context.ts';
 import { controlContent } from '../compose/inline.ts';
 import { ownItems } from '../compose/paragraph.ts';
 import { withStoryBlocks } from '../compose/paragraph-ops.ts';
+import { withControlRecords } from '../compose/prompts.ts';
 import { containerPropertiesAfter } from '../compose/properties.ts';
 import { contextOf, withNewIds, type Ctx } from '../edits/context.ts';
 import { templateItems } from '../edits/templates.ts';
@@ -384,7 +385,9 @@ export function controlScratch(
 
 /**
  * The control as the engine's emptying edit or decision leaves it, drawn from its paragraph as
- * compose draws it, or null when it shows no prompt then.
+ * compose draws it, or null when it shows no prompt then. A decision reads its value record back
+ * from its prompt, as the engine does: a list or a date showing its prompt holds no value. A
+ * direct edit leaves the record as it was.
  */
 function promptedControl(
   doc: OrderedDocument,
@@ -408,7 +411,8 @@ function promptedControl(
     return null;
   }
 
-  return findContentControl(prompted, shell.id) ?? null;
+  const read = emptied.decided ? withControlRecords(prompted, [shell.id]) : prompted;
+  return findContentControl(read, shell.id) ?? null;
 }
 
 /** The runs of a block control's paragraphs, without their paragraph properties. */

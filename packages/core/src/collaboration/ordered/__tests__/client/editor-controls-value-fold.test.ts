@@ -72,6 +72,18 @@ const CASES = [
     [6, 21],
     typing('unless'),
   ],
+  [
+    "an item over a drop-down list's prompt",
+    line(`<w:showingPlcHdr/><w:dropDownList>${ITEMS}</w:dropDownList>`, t('Choose an item.', FACE)),
+    [6, 6],
+    pick('60'),
+  ],
+  [
+    "a date over a date picker's prompt",
+    line(`<w:showingPlcHdr/><w:date>${DATE_FORMAT}</w:date>`, t('Click to enter a date.', FACE)),
+    [6, 6],
+    pick('2026-03-04'),
+  ],
   ['a check box ticked', line(CHECK_BOX, t('☐', GLYPH_FONT)), [6, 6], pick('true')],
   [
     "typing over a plain text control's prompt",
