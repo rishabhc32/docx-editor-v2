@@ -351,6 +351,18 @@ describe("a fold of a table's records", () => {
     await checkFold(doc, base, mediaStore(base), 'two row heights');
   });
 
+  // The organiser's column shows on top of the pending row height's table record, which Word's
+  // record holds as the grid before both: the fold keeps the new grid
+  test("a row height, then the organiser's direct column", async () => {
+    const { document: doc, base } = openOrderedWordFile(APPLY_FILE, { file: 1 });
+    const on = [addressOf(opens(doc, 'tr')[0]!)];
+    const op = { op: 'setTableRowHeight', heightTwips: 480 } as const;
+    apply(doc, 'ana:1', { kind: 'table-property', ...EDIT, on, op }, 'Ana', ANA_1);
+    const cell = addressOf(opens(doc, 'tc')[0]!);
+    apply(doc, 'olive:1', { kind: 'insert-column', ...DIRECT, cell, where: 'left' }, 'Olive');
+    await checkFold(doc, base, mediaStore(base), "a row height, then the organiser's column");
+  });
+
   // A row height records each cell and the grid, and sets nothing there: a decision on a column
   // gives back or gives on the widths the column holds, after a fold too
   const rowHeight = (doc: OrderedDocument, id: string, row: number, date: string) => {

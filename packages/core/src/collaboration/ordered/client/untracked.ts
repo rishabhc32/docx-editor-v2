@@ -19,7 +19,8 @@ import {
   type OrderedStory,
 } from '../model/types.ts';
 import { withMergedChildren } from '../compose/properties.ts';
-import { isWml, withChildren } from '../ooxml-nodes.ts';
+import { changedKeys } from '../edits/table-nodes.ts';
+import { childWhere, isWml, withChildren } from '../ooxml-nodes.ts';
 
 /**
  * Put back in the document loaded from a checkpoint each container's properties that a record
@@ -105,8 +106,17 @@ export function withCheckpointChangeRecords(
         return false;
       }
 
+      // A direct change made over the record shows in the file's record and in no room record
+      // after a fold: the file's record gives back what differs from the container's own
+      const own = found.open.node;
+      const was =
+        own && own.kind !== 'textValue' ? childWhere(own, (c) => isWml(c, target)) : undefined;
+      const merge =
+        record.merge === undefined || loaded.fileRecord === undefined || loaded.element === null
+          ? record.merge
+          : [...new Set([...record.merge, ...changedKeys(was, loaded.element)])];
       given.add(at);
-      props[at] = { ...loaded, merge: record.merge, tableCells };
+      props[at] = { ...loaded, merge, tableCells };
     }
 
     replaceItems(doc, found.story, [found.open], [createOrderedItem({ ...found.open, props })]);

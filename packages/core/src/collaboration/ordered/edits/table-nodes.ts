@@ -55,14 +55,19 @@ export const same = (a: OoxmlElement | undefined, b: OoxmlElement | undefined): 
 
 /**
  * The children (`<namespace URI> <local name>`) whose value differs between two properties
- * elements, revision markers aside: what a record that sets only them changes (`merge`).
+ * elements, revision markers aside: what a record that sets only them changes (`merge`). A key
+ * with more children (a grid's columns) compares them all.
  */
 export function changedKeys(was: OoxmlElement | undefined, now: OoxmlElement): string[] {
   const keyed = (element: OoxmlElement | undefined) => {
     const out = new Map<string, string>();
-    for (const c of element?.children ?? [])
-      if (c.kind !== 'textValue' && !isRevisionMarker(c))
-        out.set(`${c.namespaceUri} ${c.localName}`, JSON.stringify(plain(c)));
+    for (const c of element?.children ?? []) {
+      if (c.kind !== 'textValue' && !isRevisionMarker(c)) {
+        const key = `${c.namespaceUri} ${c.localName}`;
+        out.set(key, `${out.get(key) ?? ''}${JSON.stringify(plain(c))}`);
+      }
+    }
+
     return out;
   };
   const [before, after] = [keyed(was), keyed(now)];
