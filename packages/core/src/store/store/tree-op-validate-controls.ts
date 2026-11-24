@@ -350,7 +350,10 @@ export function validateSetContentControlValue(
         : 'unsupported';
     }
     case 'date': {
-      if (normalizeSdtFullDate(value) === null) return 'invalidArgs';
+      if (normalizeSdtFullDate(value) === null) {
+        return 'invalidArgs';
+      }
+
       return textWritable();
     }
     case 'picture':

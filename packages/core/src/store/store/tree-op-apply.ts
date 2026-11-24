@@ -2277,7 +2277,10 @@ function applySetContentControlValue(
       const format = attributeValueOf(sdtPrChild(date, 'dateFormat'), 'val');
       const iso = normalizeSdtFullDate(value);
       const picked = iso ? parseIsoDate(iso.slice(0, 10)) : null;
-      if (iso === null || picked === null) return { ok: false, reason: 'invalidArgs' };
+      if (iso === null || picked === null) {
+        return { ok: false, reason: 'invalidArgs' };
+      }
+
       const display = formatContentControlDate(picked, format);
       nextControl = withUpdatedProperties(nextControl, (props) => {
         const dateNode = sdtPrChild(props, 'date');
