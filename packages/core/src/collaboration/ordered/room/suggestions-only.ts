@@ -27,7 +27,13 @@ import { orderedKindSpecOf } from '../change/kinds/registry.ts';
 import type { OrderedKindSpec } from '../change/kinds/spec.ts';
 import type { OrderedChangeOutcome } from '../change/apply.ts';
 import type { OrderedCaret, OrderedTouched } from '../change/targets.ts';
-import { appliedNested, caretInside, insertedByOthers, paragraphMarkOf } from './inside.ts';
+import {
+  appliedNested,
+  caretInside,
+  insertedByOthers,
+  paragraphMarkOf,
+  struckByOthers,
+} from './inside.ts';
 import { atShownPrompt, fillsOthersPrompt } from './over-prompt.ts';
 import {
   isOrderedCommentChange,
@@ -139,17 +145,6 @@ function isFurniture(doc: OrderedDocument, story: OrderedStory | null): boolean 
   const host = textBoxHostOf(doc, story.name);
   const part = (host === null ? story : doc.stories.get(host.host))?.part;
   return part?.root.localName === 'hdr' || part?.root.localName === 'ftr';
-}
-
-/** Whether another person's pending deletion strikes the item itself (a row they struck). */
-function struckByOthers(doc: OrderedDocument, maker: OrderedMaker, item: OrderedItem): boolean {
-  for (const id of item.dels) {
-    if (pendingByOther(doc, id, maker)) {
-      return true;
-    }
-  }
-
-  return false;
 }
 
 /** The shown cells of the row a cell is in, not those of a table nested in them. */
@@ -431,10 +426,10 @@ function besideNested(
  * Whether a range or a target reaches inside another person's pending suggestion at one shown
  * item, as Word nests the change in it: a change that is not a property change, on an item they
  * inserted. A control value or a new link target reaches the units it strikes. A format or a
- * property change is never inside: Word writes its change record in their `w:ins` or `w:del`
- * (a run's) or beside it (a mark's, a row's or a table's), and taking back that record alone
- * gives their suggestion back as it was. Taking over their pending record is refused once
- * applied (`checkApplied`).
+ * property change is judged once applied, as only the outcome shows whether it wrote a record
+ * (`appliedNested`): a run's record goes in their `w:ins` or `w:del`, and a mark's, a row's or
+ * a table's beside it. Taking over their pending record is refused once applied too
+ * (`checkApplied`).
  */
 function itemNested(
   doc: OrderedDocument,

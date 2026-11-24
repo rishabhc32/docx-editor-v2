@@ -1,5 +1,6 @@
-// Whether a party's change goes inside another person's pending insertion, where Word nests it
-// in theirs: at a caret before the change applies, and where its items landed once it applied.
+// Whether a party's change goes inside another person's pending insertion or deletion, where
+// Word nests it in theirs: at a caret before the change applies, and where its items landed or
+// its format records went once it applied.
 
 import { isBlockToken } from '../compose/blocks.ts';
 import type { OrderedChangeOutcome } from '../change/apply.ts';
@@ -36,6 +37,24 @@ export function insertedByOthers(
   }
 
   return out;
+}
+
+/**
+ * Whether another person's pending deletion strikes the item itself: their `w:del` around its run,
+ * or a row they struck.
+ */
+export function struckByOthers(
+  doc: OrderedDocument,
+  maker: OrderedMaker,
+  item: OrderedItem
+): boolean {
+  for (const id of item.dels) {
+    if (pendingByOther(doc, id, maker)) {
+      return true;
+    }
+  }
+
+  return false;
 }
 
 /** The shown mark that ends the paragraph an item is in: the one Enter there copies. */
@@ -161,10 +180,12 @@ function landingOf(
 }
 
 /**
- * Whether a party's edit reached inside another person's pending insertion, once applied: new
- * items landed in it (`caretInside` at each run), or it struck a unit of their prompt. At a prompt
- * the edits place and strike by the prompt's rules, not by the caret or the range, so the checks
- * before the apply leave it; elsewhere this agrees with them.
+ * Whether a party's edit reached inside another person's pending insertion or deletion, once
+ * applied: new items landed in it (`caretInside` at each run), it struck a unit of their prompt,
+ * or it wrote a format record in a run of theirs. At a prompt the edits place and strike by the
+ * prompt's rules, not by the caret or the range, so the checks before the apply leave it;
+ * elsewhere this agrees with them. A format that changes nothing there writes no record, so the
+ * host's check finds nothing of the party's in their revision mark.
  */
 export function appliedNested(
   doc: OrderedDocument,
@@ -189,6 +210,19 @@ export function appliedNested(
 
       const struck = item.prompt === true && item.dels.includes(id);
       if (struck && insertedByOthers(doc, maker, item).length > 0) {
+        return true;
+      }
+
+      // A format record of theirs in a run of another person's `w:ins` or `w:del`, where Word
+      // nests it. One on their own new words writes none (`untracked`), and a unit that a new
+      // row's or note's own marker covers (`quiet`) has no `w:ins` of its own
+      const formats =
+        isUnit(item) &&
+        item.fmts.some(
+          (r) => r.suggestion === id && (r.kind !== 'properties' || r.untracked !== true)
+        );
+      const inserted = item.by !== null && !item.quiet && pendingByOther(doc, item.by, maker);
+      if (formats && (inserted || struckByOthers(doc, maker, item))) {
         return true;
       }
 

@@ -201,30 +201,36 @@ describe('the suggestions-only policy', () => {
     ).toBe('accepted');
   });
 
-  // Today: Word writes Ben's format record in Ana's `w:ins` and `w:del`; taking back Ben's own
-  // format alone gives the file back, so the check allows it (s50-long, s25-short)
-  test('a party’s format on another person’s inserted or struck words is the party’s own', () => {
+  // Today: Word writes a format record in Ana's `w:ins` and `w:del`, and the check cannot take
+  // Ben's back alone (`nested`); the organiser's is allowed (`room-policy-formats.test.ts`)
+  test('a format on another person’s inserted or struck words goes in their revision mark', () => {
     const { room, send, edit, p0, p1 } = setup();
     const overTyped = { from: { space: p0.text, offset: 2 }, to: { space: p0.text, offset: 6 } };
     const struck = { from: { space: p1.text, offset: 1 }, to: { space: p1.text, offset: 2 } };
-    expect(
-      send(BEN, { kind: 'format', ...edit, ...overTyped, properties: [{ localName: 'b' }] })
-    ).toBe('accepted');
-    expect(
-      send(BEN, { kind: 'format', ...edit, ...struck, properties: [{ localName: 'i' }] })
-    ).toBe('accepted');
+    for (const [who, expected] of [
+      [BEN, 'policy-nested/nested'],
+      [OLGA, 'accepted'],
+    ] as const) {
+      expect(
+        send(who, { kind: 'format', ...edit, ...overTyped, properties: [{ localName: 'b' }] })
+      ).toBe(expected);
+      expect(
+        send(who, { kind: 'format', ...edit, ...struck, properties: [{ localName: 'i' }] })
+      ).toBe(expected);
+    }
+
     const xml = serializeOoxmlPart(composeOrderedPart(room.document, BODY).part);
 
-    // Ben's record in a run of Ana's revision mark, before it closes
+    // Olga's record in a run of Ana's revision mark, before it closes
     const inside = (mark: 'ins' | 'del', face: string) =>
       new RegExp(
         `<w:${mark} [^>]*w:author="Ana"[^>]*>((?!</w:${mark}>).)*` +
-          `<w:r><w:rPr>${face}<w:rPrChange [^>]*w:author="Ben"`
+          `<w:r><w:rPr>${face}<w:rPrChange [^>]*w:author="Olga"`
       );
     expect(xml).toMatch(inside('ins', '<w:b/>'));
     expect(xml).toMatch(inside('del', '<w:i/>'));
 
-    // Taking over Ben's pending record is not Ana's to do (D5 policy 2)
+    // Taking over Olga's pending record is not Ana's to do (D5 policy 2)
     expect(
       send(ANA, { kind: 'format', ...edit, ...struck, properties: [{ localName: 'i' }] })
     ).toBe('policy-not-own/others_suggestions');

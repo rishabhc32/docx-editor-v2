@@ -13,7 +13,6 @@ import { openOrderedWordFile } from '../../client/open.ts';
 import { composeOrderedPart } from '../../compose/compose.ts';
 import { orderedCards } from '../../decide.ts';
 import { suggestionsOnlyPolicy } from '../../room/suggestions-only.ts';
-import { checkFold, folded, mediaStore } from '../fold-check.ts';
 import { docx, p, t } from '../word-fixtures.ts';
 import {
   BODY,
@@ -160,41 +159,6 @@ describe('a party edit today’s check allows', () => {
     expect(editorTexts(olive)[0]).toBe('The fee is 100y200 USD.');
   });
 
-  // Today: Word writes Ben's `w:rPrChange` in the runs of Ana's `w:del` and `w:ins`, and the
-  // take-back of Ben's record alone leaves the file as it was (allowed; s25-short, s50-long). It
-  // joins Ana's card, as a property change on her new paragraph does
-  test('a format over another person’s struck and inserted words: decided with them', async () => {
-    for (const status of ['rejected', 'accepted'] as const) {
-      const { room, ana, ben, olive } = await people(FILE);
-      caretAt(ana, 0, 11, 14);
-      run(ana, { type: 'insertText', text: '200' });
-      await settle();
-      caretAt(ben, 0, 11, 17);
-      run(ben, { type: 'toggleMark', mark: 'bold' });
-      await settle();
-      converged(room, ana, ben, olive);
-      expect(cardsOf(room)).toEqual([['Ana', 'Ben']]);
-      const live = await savedBody(olive);
-      expect(revisions(live)).toEqual(['del:Ana', 'rPrChange:Ben', 'ins:Ana', 'rPrChange:Ben']);
-      const doc = room.room.document;
-      const { base } = openOrderedWordFile(FILE, { file: 1 });
-      const once = await folded(doc, base, 2, mediaStore(base));
-      expect(serializeOoxmlPart(composeOrderedPart(once.document, BODY).part)).toBe(
-        serializeOoxmlPart(composeOrderedPart(doc, BODY).part)
-      );
-      await checkFold(doc, base, mediaStore(base), 'a format over Ana’s words');
-      await decide(room, olive, 'Ben', status);
-      converged(room, ana, ben, olive);
-      const body = await savedBody(olive);
-      expect(revisions(body)).toEqual([]);
-      expect(editorTexts(olive)[0]).toBe(
-        status === 'rejected' ? 'The fee is 100 USD.' : 'The fee is 200 USD.'
-      );
-      expect(body.includes('<w:b/>')).toBe(status === 'accepted');
-      closeAll();
-    }
-  });
-
   // Today: Word writes Ben's `w:pPrChange` beside Ana's `w:ins` on the paragraph mark, and the
   // take-back of Ben's record alone leaves the file as it was (allowed). It joins Ana's card
   test('a paragraph property on another person’s new paragraph: decided with it', async () => {
@@ -298,6 +262,37 @@ describe('a party edit today’s check refuses', () => {
     run(olive, { type: 'toggleMark', mark: 'bold' });
     await settle();
     converged(room, ana, ben, olive);
+  });
+
+  // Today: Word nests Ben's `w:rPrChange` in the runs of Ana's `w:del` and `w:ins`, and the
+  // check cannot take it back alone (`nested`), on part or all of her words. A colour her words
+  // have already writes no record: allowed
+  test('a format over another person’s struck and inserted words: refused by name', async () => {
+    const red = docx(p(t('The fee is ') + t('100', '<w:color w:val="C00000"/>') + t(' USD.')));
+    const { room, ana, ben, olive } = await people(red);
+    caretAt(ana, 0, 11, 14);
+    run(ana, { type: 'insertText', text: '200' });
+    await settle();
+    const before = serializeOoxmlPart(composeOrderedPart(room.room.document, BODY).part);
+    for (const [from, to] of [
+      [11, 17],
+      [12, 13],
+      [15, 16],
+    ]) {
+      caretAt(ben, 0, from, to);
+      run(ben, { type: 'toggleMark', mark: 'bold' });
+      await settle();
+      expect(refused(ben)).toEqual(['ordered-refused/nested']);
+      converged(room, ana, ben, olive);
+      expect(serializeOoxmlPart(composeOrderedPart(room.room.document, BODY).part)).toBe(before);
+    }
+
+    caretAt(ben, 0, 11, 14);
+    run(ben, { type: 'setMarkAttr', mark: 'color', attr: 'val', value: 'C00000' });
+    await settle();
+    converged(room, ana, ben, olive);
+    expect(cardsOf(room)).toEqual([['Ana']]);
+    expect(revisions(await savedBody(olive))).toEqual(['del:Ana', 'ins:Ana']);
   });
 
   // Today: Word nests Ana's `w:rPrChange` in Ben's deleted run, so taking the deletion back takes

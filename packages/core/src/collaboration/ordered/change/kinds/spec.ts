@@ -57,8 +57,8 @@ export interface OrderedKindPolicy {
    */
   readonly text: boolean;
   /**
-   * The edit sets properties: it is never inside another person's insertion or deletion (Word
-   * writes its record in their revision mark or beside it, and takes it back alone).
+   * The edit sets properties: it is judged once applied, inside another person's insertion or
+   * deletion only where it wrote a format record in a run of theirs (`appliedNested`).
    */
   readonly properties: boolean;
   /**
