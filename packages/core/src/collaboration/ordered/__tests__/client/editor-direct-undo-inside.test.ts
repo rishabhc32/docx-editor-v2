@@ -204,6 +204,24 @@ describe("the organiser's undo of a direct edit inside a party's suggestion", ()
     converged(room, org, ana);
   });
 
+  test("a footnote made in the party's new cell: its reference is part of it", async () => {
+    const { room, org, ana } = await seats();
+    caretAt(ana, indexOf(ana, 'Fee'), 0);
+    expect(tableCommand(ana, { type: 'insertColumn', where: 'right' }).ok).toBe(true);
+    await settle();
+    const before = editorXml(org);
+    caretAt(org, indexOf(org, 'Fee') + 1, 0);
+    await press(org, (s) => s.insertNote('footnote'));
+    expect(holdersOf(room, '\uFFFC')).toEqual(['Ana']);
+    converged(room, org, ana);
+    await press(org, (s) => s.undo());
+    expect(joined(editorXml(org))).toBe(joined(before));
+    converged(room, org, ana);
+    await press(org, (s) => s.redo());
+    expect(holdersOf(room, '\uFFFC')).toEqual(['Ana']);
+    converged(room, org, ana);
+  });
+
   test("a decision on the party's suggestion gives one result before or after the undo", async () => {
     const results: string[] = [];
     for (const decisionFirst of [true, false]) {

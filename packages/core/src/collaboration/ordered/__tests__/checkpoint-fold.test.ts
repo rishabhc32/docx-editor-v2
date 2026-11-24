@@ -10,12 +10,13 @@ import { applyOrderedChange } from '../change/apply.ts';
 import { orderedChangeId, orderedIdMinter } from '../change/ids.ts';
 import { validateOrderedChange } from '../change/validate.ts';
 import { openOrderedWordFile } from '../client/open.ts';
+import type { OoxmlPackage } from '../../../store/package/ooxml-package.ts';
 import { orderedPackageBytes } from '../compose/package.ts';
 import { orderedCards } from '../decide.ts';
 import { setStatus } from '../model/mutations.ts';
 import { OrderedRefusal } from '../model/refusal.ts';
 import { isTextBoxStoryName } from '../model/text-boxes.ts';
-import type { OrderedDocument } from '../model/types.ts';
+import type { OrderedDocument, OrderedItem } from '../model/types.ts';
 import { orderedUnitTyper } from '../model/typers.ts';
 import { takeBack, withUndoRecord } from '../model/undo-record.ts';
 import { orderedStampDate } from '../room/room.ts';
@@ -627,17 +628,41 @@ describe('a fold of a move with words inside it', () => {
 });
 
 describe('who typed inside a new row, cell or note', () => {
-  // The units Olive typed (`XY`) in a part
-  const typed = (doc: OrderedDocument, part: string) =>
+  // Olive's units in a part that `olives` picks: who holds each, as a reader of the labels finds
+  // it (its own label, else the new row or cell around it), and who typed it
+  const reads = (
+    doc: OrderedDocument,
+    part: string,
+    olives: (item: OrderedItem, unit: string) => boolean
+  ) =>
     [...(doc.stories.get(part)?.tree.items() ?? [])].flatMap((item) =>
-      [...item.text].flatMap((ch, k) => (ch === 'X' || ch === 'Y' ? [{ item, k }] : []))
+      [...item.text].flatMap((unit, k) =>
+        olives(item, unit)
+          ? [
+              {
+                holder: item.by ?? item.within.by.at(-1) ?? null,
+                typer: orderedUnitTyper(doc, item, item.offset + k),
+              },
+            ]
+          : []
+      )
     );
+  const typed = (_: OrderedItem, unit: string) => unit === 'X' || unit === 'Y';
+  const olive = { namespace: 'olive', person: testPerson('Olive') };
+  const anas = { holder: 'S:ana:1.1', typer: olive };
+
+  // Each copy of the room: live, and after one and two folds
+  async function copiesOf(doc: OrderedDocument, base: OoxmlPackage) {
+    const blobs = mediaStore(base);
+    const once = await folded(doc, base, 2, blobs);
+    const twice = await folded(once.document, once.base, 3, blobs);
+    return [doc, once.document, twice.document];
+  }
 
   // Ana's new row, cell or note, and Olive's direct typing in it: the container covers the
   // words, as Word writes them with no mark of their own, so a reader of the labels finds them
-  // in Ana's insertion (their own label, else the new row or cell around them) and the read names
-  // Olive who typed them, in the room and after each fold
-  for (const [label, part, insert] of [
+  // in Ana's insertion and the read names Olive who typed them, in the room and after each fold
+  const containers = [
     [
       'a new row',
       BODY,
@@ -684,24 +709,36 @@ describe('who typed inside a new row, cell or note', () => {
         return at(doc, 3, 1, FOOTNOTES);
       },
     ],
-  ] as const) {
+  ] as const;
+  for (const [label, part, insert] of containers) {
     test(`${label}: the read names the organiser who typed in it`, async () => {
       const { document: doc, base } = openOrderedWordFile(APPLY_FILE, { file: 1 });
       const place = insert(doc);
       apply(doc, 'olive:2', { kind: 'insert', part, mode: 'edit', place, text: 'XY' }, 'Olive');
-      const blobs = mediaStore(base);
-      const once = await folded(doc, base, 2, blobs);
-      const twice = await folded(once.document, once.base, 3, blobs);
-      const copies = [doc, once.document, twice.document];
-      const olive = { namespace: 'olive', person: testPerson('Olive') };
-      const reads = (copy: OrderedDocument) =>
-        typed(copy, part).map(({ item, k }) => ({
-          holder: item.by ?? item.within.by.at(-1) ?? null,
-          typer: orderedUnitTyper(copy, item, item.offset + k),
-        }));
-      const ana = { holder: 'S:ana:1.1', typer: olive };
-      expect(copies.map(reads)).toEqual(copies.map(() => [ana, ana]));
-      await checkFold(doc, base, blobs, label);
+      const copies = await copiesOf(doc, base);
+      expect(copies.map((copy) => reads(copy, part, typed))).toEqual(
+        copies.map(() => [anas, anas])
+      );
+      await checkFold(doc, base, mediaStore(base), label);
+    });
+  }
+
+  // Olive's direct footnote in Ana's new row or cell: its reference goes where a direct object
+  // goes, into the container, as Word writes it there; the note itself stays Olive's
+  for (const [label, part, insert] of containers.filter(([, part]) => part === BODY)) {
+    test(`${label}: a direct note's reference is the container's`, async () => {
+      const { document: doc, base } = openOrderedWordFile(APPLY_FILE, { file: 1 });
+      const place = insert(doc);
+      apply(
+        doc,
+        'olive:2',
+        { kind: 'insert-note', part, mode: 'edit', place, note: 'footnote', text: 'XY' },
+        'Olive'
+      );
+      const reference = (item: OrderedItem) => item.kind === 'atom' && item.within.by.length > 0;
+      const copies = await copiesOf(doc, base);
+      expect(copies.map((copy) => reads(copy, part, reference))).toEqual(copies.map(() => [anas]));
+      await checkFold(doc, base, mediaStore(base), label);
     });
   }
 });

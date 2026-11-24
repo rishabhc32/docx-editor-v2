@@ -20,7 +20,8 @@ import {
   firstElement,
   isRunProperties,
 } from '../ooxml-nodes.ts';
-import { withNewIds, type Ctx } from './context.ts';
+import { suggestionFor, withNewIds, type Ctx } from './context.ts';
+import { directInsert } from './direct.ts';
 import { addRelationshipResource, addStoryResource, emptyStoryRoot } from './resources.ts';
 import { insertText, noteOwnAddition, unitsOf } from './text.ts';
 import { templateItems } from './templates.ts';
@@ -193,7 +194,10 @@ export function noteReference(
  * A new footnote or endnote at a view offset of the main document: its reference, typed as an
  * object, and its note at the end of the notes story, in one suggestion. A file with no notes
  * part of the kind gets one. Inside the author's own earlier suggestion, the reference and the
- * note are noted for the change's undo.
+ * note are noted for the change's undo. A direct reference goes where a direct object goes
+ * (`directInsert`): into another person's pending insertion or new row, cell, note or text box
+ * around it, as Word writes it there; the note is then a suggestion of its own, which the edit
+ * settles with any words typed in it.
  */
 export function insertNote(
   ctx: Ctx,
@@ -206,9 +210,15 @@ export function insertNote(
   const existing = notesStoryOf(ctx.doc, kind);
   const id = existing ? noteIdsFor(existing)() : 1;
   const { face, atom } = noteReference(ctx, kind, id);
-  const sid = insertText(ctx, p, offset, '', {
-    pieces: [{ text: '￼', face, content: atom }],
-  });
+  const pieces = [{ text: '￼', face, content: atom }];
+  let sid: string;
+  if (ctx.direct) {
+    directInsert(ctx, p, offset, '', { pieces });
+    sid = suggestionFor(ctx).id;
+  } else {
+    sid = insertText(ctx, p, offset, '', { pieces });
+  }
+
   const notes = existing ?? addNotesStory(ctx, kind, sid);
   const items = newNoteItems(ctx, notes, kind, id, sid);
   insertItems(ctx.doc, notes, notes.tree.last(), items);
