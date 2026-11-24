@@ -2,8 +2,9 @@
 // and the editor write the type it gives the next section untracked: no change record holds it as
 // a change, so a reject of the break leaves it, and another person's pending record on that
 // section holds the section before its own change with the type, whether the room made that
-// record or a fold before the break wrote it into the file. The room, a save and reopen, and one
-// and two folds agree.
+// record or a fold before the break wrote it into the file. That person's card holds their own
+// change alone, and its reject leaves the break, as in the editor alone. The room, a save and
+// reopen, and one and two folds agree.
 
 import { describe, expect, test } from 'bun:test';
 import { orderedCardSeen } from '../change/apply-decide.ts';
@@ -69,14 +70,17 @@ async function roomAfter(steps: readonly Step[]): Promise<OrderedWordFile> {
 const recordsOf = (doc: OrderedDocument): string[] =>
   sectionsOf(doc).map((xml) => /<w:sectPrChange\b.*/.exec(xml)?.[0] ?? '');
 
+/** Each case: its name and its steps. */
+const CASES: readonly (readonly [string, readonly Step[]])[] = [
+  ['alone', ['split', 'break']],
+  ["after Ana's pending page", ['page', 'split', 'break']],
+  ["before Ana's pending page", ['split', 'break', 'page']],
+  ["after Olive's mark and Ana's pending page", ['split', 'page', 'break']],
+  ["after Olive's mark, Ana's pending page and a fold", ['split', 'page', 'fold', 'break']],
+];
+
 describe('a suggested continuous section break', () => {
-  for (const [label, steps] of [
-    ['alone', ['split', 'break']],
-    ["after Ana's pending page", ['page', 'split', 'break']],
-    ["before Ana's pending page", ['split', 'break', 'page']],
-    ["after Olive's mark and Ana's pending page", ['split', 'page', 'break']],
-    ["after Olive's mark, Ana's pending page and a fold", ['split', 'page', 'fold', 'break']],
-  ] as const) {
+  for (const [label, steps] of CASES) {
     test(`its type is under every change record (${label})`, async () => {
       const { document: doc, base } = await roomAfter(steps);
       const blobs = mediaStore(base);
@@ -96,6 +100,26 @@ describe('a suggested continuous section break', () => {
 
       checkSaveAndLoad(doc, label, base);
       await checkFold(doc, base, blobs, label);
+
+      // Ana's card holds her page alone, as in the editor alone: its reject leaves Olive's break
+      if (steps.includes('page')) {
+        const live = (await roomAfter(steps)).document;
+        for (const copy of [live, (await folded(doc, base, doc.file + 4, blobs)).document]) {
+          const card = orderedCardSeen(copy, 'S:ana:1.1') ?? [];
+          expect(card.map((seen) => seen.suggestion)).toEqual(['S:ana:1.1']);
+          apply(
+            copy,
+            'olive:3',
+            { kind: 'decide', cards: [{ suggestions: card }], status: 'rejected' },
+            'Olive'
+          );
+          const sections = sectionsOf(copy);
+          expect(orderedCardSeen(copy, 'S:olive:1.1')).not.toBeNull();
+          expect(sections).toHaveLength(2);
+          expect(sections.join()).not.toContain('landscape');
+          expect(sections[1]).toContain('<w:type w:val="continuous"/>');
+        }
+      }
 
       // Olive's card rejected: her section goes, and the next section stays continuous
       for (const copy of [doc, (await folded(doc, base, doc.file + 3, blobs)).document]) {

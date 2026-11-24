@@ -3,6 +3,7 @@
 
 import { isNotesStory, leftOutNoteItems } from './compose/note-references.ts';
 import { promptUnitHidden } from './compose/paragraph.ts';
+import { isSectionItem } from './compose/sections.ts';
 import {
   innermostNewContainer,
   inserter,
@@ -183,13 +184,16 @@ export function ownContainer(doc: OrderedDocument, item: OrderedItem): string | 
 export const startsRow = (item: OrderedItem): boolean =>
   item.kind === 'open' && item.token === 'tr';
 
-/** The one pending insertion every unit of `id` sits in, or null (kept in `read.inside`). */
+/**
+ * The one pending insertion every unit of `id` sits in, or null (kept in `read.inside`). The
+ * body's own section counts as a unit in none.
+ */
 function insideOne(read: CardRead, id: string) {
   const known = read.inside.get(id);
   if (known !== undefined) return known;
   let one: string | null | undefined;
   for (const item of read.doc.labelled.get(id) ?? []) {
-    if (!read.isUnit(item)) continue;
+    if (!read.isUnit(item) && !isSectionItem(item)) continue;
     const by = inserter(read.doc, item);
     one = one === undefined || one === by ? by : null;
     if (one === null) break;
@@ -204,14 +208,17 @@ function insideOne(read: CardRead, id: string) {
  * a row's or a cell's property record has no text, so the host reads it as a collapsed range,
  * which joins an insertion only when the whole change is inside it (`isInside`: a change on a
  * new row or on new cells only). A row height over another person's new cell keeps its own card.
+ * So is a section's record on a paragraph mark: a page setup of another person's new section
+ * only joins its card, and one that also changes other sections keeps its own, as in the editor
+ * alone and Word, where a reject of it leaves the break (ECMA-376 Part 1, §17.13.5.32).
  */
 export function joinsInsertion(read: CardRead, unit: OrderedItem, id: string, by: string): boolean {
   const propertyOnly =
-    unit.kind === 'open' &&
-    unit.token !== undefined &&
-    TABLE_CONTAINERS.has(unit.token) &&
     !unit.dels.includes(id) &&
-    !unit.fmts.some((record) => record.suggestion === id);
+    !unit.fmts.some((record) => record.suggestion === id) &&
+    (unit.kind === 'mark'
+      ? unit.props.every((record) => record.suggestion !== id || record.target === 'sectPr')
+      : unit.kind === 'open' && unit.token !== undefined && TABLE_CONTAINERS.has(unit.token));
   return !propertyOnly || insideOne(read, id) === by;
 }
 
