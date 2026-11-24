@@ -8,6 +8,7 @@ import {
   type OoxmlNode,
 } from '../../../store/package/ooxml-tree.ts';
 import { withDeletedTextRestored } from '../../../store/store/revision-rebuild-helpers.ts';
+import { storesValueRecord } from '../../../store/store/tracked-content-control-value.ts';
 import { build, textNode } from '../../../store/store/tree-op-tracked.ts';
 import { MOVE_RANGE } from '../load/moves.ts';
 import { isSplitEdge, movedAwayBy, statusOf } from '../model/document.ts';
@@ -51,6 +52,10 @@ interface Box {
   decided: boolean;
   /** A unit in it shows struck by a pending suggestion. */
   struck: boolean;
+  /** A unit in it shows, neither struck nor a suggestion's insertion. */
+  own: boolean;
+  /** A unit in it shows as a suggestion's insertion an accept decided. */
+  accepted: boolean;
   /** The pending insertion of a new control, drawn as one `w:ins` around the control. */
   cover?: string;
 }
@@ -144,6 +149,8 @@ function newBox(open: OrderedItem | null, cover: string | null = null): Box {
     reached: false,
     decided: false,
     struck: false,
+    own: false,
+    accepted: false,
     ...(cover === null ? {} : { cover }),
   };
 }
@@ -226,9 +233,13 @@ function noteUnit(ctx: ComposeContext, boxes: readonly Box[], item: OrderedItem)
   if (ctx.decidedAway(item)) for (const b of boxes) b.decided = true;
   if (ctx.gone(item)) return;
   const struck = ctx.struckBy(item) !== null;
+  const accepted = ctx.acceptedInsertion(item);
+  const own = !struck && !accepted && ctx.insertedBy(item) === null;
   for (const b of boxes) {
     b.drawn = true;
     if (struck) b.struck = true;
+    if (accepted) b.accepted = true;
+    if (own) b.own = true;
   }
 }
 
@@ -370,13 +381,14 @@ const METADATA_KEYS = new Set(
 );
 
 /**
- * A record of a control's value (its words, a list's last value, a date, a check box), not only
- * of its title, tag or lock: the value records follow the text the control shows.
+ * A record of a control's value (a list's last value, a date, a check box), not only of its
+ * title, tag or lock: the value records follow the text the control shows. A record of its words
+ * alone sets none: a value proposed over a prompt keeps the record the control stores.
  */
 export function isValueRecord(record: OrderedPropertyRecord): boolean {
   if (record.target !== 'sdtPr') return false;
   const merge = record.kind === 'element' ? record.merge : undefined;
-  return merge === undefined || merge.length === 0 || merge.some((key) => !METADATA_KEYS.has(key));
+  return merge === undefined || merge.some((key) => !METADATA_KEYS.has(key));
 }
 
 /**
@@ -405,9 +417,17 @@ function closeBox(ctx: ComposeContext, done: Box, into: Box): void {
     if (emptied && done.decided) ctx.decisionEmptied.add(container.id);
 
     // A control with a value record keeps the record in step with what it shows, once no
-    // pending deletion is in it
-    const valued = !done.struck && open.props.some(isValueRecord);
-    if (done.reached || emptied || valued) ctx.reached.push(container.id);
+    // pending deletion is in it; a record taken back (a direct edit undone) is none
+    const valued =
+      !done.struck &&
+      open.props.some(
+        (record) => isValueRecord(record) && statusOf(ctx.doc, record.suggestion) !== 'rejected'
+      );
+
+    // Words that filled its prompt beside a record it stores, once accepted, give the record, as
+    // the engine reads it back (`fillsPromptBesideRecord`)
+    const filled = done.accepted && !done.own && storesValueRecord(container);
+    if (done.reached || emptied || valued || filled) ctx.reached.push(container.id);
   }
 
   if (done.cover !== undefined) place(ctx, into.children, container, open);

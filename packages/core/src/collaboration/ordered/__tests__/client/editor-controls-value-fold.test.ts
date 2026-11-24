@@ -13,7 +13,10 @@
 // into the party's new value: a fold made the copied record that person's, and their format joined
 // the party's card. The editor alone inserts only the words the value shows. A date in a block date
 // picker once went after the control's paragraph mark, where no paragraph holds it, so no copy
-// showed it; it goes in the control's paragraph, as the editor alone writes it.
+// showed it; it goes in the control's paragraph, as the editor alone writes it. A value picked over
+// a prompt beside a stored value once wrote its own record over the stored one, so a reject, and
+// the organiser's undo of a direct pick in the room, showed the prompt with no value: the stored
+// value now stays while a pick is pending, and an accept reads the new one from the words.
 
 import { afterEach, describe, expect, test } from 'bun:test';
 import { createDocxEditor } from '../../../../editor/docx-editor.ts';
@@ -391,4 +394,42 @@ describe("a party's edit of a control, decided live and after a fold, as the edi
       });
     }
   }
+});
+
+describe('a value picked over a prompt the control shows beside a stored value', () => {
+  const stored = line(
+    `<w:showingPlcHdr/><w:comboBox w:lastValue="30">${ITEMS}</w:comboBox>`,
+    t('Choose an item.', FACE)
+  );
+
+  test('a reject gives the stored value back and an accept the new one, live and folded', async () => {
+    for (const [decision, record] of [
+      ['reject', '<w:comboBox w:lastValue="30">'],
+      ['accept', '<w:comboBox w:lastValue="60">'],
+    ] as const) {
+      const seated = await seats(stored, 1);
+      pick('60')(seated.ben);
+      await settle();
+      const copy = await foldedBytes(seated.room.room.document, stored, 1);
+      await decide(seated.olive, decision);
+      const reopened = await seats(copy, 2);
+      await decide(reopened.olive, decision);
+      for (const decided of [roomControl(seated), roomControl(reopened)]) {
+        expect({ decision, record: decided.includes(record) }).toEqual({ decision, record: true });
+        expect(decided.includes('<w:showingPlcHdr/>')).toBe(decision === 'reject');
+      }
+    }
+  });
+
+  test("the organiser's direct pick undone gives the stored value back", async () => {
+    const seated = await seats(stored, 1);
+    seated.olive.editor.setMode('edit');
+    pick('60')(seated.olive);
+    await settle();
+    surface(seated.olive).undo();
+    await settle();
+    const control = roomControl(seated);
+    expect(control).toContain('<w:showingPlcHdr/><w:comboBox w:lastValue="30">');
+    expect(control).toContain('Choose an item.');
+  });
 });

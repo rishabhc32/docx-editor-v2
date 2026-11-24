@@ -3,7 +3,10 @@
 
 import { ooxmlTreesEqual } from '../../../store/package/ooxml-serialize.ts';
 import type { OoxmlElement } from '../../../store/package/ooxml-tree.ts';
-import { liveRuns } from '../../../store/store/tracked-content-control-value.ts';
+import {
+  liveRuns,
+  proposedProperties,
+} from '../../../store/store/tracked-content-control-value.ts';
 import { applyTreeOp } from '../../../store/store/tree-op-apply.ts';
 import type { ContentControlValueInput } from '../../../store/store/tree-op-content-controls.ts';
 import { build } from '../../../store/store/tree-op-tracked.ts';
@@ -56,7 +59,8 @@ export function setControlValue(
 
   // A value in a control the author's own pending suggestion put in is part of that suggestion,
   // as the engine writes it inside the author's own insertion
-  const suggestion = suggestionFor(ctx, pendingOwn(ctx, open.by));
+  const own = pendingOwn(ctx, open.by);
+  const suggestion = suggestionFor(ctx, own);
   strikeOldValue(ctx, open, suggestion.id);
   const close = closeOf(ctx.story, open, ctx.doc);
 
@@ -77,11 +81,15 @@ export function setControlValue(
 
   // The record sets only the children the value changed (its last value, its date, its
   // check box state), so a change of the control's title or tag stays whatever its order; the
-  // prompt flag is compose's to say: it shows the prompt while the control holds nothing else
-  const before = childNamed(viewNode(view, id), 'sdtPr');
+  // prompt flag is compose's to say: it shows the prompt while the control holds nothing else.
+  // A suggestion keeps a value record the control stores beside its prompt, as the engine's; a
+  // direct value, and one in the author's own pending control, are written as they are
+  const shown = viewNode(view, id);
+  const before = childNamed(shown, 'sdtPr');
+  const after = ctx.direct || own ? sdtPr : proposedProperties(shown, sdtPr);
   const record =
-    controlPropertiesRecord(ctx, suggestion.id, before, sdtPr, result.part) ??
-    sdtPrRecord(ctx, suggestion.id, sdtPr, []);
+    controlPropertiesRecord(ctx, suggestion.id, before, after, result.part) ??
+    sdtPrRecord(ctx, suggestion.id, after, []);
   relabel(ctx.doc, ctx.story, open, { props: [...open.props, record] });
   return suggestion.id;
 }

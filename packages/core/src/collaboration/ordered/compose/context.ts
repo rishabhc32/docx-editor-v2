@@ -440,6 +440,12 @@ export class ComposeContext {
     return pendingDeleters(this.doc, item)[0] ?? null;
   }
 
+  /** Whether an accept decided the item's insertion: a suggestion's, not a direct edit's. */
+  acceptedInsertion(item: OrderedItem): boolean {
+    const found = item.by === null ? undefined : this.doc.suggestions.get(item.by);
+    return found?.status === 'accepted' && found.direct !== true;
+  }
+
   /** The pending suggestion that shows as inserting the item, if its container does not. */
   insertedBy(item: OrderedItem): string | null {
     if (this.options.pending === 'reject' || item.quiet) return null;

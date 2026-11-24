@@ -1,0 +1,13 @@
+{
+  "impact": "compatible",
+  "fields": [],
+  "before": "A value picked over a list or date control's prompt wrote its own record (w:lastValue, w:fullDate) over a value the control stored beside the prompt, so a reject showed the prompt with no value, live, after a save and after a fold. In the room, the organiser's direct pick taken back with an undo also cleared the stored value.",
+  "after": "A value proposed over a prompt keeps a record the control stores beside it while the value is pending; a reject gives that record back, and an accept reads the new one from the words, in the editor alone, the live room and after a fold. An undone direct pick in the room gives the stored record back, as the editor alone's undo does.",
+  "reason": "Change messages, the change log and its kinds keep their meaning, and the Yjs document format and the checkpoint format do not change. Only the composed Word file of such a control changes, and it now equals across the editor alone, the room and a fold. An ordered room admits only clients of its own code version.",
+  "tests": [
+    "packages/core/src/collaboration/ordered/__tests__/client/editor-controls-value-fold.test.ts",
+    "packages/core/src/editor/__tests__/suggesting-control-prompt-reject.test.ts"
+  ],
+  "changeset": "control-pick-over-stored-value",
+  "migration": null
+}

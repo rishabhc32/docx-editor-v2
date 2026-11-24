@@ -4,7 +4,8 @@
 // one in a `w:ins`, both inside `w:sdtContent`. A checkbox toggle is the same edit over its
 // glyph. `CT_SdtPr` has no change record, so the type's own record of the value (`w:lastValue`,
 // `w:date/@w:fullDate`, `w14:checked`, `w:showingPlcHdr`) moves to the new value untracked,
-// exactly as the untracked write moves it.
+// exactly as the untracked write moves it. Over a prompt, a record the control stores stays
+// (`proposedProperties`): the prompt cannot state it again on a reject.
 
 import {
   contentControlPropertiesOf as contentControlSummaryOf,
@@ -43,6 +44,7 @@ import { equivalentNodes } from './ooxml-node-equality.ts';
 import { applyTreeOp } from './tree-op-apply.ts';
 import { contentControlEffect, editedProperties } from './tree-op-content-controls.ts';
 import {
+  attributeValueOf,
   checkboxPayloadOf,
   contentControlContentOf,
   contentControlPropertiesOf,
@@ -384,7 +386,60 @@ export function proposedOverPrompt(
     replaceChildren(written.part, site.container.id, children, options),
     written.effect
   );
-  return proposed.ok ? keepingPrompt(part, control, proposed, options) : proposed;
+  const stored = proposed.ok ? keepingStoredValue(control, proposed, options) : proposed;
+  return stored.ok ? keepingPrompt(part, control, stored, options) : stored;
+}
+
+/** The `w:sdtPr` children that hold a list's or a date's value record, by its attribute. */
+const VALUE_RECORDS = [
+  ['dropDownList', 'lastValue'],
+  ['comboBox', 'lastValue'],
+  ['date', 'fullDate'],
+] as const;
+
+/**
+ * The properties a value proposed in `control` leaves: `written`, those of the untracked write,
+ * but over a prompt with a value record the control stores beside it (`w:lastValue`,
+ * `w:fullDate`) as it was. A prompt states no value, so a reject could not read that record back
+ * from it, and a file holds one record only: an accept reads the new one from the words.
+ */
+export function proposedProperties(control: OoxmlNode, written: OoxmlElement): OoxmlElement {
+  const stored = contentControlPropertiesOf(control);
+  if (!stored || !isShowingPlaceholder(control)) {
+    return written;
+  }
+
+  const children = written.children.map((child) => {
+    const record = VALUE_RECORDS.find(([holder]) => isWml(child, holder));
+    if (!record) {
+      return child;
+    }
+
+    const [holder, attribute] = record;
+    const kept = stored.children.find(
+      (node) => isWml(node, holder) && attributeValueOf(node, attribute) !== undefined
+    );
+    return kept ?? child;
+  });
+  return children.every((child, index) => child === written.children[index])
+    ? written
+    : ({ ...written, children } as OoxmlElement);
+}
+
+/** A proposal over `control`'s prompt with the value record the control stores kept. */
+function keepingStoredValue(
+  control: OoxmlNode,
+  proposed: Extract<TreeOpResult, { readonly ok: true }>,
+  options: EditOptions | undefined
+): TreeOpResult {
+  const target = findContentControl(proposed.part, control.id);
+  const written = target ? contentControlPropertiesOf(target) : undefined;
+  const kept = written ? proposedProperties(control, written) : written;
+  if (!written || !kept || kept === written) {
+    return proposed;
+  }
+
+  return fromEdit(replaceNode(proposed.part, written.id, kept, options), proposed.effect);
 }
 
 /**
@@ -507,10 +562,13 @@ function recordEdits(before: OoxmlElement, after: OoxmlElement): RecordEdits {
     return checkboxPayloadOf(after)?.checked === shown ? {} : { checked: shown };
   }
 
+  // What the decision left as it was keeps its record, but for words that filled a prompt beside
+  // a stored record: the record stayed while they were pending, so an accept reads the new one
+  const prompted = isShowingPlaceholder(after);
   const unchanged =
     contentControlTextOf(after) === contentControlTextOf(before) &&
-    isShowingPlaceholder(after) === isShowingPlaceholder(before);
-  if (unchanged) {
+    prompted === isShowingPlaceholder(before);
+  if (unchanged && (prompted || !fillsPromptBesideRecord(before))) {
     return {};
   }
 
@@ -520,11 +578,39 @@ function recordEdits(before: OoxmlElement, after: OoxmlElement): RecordEdits {
   const typedOver =
     shown === inlineTextOf(contentControlContentOf(before)?.children ?? [], undefined, true) &&
     !recordStatesText(before, shown);
-  if (isShowingPlaceholder(after) && typedOver) {
+  if (prompted && typedOver) {
     return {};
   }
 
   return valueRecordEdits(after);
+}
+
+/**
+ * Whether every word a control shows stands in a pending insertion, beside a value record it
+ * stores: words over its prompt, which left that record (`proposedProperties`).
+ */
+function fillsPromptBesideRecord(control: OoxmlElement): boolean {
+  const own = outsideInsertions(contentControlContentOf(control)?.children ?? [], 0);
+  return (
+    storesValueRecord(control) && contentControlTextOf(control) !== '' && inlineTextOf(own) === ''
+  );
+}
+
+/** Whether a list or date control stores a value record (`w:lastValue`, `w:fullDate`). */
+export function storesValueRecord(control: OoxmlElement): boolean {
+  const summary = contentControlSummaryOf(control);
+  return (summary.lastValue ?? summary.date?.fullDate) !== undefined;
+}
+
+/** The nodes of a control's content outside pending insertions, its paragraphs opened. */
+function outsideInsertions(nodes: readonly OoxmlNode[], depth: number): OoxmlNode[] {
+  return nodes.flatMap((node) => {
+    if (node.kind === 'textValue' || node.kind === 'revisionInsert' || depth > MAX_DEPTH) {
+      return [];
+    }
+
+    return node.kind === 'paragraph' ? outsideInsertions(node.children, depth + 1) : [node];
+  });
 }
 
 /**

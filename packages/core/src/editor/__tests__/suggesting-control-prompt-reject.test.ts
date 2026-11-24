@@ -7,6 +7,9 @@
 // here to enter text."), or no prompt at all in a block-level control, and the 24 prompts of a
 // real contract were lost that way. The prompt now goes where Word keeps prompts, the glossary,
 // before the suggestion removes it, so Reject, Reject All and a save and reopen show it as it was.
+// A list or a date control can store a value beside its prompt. A value proposed over that prompt
+// once wrote its own record over the stored one, so a reject showed the prompt with no value: the
+// stored value now stays while the value is pending, and only an accept writes the new one.
 
 import { GlobalRegistrator } from '@happy-dom/global-registrator';
 if (!GlobalRegistrator.isRegistered) GlobalRegistrator.register();
@@ -82,6 +85,35 @@ const TWO_PARAGRAPH_PROMPT =
   `<w:p>${run(`<w:i/>${GREY}`, 'and the term')}</w:p>`;
 const LIST_PROMPT = run(`<w:rStyle w:val="PlaceholderText"/>${GREY}`, 'Choose a payment term');
 const DATE_PROMPT = run(`<w:rStyle w:val="PlaceholderText"/>${GREY}`, 'Pick the start date');
+
+const ITEMS =
+  '<w:listItem w:displayText="Net 30" w:value="30"/><w:listItem w:displayText="Net 60" w:value="60"/>';
+const DATE_FORMAT = '<w:dateFormat w:val="M/d/yyyy"/><w:lid w:val="en-US"/>';
+
+/** A control's properties beside a stored value, its prompt, the value picked, and the records. */
+const STORED = [
+  [
+    'drop-down list',
+    `<w:showingPlcHdr/><w:dropDownList w:lastValue="30">${ITEMS}</w:dropDownList>`,
+    LIST_PROMPT,
+    '60',
+    ['w:lastValue="30"', 'w:lastValue="60"'],
+  ],
+  [
+    'combo box',
+    `<w:showingPlcHdr/><w:comboBox w:lastValue="30">${ITEMS}</w:comboBox>`,
+    LIST_PROMPT,
+    '60',
+    ['w:lastValue="30"', 'w:lastValue="60"'],
+  ],
+  [
+    'date',
+    `<w:showingPlcHdr/><w:date w:fullDate="2026-06-30T00:00:00Z">${DATE_FORMAT}</w:date>`,
+    DATE_PROMPT,
+    '2026-03-04',
+    ['w:fullDate="2026-06-30T00:00:00Z"', 'w:fullDate="2026-03-04T00:00:00Z"'],
+  ],
+] as const;
 
 const CASES: readonly Case[] = [
   {
@@ -215,6 +247,12 @@ function rejectOne(editor: DocxEditorInstance): void {
   expect(editor.rejectReviewItem(items[0]!.key).ok).toBe(true);
 }
 
+function acceptOne(editor: DocxEditorInstance): void {
+  const items = editor.getReviewItems();
+  expect(items).toHaveLength(1);
+  expect(editor.acceptReviewItem(items[0]!.key).ok).toBe(true);
+}
+
 function rejectAll(editor: DocxEditorInstance): void {
   const result = editor.exec({
     type: 'resolveAllReviewChanges',
@@ -307,4 +345,27 @@ describe('rejecting a suggestion over a content control prompt', () => {
     const source = xml(editor).replace(/ w14:(paraId|textId)="[^"]*"/g, '');
     expect(source.match(/Click here to enter your full name/g)).toHaveLength(2);
   });
+});
+
+describe('a value proposed over a prompt the control shows beside a stored value', () => {
+  for (const [name, props, prompt, value, [stored, written]] of STORED) {
+    test(`the ${name} keeps its stored value on a reject and takes the new one on an accept`, async () => {
+      const file = docx(line(control(props, prompt)));
+      for (const [decide, record] of [
+        [rejectOne, stored],
+        [acceptOne, written],
+      ] as const) {
+        // Live, and in a copy saved while the value is pending
+        const editor = open(file);
+        suggest(editor);
+        pickValue(value)(editor);
+        const saved = new Uint8Array(await editor.save());
+        for (const copy of [editor, open(saved, 'Cy')]) {
+          decide(copy);
+          expect(properties(copy)).toContain(record);
+          expect(properties(copy).includes('<w:showingPlcHdr/>')).toBe(decide === rejectOne);
+        }
+      }
+    });
+  }
 });

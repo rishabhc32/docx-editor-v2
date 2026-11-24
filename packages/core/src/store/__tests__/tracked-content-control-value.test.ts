@@ -211,12 +211,16 @@ describe('a proposed value', () => {
     expect(body(part)).not.toContain('showingPlcHdr');
     expect(content(part)).toBe('<w:ins w:author="Bea"><w:r><w:t>Two</w:t></w:r></w:ins>');
 
-    // Showing its prompt again, the control holds no value.
+    // The value it stores beside its prompt stays while the value is pending and on a reject,
+    // which shows the prompt again; an accept reads the new value from the words.
+    expect(body(part)).toContain('w:lastValue="1"');
     const rejected = apply(part, { op: 'rejectAllRevisions' });
     expect(body(rejected)).toContain('<w:showingPlcHdr/>');
-    expect(body(rejected)).not.toContain('lastValue');
+    expect(body(rejected)).toContain('w:lastValue="1"');
     expect(content(rejected)).toBe(prompt);
-    expect(content(apply(part, { op: 'acceptAllRevisions' }))).toBe('<w:r><w:t>Two</w:t></w:r>');
+    const accepted = apply(part, { op: 'acceptAllRevisions' });
+    expect(content(accepted)).toBe('<w:r><w:t>Two</w:t></w:r>');
+    expect(body(accepted)).toContain('w:lastValue="2"');
   });
 
   for (const [shape, xml] of [
