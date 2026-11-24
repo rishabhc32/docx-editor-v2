@@ -196,15 +196,16 @@ describe('a decision after a fold, beside a pending control value', () => {
 });
 
 describe("a fold of a table's records", () => {
+  // Two dates: each is decided on its own
   test('two row heights of one person on a row with no properties', async () => {
     const { document: doc, base } = openOrderedWordFile(APPLY_FILE, { file: 1 });
-    for (const [id, heightTwips] of [
-      ['ana:1', 300],
-      ['ana:2', 480],
+    for (const [id, heightTwips, date] of [
+      ['ana:1', 300, '2026-10-28T09:01:00Z'],
+      ['ana:2', 480, '2026-10-28T09:02:00Z'],
     ] as const) {
       const on = [addressOf(opens(doc, 'tr')[0]!)];
       const op = { op: 'setTableRowHeight', heightTwips } as const;
-      apply(doc, id, { kind: 'table-property', ...EDIT, on, op });
+      apply(doc, id, { kind: 'table-property', ...EDIT, on, op }, 'Ana', date);
     }
 
     await checkFold(doc, base, mediaStore(base), 'two row heights');

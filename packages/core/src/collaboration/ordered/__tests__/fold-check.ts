@@ -214,8 +214,8 @@ export function foldPrint(doc: OrderedDocument, base: OoxmlPackage, blobs: FoldB
       fmts: keys(roles.fmt),
       // A decided record takes over nothing: a fold resolves it
       replaced: keys(
-        item.fmts.flatMap((f) =>
-          f.replaced === undefined || key(f.suggestion) === null ? [] : [f.replaced]
+        [...item.fmts, ...item.props].flatMap((r) =>
+          r.replaced === undefined || key(r.suggestion) === null ? [] : [r.replaced]
         )
       ),
       // Records apply in their order of creation, whatever their place in the list

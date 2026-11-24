@@ -256,7 +256,11 @@ function inRoomOrder(
     namespacePersons: facts.namespacePersons,
     untracked: facts.untracked.map((u) => ({
       ...u,
-      records: u.records.map((r) => ({ ...r, suggestion: renumbered(r.suggestion) })),
+      records: u.records.map((r) => ({
+        ...r,
+        suggestion: renumbered(r.suggestion),
+        replaced: r.replaced === undefined ? undefined : renumbered(r.replaced),
+      })),
     })),
     lists: facts.lists.map((l) => ({ ...l, suggestion: renumbered(l.suggestion) })),
   };
