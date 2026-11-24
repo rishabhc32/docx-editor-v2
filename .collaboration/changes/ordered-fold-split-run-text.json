@@ -1,0 +1,10 @@
+{
+  "impact": "compatible",
+  "fields": [],
+  "before": "A checkpoint numbered a text element (`oc:run`) by its room run, its text form and whether the room drew it in its own paragraph. The piece of a text element after a pending paragraph break took a number of its own, so after a fold a reject of the break drew the run's text as two `w:t` where the room draws one.",
+  "after": "A checkpoint numbers a text element by its room run and its text form only, so the pieces a pending paragraph break makes share a number and an open joins them into one text shell again.",
+  "reason": "The checkpoint manifest and the `oc:run` attribute keep their format and meaning: a reader joins the elements that share a number, as before. Change messages, the change log and the Yjs document format do not change. An ordered room admits only clients of its own code version.",
+  "tests": ["packages/core/src/collaboration/ordered/__tests__/checkpoint-fold-decide.test.ts"],
+  "changeset": "ordered-fold-split-run-text",
+  "migration": null
+}

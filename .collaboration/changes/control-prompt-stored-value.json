@@ -1,0 +1,12 @@
+{
+  "impact": "compatible",
+  "fields": [],
+  "before": "A decision that showed a list or date control's prompt again cleared its value record (`w:lastValue`, `w:fullDate`). A file can show a prompt and store a value; a reject of typing over that prompt cleared the stored value in the editor alone and after a fold, where the live room kept it.",
+  "after": "A decision that shows a prompt again clears the value record only when the words it took away stated that value (a pick). The editor alone, the live room and a fold keep a value the file stores beside its prompt.",
+  "reason": "Change messages, the change log and its kinds keep their meaning, and the Yjs document format and the checkpoint format do not change. Only the composed Word file after such a decision changes, and it now equals across the editor alone, the room and a fold. An ordered room admits only clients of its own code version.",
+  "tests": [
+    "packages/core/src/collaboration/ordered/__tests__/client/editor-controls-value-fold.test.ts"
+  ],
+  "changeset": "control-prompt-stored-value",
+  "migration": null
+}
