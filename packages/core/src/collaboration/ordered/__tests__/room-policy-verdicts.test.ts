@@ -449,6 +449,7 @@ describe('the policy and today’s check', () => {
     expect(send(BEN, { kind: 'insert-row', ...EDIT, row: row(0), where: 'below' })).toBe(
       'accepted'
     );
+
     // The file's row, Ana's, Ben's and the file's row: then Ana's below Ben's
     expect(send(ANA, { kind: 'insert-row', ...EDIT, row: row(1), where: 'above' })).toBe(
       'accepted'
