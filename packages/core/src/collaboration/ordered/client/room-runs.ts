@@ -7,7 +7,7 @@ import { replaceItems } from '../model/mutations.ts';
 import type { OrderedDocument, OrderedFormatRecord, OrderedItem } from '../model/types.ts';
 
 /** What the first piece of a room run gave its units. */
-type FirstPiece = Pick<OrderedItem, 'run' | 'face' | 'fmts'>;
+type FirstPiece = Pick<OrderedItem, 'run' | 'face' | 'fmts' | 'home'>;
 
 /** Whether two elements say the same: both none, or equal but for their node ids. */
 const same = (a: OoxmlElement | null | undefined, b: OoxmlElement | null | undefined): boolean =>
@@ -39,10 +39,11 @@ function firstOf<T>(firsts: Map<string, T>, key: string, value: T): T {
  * Join again the pieces of each room run a checkpoint numbers (`oc:run`): `numbers` holds the
  * number on each run and text element, by its node id, which is the `run` and the text shell of
  * the units the load read from it. A pending suggestion split the room's run, and the file holds
- * each piece as a run of its own. The units of each later piece take the first piece's run, and
- * its face and format records where theirs say the same; a text element takes the text shell of
- * the first one of its number. So a decision that takes the suggestion away draws the run as the
- * room does. Runs after the takeovers: a record keeps what it took.
+ * each piece as a run of its own. The units of each later piece take the first piece's run, the
+ * paragraph it was loaded in (a piece after a paragraph break is drawn with new ids, as in the
+ * room), and its face and format records where theirs say the same; a text element takes the text
+ * shell of the first one of its number. So a decision that takes the suggestion away draws the run
+ * as the room does. Runs after the takeovers: a record keeps what it took.
  */
 export function withCheckpointRuns(
   doc: OrderedDocument,
@@ -88,6 +89,7 @@ function joinedItem(
   return createOrderedItem({
     ...item,
     run: first.run,
+    home: first.home,
     face: same(item.face, first.face) ? first.face : item.face,
     fmts: item.fmts.map((record) => first.fmts.find((f) => sameRecord(f, record)) ?? record),
     ...(textShell === undefined ? {} : { textShell }),

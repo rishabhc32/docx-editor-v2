@@ -10,6 +10,7 @@ import { apply, at, DIRECT, EDIT, markOf, opens } from './change-apply-fixture.t
 import { checkFold, mediaStore } from './fold-check.ts';
 import {
   alphaOmega,
+  bodyOf,
   docx,
   MATRIX_EXTRAS,
   MATRIX_ITEMS,
@@ -65,6 +66,19 @@ describe('a decision after a fold, on a suggestion inside a run', () => {
         apply(doc, 'ana:1', { kind: 'insert', ...EDIT, place: at(doc, 0, 7), text: 'X ' });
       },
       'a word inside a formatted run'
+    );
+  });
+
+  // The room's run goes on in the new paragraph: its piece there is drawn with new ids
+  test('a suggested paragraph break, beside a deletion in a combo box', async () => {
+    const combo = MATRIX_ITEMS.find((item) => item.key === 'combo');
+    await foldOf(
+      p(run('Cloud and serverless.')) + bodyOf(combo!),
+      (doc) => {
+        apply(doc, 'ana:1', { kind: 'delete', ...EDIT, from: at(doc, 2, 6), to: at(doc, 2, 7) });
+        apply(doc, 'bob:1', { kind: 'split', ...EDIT, place: at(doc, 0, 6) }, 'Bob');
+      },
+      'a paragraph break inside a run'
     );
   });
 });
