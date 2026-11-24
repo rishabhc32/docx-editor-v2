@@ -238,8 +238,8 @@ function noteUnit(ctx: ComposeContext, boxes: readonly Box[], item: OrderedItem)
   for (const b of boxes) {
     b.drawn = true;
     if (struck) b.struck = true;
-    if (accepted) b.accepted = true;
-    if (own) b.own = true;
+    b.accepted ||= accepted;
+    b.own ||= own;
   }
 }
 
@@ -427,7 +427,9 @@ function closeBox(ctx: ComposeContext, done: Box, into: Box): void {
     // Words that filled its prompt beside a record it stores, once accepted, give the record, as
     // the engine reads it back (`fillsPromptBesideRecord`)
     const filled = done.accepted && !done.own && storesValueRecord(container);
-    if (done.reached || emptied || valued || filled) ctx.reached.push(container.id);
+    if (done.reached || emptied || valued || filled) {
+      ctx.reached.push(container.id);
+    }
   }
 
   if (done.cover !== undefined) place(ctx, into.children, container, open);
