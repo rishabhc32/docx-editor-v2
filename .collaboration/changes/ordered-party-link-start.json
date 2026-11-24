@@ -1,0 +1,13 @@
+{
+  "impact": "compatible",
+  "fields": [],
+  "before": "The suggestions-only policy refused a party's edit at the start of a link or a content control that another person's pending suggestion inserted as nested, though the engine types beside the container there, as the editor alone does, and the host's check allows it.",
+  "after": "An edit at a link's or a control's start is judged where it lands, once applied: beside the container it is allowed, and typing that the keyboard sends into a control at its edge is inside it and refused as nested.",
+  "reason": "Change messages, the change log and its kinds keep their meaning, and the Yjs document format does not change. The room refuses fewer changes; every copy applies the change log with the same code version, so the copies agree. Checkpoints do not change. Ordered rooms are not deployed yet, so no room needs a migration.",
+  "tests": [
+    "packages/core/src/collaboration/ordered/__tests__/room-policy-verdicts.test.ts",
+    "packages/core/src/collaboration/ordered/__tests__/client/editor-party-rules.test.ts"
+  ],
+  "changeset": "ordered-party-link-start",
+  "migration": null
+}
