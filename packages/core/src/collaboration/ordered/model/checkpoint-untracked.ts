@@ -33,6 +33,8 @@ export interface CheckpointUntrackedRecord {
   readonly recordUnchanged?: boolean;
   /** The cells the table showed when it was taken, by their labels. */
   readonly tableCells?: readonly number[];
+  /** The suggestion the record was taken from, by its place in the manifest's list. */
+  readonly replaced?: number;
 }
 
 /**
@@ -114,5 +116,8 @@ function readRecord(
       ? bool(f.get('recordUnchanged'), at(path, 'recordUnchanged'))
       : undefined,
     tableCells: cells?.map((cell, k) => int(cell, at(at(path, 'tableCells'), k))),
+    replaced: f.has('replaced')
+      ? int(f.get('replaced'), at(path, 'replaced'), 0, suggestions - 1)
+      : undefined,
   };
 }

@@ -91,7 +91,10 @@ class SuggestionList {
 interface UntrackedOpen {
   readonly story: OrderedStory;
   readonly shell: OoxmlElement;
-  /** Every record of each such properties element, decided or not, that no takeover holds. */
+  /**
+   * Every record of each such properties element, decided or not, but those a change record holds
+   * by takeover: a record taken by an untracked one is listed, as no change record holds it.
+   */
   readonly byTarget: ReadonlyMap<OrderedPropertyTarget, readonly OrderedElementRecord[]>;
 }
 
@@ -284,7 +287,7 @@ function untrackedOpens(doc: OrderedDocument): UntrackedOpen[] {
 
       const byTarget = new Map<OrderedPropertyTarget, OrderedElementRecord[]>();
       for (const record of open.props) {
-        if (record.kind === 'element' && record.replaced === undefined) {
+        if (record.kind === 'element' && (record.replaced === undefined || record.untracked)) {
           const records = byTarget.get(record.target) ?? [];
           records.push(record);
           byTarget.set(record.target, records);
@@ -309,7 +312,7 @@ function untrackedOpens(doc: OrderedDocument): UntrackedOpen[] {
 /**
  * For each properties element of a container the file writes that a pending record changes with
  * no change record: the container's own properties, and every record of them, decided or not,
- * that no takeover holds (a takeover's records are kept by their change record).
+ * that no change record holds by takeover (those records are kept by their change record).
  */
 function checkpointUntracked(
   doc: OrderedDocument,
@@ -333,9 +336,11 @@ function checkpointUntracked(
         merge,
         recordUnchanged,
         tableCells,
+        replaced,
       } of records) {
         const made = doc.suggestions.get(suggestion);
-        if (made !== undefined) {
+        const taken = replaced === undefined ? undefined : doc.suggestions.get(replaced);
+        if (made !== undefined && (replaced === undefined || taken !== undefined)) {
           listed.push({
             suggestion: list.indexOf(made),
             element,
@@ -343,6 +348,7 @@ function checkpointUntracked(
             merge,
             recordUnchanged,
             tableCells: tableCells && cellLabels(story, tableCells, labels),
+            replaced: taken && list.indexOf(taken),
           });
         }
       }

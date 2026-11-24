@@ -1,13 +1,22 @@
 // A decision after a fold gives the Word file the same decision gives in the room (design D14).
 // A pending suggestion splits the run it sits in, and a fold writes each piece as a run of its
 // own; a decision that takes the suggestion away draws the room's run whole again. A new list's
-// definition goes with its suggestion.
+// definition goes with its suggestion. A table record keeps what it took from another.
 
 import { describe, expect, test } from 'bun:test';
 import { strFromU8, unzipSync } from 'fflate';
 import { openOrderedWordFile } from '../client/open.ts';
 import type { OrderedDocument } from '../model/types.ts';
-import { apply, at, DIRECT, EDIT, markOf, opens } from './change-apply-fixture.ts';
+import {
+  addressOf,
+  apply,
+  APPLY_FILE,
+  at,
+  DIRECT,
+  EDIT,
+  markOf,
+  opens,
+} from './change-apply-fixture.ts';
 import { checkFold, checkpointBytes, mediaStore } from './fold-check.ts';
 import {
   alphaOmega,
@@ -183,5 +192,21 @@ describe('a decision after a fold, beside a pending control value', () => {
       },
       'a drop-down list beside a check box'
     );
+  });
+});
+
+describe("a fold of a table's records", () => {
+  test('two row heights of one person on a row with no properties', async () => {
+    const { document: doc, base } = openOrderedWordFile(APPLY_FILE, { file: 1 });
+    for (const [id, heightTwips] of [
+      ['ana:1', 300],
+      ['ana:2', 480],
+    ] as const) {
+      const on = [addressOf(opens(doc, 'tr')[0]!)];
+      const op = { op: 'setTableRowHeight', heightTwips } as const;
+      apply(doc, id, { kind: 'table-property', ...EDIT, on, op });
+    }
+
+    await checkFold(doc, base, mediaStore(base), 'two row heights');
   });
 });

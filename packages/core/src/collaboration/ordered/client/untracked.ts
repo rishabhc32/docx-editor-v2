@@ -82,7 +82,12 @@ function restoredRecords(
   for (const record of records) {
     const id = listedIds[record.suggestion];
     const seq = id === undefined ? undefined : doc.suggestions.get(id)?.seq;
-    if (id === undefined || seq === undefined) {
+    const replaced = record.replaced === undefined ? undefined : listedIds[record.replaced];
+    if (
+      id === undefined ||
+      seq === undefined ||
+      (record.replaced !== undefined && replaced === undefined)
+    ) {
       return null;
     }
 
@@ -103,6 +108,7 @@ function restoredRecords(
       seq,
       target,
       tableCells: record.tableCells === undefined ? undefined : cells,
+      replaced,
     });
   }
 
