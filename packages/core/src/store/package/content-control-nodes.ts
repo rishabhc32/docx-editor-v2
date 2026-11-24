@@ -742,7 +742,11 @@ export function inlineTextOf(nodes: readonly OoxmlNode[], lineBreak?: string): s
     }
     for (const child of node.children) walk(child, depth + 1);
   };
-  for (const node of nodes) walk(node, 0);
+
+  for (const node of nodes) {
+    walk(node, 0);
+  }
+
   return text;
 }
 

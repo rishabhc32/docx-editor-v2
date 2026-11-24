@@ -509,7 +509,9 @@ function recordEdits(before: OoxmlElement, after: OoxmlElement): RecordEdits {
   const unchanged =
     contentControlTextOf(after) === contentControlTextOf(before) &&
     isShowingPlaceholder(after) === isShowingPlaceholder(before);
-  if (unchanged) return {};
+  if (unchanged) {
+    return {};
+  }
 
   // A prompt shown again clears the record its words stated, not one the file held beside it
   if (isShowingPlaceholder(after) && !recordStatesText(before, contentControlTextOf(before))) {
@@ -559,7 +561,10 @@ function statedValue(summary: ContentControlProperties, text: string): string | 
   const previous = current === undefined ? null : parseIsoDate(current);
   const century = previous ? Math.floor(previous.year / 100) * 100 : undefined;
   const shown = parseContentControlDate(text, summary.date?.dateFormat, century);
-  if (!shown) return undefined;
+  if (!shown) {
+    return undefined;
+  }
+
   const year = String(shown.year).padStart(4, '0');
   const month = String(shown.month).padStart(2, '0');
   const day = String(shown.day).padStart(2, '0');
@@ -574,7 +579,10 @@ function statedValue(summary: ContentControlProperties, text: string): string | 
 export function recordStatesText(control: OoxmlElement, text: string): boolean {
   const summary = contentControlSummaryOf(control);
   const list = summary.type === 'dropDownList' || summary.type === 'comboBox';
-  if (!list && summary.type !== 'date') return false;
+  if (!list && summary.type !== 'date') {
+    return false;
+  }
+
   const value = statedValue(summary, text);
   return value !== undefined && value === (list ? summary.lastValue : summary.date?.fullDate);
 }
