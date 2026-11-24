@@ -120,6 +120,27 @@ describe("typing over a prompt with another person's pending format (the host's 
     }
   });
 
+  // A deletion leaves a prompt's units (a prompt is not content), so Bob's format on them stays
+  // as it was, and today's check finds nothing of his changed (allowed)
+  test('a deletion that reaches the prompt leaves it, with the format on it', () => {
+    for (const [file, line, from, to] of [
+      [PLAIN, 0, 2, 8 + PROMPT.length],
+      [BLOCK, 1, 0, PROMPT.length],
+    ] as const) {
+      const { doc, send } = roomOn(file);
+      expect(send(BOB, promptOf(doc).bold)).toBe('accepted');
+      const deletion = {
+        kind: 'delete',
+        ...EDIT,
+        from: at(doc, line, from),
+        to: at(doc, line, to),
+      };
+      expect(send(CY, deletion)).toBe('accepted');
+      expect(bobs(doc)).toBe(1);
+      expect(bobs(reopened(saved(packageOf(file), doc)))).toBe(1);
+    }
+  });
+
   test('once content replaced the prompt, a party types in the control freely', () => {
     const { doc, send } = roomOn(PLAIN);
     const { place, bold } = promptOf(doc);

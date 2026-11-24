@@ -319,13 +319,19 @@ function othersFormatOn(
  * the author's own items, as `othersOnOwn` reads them; on other units not struck already (policy
  * 1), their format. Word nests a run's format record in the run's deletion, so taking the
  * deletion back takes the format back too, and today's check finds it changed (`package` or
- * `others_suggestions`). A mark's, a row's or a cell's record sits beside the deletion.
+ * `others_suggestions`). A mark's, a row's or a cell's record sits beside the deletion. A strike
+ * leaves a prompt's items, which are no content (`deleteText`); content in place of the prompt
+ * is judged by the prompt's rules (`fillsOthersPrompt`).
  */
 function othersUnderStrike(
   doc: OrderedDocument,
   maker: OrderedMaker,
   item: OrderedItem
 ): string | null {
+  if (item.prompt === true) {
+    return null;
+  }
+
   if (insertedByOwn(doc, maker, item)) {
     return othersOnOwn(doc, maker, item);
   }

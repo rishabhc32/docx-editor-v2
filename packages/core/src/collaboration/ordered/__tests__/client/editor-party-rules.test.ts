@@ -48,6 +48,17 @@ const PROMPTED = docx(
     p(t('After.'))
 );
 
+/** An inline control that shows its prompt, between words. */
+const INLINE_PROMPTED = docx(
+  p(
+    t('Name: ') +
+      '<w:sdt><w:sdtPr><w:showingPlcHdr/></w:sdtPr><w:sdtContent>' +
+      t(PROMPT, '<w:rStyle w:val="PlaceholderText"/>') +
+      '</w:sdtContent></w:sdt>' +
+      t(' end.')
+  )
+);
+
 /** Two parties and the organiser, in a room with the suggestions-only policy. */
 async function people(file: Uint8Array) {
   const room = localRoom(file, { policy: suggestionsOnlyPolicy() });
@@ -303,7 +314,22 @@ describe('a party edit today’s check allows', () => {
       closeAll();
     }
   });
-});
+
+  // Today: a deletion leaves a prompt's units (a prompt is not content), so Ben's format on the
+  // prompt stays as it was (allowed)
+  test('a deletion over a prompt with another person’s pending format: the prompt stays', async () => {
+    const { room, ana, ben, olive } = await people(INLINE_PROMPTED);
+    caretAt(ben, 0, 12, 18);
+    run(ben, { type: 'toggleMark', mark: 'bold' });
+    await settle();
+    caretAt(ana, 0, 2, 6 + PROMPT.length);
+    run(ana, { type: 'deleteText' });
+    await settle();
+    converged(room, ana, ben, olive);
+    expect(editorTexts(ana)).toEqual([`Name: ${PROMPT} end.`]);
+    expect(cardsOf(room)).toEqual([['Ana'], ['Ben']]);
+    expect(revisions(await savedBody(olive))).toEqual(['del:Ana', 'rPrChange:Ben']);
+  });
 });
 
 describe('a party edit today’s check refuses', () => {
