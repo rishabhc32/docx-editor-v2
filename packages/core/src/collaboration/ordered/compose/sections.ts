@@ -252,8 +252,8 @@ export function sectionAfter(
     ctx,
     records.filter((r) => !kept(r))
   );
-  const madeOver = shown.accepted.filter((r) => !madeOverRejected(ctx, r, records));
-  const accepted = [...records.filter(kept), ...madeOver].sort((a, b) => a.seq - b.seq);
+  const acceptedNow = shown.accepted.filter((r) => !madeOverRejected(ctx, r, records));
+  const accepted = [...records.filter(kept), ...acceptedNow].sort((a, b) => a.seq - b.seq);
   const pending = shown.pending;
   const rejected = records.filter((r) => isRejectedWrite(ctx, r));
   const decided = [...accepted, ...rejected].sort((a, b) => a.seq - b.seq);

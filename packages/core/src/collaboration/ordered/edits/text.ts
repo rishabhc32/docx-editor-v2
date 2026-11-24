@@ -435,8 +435,8 @@ export function withFormat(
 
 /**
  * Policy 2 for property records: a change of a paragraph's (or a table's, a row's, a cell's, a
- * section's) properties takes over the pending records of other suggestions on the same properties, as
- * Word keeps one change record per properties element. The takeovers are reported.
+ * section's) properties takes over the pending records of other suggestions on the same
+ * properties, as Word keeps one change record per properties element. The takeovers are reported.
  */
 export function withPropertyRecord(
   ctx: Ctx,
