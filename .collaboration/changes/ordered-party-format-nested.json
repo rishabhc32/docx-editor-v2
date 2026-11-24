@@ -1,0 +1,15 @@
+{
+  "impact": "compatible",
+  "fields": [],
+  "before": "The suggestions-only policy allowed a party's format over another person's pending insertion or deletion, though Word nests its change record in their revision mark and the host's check refuses it as nested. Once the room accepted one, that check refused every later change of the party.",
+  "after": "A party's format that writes a change record in a run of another person's pending insertion or deletion (also a Word file's own revision) is refused as nested, judged once applied. A format that changes nothing there, one on the party's own new words, and a property change on another person's mark, paragraph, row, cell or table stay allowed.",
+  "reason": "Change messages, the change log and its kinds keep their meaning, and the Yjs document format does not change. The room refuses more format changes; every copy applies the change log with the same code version, so the copies agree. Checkpoints do not change. Ordered rooms are not deployed yet, so no room needs a migration.",
+  "tests": [
+    "packages/core/src/collaboration/ordered/__tests__/room-policy-formats.test.ts",
+    "packages/core/src/collaboration/ordered/__tests__/room-policy.test.ts",
+    "packages/core/src/collaboration/ordered/__tests__/room-policy-verdicts.test.ts",
+    "packages/core/src/collaboration/ordered/__tests__/client/editor-party-rules.test.ts"
+  ],
+  "changeset": "ordered-party-format-nested",
+  "migration": null
+}

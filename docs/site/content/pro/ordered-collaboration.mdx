@@ -345,12 +345,12 @@ A policy gives a verdict for each change before the room applies it. A policy re
 Under the suggestions-only policy, a participant who may only suggest cannot:
 
 - Change a header or a footer.
-- Edit inside another participant's pending suggestion: type or delete in their inserted words, or type in a row, a cell, a table, a note, a text box, a content control, or a link that they inserted.
+- Edit inside another participant's pending suggestion: type or delete in their inserted words, type in a row, a cell, a table, a note, a text box, a content control, or a link that they inserted, or format their inserted or deleted words.
 - Make a direct edit.
 - Accept or reject a suggestion.
 - Add to or take back another participant's suggestion.
 
-A format or a property change on another participant's inserted or deleted words is allowed. It is a suggestion of its own, as Word records it. A direct edit, or an edit in a header or a footer, that changes nothing is allowed, such as a format that the words have already.
+A format on another participant's inserted or deleted words is refused, because Word records it inside their suggestion. A format that their words have already is allowed, because it records nothing. A property change on their paragraph, row, cell, or table is allowed. It is a suggestion of its own, as Word records it beside their suggestion. A direct edit, or an edit in a header or a footer, that changes nothing is allowed, such as a format that the words have already.
 
 No participant can add to or take back another participant's suggestion, because the change would be written under that participant's name. A content control's lock binds every participant.
 
@@ -397,7 +397,7 @@ The room refuses a change with an `OrderedRoomRefusalCode`:
 
 The policy codes are `policy-read-only`, `policy-decide`, `policy-furniture`, `policy-nested`, `policy-direct`, `policy-not-own`, `policy-comment`, and `policy-failed`. The suggestions-only policy can also give an `OrderedPolicyReason`, such as `furniture`, `nested`, or `others_suggestions`, which your application can report in its own messages.
 
-A policy gives its verdict before the room applies a change. It can also implement `checkApplied`, which judges what the change did once it applied, and the room takes the change back if `checkApplied` refuses it. The suggestions-only policy uses it for two rules. A party's direct edit, or a party's change in a header or footer, is accepted only when it makes no suggestion. A direct edit that types inside a pending insertion makes no suggestion of its own, because it joins that insertion, so the policy refuses it before it applies. A party's format or property change may not take over another person's pending record. If your `applyChange` wraps `applyOrderedChange`, pass the room's context on unchanged so that the room learns what the change did. If the room does not learn it, a policy with `checkApplied` refuses the change with `policy-failed`.
+A policy gives its verdict before the room applies a change. It can also implement `checkApplied`, which judges what the change did once it applied, and the room takes the change back if `checkApplied` refuses it. The suggestions-only policy uses it for three rules. A party's direct edit, or a party's change in a header or footer, is accepted only when it makes no suggestion. A direct edit that types inside a pending insertion makes no suggestion of its own, because it joins that insertion, so the policy refuses it before it applies. A party's format is nested when it records a change in another person's inserted or deleted words. A party's format or property change may not take over another person's pending record. If your `applyChange` wraps `applyOrderedChange`, pass the room's context on unchanged so that the room learns what the change did. If the room does not learn it, a policy with `checkApplied` refuses the change with `policy-failed`.
 
 The room sends `reload` when a client must open the room again. The reason is one of these values:
 
