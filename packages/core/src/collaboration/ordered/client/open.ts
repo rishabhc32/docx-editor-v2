@@ -183,6 +183,15 @@ function openCheckpointRead(pkg: OoxmlPackage, options: OrderedWordFileOptions):
   }
 
   withCheckpointRuns(doc, marks.runs);
+
+  // The versions the room gave, after every step above: an open is no write of a suggestion
+  for (const { id, version } of facts.suggestions) {
+    const suggestion = doc.suggestions.get(id);
+    if (suggestion !== undefined) {
+      suggestion.version = version ?? 0;
+    }
+  }
+
   return opened;
 }
 

@@ -70,13 +70,14 @@ class SuggestionList {
    * A listed suggestion as the manifest lists it; a file's change record outside the stories by
    * its local name, with its own `w:id`.
    */
-  entryOf({ id, attribution, status }: OrderedSuggestion): CheckpointSuggestion {
+  entryOf({ id, attribution, status, version }: OrderedSuggestion): CheckpointSuggestion {
     const record = this.doc.partRevisions.get(id);
     if (record === undefined) {
-      return { id, attribution, revisions: this.writtenOf(id), status };
+      return { id, attribution, revisions: this.writtenOf(id), status, version };
     }
 
-    return { id, attribution, revisions: [record.revision.id], record: record.element, status };
+    const { revision, element } = record;
+    return { id, attribution, revisions: [revision.id], record: element, status, version };
   }
 
   /** The `w:id`s the file writes for a suggestion's marks, every role. */

@@ -1,10 +1,12 @@
 // A decision after a fold gives the Word file the same decision gives in the room (design D14).
 // A pending suggestion splits the run it sits in, and a fold writes each piece as a run of its
 // own; a decision that takes the suggestion away draws the room's run whole again. A new list's
-// definition or style goes with its suggestion. A table record keeps what it took from another.
+// definition or style goes with its suggestion. A table record keeps what it took from another. A
+// suggestion keeps its version, so a decision that names what the room showed applies.
 
 import { describe, expect, test } from 'bun:test';
 import { strFromU8, unzipSync } from 'fflate';
+import { orderedCardSeen } from '../change/apply-decide.ts';
 import { openOrderedWordFile } from '../client/open.ts';
 import type { OrderedDocument } from '../model/types.ts';
 import {
@@ -288,4 +290,48 @@ describe("a fold of a table's records", () => {
       await checkFold(doc, base, blobs, `${kind}, folded, then a row height`);
     });
   }
+});
+
+describe("a suggestion's version after a fold", () => {
+  // Each pending suggestion's card as the organiser sends it: its suggestions and their versions
+  const seenOf = (doc: OrderedDocument) =>
+    [...doc.suggestions.values()]
+      .filter((s) => s.status === 'pending')
+      .map((s) => orderedCardSeen(doc, s.id));
+
+  // Words a person adds to their own insertion count on it; a table op's records, which an open
+  // gives back their room facts, count on nothing
+  test('typing that joins an insertion, beside a column and a row height', async () => {
+    const first = openOrderedWordFile(APPLY_FILE, { file: 1 });
+    const { document: doc } = first;
+    const blobs = mediaStore(first.base);
+    apply(doc, 'ana:1', { kind: 'insert', ...EDIT, place: at(doc, 0, 4), text: 'net ' });
+    apply(doc, 'ana:2', { kind: 'insert', ...EDIT, place: at(doc, 0, 8), text: 'x' });
+    const cell = addressOf(opens(doc, 'tc')[1]!);
+    apply(doc, 'bob:1', { kind: 'insert-column', ...EDIT, cell, where: 'left' }, 'Bob');
+    const on = [addressOf(opens(doc, 'tr')[0]!)];
+    const op = { op: 'setTableRowHeight', heightTwips: 480 } as const;
+    apply(doc, 'bob:2', { kind: 'table-property', ...EDIT, on, op }, 'Bob');
+    const seen = seenOf(doc);
+    expect(seen.some((card) => card?.some(({ version }) => version > 0))).toBe(true);
+
+    const once = await folded(doc, first.base, 2, blobs);
+    const twice = await folded(once.document, once.base, 3, blobs);
+    expect({ once: seenOf(once.document), twice: seenOf(twice.document) }).toEqual({
+      once: seen,
+      twice: seen,
+    });
+
+    // The organiser decides each card as the room showed it
+    for (const suggestions of seen) {
+      apply(
+        twice.document,
+        `olive:${seen.indexOf(suggestions) + 1}`,
+        { kind: 'decide', cards: [{ suggestions: suggestions! }], status: 'accepted' },
+        'Olive'
+      );
+    }
+
+    expect(seenOf(twice.document)).toEqual([]);
+  });
 });

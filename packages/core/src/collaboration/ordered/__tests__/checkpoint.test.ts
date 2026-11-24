@@ -517,6 +517,15 @@ describe('a file of another kind is refused by name', () => {
         suggestions: [ANA_SUGGESTION],
         untracked: [{ label: 0, target: 'tcPr', records: [{ suggestion: 0 }] }],
       }),
+      (m) => ({ ...m, suggestions: [{ ...ANA_SUGGESTION, version: -1 }] }),
+      (m) => ({ ...m, suggestions: [{ ...ANA_SUGGESTION, version: '2' }] }),
+      (m) => ({ ...m, changeRecords: [{ label: 0, target: 'tcPr', records: [] }] }),
+      // A label on no element of the file
+      (m) => ({
+        ...m,
+        suggestions: [ANA_SUGGESTION],
+        changeRecords: [{ label: 0, target: 'tcPr', records: [{ suggestion: 0, merge: [] }] }],
+      }),
       // A key that reaches a prototype, in a known section or in one a reader skips
       (m) => ({ ...m, comments: [JSON.parse('{"__proto__": {"id": "7"}}')] }),
       (m) => ({ ...m, later: { constructor: 1 } }),
