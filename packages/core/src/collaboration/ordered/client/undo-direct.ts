@@ -46,13 +46,30 @@ export function madeBy(doc: OrderedDocument, changeId: string, direct = true): s
 }
 
 /**
- * The shown units a change typed into other suggestions (`doc.added`). A refusal by name when
- * such a suggestion is decided: a decision is final.
+ * The shown units a change typed into other suggestions: units of its spaces it did not label,
+ * and units it added to another suggestion from the engine's template (`doc.added`, a control's
+ * value). A refusal by name when such a suggestion is decided: a decision is final.
  */
-function typedInside(doc: OrderedDocument, change: OrderedChange): OrderedItem[] {
+function typedInside(
+  doc: OrderedDocument,
+  change: OrderedChange,
+  own: ReadonlySet<string>
+): OrderedItem[] {
+  if (!isOrderedEditChange(change)) return [];
+  const story = doc.stories.get(change.part);
+  if (!story) return [];
+  const typed = new Set(itemsAddedBy(doc, change.id));
+  for (let k = 1; k <= ORDERED_CHANGE_LIMITS.targets; k += 1) {
+    const items = story.spaces.get(`i:${change.id}.${k}`);
+    if (!items) break;
+    for (const item of items) {
+      typed.add(item);
+    }
+  }
+
   const out: OrderedItem[] = [];
-  for (const item of itemsAddedBy(doc, change.id)) {
-    if (item.by === null || isHidden(doc, item)) {
+  for (const item of typed) {
+    if (item.by === null || own.has(item.by) || isHidden(doc, item)) {
       continue;
     }
 
@@ -133,8 +150,8 @@ function reverts(ids: readonly string[], status: 'accepted' | 'rejected'): Order
  * another person's pending insertion too (a direct edit lays its own settled record there).
  * Text the organiser typed inside another person's pending insertion, and a control's value set
  * in a control a pending insertion put in, belong to that insertion, so a direct deletion of
- * exactly those units takes them back. The inverse is read from the list
- * as it is now, so another person's suggestion inside the text stays as it is.
+ * exactly those units takes them back. The inverse is read from the list as it is now, so
+ * another person's suggestion inside the text stays as it is.
  */
 export function inverseOfDirect(
   doc: OrderedDocument,
@@ -168,7 +185,7 @@ export function inverseOfDirect(
       reject.push(id);
     }
 
-    deletions.push(...deletionsOf(doc, change.part, typedInside(doc, change)));
+    deletions.push(...deletionsOf(doc, change.part, typedInside(doc, change, new Set(made))));
   }
 
   // Empty when nothing of the step shows any more (another person took back the insertion
