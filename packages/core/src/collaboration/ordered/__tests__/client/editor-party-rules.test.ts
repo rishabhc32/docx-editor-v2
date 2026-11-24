@@ -269,6 +269,41 @@ describe('a party edit today’s check allows', () => {
       closeAll();
     }
   });
+
+  // Today: each new row has its own `w:ins`, and the take-back of Ana's rows leaves Ben's row as
+  // it was (allowed)
+  test('new rows right above and below another person’s new row: the party’s own rows', async () => {
+    for (const status of ['rejected', 'accepted'] as const) {
+      const { room, ana, ben, olive } = await people(TABLE_FILE);
+      caretIn(ben, 'Fee');
+      expect(tableCommand(ben, { type: 'insertRow', where: 'below' }).ok).toBe(true);
+      await settle();
+      caretIn(ana, 'Fee');
+      expect(tableCommand(ana, { type: 'insertRow', where: 'below' }).ok).toBe(true);
+      await settle();
+      caretIn(ana, '100');
+      expect(tableCommand(ana, { type: 'insertRow', where: 'above' }).ok).toBe(true);
+      await settle();
+      converged(room, ana, ben, olive);
+      const rows = (xml: string) => xml.match(/<w:tr[ >].*?<\/w:tr>/gs) ?? [];
+      const authors = (xml: string) => rows(xml).map((row) => revisions(row)[0] ?? 'file');
+      expect(authors(await savedBody(olive))).toEqual([
+        'file',
+        'ins:Ana',
+        'ins:Ben',
+        'ins:Ana',
+        'file',
+      ]);
+      while (cardsOf(room).length > 0) {
+        await decide(room, olive, cardsOf(room)[0]![0]!, status);
+      }
+
+      converged(room, ana, ben, olive);
+      expect(rows(await savedBody(olive)).length).toBe(status === 'accepted' ? 5 : 2);
+      closeAll();
+    }
+  });
+});
 });
 
 describe('a party edit today’s check refuses', () => {

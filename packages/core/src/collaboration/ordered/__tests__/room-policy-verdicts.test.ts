@@ -441,6 +441,30 @@ describe('the policy and today’s check', () => {
     );
   });
 
+  // Each new row has its own `w:ins`: a party's new row right above or below another person's
+  // new row sits beside it, and today's check takes it back alone (allowed)
+  test('a new row right beside another person’s new row is beside it', () => {
+    const { doc, send } = setup();
+    const row = (k: number) => addressOf(opens(doc, 'tr')[k]!);
+    expect(send(BEN, { kind: 'insert-row', ...EDIT, row: row(0), where: 'below' })).toBe(
+      'accepted'
+    );
+    // The file's row, Ana's, Ben's and the file's row: then Ana's below Ben's
+    expect(send(ANA, { kind: 'insert-row', ...EDIT, row: row(1), where: 'above' })).toBe(
+      'accepted'
+    );
+    expect(send(ANA, { kind: 'insert-row', ...EDIT, row: row(2), where: 'below' })).toBe(
+      'accepted'
+    );
+    expect(opens(doc, 'tr').map((tr) => tr.by)).toEqual([
+      null,
+      'S:ana-1:1.1',
+      'S:ben-1:1.1',
+      'S:ana-1:2.1',
+      null,
+    ]);
+  });
+
   test('a column that takes its width from another person’s new cell is inside their column', () => {
     const { doc, send } = setup();
     const tc = (k: number) => {

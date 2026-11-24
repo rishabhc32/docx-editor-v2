@@ -231,12 +231,14 @@ export function appliedNested(
         continue;
       }
 
-      // A row, a cell or a table lands where its labels say (`within`); a run of words at a caret
+      // A row, a cell or a table lands where its labels say (`within`), and so does what one of
+      // its own holds; a run of words at a caret
       if (insertedByOthers(doc, maker, item).length > 0) {
         return true;
       }
 
-      const landing = isBlockToken(item) ? null : landingOf(doc, story, item, id);
+      const held = isBlockToken(item) || heldByNew(item, id);
+      const landing = held ? null : landingOf(doc, story, item, id);
       if (landing !== null && caretInside(doc, maker, story, landing)) {
         return true;
       }
