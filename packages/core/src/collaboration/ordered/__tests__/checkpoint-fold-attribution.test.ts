@@ -107,6 +107,7 @@ describe('a new date on each kind of Word revision', () => {
       );
     }
   };
+
   // The marks a fold writes with another date
   const oldDates = (bytes: Uint8Array) =>
     Object.entries(unzipSync(bytes)).flatMap(([name, data]) =>

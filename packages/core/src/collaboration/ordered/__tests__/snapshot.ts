@@ -10,6 +10,7 @@ const identityOf = (item: object): number => {
     id = nextIdentity += 1;
     identities.set(item, id);
   }
+
   return id;
 };
 
