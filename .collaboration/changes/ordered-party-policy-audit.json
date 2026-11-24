@@ -1,0 +1,14 @@
+{
+  "impact": "compatible",
+  "fields": [],
+  "before": "The suggestions-only policy refused a party's new row right above or below another person's pending new row as nested: it read each paragraph mark of the party's own new row as typed words at a caret, and the caret at its last cell's end read the next row's mark. It also refused a party's deletion that reached a control's prompt with another person's pending format on it, though the deletion leaves the prompt and the format as they were.",
+  "after": "A new row beside another person's new row is beside it, as the host's check finds: what a new row, cell, table or note of the party's own holds lands with it. A deletion leaves a prompt's units, so the strike rule does not read them, and the deletion passes.",
+  "reason": "The Yjs document format, the ordered protocol and the checkpoint manifest do not change. The policy runs the same code on every copy, and every copy of a room runs the same code version. Ordered rooms are not deployed yet.",
+  "tests": [
+    "packages/core/src/collaboration/ordered/__tests__/room-policy-verdicts.test.ts",
+    "packages/core/src/collaboration/ordered/__tests__/room-policy-prompts.test.ts",
+    "packages/core/src/collaboration/ordered/__tests__/client/editor-party-rules.test.ts"
+  ],
+  "changeset": "ordered-party-policy-audit",
+  "migration": null
+}
