@@ -4,6 +4,7 @@
 import { ooxmlTreesEqual } from '../../../store/package/ooxml-serialize.ts';
 import type { OoxmlElement, OoxmlNode } from '../../../store/package/ooxml-tree.ts';
 import { contentControlTextOf } from '../../../store/package/content-control-nodes.ts';
+import { liveRuns } from '../../../store/store/tracked-content-control-value.ts';
 import { applyTreeOp } from '../../../store/store/tree-op-apply.ts';
 import type { ContentControlValueInput } from '../../../store/store/tree-op-content-controls.ts';
 import { build } from '../../../store/store/tree-op-tracked.ts';
@@ -128,7 +129,9 @@ function strikeOldValue(ctx: Ctx, open: OrderedItem, suggestion: string): void {
 
 /**
  * The value's items: the runs the engine wrote in the control, loaded as a paragraph would be
- * (a check box's symbol is an object), inserted by the suggestion.
+ * (a check box's symbol is an object), inserted by the suggestion. Only the runs the value shows
+ * (`liveRuns`), as the engine proposes a value: the struck words the write kept beside it are the
+ * control's items already.
  */
 function valueItems(
   ctx: Ctx,
@@ -137,8 +140,11 @@ function valueItems(
   suggestion: string
 ): OrderedItem[] {
   const content = control.children.find(isControlContent);
-  const runs = content && content.kind !== 'textValue' ? content.children : [];
-  if (runs.some((c) => c.kind === 'paragraph' || isWml(c, 'p'))) {
+  if (!content || content.kind === 'textValue') {
+    return [];
+  }
+
+  if (content.children.some((c) => c.kind === 'paragraph' || isWml(c, 'p'))) {
     // A block control's value: its text, in the first run's face
     const display = contentControlTextOf(control);
     const face = valueFace(control);
@@ -158,7 +164,7 @@ function valueItems(
     ];
   }
 
-  const paragraph = build(ctx.ids.node(), 'paragraph', 'p', [], runs);
+  const paragraph = build(ctx.ids.node(), 'paragraph', 'p', [], liveRuns(content));
   return templateItems(ctx, paragraph, suggestion, isUnit).map(
     (item): OrderedItem => ({ ...item, by: suggestion, within: open.within })
   );

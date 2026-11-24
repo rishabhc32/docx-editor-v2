@@ -8,13 +8,17 @@
 // a combo box's typed value once wrote that text as the value live, though a field's code reads as
 // no text: the editor alone and a fold keep the value. A reject of typing over a prompt the file
 // shows beside a stored value once took that value away in the editor alone and after a fold,
-// where the room kept it: the value the file holds stays, and only one the words wrote goes.
+// where the room kept it: the value the file holds stays, and only one the words wrote goes. A date
+// over another person's struck, formatted words once copied those words, with their format record,
+// into the party's new value: a fold made the copied record that person's, and their format joined
+// the party's card. The editor alone inserts only the words the value shows.
 
 import { afterEach, describe, expect, test } from 'bun:test';
 import { createDocxEditor } from '../../../../editor/docx-editor.ts';
 import { serializeOoxmlPart } from '../../../../store/package/ooxml-tree.ts';
 import { openOrderedWordFile } from '../../client/open.ts';
 import { composeOrderedPart } from '../../compose/compose.ts';
+import { orderedCards } from '../../decide.ts';
 import type { OrderedDocument } from '../../model/types.ts';
 import { checkpointBytes, folded, mediaStore } from '../fold-check.ts';
 import { docx, p, t } from '../word-fixtures.ts';
@@ -51,6 +55,11 @@ const line = (props: string, content: string) =>
 const ITEMS =
   '<w:listItem w:displayText="Net 30" w:value="30"/><w:listItem w:displayText="Net 60" w:value="60"/>';
 const DATE_FORMAT = '<w:dateFormat w:val="M/d/yyyy"/><w:lid w:val="en-US"/>';
+/** Words of a date that Cy struck and formatted, as a file holds them. */
+const STRUCK =
+  '<w:del w:id="1" w:author="Cy" w:date="2026-01-01T00:00:00Z"><w:r><w:rPr><w:caps/>' +
+  '<w:rPrChange w:id="2" w:author="Cy" w:date="2026-01-01T00:00:00Z"><w:rPr/></w:rPrChange>' +
+  '</w:rPr><w:delText xml:space="preserve">Jan </w:delText></w:r></w:del>';
 const CHECK_BOX =
   '<w14:checkbox><w14:checked w14:val="0"/><w14:checkedState w14:val="2612" w14:font="MS Gothic"/>' +
   '<w14:uncheckedState w14:val="2610" w14:font="MS Gothic"/></w14:checkbox>';
@@ -171,6 +180,15 @@ const CASES = [
     typing('2'),
   ],
   [
+    "a date over another person's struck, formatted words",
+    line(
+      `<w:date w:fullDate="2026-01-02T00:00:00Z">${DATE_FORMAT}</w:date>`,
+      STRUCK + t('1/2/2026')
+    ),
+    [6, 6],
+    pick('2026-03-04'),
+  ],
+  [
     "typing in the middle of a plain text control's value",
     line('<w:text/>', t('Acme Ltd')),
     [10, 10],
@@ -190,9 +208,29 @@ const controlOf = (xml: string): string =>
 
 type Decision = 'accept' | 'reject';
 
-/** Decide the one card as the organiser. */
+/** The party's card, as the page shows it. */
+const bensCard = (person: Person) =>
+  person.editor.getReviewItems().find((item) => item.kind === 'revision' && item.author === 'Ben');
+
+/** The page's cards, each by its author. */
+const pageCards = (person: Person): string[] =>
+  person.editor
+    .getReviewItems()
+    .filter((item) => item.kind === 'revision')
+    .map((item) => item.author)
+    .sort();
+
+/** The room's cards, each by the authors of its suggestions. */
+const roomCards = (doc: OrderedDocument): string[] =>
+  orderedCards(doc)
+    .map((card) =>
+      [...new Set(card.suggestions.map((id) => doc.suggestions.get(id)?.attribution.author))].join()
+    )
+    .sort();
+
+/** Decide the party's card as the organiser. */
 async function decide(olive: Person, decision: Decision): Promise<void> {
-  const [card] = olive.editor.getReviewItems().filter((item) => item.kind === 'revision');
+  const card = bensCard(olive);
   const result =
     decision === 'accept'
       ? olive.editor.acceptReviewItem(card?.key ?? '')
@@ -207,7 +245,7 @@ function alone(
   [from, to]: readonly [number, number],
   act: (person: Person) => void,
   decision: Decision
-): { readonly edited: string; readonly decided: string } {
+): { readonly edited: string; readonly cards: string[]; readonly decided: string } {
   const container = document.createElement('div');
   document.body.append(container);
   const editor = createDocxEditor({
@@ -223,13 +261,14 @@ function alone(
     act(person);
     surface(person).flushPendingInput();
     const edited = controlOf(editorXml(person));
-    const [card] = editor.getReviewItems().filter((item) => item.kind === 'revision');
+    const cards = pageCards(person);
+    const card = bensCard(person);
     const result =
       decision === 'accept'
         ? editor.acceptReviewItem(card?.key ?? '')
         : editor.rejectReviewItem(card?.key ?? '');
     expect(result.ok).toBe(true);
-    return { edited, decided: controlOf(editorXml(person)) };
+    return { edited, cards, decided: controlOf(editorXml(person)) };
   } finally {
     editor.destroy();
     container.remove();
@@ -287,6 +326,10 @@ describe("a party's edit of a control, decided live and after a fold, as the edi
         act(seated.ben);
         await settle();
         expect({ label, edited: roomControl(seated) }).toEqual({ label, edited: expected.edited });
+        expect({ label, cards: roomCards(seated.room.room.document) }).toEqual({
+          label,
+          cards: expected.cards,
+        });
 
         // A save reopened, and the room folded once and twice, each decided by the organiser
         const saved = new Uint8Array(await seated.olive.editor.save());
@@ -303,6 +346,11 @@ describe("a party's edit of a control, decided live and after a fold, as the edi
             label,
             copy,
             edited: expected.edited,
+          });
+          expect({ label, copy, cards: roomCards(reopened.room.room.document) }).toEqual({
+            label,
+            copy,
+            cards: expected.cards,
           });
           await decide(reopened.olive, decision);
           const decided = serializeOoxmlPart(

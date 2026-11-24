@@ -134,7 +134,7 @@ export function trackedValueRefusal(
 }
 
 /** The runs a container shows, history skipped: its own and those inside an insertion. */
-function liveRuns(container: OoxmlElement): readonly OoxmlElement[] {
+export function liveRuns(container: OoxmlElement): readonly OoxmlElement[] {
   return container.children.flatMap((child): OoxmlElement[] => {
     if (child.kind === 'run') return [child];
     if (child.kind === 'revisionInsert' || child.kind === 'revisionMoveTo') {
