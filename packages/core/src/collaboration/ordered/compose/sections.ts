@@ -269,19 +269,19 @@ export function sectionAfter(
     section = applyDecided(ctx, section, record);
   }
 
-  // A change record holds the section before the tracked writes, with every write Word makes
-  // untracked, a later one too: no reject takes those away
-  let held = section;
+  // A change record holds the section before the tracked writes; a file's record that stands
+  // holds it as the file states it, as the engine keeps a standing record
+  // (`withSectionChangeRecord`). Every write Word makes untracked goes under either, a later one
+  // too: no reject takes those away
+  const standing = pending.find(
+    (r): r is OrderedElementRecord => r.kind === 'element' && r.fileRecord !== undefined
+  )?.fileRecord;
+  let held = (standing && firstElement(standing)) ?? section;
   for (const record of later.filter(untracked)) {
     held = applyDecided(ctx, held, record);
   }
 
-  // A file's record that stands holds the section before the writes drawn over it, as the
-  // engine keeps a standing record (`withSectionChangeRecord`)
-  const standing = pending.find(
-    (r): r is OrderedElementRecord => r.kind === 'element' && r.fileRecord !== undefined
-  )?.fileRecord;
-  const prior = (standing && firstElement(standing)?.children) ?? held?.children ?? [];
+  const prior = held?.children ?? [];
   const taken: DrawnTakeover[] = [];
   for (const record of pending) {
     const before = section?.children ?? [];
