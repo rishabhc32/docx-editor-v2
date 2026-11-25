@@ -98,3 +98,24 @@ describe('a record taken over on a paragraph a deletion took', () => {
     expect(byBen(doc)).toEqual(['S:ben:1.1']);
   });
 });
+
+describe('a record taken over on a prompt that typing filled', () => {
+  test('the card names no change it replaced, live and folded', async () => {
+    const prompt = t('Click here to enter text.', '<w:rStyle w:val="PlaceholderText"/>');
+    const control =
+      '<w:sdt><w:sdtPr><w:id w:val="4"/><w:showingPlcHdr/><w:text/></w:sdtPr>' +
+      `<w:sdtContent>${prompt}</w:sdtContent></w:sdt>`;
+    const file = docx(p(t('Signed by ') + control + t(' for the buyer.')));
+    const { document: doc, base } = openOrderedWordFile(file, { file: 1 });
+    const blobs = mediaStore(base);
+    const format = (localName: string) =>
+      ({ kind: 'format', ...EDIT, properties: [{ localName }] }) as const;
+    apply(doc, 'ana:1', { ...format('i'), from: at(doc, 0, 10), to: at(doc, 0, 34) });
+    apply(doc, 'ana:2', { ...format('b'), from: at(doc, 0, 7), to: at(doc, 0, 15) });
+    expect(replacedBy(doc)).toEqual(['S:ana:1.1']);
+    apply(doc, 'ana:3', { kind: 'insert', ...EDIT, place: at(doc, 0, 34), text: 'Acme' });
+    expect(replacedBy(doc)).toEqual([]);
+    expect(replacedBy((await folded(doc, base, 2, blobs)).document)).toEqual([]);
+    await checkFold(doc, base, blobs, 'a filled prompt');
+  });
+});

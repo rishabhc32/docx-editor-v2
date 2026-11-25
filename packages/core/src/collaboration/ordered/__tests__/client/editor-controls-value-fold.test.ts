@@ -25,13 +25,15 @@
 // prompt showed again: the value goes, as Word reads it back from the prompt. A reject of typing
 // over a plain prompt with the organiser's comment on part of the words once showed the prompt
 // before the comment's range live, after it once folded: it goes inside the range, as the editor
-// alone puts it.
+// alone puts it. A party's format over his own on a prompt kept naming the change it replaced
+// once his typing filled the prompt: no copy names it, as a fold reads the file.
 
 import { afterEach, describe, expect, test } from 'bun:test';
 import { createDocxEditor } from '../../../../editor/docx-editor.ts';
 import { serializeOoxmlPart } from '../../../../store/package/ooxml-tree.ts';
 import { openOrderedWordFile } from '../../client/open.ts';
 import { composeOrderedPart } from '../../compose/compose.ts';
+import { orderedReplacedSuggestions } from '../../compose/replaced.ts';
 import { orderedCards } from '../../decide.ts';
 import type { OrderedDocument } from '../../model/types.ts';
 import { checkpointBytes, folded, mediaStore } from '../fold-check.ts';
@@ -565,4 +567,36 @@ describe("the organiser's comment on part of a party's typing over a plain promp
       expect(decided).toEqual([expected, ...copies.map(() => expected)]);
     });
   }
+});
+
+describe("a party's format over his own on a prompt, then his typing over it", () => {
+  // Ben's bold takes his italic's record on part of the prompt; his typing then fills the control,
+  // so the prompt shows nowhere and no copy names the change the bold replaced, as a fold reads
+  // the file
+  test('no copy names the change it replaced', async () => {
+    const file = line('<w:showingPlcHdr/><w:text/>', t('Click here to enter text.', FACE));
+    const seated = await seats(file, 1);
+    caretAt(seated.ben, 0, 6, 31);
+    seated.ben.editor.exec({ type: 'toggleMark', mark: 'italic' });
+    await settle();
+    caretAt(seated.ben, 0, 2, 11);
+    seated.ben.editor.exec({ type: 'toggleMark', mark: 'bold' });
+    await settle();
+    const doc = seated.room.room.document;
+    const bold = [...doc.suggestions.values()].at(-1)?.id ?? '';
+    const replaced = (copy: OrderedDocument) => orderedReplacedSuggestions(copy, bold).length;
+    expect(replaced(doc)).toBe(1);
+    caretAt(seated.ben, 0, 31);
+    typing('Acme')(seated.ben);
+    await settle();
+    roomControl(seated);
+    const { base } = openOrderedWordFile(file, { file: 1 });
+    const copies = [
+      doc,
+      seated.olive.handle.session.orderedDocument(),
+      seated.ben.handle.session.orderedDocument(),
+      (await folded(doc, base, 2, mediaStore(base))).document,
+    ];
+    expect(copies.map(replaced)).toEqual([0, 0, 0, 0]);
+  });
 });
