@@ -78,4 +78,37 @@ describe('a format the words already have when it arrives (audit R1 row 26)', ()
       ])
     );
   });
+
+  // Ana's bold on her own new words writes no change record. Olive's suggested bold, made before
+  // Ana's reached her, arrives at words that show it: it makes no record, as the editor alone's
+  // press over those words would not
+  test("an organiser's bold over a party's own bold on her new words leaves no record", async () => {
+    const room = localRoom(PLAIN_FILE, { policy: suggestionsOnlyPolicy() });
+    const ana = await join(room, 'Ana', { wordFile: PLAIN_FILE, review });
+    const held = new HeldTransport(room.transport({ person: testPerson('Olive'), ...ORGANISER }));
+    const olive = await join(room, 'Olive', {
+      wordFile: PLAIN_FILE,
+      transport: held,
+      login: ORGANISER,
+      review,
+    });
+    select(ana.editor, 6, 6);
+    exec(ana.editor, { type: 'insertText', text: 'net ' });
+    await settle();
+    held.held = true;
+    select(ana.editor, 6, 10);
+    exec(ana.editor, { type: 'toggleMark', mark: 'bold' });
+    await settle();
+    select(olive.editor, 6, 10);
+    exec(olive.editor, { type: 'toggleMark', mark: 'bold' });
+    await settle();
+    held.held = false;
+    held.release();
+    await settle();
+    converged(room, ana, olive);
+    const pending = [...room.room.document.suggestions.values()].filter(
+      (s) => s.status === 'pending'
+    );
+    expect(pending.map((s) => s.attribution.author)).toEqual(['Ana']);
+  });
 });

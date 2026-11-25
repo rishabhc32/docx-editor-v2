@@ -138,6 +138,22 @@ describe('a decision after a fold, on a suggestion inside a run', () => {
       );
     });
   }
+
+  // Ana's bold on her own new words writes no change record, so Olive's bold over it restates the
+  // face the words show: it changes nothing and makes no record, as the engine's press does
+  test("a format another person's own format already shows", async () => {
+    await foldOf(
+      p(run('Cloud and serverless.')),
+      (doc) => {
+        apply(doc, 'ana:1', { kind: 'insert', ...EDIT, place: at(doc, 0, 6), text: 'net ' });
+        const bold = { kind: 'format', ...EDIT, properties: [{ localName: 'b' }] } as const;
+        const range = { from: at(doc, 0, 6), to: at(doc, 0, 9) };
+        apply(doc, 'ana:2', { ...bold, ...range });
+        apply(doc, 'olive:1', { ...bold, ...range }, 'Olive');
+      },
+      "a format another person's own format shows"
+    );
+  });
 });
 
 describe("a checkpoint's room run numbers", () => {

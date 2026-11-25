@@ -1,0 +1,13 @@
+{
+  "impact": "compatible",
+  "fields": [],
+  "before": "A suggested format press that restated every value a unit shows still made a record when the unit had any pending format record, also a format of its author on their own new words, which writes no change record. The room kept a suggestion and a card that the file did not hold, and a fold dropped them.",
+  "after": "Only a pending record that writes a change record keeps a restating press from being no change (formatKeeps in edits/text.ts), as the engine's press reads the run: such a press makes no record, live as after a fold.",
+  "reason": "Change messages, the change log and its kinds keep their meaning, and the Yjs document format and the checkpoint format (version 5) do not change. Only whether the room records such a press changes, and it now equals a fold and the editor alone. An ordered room admits only clients of its own code version, and ordered rooms are not deployed yet, so no room needs a migration.",
+  "tests": [
+    "packages/core/src/collaboration/ordered/__tests__/client/editor-format-no-change.test.ts",
+    "packages/core/src/collaboration/ordered/__tests__/checkpoint-fold-decide.test.ts"
+  ],
+  "changeset": "ordered-restated-format",
+  "migration": null
+}

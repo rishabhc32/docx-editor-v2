@@ -496,7 +496,8 @@ export function withPressFormat(
  * Whether a format press leaves a unit as it is, by the engine's rule: the press restates every
  * value the unit shows, and no change record is there to take over (a tracked press on a unit
  * with a pending record writes the record again under its own author, as Word keeps one record
- * per run, the original under the latest author). Such a press makes no change and no record.
+ * per run, the original under the latest author; a format on its author's own new words writes
+ * none). Such a press makes no change and no record.
  */
 export function formatKeeps(
   ctx: Ctx,
@@ -504,8 +505,12 @@ export function formatKeeps(
   face: OoxmlElement | null,
   write: OrderedFormatWrite
 ): boolean {
-  if (!ctx.direct && item.fmts.some((f) => statusOf(ctx.doc, f.suggestion) === 'pending'))
+  const recorded = (f: OrderedFormatRecord) =>
+    writesRecord(f) && statusOf(ctx.doc, f.suggestion) === 'pending';
+  if (!ctx.direct && item.fmts.some(recorded)) {
     return false;
+  }
+
   const children = face?.children ?? [];
   let scratch = 0;
   const merged = faceWithProperties(children, write, () => `keeps#${(scratch += 1)}`);
