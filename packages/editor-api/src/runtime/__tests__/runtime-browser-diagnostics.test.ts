@@ -107,11 +107,12 @@ test('a browser agent refused by a viewing editor gets the read-only code and hi
   }
 });
 
-// Grace's formatting change inside Ada's insertion: two changes, one decision group.
-const NESTED =
-  '<w:p><w:ins w:id="1" w:author="Ada"><w:r><w:rPr><w:b/>' +
-  '<w:rPrChange w:id="2" w:author="Grace"><w:rPr/></w:rPrChange></w:rPr>' +
-  '<w:t>bold</w:t></w:r></w:ins></w:p>';
+// Ada's deleted paragraph mark in a paragraph that holds Grace's paragraph property change: an
+// accept of the mark drops the paragraph's properties, so the two are one decision group.
+const GROUPED =
+  '<w:p><w:pPr><w:rPr><w:del w:id="1" w:author="Ada"/></w:rPr>' +
+  '<w:pPrChange w:id="2" w:author="Grace"><w:pPr><w:jc w:val="center"/></w:pPr></w:pPrChange>' +
+  `</w:pPr><w:r><w:t>First</w:t></w:r></w:p>${p('Next')}`;
 
 for (const decision of ['its revision', 'its review item key'] as const) {
   test(`a browser agent deciding one change of a group by ${decision} gets the review reason`, async () => {
@@ -120,21 +121,21 @@ for (const decision of ['its revision', 'its review item key'] as const) {
     document.body.append(container);
     const editor = createDocxEditor({
       container,
-      document: docx(NESTED),
+      document: docx(GROUPED),
       modules: [reviewModule(), { id: 'observer', onDiagnostic: (event) => events.push(event) }],
     });
     const runtime = DocxEditor.createBrowser(editor);
     const key = editor
       .getReviewItems({ placement: false })
-      .find((item) => item.kind === 'revision' && item.author === 'Grace')!.key;
+      .find((item) => item.kind === 'revision' && item.author === 'Ada')!.key;
     let failure: unknown;
     try {
       await runtime.run(async (context) => {
         if (decision === 'its revision') {
           const revisions = context.document.revisions;
-          revisions.load('items');
+          revisions.load('items/author');
           await context.sync();
-          revisions.items[1]!.accept();
+          revisions.items.find((revision) => revision.author === 'Ada')!.accept();
         } else {
           getReviewItemRevisions(context, key).acceptAll();
         }

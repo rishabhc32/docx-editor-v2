@@ -7,6 +7,7 @@ Production use requires a commercial agreement: licensing@eigenpal.com
 // sync refuses with the reason `RevisionCollection.resolve` reports for the same change, in
 // `debugInfo.innerError`, and nothing in the batch is applied.
 import { expect, test } from 'bun:test';
+import { strFromU8, unzipSync } from 'fflate';
 import type { EditorDiagnostic } from '@docx-editor.dev/core/contracts/editor';
 import { explainDiagnostic } from '@docx-editor.dev/core/automation';
 import { DocxEditor, isDocxEditorError } from '../../index.ts';
@@ -16,14 +17,24 @@ const at = (id: number, author: string) =>
   `w:id="${id}" w:author="${author}" w:date="2026-01-02T03:04:05Z"`;
 
 /**
- * Text Ada inserted, which Grace then made bold: one decision group of an insertion and a
- * formatting change. Only nested text changes resolve alone, so neither change does.
+ * Text Ada inserted, which Grace then made bold. Word accepts or rejects the formatting change
+ * alone, and the insertion stays pending.
  */
 const NESTED =
   '<w:p><w:r><w:t xml:space="preserve">Start </w:t></w:r>' +
   `<w:ins ${at(1, 'Ada')}><w:r><w:rPr><w:b/><w:rPrChange ${at(2, 'Grace')}><w:rPr/></w:rPrChange>` +
   '</w:rPr><w:t>bold</w:t></w:r></w:ins>' +
   '<w:r><w:t xml:space="preserve"> end</w:t></w:r></w:p>';
+
+/**
+ * Ada's paragraph mark change in a paragraph that holds Grace's paragraph property change:
+ * accepting Ada's deleted mark, or rejecting her inserted one, removes the mark and drops the
+ * paragraph's properties, so Grace's change is in the decision's group and it is not decided alone.
+ */
+const MARK_OVER_PROPERTIES = (mark: 'del' | 'ins') =>
+  `<w:p><w:pPr><w:rPr><w:${mark} ${at(1, 'Ada')}/></w:rPr><w:pPrChange ${at(2, 'Grace')}>` +
+  '<w:pPr><w:jc w:val="center"/></w:pPr></w:pPrChange></w:pPr><w:r><w:t>First</w:t></w:r></w:p>' +
+  p('Next');
 
 const cell = (content: string) =>
   `<w:tc><w:tcPr><w:tcW w:w="2000" w:type="dxa"/></w:tcPr>${content}</w:tc>`;
@@ -51,32 +62,54 @@ function observer() {
 }
 
 for (const action of ['accept', 'reject'] as const) {
-  test(`${action} on a nested formatting change alone refuses with incomplete-group`, async () => {
+  test(`${action} on a formatting change inside another author's insertion decides it alone`, async () => {
+    const runtime = await DocxEditor.createServer(docx(NESTED));
+    try {
+      await runtime.run(async (context) => {
+        const revisions = context.document.revisions;
+        revisions.load('items/author');
+        await context.sync();
+        revisions.items.find((revision) => revision.author === 'Grace')![action]();
+        await context.sync();
+        revisions.load('items/author,items/type');
+        await context.sync();
+        expect(revisions.items.map((revision) => [revision.author, revision.type])).toEqual([
+          ['Ada', 'Insert'],
+        ]);
+      });
+      const xml = strFromU8(unzipSync(await runtime.save())['word/document.xml']!);
+      expect(xml).not.toContain('rPrChange');
+      expect(xml.includes('<w:b/>')).toBe(action === 'accept');
+    } finally {
+      runtime.dispose();
+    }
+  });
+
+  test(`${action} on a paragraph mark change alone refuses with incomplete-group`, async () => {
     const { events, module } = observer();
-    const runtime = await DocxEditor.createServer(docx(NESTED + p('Other paragraph')), {
-      modules: [module],
-    });
+    const file = docx(MARK_OVER_PROPERTIES(action === 'accept' ? 'del' : 'ins') + p('Other'));
+    const runtime = await DocxEditor.createServer(file, { modules: [module] });
     try {
       const before = await runtime.save();
+      let index = -1;
       await runtime.run(async (context) => {
         const revisions = context.document.revisions;
         const paragraphs = context.document.body.paragraphs;
-        revisions.load('items');
+        revisions.load('items/author');
         paragraphs.load('items');
         await context.sync();
-        for (const revision of revisions.items) revision.load('author');
-        await context.sync();
-        const nested = revisions.items.find((revision) => revision.author === 'Grace')!;
+        index = revisions.items.findIndex((revision) => revision.author === 'Ada');
+
         // An edit queued in the same batch is not applied either: the batch is one transaction.
-        paragraphs.items[1]!.insertText('Added ', 'Start');
-        nested[action]();
+        paragraphs.items[2]!.insertText('Added ', 'Start');
+        revisions.items[index]![action]();
         const error = await context.sync().catch((caught: unknown) => caught);
         expect(isDocxEditorError(error)).toBe(true);
         if (!isDocxEditorError(error)) return;
         expect(error.code).toBe('NotImplemented');
         expect(error.debugInfo).toMatchObject({
           code: 'NotImplemented',
-          errorLocation: `document.revisions.items[1].${action}`,
+          errorLocation: `document.revisions.items[${index}].${action}`,
           innerError: {
             code: 'review.incomplete-group',
             message: explainDiagnostic('review.incomplete-group').hint,
@@ -93,13 +126,13 @@ for (const action of ['accept', 'reject'] as const) {
         revisions.load('items');
         await context.sync();
         expect(revisions.items).toHaveLength(2);
-        const batch = revisions.resolve(action, [revisions.items[1]!]);
+        const batch = revisions.resolve(action, [revisions.items[index]!]);
         await context.sync();
         expect(batch.value.resolved).toEqual([]);
         expect(batch.value.skipped).toEqual([
           expect.objectContaining({
             reason: 'incomplete-group',
-            revision: expect.objectContaining({ author: 'Grace' }),
+            revision: expect.objectContaining({ author: 'Ada' }),
           }),
         ]);
       });
