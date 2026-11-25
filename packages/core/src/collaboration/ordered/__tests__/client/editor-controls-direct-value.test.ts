@@ -11,7 +11,8 @@
 //
 // A party's suggested value in its own suggested wrap is part of the wrap's insertion too, as the
 // editor alone writes one insertion: the room once made it a second suggestion, a `w:ins` of the
-// same author inside the wrap's.
+// same author inside the wrap's. Its undo takes back the value alone, and the next one the wrap,
+// as the editor alone undoes them: the room once took back the wrap and the value in one step.
 
 import { afterEach, describe, expect, test } from 'bun:test';
 import { createDocxEditor } from '../../../../editor/docx-editor.ts';
@@ -21,6 +22,7 @@ import { composeOrderedPart } from '../../compose/compose.ts';
 import type { OrderedDocument } from '../../model/types.ts';
 import { checkpointBytes, folded, mediaStore } from '../fold-check.ts';
 import { docx, p, t } from '../word-fixtures.ts';
+import { copiedBetween } from './paste-harness.ts';
 import {
   BODY,
   caretAt,
@@ -83,6 +85,26 @@ const ANAS = [
   ['a rich text control', anasControl('', t('Acme')), 'Beta'],
 ] as const;
 
+/**
+ * Each control a party pastes as its own suggestion, as a wrap makes none of these kinds with a
+ * value to choose: its label, the Word file it is copied from, and the value set in it.
+ */
+const PASTED = [
+  ['a pasted check box', CHECK_BOX, '☐', 'true'],
+  ['a pasted drop-down list', `<w:dropDownList>${ITEMS}</w:dropDownList>`, 'Net 30', '60'],
+] as const;
+
+/** A Word file of one line, "[<control>].". */
+const copySource = (props: string, content: string) =>
+  docx(
+    p(
+      t('[') +
+        `<w:sdt><w:sdtPr><w:id w:val="7"/>${props}</w:sdtPr><w:sdtContent>${t(content)}` +
+        '</w:sdtContent></w:sdt>' +
+        t('].')
+    )
+  );
+
 type Decision = 'accept' | 'reject';
 type Act = (person: Person) => void;
 
@@ -94,6 +116,16 @@ const wrap =
     caretAt(person, 0, 6, 12);
     const command = { type: 'insertContentControl', subtype: type, tag: 'clause.86' };
     expect(person.editor.exec(command as never).ok).toBe(true);
+  };
+
+/** Paste "[<control>]", copied from `copySource`, before "Revenue", as a suggestion. */
+const paste =
+  (props: string, content: string): Act =>
+  (person) => {
+    person.editor.setMode('suggesting');
+    caretAt(person, 0, 6);
+    const copy = copiedBetween(0, 0, content.length + 2, copySource(props, content));
+    expect(surface(person).pasteRich(copy.text, copy.html)).toBe(true);
   };
 
 /** Set the first control's value directly. */
@@ -126,8 +158,12 @@ const lineOf = (xml: string): string =>
     .replace(/<\/w:r><w:r>/g, '')
     .replace(/<\/w:t><w:t>/g, '');
 
-/** Accept or reject every revision, as the organiser. */
+/** Accept or reject every revision, as the organiser. A file with none has nothing to decide. */
 function decideAll(person: Person, decision: Decision): void {
+  if (!/<w:(ins|del)\b/.test(editorXml(person))) {
+    return;
+  }
+
   const command = { type: 'resolveAllReviewChanges', action: decision, scope: 'document' };
   expect(person.editor.exec(command as never).ok).toBe(true);
 }
@@ -283,6 +319,31 @@ describe("the organiser's direct value in their own suggested wrap, undone, as a
       test(`${label}, ${decision}ed`, async () => {
         await check(label, LINE, [...steps, ...more], decision);
       });
+    }
+  }
+});
+
+describe("a party's suggested value in its own pending control, undone and redone, as alone", () => {
+  const made = [
+    ...WRAPS.map(([label, type, text]) => [label, [wrap(type), suggestedValue(text)]] as const),
+    ...PASTED.map(
+      ([label, props, content, text]) =>
+        [label, [paste(props, content), suggestedValue(text)]] as const
+    ),
+  ];
+  for (const [label, steps] of made) {
+    for (const [then, more] of [
+      ['undone', [undo]],
+      ['undone twice', [undo, undo]],
+      ['undone and redone', [undo, redo]],
+      ['undone twice and redone', [undo, undo, redo]],
+      ['undone twice and redone twice', [undo, undo, redo, redo]],
+    ] as const) {
+      for (const decision of ['accept', 'reject'] as const) {
+        test(`${label}, ${then}, ${decision}ed`, async () => {
+          await check(`${label}, ${then}`, LINE, [...steps, ...more], decision, 'ben');
+        });
+      }
     }
   }
 });

@@ -128,7 +128,8 @@ export function retractSuggestion(
  * Take back exactly what `changes` of an author did to the author's own pending suggestions:
  * the undo of one editor commit, as the editor's undo takes it back. The items they took back
  * show again (`taken`), the units they typed into those suggestions are taken back
- * (`doc.added`), and the formats they gave those words come off (a format record's `change`).
+ * (`doc.added`), and the formats they gave those words and the values they gave those controls
+ * come off (a record's `change`).
  * The validator keeps `changes` to the sender's own namespace. Refused while a suggestion that
  * inserted an item it changes is decided: a decision is final. Returns the suggestions the items
  * carry.
@@ -163,6 +164,13 @@ export function undoOwnEdits(doc: OrderedDocument, changes: readonly string[]): 
       (record) => record.kind !== 'properties' || !undone.has(record.change ?? '')
     );
     if (fmts.length !== item.fmts.length) change.fmts = fmts;
+    const props = item.props.filter(
+      (record) => record.kind !== 'element' || !undone.has(record.change ?? '')
+    );
+    if (props.length !== item.props.length) {
+      change.props = props;
+    }
+
     write(story, item, change);
   }
 

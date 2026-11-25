@@ -19,6 +19,7 @@ import {
   EDIT,
   markOf,
   opens,
+  partsOf,
 } from './change-apply-fixture.ts';
 import { checkFold, checkpointBytes, folded, mediaStore } from './fold-check.ts';
 import {
@@ -254,7 +255,7 @@ describe('a decision after a fold, beside a pending control value', () => {
 describe('a decision after a fold, on a value in a pending control', () => {
   // A direct value in a control a pending insertion put in is part of that insertion (design
   // D9): a reject takes the control with its value, live as after a fold. A party's value in its
-  // own pending control is a suggestion of its own
+  // own pending control is part of that insertion too, and its undo takes back that value alone
   const WRAPS = [
     ['date', { kind: 'date', iso: '2026-09-15' }],
     ['comboBox', { kind: 'text', text: 'Net 30' }],
@@ -291,6 +292,28 @@ describe('a decision after a fold, on a value in a pending control', () => {
           apply(doc, 'Ana:2', { kind: 'control-value', ...wrapped(doc, type, 'Ana', EDIT), value });
         },
         `a suggested value in a suggested ${type} wrap`
+      );
+    });
+
+    test(`a party's undo of each value in its own suggested ${type} wrap`, async () => {
+      const again =
+        value.kind === 'date'
+          ? ({ kind: 'date', iso: '2026-10-01' } as const)
+          : ({ kind: 'text', text: 'Beta' } as const);
+      await foldOf(
+        p(run('Line: Revenue')),
+        (doc) => {
+          const control = wrapped(doc, type, 'Ana', EDIT);
+          const wrap = partsOf(doc);
+          apply(doc, 'Ana:2', { kind: 'control-value', ...control, value }, 'Ana');
+          const first = partsOf(doc);
+          apply(doc, 'Ana:3', { kind: 'control-value', ...control, value: again }, 'Ana');
+          apply(doc, 'Ana:4', { kind: 'retract', suggestions: [], undo: ['Ana:3'] }, 'Ana');
+          expect(partsOf(doc)).toEqual(first);
+          apply(doc, 'Ana:5', { kind: 'retract', suggestions: [], undo: ['Ana:2'] }, 'Ana');
+          expect(partsOf(doc)).toEqual(wrap);
+        },
+        `each suggested value in a suggested ${type} wrap undone`
       );
     });
   }

@@ -128,8 +128,8 @@ const WITHDRAWS: ReadonlySet<string> = new Set(['delete', 'delete-column', 'dele
 
 /**
  * The kinds whose edits of the author's own pending words the model takes back exactly (`undo`
- * of a `retract`): what they took back, added (typed text, a tab, a break, Enter, a note), or
- * formatted there.
+ * of a `retract`): what they took back, added (typed text, a tab, a break, Enter, a note, a
+ * control's value), or formatted there.
  */
 const OWN_EDITS: ReadonlySet<string> = new Set([
   ...WITHDRAWS,
@@ -140,6 +140,7 @@ const OWN_EDITS: ReadonlySet<string> = new Set([
   'insert-note',
   'format',
   'mark-format',
+  'control-value',
 ]);
 
 /** Whether a change edited its author's earlier pending words (`ownEdited`, `added`). */

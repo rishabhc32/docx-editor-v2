@@ -459,6 +459,12 @@ function ownEditsOf(item: OrderedItem): Set<string> {
   if (item.taken) changes.add(item.taken);
   for (const record of item.fmts)
     if (record.kind === 'properties' && record.change !== undefined) changes.add(record.change);
+  for (const record of item.props) {
+    if (record.kind === 'element' && record.change !== undefined) {
+      changes.add(record.change);
+    }
+  }
+
   return changes;
 }
 

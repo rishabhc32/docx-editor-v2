@@ -87,9 +87,12 @@ export function setControlValue(
   const shown = viewNode(view, id);
   const before = childNamed(shown, 'sdtPr');
   const after = ctx.direct || own ? sdtPr : proposedProperties(shown, sdtPr);
-  const record =
+  const made =
     controlPropertiesRecord(ctx, suggestion.id, before, after, result.part) ??
     sdtPrRecord(ctx, suggestion.id, after, []);
+
+  // In the author's own pending control it names its change, so that change's undo takes it off
+  const record = own ? { ...made, change: ctx.ids.changeId } : made;
   relabel(ctx.doc, ctx.story, open, { props: [...open.props, record] });
   return suggestion.id;
 }

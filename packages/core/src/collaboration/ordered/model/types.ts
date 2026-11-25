@@ -229,6 +229,11 @@ export interface OrderedElementRecord {
   readonly recordUnchanged?: boolean;
   /** Shown while pending with no change record (a control's value: Word records none). */
   readonly untracked?: boolean;
+  /**
+   * The change that made the record on its author's own pending control (a value): its undo
+   * takes the record off and leaves the control.
+   */
+  readonly change?: string;
   /** Applied only once accepted. */
   readonly acceptedOnly?: boolean;
   /** A table record: the spaces of the table's cells that showed when it was taken. */
