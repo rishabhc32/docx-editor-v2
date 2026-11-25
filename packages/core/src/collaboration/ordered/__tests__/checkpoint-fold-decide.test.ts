@@ -321,7 +321,8 @@ describe('a decision after a fold, beside a pending control value', () => {
 
 // A comment's marker inside a party's pending new control is part of its insertion, as Word writes
 // it inside the one `w:ins` that holds the control: a reject takes it with the control, as in the
-// editor alone, live as after a fold (Word evidence is still to come)
+// editor alone, live as after a fold (Word evidence is still to come). Ben's reply puts its markers
+// beside the comment's, so they are part of it too
 describe('a decision after a fold, on a comment in a pending new control', () => {
   // Places as paragraph and offset: Ana's words in the control are 9 to 12, after the words she
   // struck
@@ -342,6 +343,8 @@ describe('a decision after a fold, on a comment in a pending new control', () =>
           apply(doc, 'ana:1', { kind: 'wrap-control', ...EDIT, ...wrap });
           const range = { from: at(doc, from[0], from[1]), to: at(doc, to[0], to[1]) };
           apply(doc, 'olive:1', { kind: 'comment', part: BODY, ...range, text: 'Why?' }, 'Olive');
+          const [comment = ''] = doc.comments.keys();
+          apply(doc, 'ben:1', { kind: 'comment-reply', comment, text: 'Yes.' }, 'Ben');
         },
         name
       );

@@ -173,6 +173,23 @@ function addComment(
 }
 
 /**
+ * Give each new marker in a pending new control to that control's insertion, as Word writes it in
+ * the one `w:ins` that holds the control: a reject takes it with the control.
+ */
+function joinPendingControls(
+  doc: OrderedDocument,
+  story: OrderedStory,
+  markers: RangeMarkers
+): void {
+  for (const marker of [markers.start, markers.end, markers.reference]) {
+    const by = pendingControlAround(doc, story, marker);
+    if (by !== null) {
+      relabel(doc, story, marker, { by });
+    }
+  }
+}
+
+/**
  * A new comment thread of `text` on the units from `from` up to `to` (a caret at `from` when
  * they are one place): its range start before the first, its range end and its reference before
  * the last place. Returns the comment's id.
@@ -195,16 +212,7 @@ export function insertComment(
   // Read after the start went in: at a caret, the end follows the start
   const last = itemBefore(ctx, to);
   insertItems(ctx.doc, ctx.story, ctx.story.tree.prev(last), [markers.end, markers.reference]);
-
-  // A marker in a pending new control is part of its insertion, as Word writes it in the one
-  // `w:ins` that holds the control: a reject takes it with the control
-  for (const marker of [markers.start, markers.end, markers.reference]) {
-    const by = pendingControlAround(ctx.doc, ctx.story, marker);
-    if (by !== null) {
-      relabel(ctx.doc, ctx.story, marker, { by });
-    }
-  }
-
+  joinPendingControls(ctx.doc, ctx.story, markers);
   putRange(ctx.doc, id, ctx.story, markers);
   addComment(ctx, id, text, null);
   return id;
@@ -319,6 +327,7 @@ export function replyToComment(writer: OrderedCommentWriter, id: string, text: s
   insertItems(doc, story, besideParent(story, start, 'start'), [markers.start]);
   insertItems(doc, story, besideParent(story, end, 'end'), [markers.end]);
   insertItems(doc, story, besideParent(story, reference ?? end, 'reference'), [markers.reference]);
+  joinPendingControls(doc, story, markers);
   putRange(doc, reply, story, markers);
   addComment(writer, reply, text, root.id);
   return reply;

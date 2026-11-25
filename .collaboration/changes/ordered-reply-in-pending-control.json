@@ -1,0 +1,10 @@
+{
+  "impact": "compatible",
+  "fields": [],
+  "before": "A reply's markers, which sit beside its parent comment's, were no one's live where the parent's were inside another person's pending new inline control and part of that insertion, but the inserter's after a fold (the file writes them inside the control's one w:ins).",
+  "after": "A reply's markers in a pending new inline control are part of that insertion when the reply is made, as a new comment's are (joinPendingControls in edits/comments.ts), live as after a fold.",
+  "reason": "Change messages, the change log and its kinds keep their meaning, and the Yjs document format and the checkpoint format (version 5) do not change. Only the labels of a reply's markers in the room change, and they now equal a fold and the editor alone. An ordered room admits only clients of its own code version, and ordered rooms are not deployed yet, so no room needs a migration.",
+  "tests": ["packages/core/src/collaboration/ordered/__tests__/checkpoint-fold-decide.test.ts"],
+  "changeset": "ordered-reply-in-pending-control",
+  "migration": null
+}
