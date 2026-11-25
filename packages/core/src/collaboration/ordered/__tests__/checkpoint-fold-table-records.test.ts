@@ -364,6 +364,23 @@ describe('a column removed under a later one', () => {
       await checkFold(doc, base, mediaStore(base), `a cell alignment ${when} a column ${how}`);
     }
   );
+
+  // A party's column taken back beside the organiser's column made at the same cell, and another
+  // party's column taken back under a later one of theirs: the cell before the party's column
+  // takes its space, as the engine gives it; a record taken before the other party's column came
+  // still holds the column whose space the cell takes
+  test("a party's column taken back beside another's at the same cell and a removed column", async () => {
+    const { document: doc, base } = openOrderedWordFile(TABLE_FILE, { file: 1 });
+    apply(doc, 'ben:1', column(doc, 0), 'Ben');
+    apply(doc, 'olive:1', column(doc, 0), 'Olive');
+    apply(doc, 'ana:1', column(doc, 0), 'Ana', ANA_1);
+    apply(doc, 'ana:2', column(doc, 1), 'Ana', ANA_1);
+    apply(doc, 'ana:3', { kind: 'delete-column', ...EDIT, cell: cell(doc, 1) }, 'Ana', ANA_1);
+    await checkFold(doc, base, mediaStore(base), 'a removed column beside a later one');
+    apply(doc, 'ben:2', { kind: 'delete-column', ...EDIT, cell: cell(doc, 3) }, 'Ben');
+    expect(widths(doc)).toEqual(['563,187,2250,3000', '563,187,2250,3000', '563,187,2250,3000']);
+    await checkFold(doc, base, mediaStore(base), 'a column taken back beside a removed column');
+  });
 });
 
 describe("the organiser's direct columns at a decision", () => {

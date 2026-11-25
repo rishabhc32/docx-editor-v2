@@ -24,7 +24,7 @@ import {
 import { attributeOf, childNamed, isWml, withChildren, withId } from '../ooxml-nodes.ts';
 import type { ComposeContext } from './context.ts';
 import { withStoryBlocks } from './paragraph-ops.ts';
-import { acceptedAndPending, containerPropertiesAfter, propertyKey } from './properties.ts';
+import { acceptedAndPending, containerPropertiesAfter } from './properties.ts';
 
 /** A cell a column decision removed, drawn as the engine holds it before the decision. */
 export interface RemovedCell {
@@ -250,10 +250,14 @@ interface Survivors {
  * width from before the column, where the engine holds it lent until the decision gives the
  * removed cell's width back. A record that keeps the width (a cell alignment) shows it lent too.
  * Any other cell whose width a record taken when the removed cell did not show (already removed,
- * or not added yet) sets holds no width of it (`kept`). A column's record names the cell it took
- * width from, so every other cell's own properties hold that column's cell. A removed cell that
- * another removed column took width from shows that lent width too: the engine gives the column's
- * own cell to the neighbour, so the removed cell gives only what is left of it.
+ * or not added yet) sets holds no width of it (`kept`). Only the removed cells whose space a cell
+ * takes (`spaceReceivers`, the engine's rule), or whose column it lent width to, change it: a
+ * record taken before another removed column came still holds the cell it takes space from. A
+ * column's record names the cell it took width from, so every other cell's own properties hold
+ * that column's cell. A removed cell that another removed column took width from shows that lent
+ * width too: the engine gives the column's own cell to the neighbour, so the removed cell gives
+ * only what is left of it. A removed cell shows the width its records gave it before the decision,
+ * its own column's too: a fold writes there the space it took from a column removed before.
  */
 function survivorsOf(
   ctx: ComposeContext,
@@ -278,10 +282,22 @@ function survivorsOf(
     });
     const gone = cells.filter((c) => columns.has(c.id));
     const lending = new Set(cells.flatMap((c) => c.lends.map((r) => r.suggestion)));
+    const receivers = spaceReceivers(
+      row.children.flatMap((c) => (c.kind !== 'textValue' && isCell(c) ? [c] : [])),
+      new Set(gone.map((c) => c.id))
+    );
     for (const { id, open, lends } of gone.length === 0 ? [] : cells) {
       if (columns.has(id)) {
-        const others = lends.filter((r) => r.suggestion !== columns.get(id));
-        const width = lentWidth(ctx, open, others);
+        const column = columns.get(id);
+        const before = [
+          ...open.props.filter(
+            (r): r is OrderedElementRecord =>
+              r.kind === 'element' && r.target === 'tcPr' && r.suggestion === column
+          ),
+          ...appliedRecords(ctx, open, 'tcPr'),
+          ...lends.filter((r) => r.suggestion !== column),
+        ];
+        const width = lastWidth(before.filter(setsWidth).sort((a, b) => a.seq - b.seq));
         if (width) {
           lent.set(id, width);
         }
@@ -299,7 +315,11 @@ function survivorsOf(
         const lender = lends.some((r) => r.suggestion === column);
         return !lender && (lending.has(column) || holdsCell(ctx, null, open, cell.open));
       };
-      if (gone.every(holds)) {
+      const lentTo = new Set(lends.map((r) => r.suggestion));
+      const changing = gone.filter(
+        (cell) => receivers.get(cell.id) === id || lentTo.has(columns.get(cell.id) ?? '')
+      );
+      if (changing.every(holds)) {
         continue;
       }
 
@@ -317,7 +337,7 @@ function survivorsOf(
 
 /**
  * The `w:tcW` the last of a cell's lent width records gives, if any: none once a record made
- * after it gives the cell a width (a direct width), which the cell shows, as the engine holds it.
+ * after it sets the cell's width (a direct width), which the cell shows, as the engine holds it.
  */
 function lentWidth(
   ctx: ComposeContext,
@@ -325,19 +345,18 @@ function lentWidth(
   records: readonly OrderedElementRecord[]
 ): OoxmlElement | undefined {
   const last = records.at(-1);
-  const width = last?.element ? childNamed(last.element, 'tcW') : undefined;
-  if (last === undefined || width === undefined) {
+  if (last === undefined) {
     return undefined;
   }
 
-  const later = appliedRecords(ctx, open, 'tcPr').some((r) => r.seq > last.seq && givesWidth(r));
-  return later ? undefined : width;
+  const later = appliedRecords(ctx, open, 'tcPr').some((r) => r.seq > last.seq && setsWidth(r));
+  return later ? undefined : lastWidth(records);
 }
 
-/** Whether a cell's record sets its width: it has one, and sets every child or that one. */
-function givesWidth(record: OrderedElementRecord): boolean {
-  const width = record.element ? childNamed(record.element, 'tcW') : undefined;
-  return width !== undefined && (record.merge?.includes(propertyKey(width)) ?? true);
+/** The `w:tcW` the last of these width records gives, if any. */
+function lastWidth(records: readonly OrderedElementRecord[]): OoxmlElement | undefined {
+  const last = records.at(-1)?.element;
+  return last ? childNamed(last, 'tcW') : undefined;
 }
 
 /**

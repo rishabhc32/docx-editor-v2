@@ -2,6 +2,7 @@
 // one room (task 9.7). Each copy equals the editor alone, live and on the saved file reopened.
 
 import { afterEach, expect, test } from 'bun:test';
+import { paragraphTextOf } from '../../../../store/store/paragraph-model-text.ts';
 import { suggestionsOnlyPolicy } from '../../room/suggestions-only.ts';
 import {
   closeAll,
@@ -39,6 +40,24 @@ const command =
 const column = (text: string) => command(text, { type: 'insertColumn', where: 'right' });
 const takeBack = command('', { type: 'deleteColumn' });
 const align = command('Rate', { type: 'setTableCellVerticalAlignment', alignment: 'center' });
+
+/** Delete the column of the cell before the one that holds `text`. */
+const takeBackBefore =
+  (text: string) =>
+  (s: Surface): void => {
+    const part = s.session.part();
+    const ids = s.session.paragraphIds();
+    const id = ids[ids.findIndex((candidate) => paragraphTextOf(part, candidate) === text) - 1];
+    if (id === undefined) {
+      throw new Error(`no cell before ${text}`);
+    }
+
+    s.setSelection({
+      anchor: { paragraphId: id, offset: 0 },
+      head: { paragraphId: id, offset: 0 },
+    });
+    expect(commandOn(s, { type: 'deleteColumn' }).ok).toBe(true);
+  };
 
 const rejectFirst = (editor: Person['editor']): void => {
   const [card] = editor.getReviewItems().filter((item) => item.kind === 'revision');
@@ -109,3 +128,16 @@ test.each([
     await checkRoom([...made, ...(when === 'after' ? [removal, alignment] : [alignment, removal])]);
   }
 );
+
+// A party's column taken back beside another's made at the same cell, after a third party's column
+// taken back under a later one of theirs: the cell before it takes its space, as the engine gives it
+test("a party's column taken back beside another's at the same cell and a removed column", async () => {
+  await checkRoom([
+    ['Ben', column('Fee')],
+    ['Cy', column('Fee')],
+    ['Ana', column('Fee')],
+    ['Ana', column('')],
+    ['Ana', takeBack],
+    ['Ben', takeBackBefore('Rate')],
+  ]);
+});
