@@ -1,0 +1,13 @@
+{
+  "impact": "compatible",
+  "fields": [],
+  "before": "A load ended every open move range at any range end. Where one move range holds another, the outer move's wrapper after the inner range read as no part of its move: before live range markers it became a move of its own, named per author; with them, a fold also gave it range markers of its own.",
+  "after": "A load keeps the open move ranges as a stack (load/moves.ts): a range end closes its own range and any range still open inside it, so a later wrapper stays in the range round it, live, after a fold and as the editor alone reads the file.",
+  "reason": "Change messages, the change log and its kinds keep their meaning, and the Yjs document format and the checkpoint format (version 5) do not change. Only how a load reads a file's nested move ranges changes, as the file says. An ordered room admits only clients of its own code version, and ordered rooms are not deployed yet, so no room needs a migration.",
+  "tests": [
+    "packages/core/src/collaboration/ordered/__tests__/checkpoint-fold-moves.test.ts",
+    "packages/core/src/collaboration/ordered/__tests__/note-moves-fold.test.ts"
+  ],
+  "changeset": "ordered-move-range-inside-range",
+  "migration": null
+}
