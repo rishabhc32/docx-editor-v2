@@ -16,7 +16,7 @@ import { orderedCards } from '../../decide.ts';
 import { suggestionsOnlyPolicy } from '../../room/suggestions-only.ts';
 import type { OrderedLocalRoom } from '../../client/local-room.ts';
 import type { OrderedDocument } from '../../model/types.ts';
-import { folded, mediaStore } from '../fold-check.ts';
+import { checkpointBytes, folded, mediaStore } from '../fold-check.ts';
 import {
   BODY,
   caretAt,
@@ -144,31 +144,61 @@ describe('columns in an ordered room (task 9.7)', () => {
   });
 
   test("the organiser accepts a party's deleted column beside that party's pending fill", async () => {
-    // Word accepts the cell deletion alone: the fill stays pending, with the width from before
-    // in its record (`/tmp/word-evidence-tables/~$word-fill-coldel-accept.docx`)
+    // Word accepts the cell deletion alone: the grid joins, and the fill stays pending with the
+    // width from before in its record (row 227 of the known differences)
+    const fill = { type: 'setCellFill', color: { kind: 'hex', value: 'FFFF00' } };
+    const steps = (s: Surface) => {
+      caretInSurface(s, 'Fee');
+      expect(commandOn(s, fill).ok).toBe(true);
+      caretInSurface(s, 'Rate');
+      expect(commandOn(s, { type: 'deleteColumn' }).ok).toBe(true);
+    };
+    const acceptColumn = (editor: Person['editor']) => {
+      const [column] = revisionsOf(editor).filter((item) => item.revisionKind === 'structural');
+      expect(editor.acceptReviewItem(column!.key)).toEqual({ ok: true, changed: true });
+    };
+    const [accepted, rejected] = ([undefined, 'reject'] as const).map((decide) =>
+      alone({ author: 'Ana', mode: 'suggesting', review, decide }, (s, editor) => {
+        steps(s);
+        acceptColumn(editor);
+      })
+    );
     const { room, ana, olive } = await seats();
-    caretIn(ana, 'Fee');
-    expect(
-      tableCommand(ana, { type: 'setCellFill', color: { kind: 'hex', value: 'FFFF00' } }).ok
-    ).toBe(true);
-    await settle();
-    caretIn(ana, 'Rate');
-    expect(tableCommand(ana, { type: 'deleteColumn' }).ok).toBe(true);
+    steps(surface(ana));
     await settle();
     converged(room, ana, olive);
-    const column = cards(olive).find((key) => key.startsWith('revision-structural-'))!;
-    expect(olive.editor.acceptReviewItem(column)).toEqual({ ok: true, changed: true });
+    const { base } = openOrderedWordFile(TABLE_FILE, { file: 1 });
+    const fold = () => checkpointBytes(room.room.document, base, mediaStore(base));
+    const pendingFold = await fold();
+    acceptColumn(olive.editor);
     await settle();
     converged(room, ana, olive);
     expect(gridOf(ana)).toEqual([6000, 3000]);
-    expect(editorTexts(ana)).not.toContain('Rate');
+    expect(firstRowWidths(ana)).toEqual([6000, 3000]);
     expect(cards(olive)).toHaveLength(1);
-    const xml = editorXml(olive);
-    expect(xml).toContain('w:fill="FFFF00"');
-    expect(xml.match(/<w:tcPrChange /g)).toHaveLength(2);
+    expect(editorXml(olive)).not.toContain('gridSpan');
+    const old = /<w:tcPrChange [^>]*><w:tcPr><w:tcW w:type="dxa" w:w="3000"\/><\/w:tcPr>/g;
+    expect(editorXml(olive).match(old)).toHaveLength(2);
+    expect(comparedBody(surface(olive).session.part())).toBe(accepted);
+    // The fill rejected after: the record's width comes back, as in the editor alone
+    const decidedFold = await fold();
     await decideAll(olive, 'reject');
     converged(room, ana, olive);
-    expect(editorXml(olive)).not.toContain('w:fill="FFFF00"');
+    expect(comparedBody(surface(olive).session.part())).toBe(rejected);
+    // The same decisions on the room folded before each
+    const folds = [
+      [pendingFold, (p: Person) => acceptColumn(p.editor), accepted],
+      [decidedFold, (p: Person) => decideAll(p, 'reject'), rejected],
+    ] as const;
+    for (const [bytes, decide, expected] of folds) {
+      const copy = localRoom(bytes, { policy: suggestionsOnlyPolicy(), file: 2 });
+      const login = { wordFile: bytes, mode: 'edit', login: ORGANISER, review } as const;
+      const organiser = await join(copy, 'Olive', login);
+      await decide(organiser);
+      await settle();
+      converged(copy, organiser);
+      expect(comparedBody(surface(organiser).session.part())).toBe(expected);
+    }
   });
 
   test('the decisions on the saved file give what they give live', async () => {

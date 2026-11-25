@@ -79,9 +79,10 @@ function decided(): OrderedDocument {
 describe('a decided column', () => {
   test('is written into the table: compose draws it from the items alone', () => {
     const doc = decided();
-    const joined = ['grid 6000', '6000', '6000'];
-    expect(tableOf(doc)).toEqual(joined);
-    expect(tableOf(doc, 'reject')).toEqual(joined);
+    expect(tableOf(doc)).toEqual(['grid 6000', '6000', '6000']);
+    // The fill's reject gives the cells their width from before, which its record holds, as the
+    // editor alone and Word do; the grid stays joined
+    expect(tableOf(doc, 'reject')).toEqual(['grid 6000', '3000', '3000']);
     // The removed cells show nowhere and are taken out no more
     const cells = [...(doc.stories.get(BODY)?.tree.items() ?? [])].filter(
       (item) => item.kind === 'open' && item.token === 'tc'
@@ -105,14 +106,18 @@ describe('a decided column', () => {
       'Olive'
     );
     expect(tableOf(doc)).toEqual(['grid 6000', '6000', '6000', '6000']);
-    // Every later decision keeps it: the row rejected, or accepted
+    // Every later decision keeps it: the row rejected, or accepted. Ana's row height took her
+    // fill's record over (one record, as Word keeps), so its reject gives the width from before
     for (const status of ['rejected', 'accepted'] as const) {
       const { record } = withUndoRecord(doc, () => {
         for (const id of ['S:ana:3.1', 'S:olive:2.1']) setStatus(doc, id, status);
       });
       expect({ status, table: tableOf(doc) }).toEqual({
         status,
-        table: ['grid 6000', '6000', '6000', ...(status === 'accepted' ? ['6000'] : [])],
+        table:
+          status === 'accepted'
+            ? ['grid 6000', '6000', '6000', '6000']
+            : ['grid 6000', '3000', '3000'],
       });
       takeBack(doc, record);
     }

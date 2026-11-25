@@ -360,7 +360,7 @@ export function deleteText(
 
 /** The pending suggestions of these records, each once. */
 function pendingSuggestionsOf(
-  ctx: Ctx,
+  ctx: Pick<Ctx, 'doc'>,
   records: readonly (OrderedFormatRecord | OrderedPropertyRecord)[]
 ): string[] {
   const found = new Set<string>();
@@ -375,7 +375,7 @@ const holdsChangeRecord = (properties: OoxmlElement | null, name: string): boole
 
 /** The pending suggestions of an item's records of `target` that Word writes a change record for. */
 export const recordedPending = (
-  ctx: Ctx,
+  ctx: Pick<Ctx, 'doc'>,
   item: OrderedItem,
   target: OrderedPropertyRecord['target']
 ): string[] =>

@@ -5,12 +5,13 @@ import {
   type OoxmlElement,
   type OoxmlNode,
 } from '../../../store/package/ooxml-tree.ts';
-import { holdsOtherGrid } from '../../../store/store/revision-table-rebuild.ts';
+import { holdsOtherGrid, spaceReceivers } from '../../../store/store/revision-table-rebuild.ts';
 import { cloneWithNewIds } from '../../../store/store/tree-op-nodes.ts';
 import { composeBlocks } from '../compose/blocks.ts';
 import { ComposeContext } from '../compose/context.ts';
 import type { RemovedColumns } from '../compose/table-columns.ts';
-import { cellsOf, rowsOf } from '../edits/table-nodes.ts';
+import { cellsOf, rowCells, rowsOf } from '../edits/table-nodes.ts';
+import { recordedPending } from '../edits/text.ts';
 import { itemAt, statusOf, storyOfItem } from '../model/document.ts';
 import { nextSeq, relabel } from '../model/mutations.ts';
 import {
@@ -140,7 +141,14 @@ function settleTable(
     return false;
   }
 
-  const written = writeTable({ doc, story, suggestion: cells[0]!.suggestion, ids }, before, after);
+  // The cells that took a removed cell's space: the engine's reject of their pending records
+  // restores the width from before (a deleted column's width is not lent)
+  const gone = new Set(cells.map((c) => c.id));
+  const receivers = new Set(
+    rowsOf(before).flatMap((row) => [...spaceReceivers(rowCells(row), gone).values()])
+  );
+  const decision = { doc, story, suggestion: cells[0]!.suggestion, ids };
+  const written = writeTable(decision, before, after, receivers);
   if (written) {
     dropRemoved({ doc, story }, removed);
   }
@@ -152,12 +160,16 @@ function settleTable(
  * Write the widths, spans and grid compose drew after a decision (`after`) into a table's items,
  * as records of the decision; false when not written. A table whose grid holds a pending record
  * of another grid stays as the items draw it: its join waits for that record's decision. One that
- * holds the grid unchanged (a row height's anchor) holds the written grid too.
+ * holds the grid unchanged (a row height's anchor) holds the written grid too. The record of a
+ * cell in `receivers` is made over the cell's pending records, so their reject takes it away, as
+ * the engine's reject does; a join alone (a span, a row's skipped columns) stays, as the engine's
+ * records follow it.
  */
 function writeTable(
   decision: Omit<TableWrite, 'seq'>,
   before: OoxmlElement,
-  after: OoxmlElement
+  after: OoxmlElement,
+  receivers: ReadonlySet<string> = new Set()
 ): boolean {
   const grid = childNamed(after, 'tblGrid');
   const table = openOf(decision, before.id);
@@ -174,7 +186,9 @@ function writeTable(
 
   const oldCells = cellsOf(before);
   for (const [id, cell] of cellsOf(after)) {
-    recordPlacement(write, openOf(write, id), oldCells.get(id), cell, 'tcPr');
+    const open = openOf(write, id);
+    const over = open && receivers.has(id) ? recordedPending(write, open, 'tcPr') : [];
+    recordPlacement(write, open, oldCells.get(id), cell, 'tcPr', over);
   }
 
   return true;
@@ -218,7 +232,8 @@ function recordPlacement(
   open: OrderedItem | null,
   was: OoxmlElement | undefined,
   now: OoxmlElement,
-  target: keyof typeof PLACEMENT
+  target: keyof typeof PLACEMENT,
+  over: readonly string[] = []
 ): void {
   const names = PLACEMENT[target];
   const nowProps = childNamed(now, target);
@@ -237,6 +252,7 @@ function recordPlacement(
     // Merged over the container's own children: the others (a pending fill) stay theirs
     element: nowProps ? copied(write, withChildren(nowProps, given)) : null,
     merge: names.map((name) => `${WML_NAMESPACE_URI} ${name}`),
+    ...(over.length > 0 ? { over } : {}),
   });
 }
 
