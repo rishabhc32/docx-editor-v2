@@ -4,9 +4,7 @@
   "before": "In a room, the organiser's direct typing inside a party's pending new control, or where two parts of one pending insertion meet, became her own direct edit, and her direct note there kept a suggestion of its own: a reject of the party's insertion left her words, where the editor alone and a fold took them with it.",
   "after": "Those words, and a note whose reference goes into the party's insertion, are part of that insertion (settle's pendingControlAround, directInsert where two parts meet, insertNote's insertionHolding), as the file writes them inside its w:ins and a load reads them back; the read still names the organiser who typed them.",
   "reason": "Change messages, the change log and its kinds keep their meaning, and the Yjs document format and the checkpoint format do not change. Only the room's labels of such words, and so the Word file after a decision on the insertion, change, and they now equal across the editor alone, the room and a fold. An ordered room admits only clients of its own code version.",
-  "tests": [
-    "packages/core/src/collaboration/ordered/__tests__/checkpoint-fold.test.ts"
-  ],
+  "tests": ["packages/core/src/collaboration/ordered/__tests__/checkpoint-fold.test.ts"],
   "changeset": "organiser-words-in-pending-insertion",
   "migration": null
 }

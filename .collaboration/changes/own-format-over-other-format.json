@@ -4,9 +4,7 @@
   "before": "In a room, a party's format on their own pending words over another person's pending format stayed when that format was rejected, where the Word file, the engine and a fold take it away: Word keeps one change record for each run.",
   "after": "A format on its author's own pending words names the pending formats whose change record holds the run (`over`, as a direct format does), and compose leaves it out once one of them is rejected, live as after a fold.",
   "reason": "Change messages, the change log and its kinds keep their meaning, and the Yjs document format and the checkpoint format do not change. The record gains the `over` list a direct format record already has; only the composed Word file of such a run after the reject changes, and it now equals across the room and a fold. An ordered room admits only clients of its own code version.",
-  "tests": [
-    "packages/core/src/collaboration/ordered/__tests__/checkpoint-fold-decide.test.ts"
-  ],
+  "tests": ["packages/core/src/collaboration/ordered/__tests__/checkpoint-fold-decide.test.ts"],
   "changeset": "own-format-over-other-format",
   "migration": null
 }
