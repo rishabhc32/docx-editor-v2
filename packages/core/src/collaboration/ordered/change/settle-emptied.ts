@@ -473,8 +473,11 @@ function promptedControl(
     return null;
   }
 
+  // The words the decision took away, as `readValueBack` reads them: not those a direct edit took
+  const ctx = new ComposeContext(doc, story, {});
+  const decided = emptied.went.filter((unit) => ctx.decidedAway(unit));
   const read =
-    emptied.decided && readsRecordBack(doc, shell, emptied.went)
+    emptied.decided && readsRecordBack(doc, shell, decided)
       ? withControlRecords(prompted, [shell.id])
       : prompted;
   return findContentControl(read, shell.id) ?? null;

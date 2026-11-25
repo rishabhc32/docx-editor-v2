@@ -213,6 +213,39 @@ describe("a control's prompt shown again, decided card by card after a fold", ()
     });
   }
 
+  // Seed 91 of the fold shapes: after a fold, Olive's direct deletion takes words of Ben's date
+  // and of her own over it; a reject of the two shows the prompt beside the date the file stores,
+  // as after a second fold, where those words are no more: a direct edit took them, not the
+  // decision. With no fold before, the prompt's own units show again, as they do
+  for (const fold of [false, true]) {
+    test(`a date the file stores, under picks a direct deletion cut, fold ${fold}`, async () => {
+      const date =
+        '<w:sdt><w:sdtPr><w:id w:val="1"/><w:showingPlcHdr/>' +
+        '<w:date w:fullDate="2026-06-30T00:00:00Z"><w:dateFormat w:val="M/d/yyyy"/>' +
+        '<w:lid w:val="en-US"/></w:date></w:sdtPr>' +
+        `<w:sdtContent>${t('Click to enter a date.', '<w:rStyle w:val="PlaceholderText"/>')}` +
+        '</w:sdtContent></w:sdt>';
+      const file = docx(p(t('Due on ') + date + t(' at the latest.')));
+      const first = openOrderedWordFile(file, { file: 1 });
+      const blobs = mediaStore(first.base);
+      const pick = (room: OrderedDocument, iso: string) =>
+        ({
+          kind: 'control-value',
+          ...EDIT,
+          control: addressOf(opens(room, 'sdt')[0]!),
+          value: { kind: 'date', iso },
+        }) as const;
+      apply(first.document, 'ben:1', pick(first.document, '2026-09-15'), 'Ben');
+      const { document: doc, base } = fold
+        ? await folded(first.document, first.base, 2, blobs)
+        : first;
+      apply(doc, 'olive:1', pick(doc, '2026-09-18'), 'Olive');
+      const cut = { kind: 'delete', ...DIRECT, from: at(doc, 0, 11), to: at(doc, 0, 22) } as const;
+      apply(doc, 'olive:2', cut, 'Olive');
+      await checkEveryCard(doc, base, blobs, 'picks a direct deletion cut');
+    });
+  }
+
   // The prompt a party typed over holds a combo box: after a fold the glossary gives it back, and a
   // reject of the typing shows the combo box in it again, not its words alone, and each of its
   // paragraphs. They are the prompt's own: typing in its first drops the second, as live

@@ -407,16 +407,28 @@ export class ComposeContext {
 
   /**
    * Whether a decision on a suggestion took the unit away: a rejected insertion or an accepted
-   * deletion, not a direct edit (whose suggestion is accepted when made). A drawing as if every
-   * suggestion were rejected rejects the pending insertions.
+   * deletion, not a direct edit (whose suggestion is accepted when made): a unit a direct
+   * deletion took went then, whatever is decided on its insertion, and a fold keeps none of it.
+   * A drawing as if every suggestion were rejected rejects the pending insertions.
    */
   decidedAway(item: OrderedItem): boolean {
     if (item.gone || item.retracted || !this.gone(item)) return false;
-    if (this.options.pending === 'reject' && insertedPending(this.doc, item)) return true;
     const decision = (suggestion: string, status: OrderedSuggestionStatus): boolean => {
       const found = this.doc.suggestions.get(suggestion);
       return found?.status === status && found.direct !== true;
     };
+    const direct = (deleter: string): boolean => {
+      const found = this.doc.suggestions.get(deleter);
+      return found?.status === 'accepted' && found.direct === true;
+    };
+    if (item.dels.some(direct)) {
+      return false;
+    }
+
+    if (this.options.pending === 'reject' && insertedPending(this.doc, item)) {
+      return true;
+    }
+
     if (item.by !== null && decision(item.by, 'rejected')) return true;
     return item.dels.some((deleter) => decision(deleter, 'accepted'));
   }

@@ -1,0 +1,10 @@
+{
+  "impact": "compatible",
+  "fields": [],
+  "before": "A reject of picks over a date control's prompt, after a direct deletion had cut words of them, cleared the date the file stores beside the prompt: the words the direct deletion took counted as struck words the decision took away. After a fold those words are no more, and the date stayed.",
+  "after": "Words a direct deletion took are no words a decision takes away (decidedAway), and the record is read back from the decision's words only (as readValueBack reads them), so the date stays, live as after a fold.",
+  "reason": "Change messages, the change log and its kinds keep their meaning, and the Yjs document format and the checkpoint format do not change. Only the composed Word file of such a control after the decision changes, and it now equals a fold. An ordered room admits only clients of its own code version.",
+  "tests": ["packages/core/src/collaboration/ordered/__tests__/checkpoint-fold-prompts.test.ts"],
+  "changeset": "direct-cut-picks-keep-date",
+  "migration": null
+}
