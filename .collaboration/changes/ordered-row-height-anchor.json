@@ -1,0 +1,10 @@
+{
+  "impact": "compatible",
+  "fields": [],
+  "before": "Compose wrote a pending row height's own row anchor (`w:tblPrEx` with an unchanged `w:tblPrExChange`) on every row with such a height. On a row Word's form does not read as the height (a row record of its own, a cell with no record) a fold read the anchor as a record of the row, and a decision then kept a `w:tblPrEx` that live had none of.",
+  "after": "Compose writes the anchor only on a row that Word's form, as the engine reads it (`wordHeightRows`), reads as the height.",
+  "reason": "Change messages, the change log, checkpoint manifests and the Yjs format do not change; the Word file a room writes for such a row holds no anchor, which no reader used. A room admits only clients of its own code version.",
+  "tests": ["packages/core/src/collaboration/ordered/__tests__/checkpoint-fold-decide.test.ts"],
+  "changeset": "ordered-row-height-anchor",
+  "migration": null
+}

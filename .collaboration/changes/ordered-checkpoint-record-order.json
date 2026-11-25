@@ -1,0 +1,10 @@
+{
+  "impact": "compatible",
+  "fields": [],
+  "before": "A checkpoint load gave each restored record of a container's properties its suggestion's order. A record made later for an older suggestion (a height on its author's own new row after another person's height, a direct height after a record another took) moved under the records made before it, so the shown height and the change record's old properties changed after a fold.",
+  "after": "Restored records take new seqs in the manifest's order, the order they were made; a record a takeover put back takes the seq of the record that took it, as before.",
+  "reason": "Change messages, the change log and the Yjs format do not change; the checkpoint's manifest does not change; its load reads the order the manifest already lists. A room admits only clients of its own code version.",
+  "tests": ["packages/core/src/collaboration/ordered/__tests__/checkpoint-fold-decide.test.ts"],
+  "changeset": "ordered-checkpoint-record-order",
+  "migration": null
+}

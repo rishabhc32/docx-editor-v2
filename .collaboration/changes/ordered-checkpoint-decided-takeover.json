@@ -1,0 +1,10 @@
+{
+  "impact": "compatible",
+  "fields": [],
+  "before": "Where a container keeps every record of its properties in the manifest, a record taken from another suggestion was left out, as its change record holds it while pending. Once decided, no change record holds it, and a fold lost what it gave (an accepted row height on a row whose cells keep their records).",
+  "after": "The manifest lists decided records taken from another too.",
+  "reason": "Change messages, the change log and the Yjs format do not change; the manifest's fields do not change, it lists more records; older checkpoints read as before. A room admits only clients of its own code version.",
+  "tests": ["packages/core/src/collaboration/ordered/__tests__/checkpoint-fold-decide.test.ts"],
+  "changeset": "ordered-checkpoint-decided-takeover",
+  "migration": null
+}

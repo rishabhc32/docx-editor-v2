@@ -1,0 +1,10 @@
+{
+  "impact": "compatible",
+  "fields": [],
+  "before": "A pending record taken from another came back only from the checkpoint's takeovers and drew right in front of the record that took it, so it moved behind records made after it (a column and a direct column deletion after a row height that a cell alignment took), and the grid record's old grid changed.",
+  "after": "Where a container keeps every record of its properties, the manifest lists every record, a pending taken one too, in the order made, and the load puts them back in that order; a taken record an older manifest does not list stays as its takeover put it back.",
+  "reason": "Change messages, the change log and the Yjs format do not change; the manifest's fields do not change, it lists more records; the golden checkpoints written before read to the same print. A room admits only clients of its own code version.",
+  "tests": ["packages/core/src/collaboration/ordered/__tests__/checkpoint-fold-decide.test.ts"],
+  "changeset": "ordered-checkpoint-taken-order",
+  "migration": null
+}
