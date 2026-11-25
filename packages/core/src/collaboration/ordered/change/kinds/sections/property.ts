@@ -18,14 +18,14 @@ import { suggestionOrNull } from '../../../model/document.ts';
 import type { OrderedSectionOp } from '../../../model/sections.ts';
 import { address } from '../../values.ts';
 import { runKindEdit } from '../run.ts';
-import { at, bool, fieldsOf, int, Invalid, list, oneOf, type Fields } from '../../read.ts';
+import { at, Invalid, list, type Fields } from '../../read.ts';
 import {
   ORDERED_CHANGE_LIMITS,
   type OrderedChangeAddress,
   type OrderedEditBase,
 } from '../../types.ts';
 import { orderedKindSpec } from '../spec.ts';
-import { touchSection } from './read.ts';
+import { readFurniture, readPage, touchSection } from './read.ts';
 
 /** Page size, orientation and margins, in twips, as `setSectionProperties` takes them. @public */
 export interface OrderedChangePageSetup {
@@ -59,49 +59,6 @@ export interface OrderedSectionPropertyChange extends OrderedEditBase {
   readonly page?: OrderedChangePageSetup;
   readonly pageAt?: OrderedChangeAddress;
   readonly furniture?: OrderedChangeFurnitureOptions;
-}
-
-/** A page side from 1 twip up to 44 inches, a margin up to 22 inches (the engine's bounds). */
-const PAGE = 63_360;
-const MARGIN = 31_680;
-
-const PAGE_FIELDS = ['pageWidthTwips', 'pageHeightTwips'] as const;
-const MARGIN_FIELDS = [
-  'marginTopTwips',
-  'marginRightTwips',
-  'marginBottomTwips',
-  'marginLeftTwips',
-] as const;
-
-function readPage(value: unknown, path: string): OrderedChangePageSetup {
-  const fields = fieldsOf(value, path, new Set([...PAGE_FIELDS, ...MARGIN_FIELDS, 'orientation']));
-  const out: Record<string, number | string> = {};
-  for (const name of PAGE_FIELDS)
-    if (fields.has(name)) out[name] = int(fields.get(name), at(path, name), 1, PAGE);
-  for (const name of MARGIN_FIELDS)
-    if (fields.has(name)) out[name] = int(fields.get(name), at(path, name), 0, MARGIN);
-  if (fields.has('orientation'))
-    out.orientation = oneOf(fields.get('orientation'), at(path, 'orientation'), [
-      'portrait',
-      'landscape',
-    ] as const);
-  if (Object.keys(out).length === 0) throw new Invalid('empty', path);
-  return out;
-}
-
-function readFurniture(value: unknown, path: string): OrderedChangeFurnitureOptions {
-  const fields = fieldsOf(
-    value,
-    path,
-    new Set(['titlePage', 'headerDistanceTwips', 'footerDistanceTwips'])
-  );
-  const out: { titlePage?: boolean; headerDistanceTwips?: number; footerDistanceTwips?: number } =
-    {};
-  if (fields.has('titlePage')) out.titlePage = bool(fields.get('titlePage'), at(path, 'titlePage'));
-  for (const name of ['headerDistanceTwips', 'footerDistanceTwips'] as const)
-    if (fields.has(name)) out[name] = int(fields.get(name), at(path, name), 0, MARGIN);
-  if (Object.keys(out).length === 0) throw new Invalid('empty', path);
-  return out;
 }
 
 function read(fields: Fields): Record<string, unknown> {

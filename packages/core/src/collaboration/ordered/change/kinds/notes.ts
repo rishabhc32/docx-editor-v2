@@ -5,17 +5,17 @@ import { replaceEquation } from '../../edits/equations.ts';
 import { convertNotes } from '../../edits/note-convert.ts';
 import { setNoteProperties } from '../../edits/note-properties.ts';
 import { shownItemAt } from '../../edits/places.ts';
-import { NOTE_ID_MAX } from '../../../../store/package/note-nodes.ts';
 import type {
   OrderedDocument,
   OrderedItem,
   OrderedNoteProperties,
   OrderedStory,
 } from '../../model/types.ts';
-import { at, fieldPath, fieldsOf, int, Invalid, oneOf, plainText, required } from '../read.ts';
+import { at, fieldPath, fieldsOf, int, Invalid, plainText, required } from '../read.ts';
 import type { OrderedChangeAddress, OrderedEditBase } from '../types.ts';
 import { address, addresses } from '../values.ts';
 import { runKindEdit } from './run.ts';
+import { noteWrites } from './sections/read.ts';
 import { orderedKindSpec, type OrderedKindSpec } from './spec.ts';
 
 /**
@@ -131,101 +131,6 @@ const CONVERT_NOTE = orderedKindSpec<OrderedConvertNoteChange>({
   publish: 'suggestions',
 });
 
-/** `ST_NumberFormat`: the number formats a note may take. */
-const NUMBER_FORMATS = [
-  'decimal',
-  'upperRoman',
-  'lowerRoman',
-  'upperLetter',
-  'lowerLetter',
-  'ordinal',
-  'cardinalText',
-  'ordinalText',
-  'hex',
-  'chicago',
-  'ideographDigital',
-  'japaneseCounting',
-  'aiueo',
-  'iroha',
-  'decimalFullWidth',
-  'decimalHalfWidth',
-  'japaneseLegal',
-  'japaneseDigitalTenThousand',
-  'decimalEnclosedCircle',
-  'decimalFullWidth2',
-  'aiueoFullWidth',
-  'irohaFullWidth',
-  'decimalZero',
-  'bullet',
-  'ganada',
-  'chosung',
-  'decimalEnclosedFullstop',
-  'decimalEnclosedParen',
-  'decimalEnclosedCircleChinese',
-  'ideographEnclosedCircle',
-  'ideographTraditional',
-  'ideographZodiac',
-  'ideographZodiacTraditional',
-  'taiwaneseCounting',
-  'ideographLegalTraditional',
-  'taiwaneseCountingThousand',
-  'taiwaneseDigital',
-  'chineseCounting',
-  'chineseLegalSimplified',
-  'chineseCountingThousand',
-  'koreanDigital',
-  'koreanCounting',
-  'koreanLegal',
-  'koreanDigital2',
-  'vietnameseCounting',
-  'russianLower',
-  'russianUpper',
-  'none',
-  'numberInDash',
-  'hebrew1',
-  'hebrew2',
-  'arabicAlpha',
-  'arabicAbjad',
-  'hindiVowels',
-  'hindiConsonants',
-  'hindiNumbers',
-  'hindiCounting',
-  'thaiLetters',
-  'thaiNumbers',
-  'thaiCounting',
-  'bahtText',
-  'dollarText',
-  'custom',
-] as const;
-
-/** Where footnotes and endnotes may go (`ST_FtnPos`, `ST_EdnPos`), and when they restart. */
-const FOOTNOTE_POSITIONS = ['pageBottom', 'beneathText', 'sectEnd', 'docEnd'] as const;
-const ENDNOTE_POSITIONS = ['sectEnd', 'docEnd'] as const;
-const NUM_RESTARTS = ['continuous', 'eachSect', 'eachPage'] as const;
-
-/** One kind's note properties: each field bounded, the start as the engine bounds it. */
-function noteProperties(
-  value: unknown,
-  path: string,
-  positions: readonly string[]
-): OrderedNoteProperties {
-  const f = fieldsOf(value, path, new Set(['position', 'numFmt', 'numStart', 'numRestart']));
-  return {
-    ...(f.has('position')
-      ? { position: oneOf(f.get('position'), at(path, 'position'), positions) }
-      : {}),
-    ...(f.has('numFmt')
-      ? { numFmt: oneOf(f.get('numFmt'), at(path, 'numFmt'), NUMBER_FORMATS) }
-      : {}),
-    ...(f.has('numStart')
-      ? { numStart: int(f.get('numStart'), at(path, 'numStart'), 0, NOTE_ID_MAX) }
-      : {}),
-    ...(f.has('numRestart')
-      ? { numRestart: oneOf(f.get('numRestart'), at(path, 'numRestart'), NUM_RESTARTS) }
-      : {}),
-  };
-}
-
 /** A section, by the item that holds its `w:sectPr`. */
 function noteSection(value: unknown, path: string): OrderedNoteSection {
   const f = fieldsOf(value, path, new Set(['mark', 'body']));
@@ -256,27 +161,12 @@ function sectionHolder(
 const NOTE_PROPERTIES = orderedKindSpec<OrderedNotePropertiesChange>({
   kind: 'note-properties',
   fields: ['section', 'footnote', 'endnote'],
-  read: (f) => {
-    if (!f.has('footnote') && !f.has('endnote'))
-      throw new Invalid('missing-field', fieldPath(f, 'footnote'), 'footnote or endnote');
-    return {
-      ...(f.has('section')
-        ? { section: noteSection(f.get('section'), fieldPath(f, 'section')) }
-        : {}),
-      ...(f.has('footnote')
-        ? {
-            footnote: noteProperties(
-              f.get('footnote'),
-              fieldPath(f, 'footnote'),
-              FOOTNOTE_POSITIONS
-            ),
-          }
-        : {}),
-      ...(f.has('endnote')
-        ? { endnote: noteProperties(f.get('endnote'), fieldPath(f, 'endnote'), ENDNOTE_POSITIONS) }
-        : {}),
-    };
-  },
+  read: (f) => ({
+    ...(f.has('section')
+      ? { section: noteSection(f.get('section'), fieldPath(f, 'section')) }
+      : {}),
+    ...noteWrites(f),
+  }),
   touches: (change, reader) => {
     const section = change.section;
     if (section === undefined) return;
