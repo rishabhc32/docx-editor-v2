@@ -1,0 +1,12 @@
+{
+  "impact": "compatible",
+  "fields": [],
+  "before": "In a room, a block date picker or list did not follow the value record rules of an inline one: an accept of a value picked over a prompt beside a stored date, or over a date whose format shows no day, kept the stored record, and a reject over words that state no date kept the picked record, where the editor alone and an inline control did not.",
+  "after": "One rule reads what a control's units tell its value record (reached, struck, own, accepted, rejected words) for inline and block controls alike, so a block control's record after a decision equals the editor alone's, live and after a fold.",
+  "reason": "Change messages, the change log and its kinds keep their meaning, and the Yjs document format and the checkpoint format do not change. Only the composed Word file of a block control after such a decision changes, and it now equals across the editor alone, the room and a fold. An ordered room admits only clients of its own code version.",
+  "tests": [
+    "packages/core/src/collaboration/ordered/__tests__/client/editor-controls-value-fold.test.ts"
+  ],
+  "changeset": "block-control-value-record",
+  "migration": null
+}

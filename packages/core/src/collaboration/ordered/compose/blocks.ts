@@ -11,7 +11,7 @@ import { REVISION_ROLE } from '../model/revision-ids.ts';
 import { BLOCK_TOKENS, type OrderedDocument, type OrderedItem } from '../model/types.ts';
 import { isWml, withChildren } from '../ooxml-nodes.ts';
 import type { ComposeContext, OrderedViewParagraph } from './context.ts';
-import { controlContent, isValueRecord } from './inline.ts';
+import { controlContent, noteValueRecord } from './inline.ts';
 import { isNotesStory, noteKeyOf, notesWithHiddenReferences } from './note-references.ts';
 import {
   composeParagraph,
@@ -46,6 +46,12 @@ interface Builder {
   reached: boolean;
   /** A unit in it shows struck by a pending suggestion. */
   struck: boolean;
+  /** A unit in it shows, neither struck nor a suggestion's insertion. */
+  own: boolean;
+  /** A unit in it shows as a suggestion's insertion an accept decided. */
+  accepted: boolean;
+  /** The words of insertions a reject took away in it. */
+  rejected: string;
   /** A table's cells a column decision removed (`table-columns.ts`). */
   removed?: RemovedCell[];
   /** A row's drawn cells and their open items (`row-cells.ts`). */
@@ -205,6 +211,9 @@ function newBuilder(open: OrderedItem | null): Builder {
     decided: false,
     reached: false,
     struck: false,
+    own: false,
+    accepted: false,
+    rejected: '',
   };
 }
 
@@ -232,8 +241,8 @@ function closeBlock(ctx: ComposeContext, builder: Builder, open: OrderedItem, in
 }
 
 /**
- * What a paragraph drawn in a block tells it: touched, held units, drew units, decided, reached,
- * struck.
+ * What a paragraph drawn in a block tells it: touched, held units, drew units, decided, and what
+ * its units tell a control's value record (`ValueSigns`).
  */
 function noteParagraph(builder: Builder, drawn: DrawnParagraph): void {
   if (drawn.touched) builder.touched = true;
@@ -247,6 +256,10 @@ function noteParagraph(builder: Builder, drawn: DrawnParagraph): void {
   if (drawn.struck) {
     builder.struck = true;
   }
+
+  builder.own ||= drawn.own;
+  builder.accepted ||= drawn.accepted;
+  builder.rejected += drawn.rejected;
 }
 
 /** A cell a column decision removed: drawn for its table to remove by the engine's rule. */
@@ -285,19 +298,20 @@ function blockElement(ctx: ComposeContext, builder: Builder): OoxmlNode {
       if (builder.decided) ctx.decisionEmptied.add(shell.id);
     }
 
-    // Its value record follows what it shows, as an inline control's (`closeBox`)
-    const valued = !builder.struck && open.props.some(isValueRecord);
-    if (builder.reached || emptied || valued) {
-      ctx.reached.push(shell.id);
-    }
-
     // Enter removes a prompt for good, with no glossary block, unless a suggestion had filled it
     // before and its words went for good: the engine kept it in the glossary then
     const retain = !removed || isFilledPrompt(ctx.doc, open.space);
     if (ctx.unprompted.has(open.space)) props = hidePrompt(ctx, props, original, { retain });
     else if (ctx.filledPrompts.has(open.space))
       props = hidePrompt(ctx, props, original, { hide: false });
-    return withChildren(shell, [...props, controlContent(ctx, original, builder.children)]);
+    const control = withChildren(shell, [
+      ...props,
+      controlContent(ctx, original, builder.children),
+    ]);
+
+    // Its value record follows what it shows, as an inline control's (`closeBox`)
+    noteValueRecord(ctx, open, control, builder, emptied);
+    return control;
   }
 
   return withChildren(shell, [...props, ...builder.children]);

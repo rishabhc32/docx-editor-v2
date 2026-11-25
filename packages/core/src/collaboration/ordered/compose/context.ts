@@ -449,6 +449,15 @@ export class ComposeContext {
     return rejected && !item.gone && item.kind === 'text' && item.instr !== true ? item.text : '';
   }
 
+  /** Whether a shown unit is a control's own word: neither struck nor a suggestion's insertion. */
+  ownWord(item: OrderedItem): boolean {
+    return (
+      this.struckBy(item) === null &&
+      !this.acceptedInsertion(item) &&
+      this.insertedBy(item) === null
+    );
+  }
+
   /** Whether an accept decided the item's insertion: a suggestion's, not a direct edit's. */
   acceptedInsertion(item: OrderedItem): boolean {
     const found = item.by === null ? undefined : this.doc.suggestions.get(item.by);

@@ -245,7 +245,7 @@ function noteUnit(ctx: ComposeContext, boxes: readonly Box[], item: OrderedItem)
   if (ctx.gone(item)) return;
   const struck = ctx.struckBy(item) !== null;
   const accepted = ctx.acceptedInsertion(item);
-  const own = !struck && !accepted && ctx.insertedBy(item) === null;
+  const own = ctx.ownWord(item);
   for (const b of boxes) {
     b.drawn = true;
     if (struck) b.struck = true;
@@ -396,7 +396,7 @@ const METADATA_KEYS = new Set(
  * title, tag or lock: the value records follow the text the control shows. A record of its words
  * alone sets none: a value proposed over a prompt keeps the record the control stores.
  */
-export function isValueRecord(record: OrderedPropertyRecord): boolean {
+function isValueRecord(record: OrderedPropertyRecord): boolean {
   if (record.target !== 'sdtPr') return false;
   const merge = record.kind === 'element' ? record.merge : undefined;
   return merge === undefined || merge.some((key) => !METADATA_KEYS.has(key));
@@ -413,6 +413,50 @@ function coverOf(ctx: ComposeContext, open: OrderedItem): string | null {
   return ctx.insertedBy(open);
 }
 
+/** What the units of a control told its value record: an inline control's box, a block's builder. */
+export interface ValueSigns {
+  /** A decision changed whether a unit in it reads as text. */
+  readonly reached: boolean;
+  /** A unit in it shows struck by a pending suggestion. */
+  readonly struck: boolean;
+  /** A unit in it shows, neither struck nor a suggestion's insertion. */
+  readonly own: boolean;
+  /** A unit in it shows as a suggestion's insertion an accept decided. */
+  readonly accepted: boolean;
+  /** The words of insertions a reject took away in it. */
+  readonly rejected: string;
+}
+
+/**
+ * Keep a control's value record in step with what it shows (`ComposeContext.reached`), as the
+ * engine reads it back after a decision: a decision reached it or emptied it; it has a value
+ * record that shows and no pending deletion (a record taken back, a direct edit undone, is
+ * none); or words that filled it beside a record it stores were accepted
+ * (`newWordsBesideRecord`). A record the words a reject took away stated is stale
+ * (`ComposeContext.stale`). `control` is the control as drawn.
+ */
+export function noteValueRecord(
+  ctx: ComposeContext,
+  open: OrderedItem,
+  control: OoxmlElement,
+  signs: ValueSigns,
+  emptied: boolean
+): void {
+  const valued =
+    !signs.struck &&
+    open.props.some(
+      (record) => isValueRecord(record) && statusOf(ctx.doc, record.suggestion) !== 'rejected'
+    );
+  const filled = signs.accepted && !signs.own && storesValueRecord(control);
+  if (recordStatesText(control, signs.rejected)) {
+    ctx.stale.add(control.id);
+  }
+
+  if (signs.reached || emptied || valued || filled) {
+    ctx.reached.push(control.id);
+  }
+}
+
 function closeBox(ctx: ComposeContext, done: Box, into: Box): void {
   const open = done.open;
   if (done.cover !== undefined) ctx.covered.delete(done.cover);
@@ -427,24 +471,7 @@ function closeBox(ctx: ComposeContext, done: Box, into: Box): void {
     if (emptied) ctx.emptied.push(container.id);
     if (emptied && done.decided) ctx.decisionEmptied.add(container.id);
 
-    // A control with a value record keeps the record in step with what it shows, once no
-    // pending deletion is in it; a record taken back (a direct edit undone) is none
-    const valued =
-      !done.struck &&
-      open.props.some(
-        (record) => isValueRecord(record) && statusOf(ctx.doc, record.suggestion) !== 'rejected'
-      );
-
-    // Words that filled its prompt beside a record it stores, once accepted, give the record, as
-    // the engine reads it back (`fillsPromptBesideRecord`)
-    const filled = done.accepted && !done.own && storesValueRecord(container);
-    if (recordStatesText(container, done.rejected)) {
-      ctx.stale.add(container.id);
-    }
-
-    if (done.reached || emptied || valued || filled) {
-      ctx.reached.push(container.id);
-    }
+    noteValueRecord(ctx, open, container, done, emptied);
   }
 
   if (done.cover !== undefined) place(ctx, into.children, container, open);

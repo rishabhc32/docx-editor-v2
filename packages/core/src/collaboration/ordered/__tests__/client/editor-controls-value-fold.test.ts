@@ -228,6 +228,30 @@ const CASES = [
     pick('2026-03-04'),
   ],
   [
+    "a date over a block date picker's prompt with a stored date",
+    block(
+      `<w:showingPlcHdr/><w:date w:fullDate="2026-06-30T00:00:00Z">${DATE_FORMAT}</w:date>`,
+      t('Click to enter a date.', FACE)
+    ),
+    [0, 0],
+    pick('2026-03-04'),
+  ],
+  [
+    'a date over a date in a block date picker whose format shows no day',
+    block(
+      '<w:date w:fullDate="2026-06-30T00:00:00Z"><w:dateFormat w:val="MMMM yyyy"/></w:date>',
+      t('June 2026')
+    ),
+    [0, 0],
+    pick('2026-09-15'),
+  ],
+  [
+    'a date over words that state no date in a block date picker',
+    block('<w:date><w:lid w:val="en-US"/></w:date>', t('Soon')),
+    [0, 0],
+    pick('2026-09-15'),
+  ],
+  [
     "a date over another person's struck, formatted words in a block date picker",
     block(
       `<w:date w:fullDate="2026-01-02T00:00:00Z">${DATE_FORMAT}</w:date>`,

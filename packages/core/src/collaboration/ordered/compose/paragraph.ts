@@ -37,6 +37,12 @@ export interface DrawnParagraph {
   readonly reached: boolean;
   /** A unit in it shows struck by a pending suggestion. */
   readonly struck: boolean;
+  /** A unit in it shows, neither struck nor a suggestion's insertion. */
+  readonly own: boolean;
+  /** A unit in it shows as a suggestion's insertion an accept decided. */
+  readonly accepted: boolean;
+  /** The words of insertions a reject took away in it. */
+  readonly rejected: string;
 }
 
 /** Draw one paragraph: the items since the last shown mark, and its mark. */
@@ -93,6 +99,9 @@ export function viewOfParagraph(
   let decided = false;
   let reached = false;
   let struck = false;
+  let own = false;
+  let accepted = false;
+  let rejected = '';
   const kept = keptLinkEdges(ctx, buffer);
   for (const item of buffer) {
     if (isLabelled(item) || item.home !== home) touched = true;
@@ -114,10 +123,13 @@ export function viewOfParagraph(
       reached = true;
     }
 
+    rejected += ctx.rejectedWords(item);
     if (ctx.gone(item)) continue;
     drawn = true;
     const deleted = ctx.struckBy(item) !== null;
     struck ||= deleted;
+    own ||= ctx.ownWord(item);
+    accepted ||= ctx.acceptedInsertion(item);
     const within = containers.join('>');
     for (let k = 0; k < item.length; k += 1) {
       chars.push({
@@ -132,7 +144,19 @@ export function viewOfParagraph(
   }
 
   const view: OrderedViewParagraph = { id: shell.id, mark, chars, items: buffer, blocks };
-  return { view, shell, touched, hadUnits, drawn, decided, reached, struck };
+  return {
+    view,
+    shell,
+    touched,
+    hadUnits,
+    drawn,
+    decided,
+    reached,
+    struck,
+    own,
+    accepted,
+    rejected,
+  };
 }
 
 /** Every unit of the loaded paragraph is here, in one piece. */
