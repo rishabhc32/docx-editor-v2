@@ -252,7 +252,8 @@ function survivorsOf(
   const kept = new Set<string>();
   const lent = new Map<string, OoxmlElement>();
   for (const row of drawn.children) {
-    if (row.kind === 'textValue' || !isRow(row)) {
+    // A row with no removed cell keeps its widths
+    if (row.kind === 'textValue' || !isRow(row) || !row.children.some((c) => columns.has(c.id))) {
       continue;
     }
 
