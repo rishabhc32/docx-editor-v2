@@ -39,7 +39,7 @@ import type {
   OrderedPropertyRecord,
   OrderedSuggestion,
 } from '../model/types.ts';
-import { refuseLockedAt } from '../placement.ts';
+import { paragraphOfItem, refuseLockedAt } from '../placement.ts';
 import { pendingOwn, scratchCompose, suggestionFor, withNewIds, type Ctx } from './context.ts';
 import { withPropertyRecord } from './text.ts';
 
@@ -310,6 +310,12 @@ export function insertSectionBreak(
   const sections = sectionsNow(ctx);
   if (sections.some((s) => s.holder === mark))
     throw new OrderedRefusal('engine-refused', 'setSectionMark: the paragraph ends a section');
+
+  // No section ends inside a table cell: Word writes none there, and the engine refuses it
+  if (paragraphOfItem(ctx, mark)?.blocks.some((block) => block.token === 'tbl')) {
+    throw new OrderedRefusal('engine-refused', 'setSectionMark: the paragraph is in a table');
+  }
+
   const own = pendingOwn(ctx, mark.by);
   const onOwnMark = own !== null && insertedPending(ctx.doc, mark);
   if (!ctx.direct && !onOwnMark)

@@ -1,0 +1,10 @@
+{
+  "impact": "compatible",
+  "fields": [],
+  "before": "An ordered room took a section break on a paragraph mark in a table cell, direct or suggested on its author's own new mark, which the editor alone refuses (setSectionMark). The break wrote a section no read counts, and a later break on the same mark copied the next section's records onto it a second time.",
+  "after": "The room refuses the break with engine-refused and changes nothing, as the editor alone does.",
+  "reason": "Change messages, the change log and its kinds keep their meaning, and the Yjs document format and the checkpoint format do not change. Only a change the editor never sends is now refused. An ordered room admits only clients of its own code version.",
+  "tests": ["packages/core/src/collaboration/ordered/__tests__/section-break-in-table.test.ts"],
+  "changeset": "ordered-section-break-in-table",
+  "migration": null
+}

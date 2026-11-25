@@ -900,7 +900,7 @@ export function refuseLockedWithin(
 }
 
 /** The shown paragraph that holds an item (a mark, a unit, a container's edge), as drawn now. */
-function paragraphOfItem(ctx: Ctx, item: OrderedItem): OrderedViewParagraph | null {
+export function paragraphOfItem(ctx: Ctx, item: OrderedItem): OrderedViewParagraph | null {
   const p = orderedViewParagraph(ctx.doc, ctx.story.name, ctx.story.tree.before(item).marks);
   return p && (p.mark === item || p.items.includes(item)) ? p : null;
 }
