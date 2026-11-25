@@ -7,6 +7,7 @@
 import {
   contentControlPropertiesContainerOf,
   contentControlPropertiesOf,
+  contentControlsIn,
   type ContentControlKind,
 } from '../package/content-control-nodes.ts';
 import { actorScopedSeed } from '../package/actor-scoped-ids.ts';
@@ -23,7 +24,13 @@ import { isInlineControl, isWml } from './content-control-checkbox.ts';
 import { showsPromptWhenEmpty } from './content-control-prompt-kinds.ts';
 import { isCommentAnchorRun, valueContent } from './content-control-value-content.ts';
 import { placeholderRunProperties } from './placeholder-materialize.ts';
-import { editedProperties, promptFor, textRun, wmlElement } from './tree-op-content-controls.ts';
+import {
+  editedProperties,
+  enclosingContentControls,
+  promptFor,
+  textRun,
+  wmlElement,
+} from './tree-op-content-controls.ts';
 import {
   cloneWithNewIds,
   contentControlContentOf,
@@ -149,12 +156,14 @@ export const BLANK_PROMPT_TEXT = '     ';
  * 16.114 writes `w:showingPlcHdr` and an empty `w:sdtEndPr`, drops `w:richText`, and fills the
  * content with one run of five spaces in no style. Word adds no glossary block (inline and
  * block controls, Accept of a deletion and Reject of an insertion, compatibility and native
- * mode).
+ * mode). An author's deletion of their own pending words gives the same prompt with no
+ * `w:sdtEndPr` (`afterDecision` false; `withOwnEmptiedPrompts`).
  */
 export function withDecisionPrompt(
   part: OoxmlPart,
   controlId: string,
-  options?: EditOptions
+  options?: EditOptions,
+  afterDecision = true
 ): OoxmlPart {
   const control = findContentControl(part, controlId);
   if (!control) return part;
@@ -179,14 +188,18 @@ export function withDecisionPrompt(
     children: flagged.children.filter((child) => !isWml(child, 'richText')),
   } as OoxmlNode;
   const endProperties = control.children.find((child) => isWml(child, 'sdtEndPr'));
+  const end =
+    endProperties ??
+    (afterDecision
+      ? wmlElement(nextId, 'sdtEndPr', {
+          kind: 'contentControlEndProperties' as OoxmlNode['kind'],
+        })
+      : undefined);
   const rebuilt = {
     ...control,
     children: [
       properties,
-      endProperties ??
-        wmlElement(nextId, 'sdtEndPr', {
-          kind: 'contentControlEndProperties' as OoxmlNode['kind'],
-        }),
+      ...(end ? [end] : []),
       ...control.children.filter(
         (child) => child.id !== sdtPr?.id && child !== endProperties && child.id !== content.id
       ),
@@ -195,6 +208,38 @@ export function withDecisionPrompt(
   } as OoxmlNode;
   const written = replaceNode(part, control.id, rebuilt, options);
   return written.ok ? written.part : part;
+}
+
+/**
+ * `result` with each control in or around a paragraph that held content in `before` and holds
+ * none now showing its prompt again: an author's deletion of their own pending words takes them
+ * out with no revision, and Word then shows the control's prompt as after a decision, with no
+ * `w:sdtEndPr` (Word for Mac, 2026-11-25, `w58-after-own-delete.docx`).
+ */
+export function withOwnEmptiedPrompts(
+  before: OoxmlPart,
+  result: TreeOpResult,
+  paragraphId: string,
+  options?: EditOptions
+): TreeOpResult {
+  const paragraph = findNode(before, paragraphId);
+  if (!result.ok || !paragraph) {
+    return result;
+  }
+
+  const controls = [
+    ...enclosingContentControls(before, paragraphId),
+    ...contentControlsIn(paragraph).map((entry) => entry.node),
+  ];
+  let part = result.part;
+  for (const control of controls) {
+    const now = findContentControl(part, control.id);
+    if (now && controlHoldsContent(control) && !controlHoldsContent(now)) {
+      part = withDecisionPrompt(part, control.id, options, false);
+    }
+  }
+
+  return part === result.part ? result : { ...result, part };
 }
 
 const isParagraph = (node: OoxmlNode): boolean => node.kind === 'paragraph' || isWml(node, 'p');

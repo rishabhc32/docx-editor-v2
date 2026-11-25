@@ -1,0 +1,10 @@
+{
+  "impact": "compatible",
+  "fields": [],
+  "before": "In suggesting mode, an author's deletion of their own pending words removed them and left the content control empty, with no prompt (`<w:sdtContent/>`), where Word shows the prompt again with no revision.",
+  "after": "The tracked deleteText op shows the prompt of each control in or around the paragraph that the deletion emptied (withOwnEmptiedPrompts in content-control-prompt-restore.ts): the prompt the control kept, else Word's blank prompt for a text control that names none, with no w:sdtEndPr (Word for Mac 2026-11-25, w58-after-own-delete.docx).",
+  "reason": "Change messages, the change log and its kinds keep their meaning, and the Yjs document format and the checkpoint format do not change. Only the editor's part after such a deletion changes, as Word writes it. An ordered room admits only clients of its own code version.",
+  "tests": ["packages/core/src/editor/__tests__/suggesting-control-prompts.test.ts"],
+  "changeset": "own-deletion-shows-prompt",
+  "migration": null
+}

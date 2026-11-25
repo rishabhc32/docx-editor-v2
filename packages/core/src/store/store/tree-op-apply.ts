@@ -209,6 +209,7 @@ import {
 import {
   promptInsertionOffset,
   restoreEmptiedPlaceholder,
+  withOwnEmptiedPrompts,
 } from './content-control-prompt-restore.ts';
 
 /** The one run-level element each insert op places, shared by its tracked and untracked arms. */
@@ -538,7 +539,8 @@ function applyValidatedTreeOp(part: OoxmlPart, op: TreeDocOp, options?: EditOpti
         if (promptHoldsRange(part, paragraph.id, op.start, op.end)) {
           return promptKept(part, paragraph.id);
         }
-        return applyDeleteTracked(part, paragraph, op.start, op.end, op.revision, options);
+        const deleted = applyDeleteTracked(part, paragraph, op.start, op.end, op.revision, options);
+        return withOwnEmptiedPrompts(part, deleted, paragraph.id, options);
       }
       return applyDeleteText(part, paragraph, op.start, op.end, options);
     case 'insertHyperlink':

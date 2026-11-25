@@ -168,6 +168,38 @@ describe('typing over a prompt in suggesting mode', () => {
     }
   });
 
+  // Word for Mac, 2026-11-25 (`w58-after-own-delete.docx`): an author's Backspace over their own
+  // new words in a control leaves no revision, and the control shows its prompt again: the one it
+  // kept when the words replaced it, else Word's blank prompt (five spaces in no style, with no
+  // `w:sdtEndPr`) for a text control that names none, here Bea's own new control
+  test("deleting one's own words in a control shows its prompt again, with no revision", () => {
+    const own =
+      '<w:p><w:r><w:t xml:space="preserve">A: </w:t></w:r>' +
+      '<w:ins w:id="7" w:author="Bea" w:date="2026-11-25T00:00:00Z"><w:sdt><w:sdtPr><w:text/>' +
+      '</w:sdtPr><w:sdtContent><w:r><w:t>ab</w:t></w:r></w:sdtContent></w:sdt></w:ins>' +
+      '<w:r><w:t xml:space="preserve"> end.</w:t></w:r></w:p>';
+    for (const [body, start, typed, prompt] of [
+      [PROMPTED, PROMPT_START, true, PROMPT_RUN],
+      [own, 'A: '.length, false, '<w:r><w:t xml:space="preserve">     </w:t></w:r>'],
+    ] as const) {
+      const surface = suggesting(body);
+      if (typed) {
+        select(surface, start, start + 'Enter'.length);
+        surface.type('ab');
+      }
+
+      select(surface, start, start + 2);
+      surface.deleteBackward();
+      expect(surface.state().lastRejection).toBeFalsy();
+      expect(showsPrompt(surface)).toBe(true);
+      expect(content(surface)).toBe(prompt);
+      expect(serializeOoxmlPart(surface.session.part())).not.toContain('sdtEndPr');
+      expect(collectReviewItems({ storyPart: surface.session.part() }).map((i) => i.kind)).toEqual(
+        typed ? [] : ['revision']
+      );
+    }
+  });
+
   test('undo gives the prompt back as it was', () => {
     const surface = suggesting();
     const before = serializeOoxmlPart(surface.session.part());
