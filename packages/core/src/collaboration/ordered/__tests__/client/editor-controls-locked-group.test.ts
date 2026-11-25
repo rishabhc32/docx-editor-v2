@@ -134,6 +134,7 @@ describe('a deletion over the whole group takes it whole, as the editor alone', 
     const { room, olive, bob } = await seats();
     caretAt(bob, 0, 6);
     surface(bob).insertPlainText('Q');
+
     // "A: G ab end.": the group is 3 to 7; the range " G ab " covers it whole
     caretAt(olive, 0, 2, 8);
     surface(olive).deleteSelection();
