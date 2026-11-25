@@ -534,6 +534,44 @@ describe('a control is written through the document’s own write path', () => {
     expect(await mainXmlOf(runtime)).toContain('REPLACED');
   });
 
+  // Word refuses an edit of a group control's own content; a control nested in it stays editable
+  const GROUP = docx(
+    `<w:sdt><w:sdtPr><w:tag w:val="group"/><w:group/></w:sdtPr><w:sdtContent>` +
+      `<w:p><w:r><w:t>Own words.</w:t></w:r></w:p>` +
+      `<w:sdt><w:sdtPr><w:tag w:val="field"/></w:sdtPr><w:sdtContent>` +
+      `<w:p><w:r><w:t>Field.</w:t></w:r></w:p></w:sdtContent></w:sdt></w:sdtContent></w:sdt>`
+  );
+
+  test("a write in a group control's own content is refused as protected content", async () => {
+    const runtime = await serverRuntime(GROUP);
+    const before = await mainXmlOf(runtime);
+    let inner = '';
+    try {
+      await runtime.run(async (context) => {
+        context.document.body.paragraphs.getFirst().insertText('Q', 'End');
+        await context.sync();
+      });
+    } catch (error) {
+      inner = isDocxEditorError(error) ? (error.debugInfo.innerError?.code ?? '') : '';
+    }
+    expect(inner).toBe('edit.protected-content');
+    expect(await mainXmlOf(runtime)).toBe(before);
+  });
+
+  test('a write in a control nested in a group goes through', async () => {
+    const runtime = await serverRuntime(GROUP);
+    const text = await runtime.run(async (context) => {
+      const field = context.document.body.paragraphs.getLast();
+      field.insertText('Q', 'End');
+      await context.sync();
+      // Reads answer the document as the batch was planned, so the text is read after the write
+      field.load('text');
+      await context.sync();
+      return field.text;
+    });
+    expect(text).toBe('Field.Q');
+  });
+
   test('a location no control has is refused before anything is sent', async () => {
     const runtime = await serverRuntime(CONTROLS);
     const code = await codeOf(() =>
