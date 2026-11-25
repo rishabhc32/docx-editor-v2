@@ -154,6 +154,20 @@ describe('the fields of a date format Word writes', () => {
     });
     expect(parseContentControlDate('September 15', { dateFormat: 'MMMM d' }, null)).toBeNull();
   });
+
+  // A `w:fullDate` year has four digits, so a longer one is no date the control can store
+  test('read a full year of four digits at most', () => {
+    const form = { dateFormat: 'M/d/yyyy' };
+    expect(parseContentControlDate('1/1/12345', form, null)).toBeNull();
+    expect(parseContentControlDate('1/1/2345', form, null)).toEqual({
+      year: 2345,
+      month: 1,
+      day: 1,
+      hour: 0,
+      minute: 0,
+      second: 0,
+    });
+  });
 });
 
 describe('a date value, whichever form it takes: the editor string or the typed value', () => {
@@ -175,6 +189,12 @@ describe('a date value, whichever form it takes: the editor string or the typed 
         fullDate: '2026-09-15T10:30:00+02:00',
       });
     }
+  });
+
+  test('shows the weekday of a year before 100 as that year has it', () => {
+    // The Gregorian calendar repeats every 400 years: 0045-03-15 is a Wednesday, as 2045-03-15
+    // is, and 1945-03-15 a Thursday
+    expect(dateSet('dddd', '0045-03-15').text).toBe('Wednesday');
   });
 
   test('shows a weekday and a time as Word shows them', () => {

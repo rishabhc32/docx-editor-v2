@@ -20,7 +20,7 @@ export interface ControlDate {
 const FULL_DATE =
   /^(\d{4})-(\d{2})-(\d{2})(?:T(\d{2}):(\d{2}):(\d{2})(?:\.(\d{1,9}))?(Z|[+-]\d{2}:\d{2})?)?$/;
 
-/** Days in `month` (1–12) for a Gregorian `year`, or 0 when the month is out of range. */
+/** Days in `month` (1 to 12) for a Gregorian `year`, or 0 when the month is out of range. */
 function daysInGregorianMonth(year: number, month: number): number {
   if (month < 1 || month > 12) {
     return 0;
@@ -41,28 +41,33 @@ function daysInGregorianMonth(year: number, month: number): number {
  * Returns a normalized `xsd:dateTime` string (`…T…Z` or with a numeric offset).
  */
 export function normalizeSdtFullDate(value: string): string | null {
+  return readFullDate(value)?.fullDate ?? null;
+}
+
+/** A `w:fullDate` value checked and normalized (`normalizeSdtFullDate`), with its fields. */
+function readFullDate(
+  value: string
+): { readonly fullDate: string; readonly date: ControlDate } | null {
   const match = FULL_DATE.exec(value.trim());
   if (!match) {
     return null;
   }
 
-  const year = Number(match[1]);
-  const month = Number(match[2]);
-  const day = Number(match[3]);
+  const [year = 0, month = 0, day = 0, hour = 0, minute = 0, second = 0] = match
+    .slice(1, 7)
+    .map((field) => Number(field ?? 0));
   const maxDay = daysInGregorianMonth(year, month);
   if (maxDay === 0 || day < 1 || day > maxDay) {
     return null;
   }
 
-  const date = `${match[1]}-${match[2]}-${match[3]}`;
+  const date: ControlDate = { year, month, day, hour, minute, second };
+  const ymd = `${match[1]}-${match[2]}-${match[3]}`;
   if (match[4] === undefined) {
-    return `${date}T00:00:00Z`;
+    return { fullDate: `${ymd}T00:00:00Z`, date };
   }
 
-  const hour = Number(match[4]);
-  const minute = Number(match[5]);
-  const second = Number(match[6]);
-  if (hour > 23 || minute > 59 || second > 59) {
+  if (date.hour > 23 || date.minute > 59 || date.second > 59) {
     return null;
   }
 
@@ -72,7 +77,7 @@ export function normalizeSdtFullDate(value: string): string | null {
     return null;
   }
 
-  return `${date}T${match[4]}:${match[5]}:${match[6]}${fraction}${zone}`;
+  return { fullDate: `${ymd}T${match[4]}:${match[5]}:${match[6]}${fraction}${zone}`, date };
 }
 
 /** Whether `zone` is a legal `xsd:dateTime` timezone: `Z` or a numeric offset within ±14:00. */
@@ -111,21 +116,7 @@ function isValidXsdDateTimeZone(zone: string): boolean {
 
 /** The date and time a `w:fullDate` names, as it writes them, or null for one that names none. */
 export function controlDateOf(fullDate: string): ControlDate | null {
-  const normalized = normalizeSdtFullDate(fullDate);
-  const match = normalized === null ? null : FULL_DATE.exec(normalized);
-  if (!match) {
-    return null;
-  }
-
-  const [year, month, day, hour, minute, second] = match.slice(1, 7).map(Number);
-  return {
-    year: year!,
-    month: month!,
-    day: day!,
-    hour: hour!,
-    minute: minute!,
-    second: second!,
-  };
+  return readFullDate(fullDate)?.date ?? null;
 }
 
 /** The `w:fullDate` of a date and time, at UTC, as Word writes it. */
@@ -144,13 +135,10 @@ export function dateControlValue(
   value: string,
   form: DateForm | undefined
 ): { readonly fullDate: string; readonly text: string } | null {
-  const fullDate = normalizeSdtFullDate(value);
-  const date = fullDate === null ? null : controlDateOf(fullDate);
-  if (fullDate === null || date === null) {
-    return null;
-  }
-
-  return { fullDate, text: formatContentControlDate(date, form) };
+  const read = readFullDate(value);
+  return read === null
+    ? null
+    : { fullDate: read.fullDate, text: formatContentControlDate(read.date, form) };
 }
 
 /**
@@ -301,7 +289,10 @@ function beforeMonthName(parts: readonly FormatPart[], index: number): boolean {
 
 /** The day of the week of a date, 0 for Sunday. */
 function weekdayOf(date: ControlDate): number {
-  return new Date(Date.UTC(date.year, date.month - 1, date.day)).getUTCDay();
+  // `Date.UTC` reads years 0 to 99 as 1900 to 1999; `setUTCFullYear` takes the year as it is
+  const day = new Date(0);
+  day.setUTCFullYear(date.year, date.month - 1, date.day);
+  return day.getUTCDay();
 }
 
 /** A field's text in digits, padded to the run, or the language's text of day 1. */
@@ -466,7 +457,7 @@ function readToken(
   }
 
   const fullYear = letter === 'y' && run > 2;
-  const read = digitsAt(text, at, fullYear ? 1 : Math.min(run, 2), fullYear ? 6 : 2);
+  const read = digitsAt(text, at, fullYear ? 1 : Math.min(run, 2), fullYear ? 4 : 2);
   if (!read) {
     return null;
   }
