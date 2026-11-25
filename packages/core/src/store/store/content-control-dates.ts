@@ -4,8 +4,19 @@
 import type { ContentControlDateFormat } from '../package/content-control-nodes.ts';
 import { dateNamesFor, type DateNames } from './date-names.ts';
 
-/** What a date's text depends on: the control's `w:dateFormat` and its language (`w:lid`). */
-export type DateForm = Pick<ContentControlDateFormat, 'dateFormat' | 'lid'>;
+/**
+ * What a date's text depends on: the control's `w:dateFormat`, its language (`w:lid`) and its
+ * calendar (`w:calendar`).
+ */
+export type DateForm = Pick<ContentControlDateFormat, 'dateFormat' | 'lid' | 'calendar'>;
+
+/**
+ * Whether the engine writes and reads the dates of `form`: Gregorian ones only (`w:calendar`
+ * absent or `gregorian`). Another calendar's text is refused, never approximated.
+ */
+export function isGregorianDateForm(form: DateForm | undefined): boolean {
+  return form?.calendar === undefined || form.calendar === 'gregorian';
+}
 
 /** A date control's date and time, as its `w:fullDate` writes them, with no time zone shift. */
 export interface ControlDate {
@@ -128,16 +139,21 @@ export function fullDateOf(date: ControlDate): string {
 
 /**
  * A value set in a date control: the `w:fullDate` it writes and the text the control's format
- * shows, or null for a value that is no date. The editor's string value and the editing API's
- * typed value both take it.
+ * shows; `invalidArgs` for a value that is no date, and `unsupported` for a control in another
+ * calendar than the Gregorian one. The editor's string value and the editing API's typed value
+ * both take it.
  */
 export function dateControlValue(
   value: string,
   form: DateForm | undefined
-): { readonly fullDate: string; readonly text: string } | null {
+): { readonly fullDate: string; readonly text: string } | 'invalidArgs' | 'unsupported' {
+  if (!isGregorianDateForm(form)) {
+    return 'unsupported';
+  }
+
   const read = readFullDate(value);
   return read === null
-    ? null
+    ? 'invalidArgs'
     : { fullDate: read.fullDate, text: formatContentControlDate(read.date, form) };
 }
 
@@ -364,7 +380,8 @@ interface ReadFields {
  * inverse of {@link formatContentControlDate}, or null for text that formatter does not write.
  * A field the format does not show reads as its first value (the first day, the first month,
  * midnight); a year it does not show is the year of `previous`, and a two-digit year falls in
- * the century of `previous` (2000 without one).
+ * the century of `previous` (2000 without one). Text in another calendar reads as no date, so a
+ * decision leaves the control's record as it is.
  *
  * Bounded like the formatter: one walk of the format and the text together, left to right.
  * The result is formatted again and compared, so a format whose fields run together cannot
@@ -375,6 +392,10 @@ export function parseContentControlDate(
   form: DateForm | undefined,
   previous: ControlDate | null
 ): ControlDate | null {
+  if (!isGregorianDateForm(form)) {
+    return null;
+  }
+
   const tokens = dateTokens(form);
   if (!tokens) {
     return controlDateOf(text);

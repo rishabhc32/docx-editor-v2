@@ -144,6 +144,7 @@ import {
   type AutomationContentControlRead,
 } from './content-controls.ts';
 import { contentControlPropertiesOf } from '../store/package/content-control-nodes.ts';
+import { isGregorianDateForm } from '../store/store/content-control-dates.ts';
 import {
   CONTENT_CONTROL_LOCKS,
   CONTENT_CONTROL_RANGE_LOCATIONS,
@@ -2592,6 +2593,15 @@ export function createBatchPlanner(host: BatchPlannerHost): BatchPlanner {
         if (!('control' in found)) return found;
         const value = contentControlValueOf(operation.value);
         if (!value.ok) return refuse(value.code, value.message, value.detail);
+        // Named here, as `NotSupported`: the store refuses the write too (`dateControlValue`)
+        const date = contentControlPropertiesOf(found.node).date;
+        if (value.value.kind === 'date' && !isGregorianDateForm(date)) {
+          return refuse(
+            'unsupported-capability',
+            'this date control uses a calendar the editor does not write',
+            'date-calendar'
+          );
+        }
         const plan = planFor(found.reads);
         const pin = pinWrite(plan);
         if (pin) return pin;

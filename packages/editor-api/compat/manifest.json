@@ -508,7 +508,7 @@
     },
     {
       "uid": "Word.ContentControlCollection",
-      "note": "getByTag, getByTitle, getFirst, getFirstOrNullObject, ContentControl#setValue and ContentControl#isBound are implemented and are NOT in this list's frozen reference fixture, so they are published as DocxEditor's own additions rather than as conformance-checked members. setValue exists because a control's value is not its characters: a dropdown takes a declared item, a date an ISO instant, a checkbox a state, and upstream spreads those over five sibling objects this subset does not ship. isBound is a presence-only advisory preflight; sync-time refusal remains authoritative."
+      "note": "getByTag, getByTitle, getFirst, getFirstOrNullObject, ContentControl#setValue and ContentControl#isBound are implemented and are NOT in this list's frozen reference fixture, so they are published as DocxEditor's own additions rather than as conformance-checked members. setValue exists because a control's value is not its characters: a dropdown takes a declared item, a date an ISO instant, a checkbox a state, and upstream spreads those over five sibling objects this subset does not ship. A date in a control whose w:calendar is not gregorian refuses with NotSupported; other calendars are not formatted. isBound is a presence-only advisory preflight; sync-time refusal remains authoritative."
     },
     {
       "uid": "Word.Section#getHeader / #getFooter",

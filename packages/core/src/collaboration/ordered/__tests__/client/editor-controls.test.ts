@@ -585,3 +585,47 @@ describe("a control's value and its properties at once", () => {
     expect(editorTexts(ana)[0]).toBe('Pick: One.');
   });
 });
+
+// The engine writes and reads Gregorian dates only: a date pick in a control in another calendar
+// is refused by name, for a party and for the organiser, and nothing reaches the room
+describe('a date control in another calendar', () => {
+  const HIJRI = docx(
+    p(
+      t('Due: ') +
+        sdt(
+          '<w:id w:val="11"/><w:date><w:dateFormat w:val="dd/MM/yyyy"/>' +
+            '<w:calendar w:val="hijri"/></w:date>',
+          t('Soon')
+        ) +
+        t('.')
+    )
+  );
+
+  test('refuses a date pick in the editor and in the room', async () => {
+    const room = localRoom(HIJRI);
+    const olive = await join(room, 'Olive', { mode: 'edit', login: ORGANISER, wordFile: HIJRI });
+    const ana = await join(room, 'Ana', { wordFile: HIJRI });
+    for (const person of [ana, olive]) {
+      caretAt(person, 0, 6);
+      const picked = person.editor.exec({
+        type: 'setContentControlValue',
+        value: '2026-09-15',
+      } as never);
+      expect({ person: person.name, picked }).toMatchObject({
+        person: person.name,
+        picked: { ok: false },
+      });
+      await settle();
+      expect(person.refusals.splice(0)).toEqual([
+        {
+          code: 'ordered-refused',
+          reason: 'engine-refused',
+          detail: 'setContentControlValue: unsupported',
+        },
+      ]);
+      converged(room, olive, ana);
+      expect(editorTexts(person)[0]).toBe('Due: Soon.');
+      expect(bodyOf(editorXml(person))).not.toContain('w:fullDate');
+    }
+  });
+});

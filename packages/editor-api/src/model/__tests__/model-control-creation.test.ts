@@ -274,6 +274,37 @@ test('a date value takes a full ISO-8601 instant with its offset', async () => {
   }
 });
 
+// The engine formats Gregorian dates only: a control in another calendar refuses a date by name,
+// and its text and record stay as they were
+test('a date control in another calendar refuses a date with NotSupported', async () => {
+  const control = (calendar: string) =>
+    `<w:p><w:sdt><w:sdtPr><w:tag w:val="due"/><w:date><w:dateFormat w:val="dd/MM/yyyy"/>` +
+    `${calendar}</w:date></w:sdtPr><w:sdtContent><w:r><w:t>Soon</w:t></w:r></w:sdtContent>` +
+    '</w:sdt></w:p>';
+  for (const [calendar, refused] of [
+    ['<w:calendar w:val="hijri"/>', true],
+    ['<w:calendar w:val="gregorian"/>', false],
+  ] as const) {
+    const runtime = await serverRuntime(docx(control(calendar)));
+    try {
+      await runtime.run(async (context) => {
+        const found = context.document.contentControls.getByTag('due').getFirst();
+        found.setValue({ kind: 'date', iso: '2026-09-15' });
+        if (refused) {
+          await expect(context.sync()).rejects.toMatchObject({ code: 'NotSupported' });
+        } else {
+          await context.sync();
+        }
+      });
+      const xml = await mainXmlOf(runtime);
+      expect(xml.includes('w:fullDate')).toBe(!refused);
+      expect(xml.includes('<w:t>Soon</w:t>')).toBe(refused);
+    } finally {
+      runtime.dispose();
+    }
+  }
+});
+
 test('controls created in one batch each answer their own control', async () => {
   const runtime = await serverRuntime(docx(p('First') + p('Second')));
   try {

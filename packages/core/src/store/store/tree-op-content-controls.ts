@@ -1355,9 +1355,11 @@ function planValue(
     case 'date': {
       if (properties.type !== 'date') return 'typeMismatch';
       const picked =
-        typeof value.iso === 'string' ? dateControlValue(value.iso, properties.date) : null;
-      if (!picked) {
-        return 'invalidArgs';
+        typeof value.iso === 'string'
+          ? dateControlValue(value.iso, properties.date)
+          : 'invalidArgs';
+      if (typeof picked === 'string') {
+        return picked;
       }
 
       return { text: picked.text, showingPlaceholder: false, fullDate: picked.fullDate };

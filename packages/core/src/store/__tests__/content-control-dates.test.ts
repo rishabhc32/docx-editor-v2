@@ -206,6 +206,48 @@ describe('a date value, whichever form it takes: the editor string or the typed 
   });
 });
 
+// The engine formats and reads Gregorian dates only: another calendar is refused, not approximated
+describe('a date control in another calendar', () => {
+  const control = (calendar: string) =>
+    readOoxmlPart(
+      `<w:document xmlns:w="${W}"><w:body><w:p><w:sdt><w:sdtPr><w:date>` +
+        `<w:dateFormat w:val="M/d/yyyy"/>${calendar}</w:date></w:sdtPr><w:sdtContent><w:r>` +
+        '<w:t>Soon</w:t></w:r></w:sdtContent></w:sdt></w:p></w:body></w:document>',
+      { name: '/word/document.xml', contentType: 'application/xml' }
+    );
+
+  test('refuses a date, as the editor string and as the typed value', () => {
+    for (const [calendar, reason] of [
+      ['<w:calendar w:val="hijri"/>', 'unsupported'],
+      ['<w:calendar w:val="japan"/>', 'unsupported'],
+      ['<w:calendar w:val="gregorian"/>', undefined],
+      ['', undefined],
+    ] as const) {
+      const read = control(calendar);
+      if (!read.ok) {
+        throw new Error(read.reason);
+      }
+
+      const controlId = contentControlsIn(read.part.root)[0]!.node.id;
+      for (const value of ['2026-09-15', { kind: 'date' as const, iso: '2026-09-15' }]) {
+        const result = applyTreeOp(read.part, { op: 'setContentControlValue', controlId, value });
+        expect({ calendar, reason: result.ok ? undefined : result.reason }).toEqual({
+          calendar,
+          reason,
+        });
+      }
+    }
+  });
+
+  test('reads no date back from its text', () => {
+    const form = { dateFormat: 'M/d/yyyy', calendar: 'hijri' };
+    expect(parseContentControlDate('9/15/2026', form, null)).toBeNull();
+    expect(parseContentControlDate('9/15/2026', { ...form, calendar: 'gregorian' }, null)).not.toBe(
+      null
+    );
+  });
+});
+
 // As Word for Mac shows date pictures in a run's language (DATE and QUOTE fields, 2026-11-25)
 describe('the names of a date in the control language', () => {
   const day = (month: number, date: number) => ({

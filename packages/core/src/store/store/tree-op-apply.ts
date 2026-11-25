@@ -2275,8 +2275,8 @@ function applySetContentControlValue(
     }
     case 'date': {
       const picked = dateControlValue(value, contentControlSummaryOf(control).date);
-      if (picked === null) {
-        return { ok: false, reason: 'invalidArgs' };
+      if (typeof picked === 'string') {
+        return { ok: false, reason: picked };
       }
 
       const { fullDate: iso, text: display } = picked;
