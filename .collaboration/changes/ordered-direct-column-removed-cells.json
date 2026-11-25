@@ -1,0 +1,10 @@
+{
+  "impact": "compatible",
+  "fields": [],
+  "before": "Compose drew the cells an organiser's direct column deletion removed as cells of a column decision. When a reject of a pending record the deletion was made over took the deletion's grid record away, compose joined their column out of the record's grid; a fold holds no such cells, and the editor alone fits the record's grid to the cells that remain, so live gave another grid.",
+  "after": "A cell a direct column removed is never drawn for a decision to remove; the decision fits the grid to the cells, live and after a fold alike.",
+  "reason": "Change messages, the change log, checkpoints and the Yjs format do not change; compose draws the decided table as the editor does, the same on every copy. A room admits only clients of its own code version.",
+  "tests": ["packages/core/src/collaboration/ordered/__tests__/checkpoint-fold-decide.test.ts"],
+  "changeset": "ordered-direct-column-removed-cells",
+  "migration": null
+}

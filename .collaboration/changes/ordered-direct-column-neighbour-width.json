@@ -1,0 +1,10 @@
+{
+  "impact": "compatible",
+  "fields": [],
+  "before": "Compose widened a cell that shows its own properties only when the removed cell was made with it, and counted a direct column's cell as made by its change: an accepted deletion of that column left the neighbour's width under the joined grid live, while a fold and the editor alone widened it.",
+  "after": "A direct change's cells count as the table's own, as a fold reads them.",
+  "reason": "Change messages, the change log, checkpoints and the Yjs format do not change; compose draws the decided table as the editor does, the same on every copy. A room admits only clients of its own code version.",
+  "tests": ["packages/core/src/collaboration/ordered/__tests__/checkpoint-fold-decide.test.ts"],
+  "changeset": "ordered-direct-column-neighbour-width",
+  "migration": null
+}
