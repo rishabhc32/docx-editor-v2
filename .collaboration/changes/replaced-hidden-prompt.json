@@ -1,0 +1,10 @@
+{
+  "impact": "compatible",
+  "fields": [],
+  "before": "A card listed a format its suggestion took over from another on a control's prompt while typing filled the control, so the prompt showed nowhere; after a fold the prompt is in the glossary only, and the card listed nothing.",
+  "after": "The replaced list reads units by the cards' rule (isOrderedItemHidden): a record on a prompt that content took the place of takes over nothing that shows, live as after a fold; taking the content back lists it again.",
+  "reason": "Change messages, the change log and its kinds keep their meaning, and the Yjs document format and the checkpoint format do not change. Only the replaced entries a card shows for such a prompt change, and they now equal a fold. An ordered room admits only clients of its own code version.",
+  "tests": ["packages/core/src/collaboration/ordered/__tests__/replaced-record-gone.test.ts"],
+  "changeset": "replaced-hidden-prompt",
+  "migration": null
+}

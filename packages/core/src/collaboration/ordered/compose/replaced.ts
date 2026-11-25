@@ -8,8 +8,9 @@ import {
 } from '../../../store/store/review-formatting.ts';
 import type { ReviewRevisionItem } from '../../../store/store/review-items.ts';
 import { build } from '../../../store/store/tree-op-tracked.ts';
+import { isOrderedItemHidden } from '../card-of.ts';
 import { takenProperties } from '../model/checkpoint-takeovers.ts';
-import { isHidden, isPending } from '../model/document.ts';
+import { isPending } from '../model/document.ts';
 import type { OrderedPerson } from '../model/person.ts';
 import type { OrderedDocument, OrderedFormatRecord, OrderedItem } from '../model/types.ts';
 import { childWhere, isParagraphProperties } from '../ooxml-nodes.ts';
@@ -86,12 +87,13 @@ function takenChanges(doc: OrderedDocument, suggestion: string): Map<string, Tak
   const found = new Map<string, TakenChanges>();
 
   // Cheap first: the items with a record `suggestion` took from one still pending, before any
-  // drawing. A record taken from a decided one takes over nothing, and one on an item hidden for
-  // good (a direct deletion took it) shows nowhere: the file holds no change record of it
+  // drawing. A record taken from a decided one takes over nothing, and one on an item that shows
+  // nowhere (a direct deletion took it, or content took the place of its prompt) holds no change
+  // record in the story, as cards read units (`isOrderedItemHidden`)
   const holders = new Map<OrderedItem, ReadonlySet<string>>();
   const trees = new Set<object>();
   for (const item of doc.labelled.get(suggestion) ?? []) {
-    if (isHidden(doc, item)) {
+    if (isOrderedItemHidden(doc, item)) {
       continue;
     }
 
