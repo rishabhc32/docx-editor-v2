@@ -11,7 +11,6 @@
 
 import { actorScopedSeed } from '../package/actor-scoped-ids.ts';
 import {
-  createMarkContainerIdAllocator,
   createNodeIdAllocator,
   findNode,
   insertChildren,
@@ -218,7 +217,6 @@ function buildTable(
   w14Prefix: string | null,
   usedParagraphIds: Set<string>,
   nextId: () => string,
-  markId: () => string,
   wml: WmlFreshNamespaceContext,
   revisionId?: string
 ): BuiltTable {
@@ -266,9 +264,7 @@ function buildTable(
       children: cells,
     } as OoxmlTableRowNode;
     rows.push(
-      op.revision
-        ? withTrackedRowMarker(row, 'ins', revisionId!, op.revision, nextId, markId, wml)
-        : row
+      op.revision ? withTrackedRowMarker(row, 'ins', revisionId!, op.revision, nextId, wml) : row
     );
   }
   const table = {
@@ -336,12 +332,11 @@ export function applyInsertTable(
   if (index < 0) return { ok: false, reason: 'tree-invariant' };
 
   const nextId = createNodeIdAllocator(part);
-  const markId = createMarkContainerIdAllocator(part);
   const wml = wmlFreshNamespaceContextAt(part, parent);
   const w14Prefix = w14PrefixInScopeAt(part, parent);
   const usedParagraphIds = new Set(usedParaIds(part.root));
   const revisionId = op.revision ? (options?.revisionIds?.() ?? nextRevisionId(part)()) : undefined;
-  const built = buildTable(op, w14Prefix, usedParagraphIds, nextId, markId, wml, revisionId);
+  const built = buildTable(op, w14Prefix, usedParagraphIds, nextId, wml, revisionId);
 
   // Two `w:tbl` siblings are ONE table when Word reopens the file. An empty paragraph
   // between them is the separator Word itself authors, and it has to be minted here
@@ -356,7 +351,7 @@ export function applyInsertTable(
     separator = paragraphWithInsertedMark(
       separator,
       freshWmlElement('ins', nextId, wml, trackedRevisionAttributes(revisionId!, op.revision, wml)),
-      markId,
+      nextId,
       wml
     );
   }

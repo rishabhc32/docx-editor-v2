@@ -24,28 +24,17 @@ export function isInertMarker(node: OoxmlNode): boolean {
 }
 
 /**
- * Whether a paragraph-mark stamp created this node: its id is in the `mark` family. Read
- * after the LAST `#`, so a part name that contains the family marker does not count.
- */
-export function isMarkStampContainer(node: OoxmlNode): boolean {
-  return node.id.slice(node.id.lastIndexOf('#') + 1).startsWith('mark:');
-}
-
-/**
- * A `w:pPr` or `w:rPr` that a paragraph-mark stamp created and that held nothing but the
- * revision marks this resolution drops.
+ * A `w:pPr` or `w:rPr` that held nothing but the revision marks this resolution drops.
  *
- * Proposing a paragraph-mark change writes those containers when the paragraph had none, with
- * ids in the `mark` family, so resolving the proposal removes them again. Rejecting a proposed
- * mark deletion then restores the paragraph as it was. A container the source already had
- * keeps its id and stays, even when empty. In a document reopened from saved bytes, ids carry
- * no history, and on another collaboration replica the container has a replica-scoped id, so
- * there an emptied container stays as an empty element.
+ * Proposing a paragraph-mark change writes those containers when the paragraph had none, so
+ * resolving the proposal removes them again, and an accepted new paragraph writes no empty
+ * `<w:pPr><w:rPr/></w:pPr>`. The rule reads the content, not who made the container, so it
+ * holds the same in the session that made the mark, in a document reopened from saved bytes
+ * and on every collaboration replica. A source `w:rPr` that held nothing before a stamp goes
+ * with the stamp too: saved bytes cannot tell it from one the stamp made.
  */
 export function heldOnlyResolvedMarks(node: OoxmlNode, dropped: ReadonlySet<string>): boolean {
   if (node.kind === 'textValue' || node.children.length === 0) return false;
-  // Only a container a mark stamp created; a source container stays, empty or not.
-  if (!isMarkStampContainer(node)) return false;
   const markProperties =
     node.kind === 'runProperties' ||
     (node.kind === 'generic' &&
@@ -62,9 +51,7 @@ export function heldOnlyResolvedMarks(node: OoxmlNode, dropped: ReadonlySet<stri
  * `w:ins` or `w:del`, an accepted `w:trPrChange`, or a height Word added without a record.
  *
  * The row marker is the row decision itself, so its container goes with it, and the row
- * digests like one that never had row properties. The id-family rule above cannot apply here:
- * a row read from a file, reopened from saved bytes, or held by another collaboration replica
- * carries no record of who created its `w:trPr`. A `w:trPr` that arrives empty holds nothing
+ * digests like one that never had row properties. A `w:trPr` that arrives empty holds nothing
  * this resolution drops, so it stays.
  */
 export function heldOnlyResolvedRowProperties(

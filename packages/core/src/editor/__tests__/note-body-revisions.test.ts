@@ -214,9 +214,7 @@ describe('a deleted note in suggesting mode', () => {
       expect(revisionCards(editor)).toHaveLength(1);
       const [card] = revisionCards(editor);
       expect(editor.rejectReviewItem(card!.key).ok).toBe(true);
-      // A rejected mark of a loaded file leaves its emptied properties, as for any paragraph
-      const footnotes = (await saved(editor)).footnotes.replace('<w:pPr><w:rPr/></w:pPr>', '');
-      expect(footnotes).toBe(original!.footnotes);
+      expect((await saved(editor)).footnotes).toBe(original!.footnotes);
     });
     await withEditor(bytes!, async (editor) => {
       const [card] = revisionCards(editor);

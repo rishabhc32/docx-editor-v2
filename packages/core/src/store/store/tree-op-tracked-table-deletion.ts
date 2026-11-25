@@ -7,7 +7,6 @@
 
 import {
   applyEdits,
-  createMarkContainerIdAllocator,
   createNodeIdAllocator,
   findNode,
   replaceNode,
@@ -147,7 +146,6 @@ export function applyTrackedTableDeletion(
   // ONE id for every row, as a tracked `insertTable` writes: one gesture is one decision.
   const revisionId = options?.revisionIds?.() ?? nextRevisionId(part)();
   const nextId = createNodeIdAllocator(part);
-  const markId = createMarkContainerIdAllocator(part);
   const wml = wmlFreshNamespaceContextAt(part, topology.table);
   const revision = op.revision;
   const withdrawn = topology.rows
@@ -155,7 +153,7 @@ export function applyTrackedTableDeletion(
     .filter((row) => isOwnInsertedRow(row, revision.author));
   const marked = topology.rows
     .filter(({ row }) => !rowMarker(row, 'del') && !withdrawn.includes(row))
-    .map(({ row }) => withTrackedRowMarker(row, 'del', revisionId, revision, nextId, markId, wml));
+    .map(({ row }) => withTrackedRowMarker(row, 'del', revisionId, revision, nextId, wml));
   const effect: TreeOpEffect = {
     dirty: [topology.table.id, ...marked.map((row) => row.id)],
     created: [],

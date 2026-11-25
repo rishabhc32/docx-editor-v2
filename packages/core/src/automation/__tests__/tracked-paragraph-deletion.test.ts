@@ -361,23 +361,33 @@ describe('deletions beside the author own pending deletion', () => {
   });
 });
 
-describe('reject restores the source paragraph properties exactly', () => {
-  for (const [name, properties] of [
-    ['no properties', ''],
-    ['empty properties', '<w:pPr/>'],
-    ['empty mark properties', '<w:pPr><w:rPr/></w:pPr>'],
-    ['alignment', '<w:pPr><w:jc w:val="center"/></w:pPr>'],
-  ] as const)
-    test(name, () => {
-      const host = open(
-        docx(`<w:p>${properties}<w:r><w:t>One</w:t></w:r></w:p>` + p('Two') + p('Three'))
-      );
-      const { body } = roots(host);
-      const before = oracles(host);
-      run2(host, body, 0);
-      decide(host, body, false);
-      expect(oracles(host)).toEqual(before);
-    });
+describe('reject restores the source paragraph properties', () => {
+  // Properties that held nothing but the struck mark go with it, in the session and after a
+  // reopen alike: saved bytes cannot tell them from the ones the deletion wrote
+  const file = (properties: string) =>
+    docx(`<w:p>${properties}<w:r><w:t>One</w:t></w:r></w:p>` + p('Two') + p('Three'));
+  const CENTERED = '<w:pPr><w:jc w:val="center"/></w:pPr>';
+  for (const [name, properties, restored] of [
+    ['no properties', '', ''],
+    ['empty properties', '<w:pPr/>', ''],
+    ['empty mark properties', '<w:pPr><w:rPr/></w:pPr>', ''],
+    ['alignment', CENTERED, CENTERED],
+    [
+      'alignment and empty mark properties',
+      '<w:pPr><w:jc w:val="center"/><w:rPr/></w:pPr>',
+      CENTERED,
+    ],
+  ] as const) {
+    for (const reopened of [false, true]) {
+      test(`${name}${reopened ? ', reopened' : ''}`, () => {
+        const host = open(file(properties));
+        run2(host, roots(host).body, 0);
+        const decided = reopened ? reopen(host).host : host;
+        decide(decided, roots(decided).body, false);
+        expect(oracles(decided)).toEqual(oracles(open(file(restored))));
+      });
+    }
+  }
 });
 
 test('a tracked deletion over 8000 paragraphs stays fast', () => {

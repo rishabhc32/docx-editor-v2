@@ -168,11 +168,11 @@ export function insertedCellParagraphNodeCount(sourceCell: OoxmlElement): number
 export function withInsertedCellMarks(
   cell: OoxmlTableCellNode,
   marker: () => OoxmlElement,
-  markId: () => string,
+  nextId: () => string,
   wml: WmlFreshNamespaceContext
 ): OoxmlTableCellNode {
   const children = cell.children.map((child) =>
-    child.kind === 'paragraph' ? paragraphWithInsertedMark(child, marker(), markId, wml) : child
+    child.kind === 'paragraph' ? paragraphWithInsertedMark(child, marker(), nextId, wml) : child
   );
   return Object.freeze({ ...cell, children }) as OoxmlTableCellNode;
 }
@@ -180,18 +180,18 @@ export function withInsertedCellMarks(
 /**
  * The paragraph with `marker` on its mark. The `w:ins` goes first in the mark's properties
  * (`EG_ParaRPrTrackChanges`), and a new `w:rPr` after the base properties: only `w:sectPr`
- * and `w:pPrChange` may follow it in `CT_PPr`. Containers the stamp creates take `markId`'s ids
- * (`createMarkContainerIdAllocator`), so accepting removes them.
+ * and `w:pPrChange` may follow it in `CT_PPr`. Accepting removes the containers the stamp
+ * creates (`heldOnlyResolvedMarks`).
  */
 export function paragraphWithInsertedMark(
   paragraph: OoxmlParagraphNode,
   marker: OoxmlElement,
-  markId: () => string,
+  nextId: () => string,
   wml: WmlFreshNamespaceContext
 ): OoxmlParagraphNode {
   const fresh = (kind: OoxmlElement['kind'], localName: string, children: readonly OoxmlNode[]) =>
     ({
-      id: markId(),
+      id: nextId(),
       kind,
       namespaceUri: WML_NAMESPACE_URI,
       localName,

@@ -225,7 +225,13 @@ function markProperties(
         []
       )
     );
-  let rPr = face;
+  // A decision on the mark's own insertion or deletion leaves no empty properties, as the
+  // engine's leaves none (`heldOnlyResolvedMarks`): a direct edit taken back is no decision
+  const decided =
+    markers.length === 0 &&
+    (ctx.acceptedInsertion(mark) ||
+      mark.dels.some((id) => !ctx.revertedDirect(id) && ctx.rejectedOrDrawnSo(id)));
+  let rPr = decided && face?.children.length === 0 ? null : face;
   if (markers.length > 0) {
     const runProperties = face ?? ctx.drawn(build(ctx.mint(), 'runProperties', 'rPr', [], []));
     rPr = withChildren(runProperties, [...markers, ...runProperties.children]);
@@ -233,6 +239,10 @@ function markProperties(
 
   if (!pPr && !rPr) return null;
   const written = withMarkFace(pPr ?? build(ctx.mint(), 'paragraphProperties', 'pPr', [], []), rPr);
+  if (decided && written.children.length === 0) {
+    return null;
+  }
+
   return base === null ? ctx.drawn(written) : written;
 }
 

@@ -13,7 +13,6 @@ import {
   type OoxmlPart,
 } from '../package/ooxml-tree.ts';
 import {
-  createMarkContainerIdAllocator,
   createNodeIdAllocator,
   parentNodeOf as parentOf,
   replaceChildren,
@@ -23,7 +22,7 @@ import { nextRevisionId } from './tree-op-revision-ids.ts';
 import { TEXT_DEPS, fromEdit } from './tree-op-nodes.ts';
 import { build, childrenOf, isWmlNamed, revisionAttributes } from './tree-op-tracked.ts';
 import { sameEditingMoment } from './tree-op-tracked-adjacency.ts';
-import { isInertMarker, isMarkStampContainer } from './revision-marker-content.ts';
+import { isInertMarker } from './revision-marker-content.ts';
 import type { RevisionAttributionInput, TreeOpEffect, TreeOpResult } from './tree-op-validate.ts';
 
 /**
@@ -102,11 +101,8 @@ export function applyParagraphMarkRevision(
   // The existing containers keep their ids. A fresh `w:pPr` reads, to a collaborating
   // replica, as removing the old one, and a peer's concurrent property edit inside the old one
   // then lands in a container that no longer exists.
-  // Containers this stamp creates take the `mark` id family, so resolving the mark removes
-  // them again and only them: a source `<w:pPr/>` or empty `w:rPr` stays as it was.
-  const markMint = createMarkContainerIdAllocator(part);
   const rPr = build(
-    previousRPr?.id ?? markMint(),
+    previousRPr?.id ?? mint(),
     'runProperties',
     'rPr',
     previousRPr && previousRPr.kind !== 'textValue' ? previousRPr.attributes : [],
@@ -122,7 +118,7 @@ export function applyParagraphMarkRevision(
   const trailing = pPrRest.filter(isTrailingParagraphProperty);
   const leading = pPrRest.filter((child) => !isTrailingParagraphProperty(child));
   const pPr = build(
-    properties?.id ?? markMint(),
+    properties?.id ?? mint(),
     'paragraphProperties',
     'pPr',
     properties ? properties.attributes : [],
@@ -202,8 +198,8 @@ export function paragraphMarkRevisionOf(
  * joining to the next one went away with their join. A pending `w:ins` stays, as new text
  * inside an insertion does, and so does a move, which follows its move range.
  *
- * A container that a mark stamp created goes too when the deletion was all it held, which is
- * what resolving the deletion would do. `undefined` when nothing of the `w:pPr` is left.
+ * A container goes too when the deletion was all it held, which is what resolving the
+ * deletion would do (`heldOnlyResolvedMarks`). `undefined` when nothing of the `w:pPr` is left.
  */
 export function insertedMarkProperties(pPr: OoxmlNode): OoxmlNode | undefined {
   if (pPr.kind === 'textValue') return pPr;
@@ -212,12 +208,14 @@ export function insertedMarkProperties(pPr: OoxmlNode): OoxmlNode | undefined {
   const kept = rPr.children.filter((child) => !isMarkRevisionOfKind(child, 'del'));
   if (kept.length === rPr.children.length) return pPr;
   const children =
-    kept.length === 0 && isMarkStampContainer(rPr)
+    kept.length === 0
       ? pPr.children.filter((child) => child !== rPr)
       : pPr.children.map((child) =>
           child === rPr ? ({ ...rPr, children: kept } as OoxmlNode) : child
         );
-  if (children.length === 0 && isMarkStampContainer(pPr)) return undefined;
+  if (children.length === 0) {
+    return undefined;
+  }
   return { ...pPr, children } as OoxmlNode;
 }
 

@@ -663,11 +663,10 @@ test('a peer that did not propose the deletion rejects it', async () => {
     });
     r.sync();
     await converged(r);
-    // The text and paragraph come back. The containers the author's replica created keep
-    // replica-scoped ids elsewhere, so this replica cannot tell them from source containers
-    // and leaves them empty, which reads the same as no properties.
+    // The text and paragraph come back, with no properties: the containers the author's
+    // replica created held nothing but the struck mark, so they go on this replica too
     const xml = await mainXml(r.peers[0]!.editor);
-    expect(xml).toContain('<w:pPr><w:rPr/></w:pPr><w:r><w:t>Middle clause</w:t></w:r>');
+    expect(xml).toMatch(/<w:p [^>]*><w:r><w:t>Middle clause<\/w:t><\/w:r>/);
     expect(xml).not.toContain('<w:del');
     for (const { runtime } of r.peers)
       await runtime.run(async (c) => {

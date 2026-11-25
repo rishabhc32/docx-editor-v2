@@ -9,14 +9,8 @@
 //     `w:tcPr` plain, and the cell paragraphs are marked like any other pasted paragraph.
 // Media, styles, numbering and relationships are package resources, not revisions.
 
-import { createMarkContainerIdAllocator } from '../package/ooxml-edit.ts';
 import { isInertMarker } from './revision-marker-content.ts';
-import {
-  WML_NAMESPACE_URI,
-  type OoxmlElement,
-  type OoxmlNode,
-  type OoxmlPart,
-} from '../package/ooxml-tree.ts';
+import { WML_NAMESPACE_URI, type OoxmlElement, type OoxmlNode } from '../package/ooxml-tree.ts';
 import { build, revisionAttributes } from './tree-op-tracked-builders.ts';
 import { patchTrPrChild } from './tree-op-table-properties.ts';
 import { isWmlNamed } from './tree-op-tracked.ts';
@@ -157,10 +151,8 @@ function absorbed(children: readonly OoxmlNode[]): OoxmlNode[] {
 export interface FragmentWriter {
   readonly revisionId: string;
   readonly revision: RevisionAttributionInput;
-  /** Ids for the wrappers and markers the transform adds. */
+  /** Ids for the wrappers, markers and mark containers the transform adds. */
   readonly nextId: () => string;
-  /** Ids for the `w:pPr` and `w:rPr` a mark stamp creates, which resolving the mark removes. */
-  readonly markId: () => string;
 }
 
 type Tracked<T> = { readonly ok: true; readonly value: T } | { readonly ok: false };
@@ -273,7 +265,7 @@ const isTrailingParagraphProperty = (node: OoxmlNode): boolean =>
  * `w:pPr` with the paragraph's mark stamped inserted: `w:pPr/w:rPr/w:ins`, first in the
  * `w:rPr` as `EG_ParaRPrTrackChanges` requires, and the `w:rPr` after the base properties as
  * `CT_PPr` requires. An insertion already on the mark is replaced; the mark's formatting
- * stays. Containers the stamp creates take the `mark` id family, so accepting removes them.
+ * stays. Accepting removes the containers the stamp creates (`heldOnlyResolvedMarks`).
  */
 export function withInsertedMark(pPr: OoxmlNode | undefined, writer: FragmentWriter): OoxmlElement {
   const marker = build(
@@ -292,7 +284,7 @@ export function withInsertedMark(pPr: OoxmlNode | undefined, writer: FragmentWri
           // A mark's own insertion or move destination is absorbed by the paste's
           children: [marker, ...rPr.children.filter((child) => !isWml(child, ABSORBED))],
         } as OoxmlElement)
-      : build(writer.markId(), 'runProperties', 'rPr', [], [marker]);
+      : build(writer.nextId(), 'runProperties', 'rPr', [], [marker]);
   const rest = properties?.children.filter((child) => child !== rPr) ?? [];
   const children = [
     ...rest.filter((child) => !isTrailingParagraphProperty(child)),
@@ -301,7 +293,7 @@ export function withInsertedMark(pPr: OoxmlNode | undefined, writer: FragmentWri
   ];
   return properties
     ? ({ ...properties, children } as OoxmlElement)
-    : build(writer.markId(), 'paragraphProperties', 'pPr', [], children);
+    : build(writer.nextId(), 'paragraphProperties', 'pPr', [], children);
 }
 
 function trackedParagraph(
@@ -401,16 +393,6 @@ export function trackedFragmentRefusal(blocks: readonly OoxmlNode[]): TreeOpReje
   }
 
   return null;
-}
-
-/** The writer for one tracked fragment: one revision id, and the part's id families. */
-export function fragmentWriter(
-  part: OoxmlPart,
-  revisionId: string,
-  revision: RevisionAttributionInput,
-  nextId: () => string
-): FragmentWriter {
-  return { revisionId, revision, nextId, markId: createMarkContainerIdAllocator(part) };
 }
 
 /**

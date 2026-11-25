@@ -1,32 +1,15 @@
 import { WML_NAMESPACE_URI, type OoxmlElement, type OoxmlNode } from '../package/ooxml-tree.ts';
-import { isMarkStampContainer } from './revision-marker-content.ts';
 import { PARAGRAPH_VOCABULARY, propertyElement, schemaInsertIndex } from './tree-op-properties.ts';
 
-/**
- * Clone a split's `w:pPr` with fresh ids, keeping the `mark` id family on the containers that a
- * paragraph-mark stamp created.
- *
- * A split leaves the ORIGINAL mark on the tail, so resolving a revision on that mark has to
- * remove those containers from the tail just as it would from the unsplit paragraph. With
- * ordinary ids, rejecting a proposed join after an Enter left an empty `<w:pPr><w:rPr/>`
- * that the paragraph never had.
- */
-export function cloneSplitProperties(
-  node: OoxmlNode,
-  nextId: () => string,
-  markId: () => string
-): OoxmlNode {
-  const id = splitIdFor(node, nextId, markId);
+/** Clone a split's `w:pPr` with fresh ids. */
+export function cloneSplitProperties(node: OoxmlNode, nextId: () => string): OoxmlNode {
+  const id = nextId();
   if (node.kind === 'textValue') return { id, kind: 'textValue', value: node.value };
   return {
     ...node,
     id,
-    children: node.children.map((child) => cloneSplitProperties(child, nextId, markId)),
+    children: node.children.map((child) => cloneSplitProperties(child, nextId)),
   } as OoxmlNode;
-}
-/** A split copy's id: from the `mark` family for a container a paragraph-mark stamp created. */
-function splitIdFor(node: OoxmlNode, nextId: () => string, markId: () => string): string {
-  return isMarkStampContainer(node) ? markId() : nextId();
 }
 
 /**
@@ -43,10 +26,9 @@ function splitIdFor(node: OoxmlNode, nextId: () => string, markId: () => string)
 export function withTailStyle(
   pPr: OoxmlElement | undefined,
   tailStyleId: string | null | undefined,
-  nextId: () => string,
-  markId: () => string
+  nextId: () => string
 ): OoxmlNode | undefined {
-  if (tailStyleId === undefined) return pPr ? cloneSplitProperties(pPr, nextId, markId) : undefined;
+  if (tailStyleId === undefined) return pPr ? cloneSplitProperties(pPr, nextId) : undefined;
   const currentStyle = pPr?.children.find(
     (child) => child.kind !== 'textValue' && child.localName === 'pStyle'
   );
@@ -60,7 +42,7 @@ export function withTailStyle(
       (child.localName !== 'pStyle' &&
         (child.localName !== 'numPr' || tailStyleId === currentStyleId))
   );
-  const children = kept.map((child) => cloneSplitProperties(child, nextId, markId));
+  const children = kept.map((child) => cloneSplitProperties(child, nextId));
   if (tailStyleId !== null) {
     children.splice(
       schemaInsertIndex(children, PARAGRAPH_VOCABULARY.sequence, 'pStyle'),
@@ -70,7 +52,7 @@ export function withTailStyle(
   }
   if (children.length === 0) return undefined;
   if (pPr) {
-    return { ...pPr, id: splitIdFor(pPr, nextId, markId), children } as unknown as OoxmlNode;
+    return { ...pPr, id: nextId(), children } as unknown as OoxmlNode;
   }
   return {
     id: nextId(),

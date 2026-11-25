@@ -14,24 +14,29 @@ const element = (id: string, kind: string, localName: string, children: OoxmlNod
     children,
   }) as unknown as OoxmlNode;
 
-/** `w:pPr` holding `w:rPr` holding one mark, and the mark's id. */
-function properties(partName: string, family: string): { node: OoxmlNode; mark: string } {
-  const mark = element(`${partName}#${family}2`, 'generic', 'del');
-  const rPr = element(`${partName}#${family}1`, 'runProperties', 'rPr', [mark]);
+/** `w:pPr` holding `others` and `w:rPr` holding one mark, and the mark's id. */
+function properties(others: OoxmlNode[] = []): { node: OoxmlNode; mark: string } {
+  const mark = element('/word/document.xml#0.0.2', 'generic', 'del');
+  const rPr = element('/word/document.xml#0.0.1', 'runProperties', 'rPr', [mark]);
   return {
-    node: element(`${partName}#${family}0`, 'paragraphProperties', 'pPr', [rPr]),
+    node: element('/word/document.xml#0.0.0', 'paragraphProperties', 'pPr', [...others, rPr]),
     mark: mark.id,
   };
 }
 
-test('only containers in the mark id family are removed', () => {
-  const created = properties('/word/document.xml', 'mark:');
-  expect(heldOnlyResolvedMarks(created.node, new Set([created.mark]))).toBe(true);
-  const source = properties('/word/document.xml', '0.0.');
-  expect(heldOnlyResolvedMarks(source.node, new Set([source.mark]))).toBe(false);
+test('containers that held only the resolved marks are removed, whoever made them', () => {
+  const { node, mark } = properties();
+  expect(heldOnlyResolvedMarks(node, new Set([mark]))).toBe(true);
 });
 
-test('a part name that contains the family marker does not count', () => {
-  const crafted = properties('/word/a#mark:b.xml', '0.0.');
-  expect(heldOnlyResolvedMarks(crafted.node, new Set([crafted.mark]))).toBe(false);
+test('containers that hold anything else stay', () => {
+  const centered = properties([element('/word/document.xml#0.0.3', 'generic', 'jc')]);
+  expect(heldOnlyResolvedMarks(centered.node, new Set([centered.mark]))).toBe(false);
+  const { node } = properties();
+  expect(heldOnlyResolvedMarks(node, new Set())).toBe(false);
+});
+
+test('a container that arrives empty holds nothing this resolution drops', () => {
+  const empty = element('/word/document.xml#0.0.4', 'paragraphProperties', 'pPr');
+  expect(heldOnlyResolvedMarks(empty, new Set())).toBe(false);
 });

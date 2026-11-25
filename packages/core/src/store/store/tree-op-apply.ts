@@ -47,7 +47,6 @@ import {
 } from '../package/ooxml-tree.ts';
 import {
   applyEdits,
-  createMarkContainerIdAllocator,
   createNodeIdAllocator,
   findNode,
   insertChildren,
@@ -2518,7 +2517,6 @@ function applySplit(
   tailStyleId?: string | null
 ): TreeOpResult {
   const nextId = createNodeIdAllocator(part);
-  const markId = createMarkContainerIdAllocator(part);
   const { children, segments, endIds } = fieldSplitChildren(paragraph, [offset], nextId);
   const atomEnds = atomUnitEnds(segments);
   const headChildren: OoxmlNode[] = [];
@@ -2589,7 +2587,7 @@ function applySplit(
         )
       : [],
     children: (() => {
-      const tailPPr = withTailStyle(pPr, tailStyleId, nextId, markId);
+      const tailPPr = withTailStyle(pPr, tailStyleId, nextId);
       return tailPPr ? [tailPPr, ...tailChildren] : tailChildren;
     })(),
   } as unknown as OoxmlNode;
@@ -2867,7 +2865,6 @@ function applySplitMany(
   options?: EditOptions
 ): TreeOpResult {
   const nextId = createNodeIdAllocator(part);
-  const markId = createMarkContainerIdAllocator(part);
   const { children, segments, endIds } = fieldSplitChildren(paragraph, offsets, nextId);
   const atomEnds = atomUnitEnds(segments);
   const pPr = paragraphPropertiesNodeOf(paragraph);
@@ -2948,9 +2945,7 @@ function applySplitMany(
       prefix: 'w',
       namespaceBindings: [],
       attributes: tailIdentityAttributes[piece] ?? [],
-      children: source
-        ? [cloneSplitProperties(source, nextId, markId), ...pieces[piece]!]
-        : pieces[piece]!,
+      children: source ? [cloneSplitProperties(source, nextId), ...pieces[piece]!] : pieces[piece]!,
     } as unknown as OoxmlNode);
   }
 

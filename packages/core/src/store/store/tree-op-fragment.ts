@@ -58,7 +58,6 @@ import { recordSetNamespaceBinding } from '../package/canonical-primitive-captur
 import { invalidRevisionAttribution } from './tree-op-revision-attribution.ts';
 import { nextRevisionId } from './tree-op-revision-ids.ts';
 import {
-  fragmentWriter,
   trackedFragmentBlocks,
   trackedFragmentRefusal,
   withInsertedMark,
@@ -376,7 +375,7 @@ function landFragment(
   // Tracked: the whole paste is one insertion, so it takes ONE id from the part as it stands
   // after whatever this transaction already wrote (a replaced selection's struck words).
   const writer = op.revision
-    ? fragmentWriter(hostPart, nextRevisionId(hostPart)(), op.revision, nextId)
+    ? { revisionId: nextRevisionId(hostPart)(), revision: op.revision, nextId }
     : null;
   // Inside a link or a control the paste goes into it, its paragraph marks spaces in a control
   const inside = indivisibleAt(host, op.offset) ? insideContainersAt(host, op.offset) : null;

@@ -6,7 +6,6 @@
 
 import { actorScopedSeed } from '../package/actor-scoped-ids.ts';
 import {
-  createMarkContainerIdAllocator,
   createNodeIdAllocator,
   insertChildren,
   removeNode,
@@ -309,8 +308,8 @@ export function trackedRevisionAttributes(
 
 /**
  * A row's tracked marker (`w:trPr/w:ins` or `w:del`). A new row's cells carry no `w:cellIns`:
- * Word marks each cell's paragraph mark inserted instead (`withInsertedCellMarks`, its
- * containers from `markId`). A struck row's cells carry `w:cellDel`.
+ * Word marks each cell's paragraph mark inserted instead (`withInsertedCellMarks`). A struck
+ * row's cells carry `w:cellDel`.
  */
 export function withTrackedRowMarker(
   row: OoxmlTableRowNode,
@@ -318,7 +317,6 @@ export function withTrackedRowMarker(
   revisionId: string,
   revision: RevisionAttributionInput,
   nextId: () => string,
-  markId: () => string,
   wml: WmlFreshNamespaceContext
 ): OoxmlTableRowNode {
   const rowMarker = freshWmlElement(
@@ -341,7 +339,7 @@ export function withTrackedRowMarker(
       return withInsertedCellMarks(
         child,
         () => freshWmlElement('ins', nextId, wml, attributes()),
-        markId,
+        nextId,
         wml
       );
     }
@@ -808,7 +806,6 @@ export function applyInsertTableRow(
         nextRevisionId(part)(),
         op.revision,
         nextId,
-        createMarkContainerIdAllocator(part),
         wmlFreshNamespaceContextAt(part, topology.table)
       )
     : built.row;
@@ -880,7 +877,6 @@ export function applyDeleteTableRow(
       nextRevisionId(part)(),
       op.revision,
       nextId,
-      createMarkContainerIdAllocator(part),
       wmlFreshNamespaceContextAt(part, topologyResult.topology.table)
     );
     const effect: TreeOpEffect = {
