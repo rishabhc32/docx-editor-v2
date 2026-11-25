@@ -14,6 +14,26 @@ import { apply, at, EDIT, markOf } from './change-apply-fixture.ts';
 import { checkFold, folded, mediaStore } from './fold-check.ts';
 import { docx, p, t } from './word-fixtures.ts';
 
+const STAMP = 'w:author="Ana" w:date="2026-11-25T09:00:00Z"';
+const mark = (id: number) => `w:id="${id}" ${STAMP}`;
+
+/** Ana's moves "One two " (a) and "three " (b), a Word file: a's range holds b's, then "two ". */
+const NESTED = docx(
+  p(
+    `<w:moveFromRangeStart ${mark(1)} w:name="a"/><w:moveFrom ${mark(2)}>${t('One two ')}` +
+      `</w:moveFrom><w:moveFromRangeEnd w:id="1"/><w:moveFromRangeStart ${mark(3)} w:name="b"/>` +
+      `<w:moveFrom ${mark(4)}>${t('three ')}</w:moveFrom><w:moveFromRangeEnd w:id="3"/>` +
+      t('rest.')
+  ) +
+    p(
+      t('End ') +
+        `<w:moveToRangeStart ${mark(5)} w:name="a"/><w:moveTo ${mark(6)}>${t('One ')}</w:moveTo>` +
+        `<w:moveToRangeStart ${mark(7)} w:name="b"/><w:moveTo ${mark(8)}>${t('three ')}` +
+        `</w:moveTo><w:moveToRangeEnd w:id="7"/><w:moveTo ${mark(9)}>${t('two ')}</w:moveTo>` +
+        '<w:moveToRangeEnd w:id="5"/>'
+    )
+);
+
 describe('a move range inside another, after a fold', () => {
   test('each range end goes with its own move', async () => {
     // Ana's move to the end of the second paragraph, kept by a fold; Ben's move to that
@@ -46,9 +66,20 @@ describe('a move range inside another, after a fold', () => {
       '<w:moveToRangeEnd ',
     ]);
   });
-});
 
-const STAMP = 'w:author="Ana" w:date="2026-11-25T09:00:00Z"';
+  // An end closes only its own range: "two " is still a's, with no range of its own (the fold
+  // shapes session, seed 36)
+  test("a file's wrapper after the range inside it stays the outer move's", async () => {
+    const { document: doc, base } = openOrderedWordFile(NESTED, { file: 1 });
+    const blobs = mediaStore(base);
+    expect(doc.suggestions.size).toBe(2);
+    const xml = strFromU8(
+      unzipSync(orderedPackageBytes(doc, base, { blobs }))['word/document.xml']!
+    );
+    expect(xml.match(/<w:moveToRangeStart /g)).toHaveLength(2);
+    await checkFold(doc, base, blobs, "a file's move range inside another");
+  });
+});
 
 /** Ana's move of "Cloud " to the second paragraph's end, as a Word file without range markers. */
 const UNRANGED = docx(
