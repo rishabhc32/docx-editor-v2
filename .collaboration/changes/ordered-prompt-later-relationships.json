@@ -1,0 +1,12 @@
+{
+  "impact": "compatible",
+  "fields": [],
+  "before": "A room read a relationship id it writes later (a link a change added) as not written yet when it kept a prompt in the glossary. When the glossary already held that id for the same link, the room left the prompt out and the editor alone kept it.",
+  "after": "withRetainedPrompts reads the relationships the room writes later (relationship-targets.ts, laterRelationshipsOf, from the added resources), so the room keeps such a prompt as the editor alone does.",
+  "reason": "Change messages, the change log and its kinds keep their meaning, and the Yjs document format and the checkpoint format do not change. Only the glossary part of a saved or composed package changes, in this rare case. An ordered room admits only clients of its own code version, and ordered rooms are not deployed yet, so no room needs a migration.",
+  "tests": [
+    "packages/core/src/collaboration/ordered/__tests__/client/editor-controls-prompt-link.test.ts"
+  ],
+  "changeset": "room-prompt-later-relationships",
+  "migration": null
+}
