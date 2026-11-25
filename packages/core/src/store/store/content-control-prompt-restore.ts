@@ -157,13 +157,13 @@ export const BLANK_PROMPT_TEXT = '     ';
  * content with one run of five spaces in no style. Word adds no glossary block (inline and
  * block controls, Accept of a deletion and Reject of an insertion, compatibility and native
  * mode). An author's deletion of their own pending words gives the same prompt with no
- * `w:sdtEndPr` (`afterDecision` false; `withOwnEmptiedPrompts`).
+ * `w:sdtEndPr` (`endProperties` false; `withOwnEmptiedPrompts`).
  */
 export function withDecisionPrompt(
   part: OoxmlPart,
   controlId: string,
   options?: EditOptions,
-  afterDecision = true
+  { endProperties = true }: { readonly endProperties?: boolean } = {}
 ): OoxmlPart {
   const control = findContentControl(part, controlId);
   if (!control) return part;
@@ -187,10 +187,10 @@ export function withDecisionPrompt(
     ...flagged,
     children: flagged.children.filter((child) => !isWml(child, 'richText')),
   } as OoxmlNode;
-  const endProperties = control.children.find((child) => isWml(child, 'sdtEndPr'));
+  const ownEnd = control.children.find((child) => isWml(child, 'sdtEndPr'));
   const end =
-    endProperties ??
-    (afterDecision
+    ownEnd ??
+    (endProperties
       ? wmlElement(nextId, 'sdtEndPr', {
           kind: 'contentControlEndProperties' as OoxmlNode['kind'],
         })
@@ -201,7 +201,7 @@ export function withDecisionPrompt(
       properties,
       ...(end ? [end] : []),
       ...control.children.filter(
-        (child) => child.id !== sdtPr?.id && child !== endProperties && child.id !== content.id
+        (child) => child.id !== sdtPr?.id && child !== ownEnd && child.id !== content.id
       ),
       { ...content, children } as OoxmlNode,
     ],
@@ -243,7 +243,7 @@ export function withOwnEmptiedPrompts(
   for (const control of [...around, ...inside].reverse()) {
     const current = findContentControl(part, control.id);
     if (current && !controlHoldsContent(current)) {
-      part = withDecisionPrompt(part, control.id, options, false);
+      part = withDecisionPrompt(part, control.id, options, { endProperties: false });
     }
   }
 

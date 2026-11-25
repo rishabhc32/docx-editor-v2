@@ -479,7 +479,9 @@ function promptedControl(
   // engine shows it after its author's own deletion (`withOwnEmptiedPrompts`)
   const prompted =
     emptied.decided || emptied.went.length === 0
-      ? withDecisionPrompt(drawn.scratch, shell.id, drawn.options, emptied.decided)
+      ? withDecisionPrompt(drawn.scratch, shell.id, drawn.options, {
+          endProperties: emptied.decided,
+        })
       : withRestoredPrompt(drawn.scratch, shell.id, drawn.options);
   if (prompted === drawn.scratch) {
     return null;

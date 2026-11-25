@@ -56,7 +56,10 @@ import {
   type EditOptions,
 } from '../package/ooxml-edit.ts';
 import { wmlFreshNamespaceContextAt } from '../package/wml-namespace.ts';
-import { contentControlLevelOf } from '../package/content-control-nodes.ts';
+import {
+  contentControlLevelOf,
+  contentControlPropertiesOf as contentControlSummaryOf,
+} from '../package/content-control-nodes.ts';
 import {
   applyTrackedContentControlValue,
   keepingPrompt,
@@ -2272,12 +2275,7 @@ function applySetContentControlValue(
       break;
     }
     case 'date': {
-      const properties = contentControlPropertiesOf(control);
-      const date = sdtPrChild(properties, 'date');
-      const picked = dateControlValue(value, {
-        dateFormat: attributeValueOf(sdtPrChild(date, 'dateFormat'), 'val'),
-        lid: attributeValueOf(sdtPrChild(date, 'lid'), 'val'),
-      });
+      const picked = dateControlValue(value, contentControlSummaryOf(control).date);
       if (picked === null) {
         return { ok: false, reason: 'invalidArgs' };
       }
