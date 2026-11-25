@@ -20,7 +20,9 @@
 // picked over words that state no date, rejected, once kept the picked date's record in the
 // editor alone and after a fold, and a date control with no format showed 2026-09-15 in the room.
 // A date picked over a date in a format that shows no day, rejected, once kept the picked date in
-// the editor alone and after a fold, where the live room gave the file's date back.
+// the editor alone and after a fold, where the live room gave the file's date back. An accepted
+// deletion of a control's words that do not state its stored value once kept that value when the
+// prompt showed again: the value goes, as Word reads it back from the prompt.
 
 import { afterEach, describe, expect, test } from 'bun:test';
 import { createDocxEditor } from '../../../../editor/docx-editor.ts';
@@ -475,4 +477,36 @@ describe('a value picked over a prompt the control shows beside a stored value',
     expect(control).toContain('<w:showingPlcHdr/><w:comboBox w:lastValue="30">');
     expect(control).toContain('Choose an item.');
   });
+});
+
+describe('an accepted deletion of the words of a control with a stored value', () => {
+  // Words that do not state the value: an accept shows the prompt again, and the value goes, as
+  // Word reads it back from the prompt
+  const strike = (person: Person) => {
+    surface(person).deleteSelection();
+  };
+
+  for (const [label, props] of [
+    ['a combo box', `<w:comboBox w:lastValue="30">${ITEMS}</w:comboBox>`],
+    ['a date picker', `<w:date w:fullDate="2026-06-30T00:00:00Z">${DATE_FORMAT}</w:date>`],
+  ] as const) {
+    test(`${label}: the prompt shows with no value, live, folded and alone`, async () => {
+      const file = line(props, t('Custom'));
+      const expected = alone(file, [6, 12], strike, 'accept');
+      expect(expected.decided).toContain('<w:showingPlcHdr/>');
+      expect(expected.decided).not.toMatch(/w:lastValue|w:fullDate/);
+      const seated = await seats(file, 1);
+      caretAt(seated.ben, 0, 6, 12);
+      strike(seated.ben);
+      await settle();
+      const copy = await foldedBytes(seated.room.room.document, file, 1);
+      await decide(seated.olive, 'accept');
+      const reopened = await seats(copy, 2);
+      await decide(reopened.olive, 'accept');
+      expect({ live: roomControl(seated), folded: roomControl(reopened) }).toEqual({
+        live: expected.decided,
+        folded: expected.decided,
+      });
+    });
+  }
 });
