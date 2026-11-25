@@ -1,0 +1,12 @@
+{
+  "impact": "compatible",
+  "fields": [],
+  "before": "A comment on part of a plain control's prompt (no glossary block named), then a party's value over the prompt: when a decision showed the prompt again, the live room gave the prompt's own units back with the comment's markers between its words, where the editor alone and a fold write the prompt whole after the range start and before the range end and anchor.",
+  "after": "A prompt with an item of another between its units is not in place (settle-named-prompts.ts misplacedPrompt, standsTogether): the prompt is drawn again and goes where the engine writes one, as swapPrompt places a named one.",
+  "reason": "Change messages, the change log and its kinds keep their meaning, and the Yjs document format and the checkpoint format do not change. Only the room's list and file after such a decision change, and they now equal the editor alone and a fold. An ordered room admits only clients of its own code version.",
+  "tests": [
+    "packages/core/src/collaboration/ordered/__tests__/client/editor-controls-value-fold.test.ts"
+  ],
+  "changeset": "ordered-prompt-inside-comment",
+  "migration": null
+}

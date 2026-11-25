@@ -28,7 +28,9 @@
 // alone puts it. A party's format over his own on a prompt kept naming the change it replaced
 // once his typing filled the prompt: no copy names it, as a fold reads the file. A reject of typing
 // over a prompt formatted after its first fill showed that format live: the prompt the control
-// kept at the first fill shows, as the editor alone and a fold show it.
+// kept at the first fill shows, as the editor alone and a fold show it. A comment on part of a
+// plain prompt kept its markers between the prompt's words when a reject showed the prompt again
+// live: the prompt goes whole inside the range, as the editor alone writes it.
 
 import { afterEach, describe, expect, test } from 'bun:test';
 import { createDocxEditor } from '../../../../editor/docx-editor.ts';
@@ -558,6 +560,36 @@ describe("the organiser's comment on part of a party's typing over a plain promp
         await foldedBytes(seated.room.room.document, file, 1),
         await foldedBytes(seated.room.room.document, file, 2),
       ];
+      await decide(seated.olive, decision);
+      const decided = [roomControl(seated)];
+      for (const bytes of copies) {
+        const reopened = await seats(bytes, 2);
+        await decide(reopened.olive, decision);
+        decided.push(roomControl(reopened));
+      }
+
+      expect(decided).toEqual([expected, ...copies.map(() => expected)]);
+    });
+  }
+});
+
+describe("a comment on part of a plain prompt, then a party's typing over it", () => {
+  // The comment's markers stay in the control while the typing fills it; a decision shows the
+  // control as the editor alone leaves the room's own file, live and folded
+  const file = line('<w:showingPlcHdr/><w:text/>', t('Click here to enter text.', FACE));
+
+  for (const decision of ['accept', 'reject'] as const) {
+    test(`${decision}ed: the control as the editor alone leaves it, live and folded`, async () => {
+      const seated = await seats(file, 1);
+      caretAt(seated.olive, 0, 7, 17);
+      expect(seated.olive.editor.addComment('Why?').ok).toBe(true);
+      await settle();
+      caretAt(seated.ben, 0, 6, 31);
+      typing('Acme')(seated.ben);
+      await settle();
+      const saved = new Uint8Array(await seated.olive.editor.save());
+      const expected = alone(saved, [0, 0], () => {}, decision).decided;
+      const copies = [saved, await foldedBytes(seated.room.room.document, file, 1)];
       await decide(seated.olive, decision);
       const decided = [roomControl(seated)];
       for (const bytes of copies) {

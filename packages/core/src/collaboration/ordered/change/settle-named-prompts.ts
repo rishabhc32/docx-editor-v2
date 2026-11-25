@@ -394,14 +394,36 @@ function misplacedPrompt(
   shell: OoxmlElement,
   scan: Scan
 ): OoxmlElement | null {
-  // In place when the prompt's own items come last, but for the markers that close the content.
-  // A prompt that holds a control stays too: a swap gives back the prompt's units only.
+  // In place when the prompt's own items come last, but for the markers that close the content,
+  // with no other item between them (a comment made on part of the prompt). A prompt that holds a
+  // control stays too: a swap gives back the prompt's units only.
   const after = promptPlace(doc, story, promptEnd(story, open, scan));
-  if (!after || after.prompt === true || holdsControl(story, open)) {
+  if (!after || holdsControl(story, open)) {
+    return null;
+  }
+
+  if (after.prompt === true && standsTogether(doc, story, promptItems(story, open))) {
     return null;
   }
 
   return drawnPrompt(doc, story, open, shell, scan);
+}
+
+/** Whether items stand together: no item that shows lies between them but their own. */
+function standsTogether(
+  doc: OrderedDocument,
+  story: OrderedStory,
+  items: readonly OrderedItem[]
+): boolean {
+  const own = new Set(items);
+  const last = items.at(-1);
+  for (let at: OrderedItem | null = items[0] ?? null; at && at !== last; at = story.tree.next(at)) {
+    if (!own.has(at) && !isHidden(doc, at)) {
+      return false;
+    }
+  }
+
+  return true;
 }
 
 /** Mark settled the units that went and were not yet, in the undo record, and return them. */
