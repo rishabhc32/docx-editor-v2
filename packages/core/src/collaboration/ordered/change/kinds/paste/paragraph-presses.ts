@@ -11,7 +11,7 @@ import {
 import { settle } from '../../../edits/direct.ts';
 import { resolveOrderedPlace } from '../../../edits/places.ts';
 import type { OrderedParagraphOp } from '../../../model/types.ts';
-import { refuseLockedBlocks } from '../../../locked-content.ts';
+import { refuseLockedPlace } from '../../../locked-content.ts';
 import type { OrderedChangeAddress } from '../../types.ts';
 
 /** One paragraph's press: its mark, and the op it takes. */
@@ -58,7 +58,7 @@ export function pressParagraphs(
  */
 export function pressKeeps(ctx: Ctx, press: ParagraphPress): boolean {
   const { paragraph } = resolveOrderedPlace(ctx.doc, ctx.story.name, press.mark);
-  refuseLockedBlocks(ctx, paragraph.blocks);
+  refuseLockedPlace(ctx, paragraph.blocks);
   let scratch = 0;
   const mint = () => `check#${(scratch += 1)}`;
   const shown = shownParagraphProperties(ctx, paragraph.mark);

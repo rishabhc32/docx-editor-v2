@@ -10,7 +10,7 @@ import { insertedPending, isHidden } from '../../../model/document.ts';
 import { OrderedRefusal } from '../../../model/refusal.ts';
 import type { OrderedStory } from '../../../model/types.ts';
 import { siblings } from '../../../placement.ts';
-import { refuseLockedBlocks, refuseLockedWithin } from '../../../locked-content.ts';
+import { refuseLockedPlace, refuseLockedWithin } from '../../../locked-content.ts';
 import { fieldPath, required } from '../../read.ts';
 import type { OrderedChangeAddress, OrderedEditBase } from '../../types.ts';
 import { address } from '../../values.ts';
@@ -44,7 +44,7 @@ function deleteParagraph(ctx: Ctx, story: OrderedStory, address: OrderedChangeAd
 
   // As the engine's `deleteBlock`: a lock around the paragraph, or any lock on a control in it,
   // and the paragraph a note, a cell or a section's end keeps
-  refuseLockedBlocks(ctx, p.blocks);
+  refuseLockedPlace(ctx, p.blocks);
   refuseLockedWithin(ctx, p.items, true);
   engineOnView(ctx, { op: 'deleteBlock', blockId: p.id });
 

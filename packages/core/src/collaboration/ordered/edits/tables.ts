@@ -16,7 +16,7 @@ import type { OrderedItem } from '../model/types.ts';
 import { engineRefusal, OrderedRefusal } from '../model/refusal.ts';
 import { isWml } from '../ooxml-nodes.ts';
 import { closeOf, itemsInside } from '../placement.ts';
-import { refuseLockedBlocks, refuseLockedTable, refuseLockedWithin } from '../locked-content.ts';
+import { refuseLockedPlace, refuseLockedTable, refuseLockedWithin } from '../locked-content.ts';
 import { holdWithin, nestedIn, pendingOwn, suggestionFor, takeBack, type Ctx } from './context.ts';
 import { takeBackNotesOf } from './note-body.ts';
 import { othersPending } from './retract.ts';
@@ -209,7 +209,7 @@ export function insertTable(
     throw new OrderedRefusal('invalid-edit', 'a column needs a width');
 
   // The table goes before the paragraph, into every block container it is in
-  refuseLockedBlocks(ctx, p.blocks);
+  refuseLockedPlace(ctx, p.blocks);
   const first = p.items[0] ?? p.mark;
   const before = ctx.story.tree.prev(first);
   const view = viewPart(ctx);

@@ -11,7 +11,7 @@ import { OrderedRefusal } from '../model/refusal.ts';
 import type { OrderedFormatWrite, OrderedParagraphOp } from '../model/types.ts';
 import { withUndoRecord, type OrderedUndoRecorded } from '../model/undo-record.ts';
 import { siblings } from '../placement.ts';
-import { refuseLockedBlocks } from '../locked-content.ts';
+import { refuseLockedPlace } from '../locked-content.ts';
 import { breakPiece, type OrderedBreak, type OrderedBreakClear } from './breaks.ts';
 import {
   contextOf,
@@ -304,7 +304,7 @@ function deleteOverRange(
     }
 
     if (joins && !markInPrompt(ctx, p, step.next)) {
-      refuseLockedBlocks(ctx, p.blocks);
+      refuseLockedPlace(ctx, p.blocks);
       id = strikeMark(ctx, p.mark, suggestionOrNull(ctx.doc, id)) ?? id;
     }
   }

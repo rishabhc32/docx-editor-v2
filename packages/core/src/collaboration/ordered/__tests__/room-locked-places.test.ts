@@ -169,26 +169,37 @@ describe('a lock the organiser set in the room binds at once, and its undo frees
   });
 });
 
-describe('a nested control inherits the lock of the control around it', () => {
-  test('an unlocked control inside a content-locked one refuses typing; a sibling does not', () => {
-    const inner = sdt('<w:tag w:val="inner"/>', t('in'));
-    const file = docx(
-      p(
-        t('A ') +
-          sdt('<w:lock w:val="contentLocked"/>', t('x') + inner + t('y')) +
-          t(' B ') +
-          sdt('<w:tag w:val="free"/>', t('ok'))
-      ),
-      EXTRAS
+describe('a lock keeps its own content, not a control nested in it (Word)', () => {
+  const nestedIn = (lock: Lock) =>
+    roomOn(
+      docx(
+        p(
+          t('A ') +
+            sdt(
+              `<w:lock w:val="${lock}"/>`,
+              t('x') + sdt('<w:tag w:val="inner"/>', t('in')) + t('y')
+            )
+        ),
+        EXTRAS
+      )
     );
-    const { doc, send } = roomOn(file);
-    // "A x[in]y B ok": inside the inner control at 4, inside the free control at 10
+
+  test('an unlocked control inside a content-locked one takes typing; the own words do not', () => {
+    // "A x[in]y": a caret after the own "x" at 3, inside the inner control at 4
+    const { doc, send } = nestedIn('contentLocked');
+    expect(
+      send('party', { kind: 'insert', ...edit('party'), place: at(doc, 0, 4), text: 'Q' })
+    ).toBe('accepted');
+    expect(
+      send('party', { kind: 'insert', ...edit('party'), place: at(doc, 0, 3), text: 'Q' })
+    ).toBe('apply-refused/locked');
+  });
+
+  test('an sdtContentLocked control still keeps a control nested in it (Word not checked)', () => {
+    const { doc, send } = nestedIn('sdtContentLocked');
     expect(
       send('party', { kind: 'insert', ...edit('party'), place: at(doc, 0, 4), text: 'Q' })
     ).toBe('apply-refused/locked');
-    expect(
-      send('party', { kind: 'insert', ...edit('party'), place: at(doc, 0, 10), text: 'Q' })
-    ).toBe('accepted');
   });
 });
 

@@ -41,7 +41,7 @@ import {
   formatPassesContentLock,
   refuseContentLock,
   refuseLocked,
-  refuseLockedBlocks,
+  refuseLockedPlace,
 } from '../locked-content.ts';
 import {
   currentFace,
@@ -424,7 +424,7 @@ export function formatMark(
   write: OrderedFormatWrite,
   into: OrderedSuggestion | null
 ): string | null {
-  if (!formatPassesContentLock(ctx, write.properties)) refuseLockedBlocks(ctx, p.blocks);
+  if (!formatPassesContentLock(ctx, write.properties)) refuseLockedPlace(ctx, p.blocks);
   const mark = p.mark;
   if (formatKeeps(ctx, mark, currentFace(ctx, mark, false), write)) return into?.id ?? null;
   const own = pendingOwn(ctx, mark.by);
@@ -492,7 +492,7 @@ export function paragraphOp(
   op: OrderedParagraphOp,
   into: OrderedSuggestion | null
 ): string | null {
-  refuseLockedBlocks(ctx, p.blocks);
+  refuseLockedPlace(ctx, p.blocks);
   const mark = p.mark;
   let scratch = 0;
   const mint = () => `check#${(scratch += 1)}`;
