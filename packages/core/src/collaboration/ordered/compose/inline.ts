@@ -36,7 +36,7 @@ import {
 } from '../ooxml-nodes.ts';
 import type { ComposeContext } from './context.ts';
 import { isNotesStory } from './note-references.ts';
-import { faceAfter, containerPropertiesAfter } from './properties.ts';
+import { containerPropertiesAfter, drawnFormats, faceAfter } from './properties.ts';
 import { keptLinkEdges } from './kept-links.ts';
 import { hidePrompt } from './prompts.ts';
 import { withTextBoxContent } from './text-boxes.ts';
@@ -506,7 +506,9 @@ function runKey(ctx: ComposeContext, item: OrderedItem): string {
   return [
     item.run,
     item.face ? item.face.id : '',
-    item.fmts.map((f) => `${f.id}:${f.suggestion}`).join(','),
+    drawnFormats(ctx, item.fmts)
+      .map((f) => `${f.id}:${f.suggestion}`)
+      .join(','),
     by,
     del,
     move,

@@ -1,0 +1,13 @@
+{
+  "impact": "compatible",
+  "fields": [],
+  "before": "A run split by a pending format on part of it was numbered in a checkpoint by its format records too, so after a fold the formatted piece loaded as a run of its own and a take-back of the format left the run split in the Word file, where live draws it whole. Live, a rejected format record still split the run, while a fold loads no rejected record.",
+  "after": "A checkpoint numbers a room run by its run and face only, and compose splits a run only by the format records that show (drawnFormats): a rejected record, or a direct one a reject took away, splits nothing. Live and after a fold, a take-back or a reject draws the run whole.",
+  "reason": "Change messages, the change log and its kinds keep their meaning, and the Yjs document format does not change. The checkpoint manifest and its version 5 stay; only the oc:run numbers in a checkpoint's parts change, and a reader joins pieces by any number as before. Only the run boundaries of the composed Word file change, and every copy composes with the same code version. Ordered rooms are not deployed yet, so no room needs a migration.",
+  "tests": [
+    "packages/core/src/collaboration/ordered/__tests__/checkpoint-fold-decide.test.ts",
+    "packages/core/src/collaboration/ordered/__tests__/checkpoint-fold.test.ts"
+  ],
+  "changeset": "room-run-format-split",
+  "migration": null
+}

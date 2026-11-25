@@ -243,6 +243,23 @@ export function drawnLater<T, R extends AnyRecord>(
   return { drawn, over: { own: childrenOf(own).filter((c) => !isChangeRecord(c)), records } };
 }
 
+/**
+ * The format records a run draws, in their order: accepted and pending ones, less those a reject
+ * took away. A record that no longer shows splits no run.
+ */
+export function drawnFormats(
+  ctx: ComposeContext,
+  fmts: readonly OrderedFormatRecord[]
+): readonly OrderedFormatRecord[] {
+  if (fmts.length === 0) {
+    return fmts;
+  }
+
+  const { accepted, pending } = acceptedAndPending(ctx, fmts);
+  const shown = new Set([...accepted, ...pending]);
+  return fmts.filter((record) => shown.has(record) && !madeOverRejected(ctx, record, fmts));
+}
+
 /** The decided records drawn: the accepted ones, less those a reject took away. */
 const shownAccepted = <T extends AnyRecord>(
   ctx: ComposeContext,

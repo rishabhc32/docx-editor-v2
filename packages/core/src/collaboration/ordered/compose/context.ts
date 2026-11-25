@@ -145,9 +145,12 @@ export interface WrapperInfo {
   readonly move: string | null;
 }
 
-/** The run the room draws a unit in, by what no file holds: its `run`, face and format records. */
-const roomRunOf = (unit: OrderedItem): string =>
-  [unit.run, unit.face?.id ?? '', ...unit.fmts.map((record) => record.id)].join(' ');
+/**
+ * The run the room draws a unit in, by what no file holds: its `run` and face. Format records
+ * split the run only while they show, and the file draws that split, so they name no room run: a
+ * take-back draws the run whole again.
+ */
+const roomRunOf = (unit: OrderedItem): string => `${unit.run} ${unit.face?.id ?? ''}`;
 
 /** The number of a room run or text element in a checkpoint's drawing, the first time a new one. */
 function roomNumber(runs: Map<string, RoomNumber>, key: string): string {

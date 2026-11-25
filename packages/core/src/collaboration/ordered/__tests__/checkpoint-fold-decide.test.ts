@@ -91,6 +91,18 @@ describe('a decision after a fold, on a suggestion inside a run', () => {
     );
   });
 
+  // The format's records split the run only while they show: its take-back draws the run whole
+  test('a suggested format on part of a run, taken back', async () => {
+    const { document: doc, base } = openOrderedWordFile(docx(p(run('Cloud and serverless.'))), {
+      file: 1,
+    });
+    const bold = { from: at(doc, 0, 2), to: at(doc, 0, 8), properties: [{ localName: 'b' }] };
+    apply(doc, 'bob:1', { kind: 'format', ...EDIT, ...bold }, 'Bob');
+    await checkFold(doc, base, mediaStore(base), 'a format on part of a run, taken back', (each) =>
+      apply(each, 'bob:2', { kind: 'retract', suggestions: ['S:bob:1.1'] }, 'Bob')
+    );
+  });
+
   // The room's run goes on in the new paragraph: its piece there is drawn with new ids
   test('a suggested paragraph break, beside a deletion in a combo box', async () => {
     const combo = MATRIX_ITEMS.find((item) => item.key === 'combo');
