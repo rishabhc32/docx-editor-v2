@@ -16,9 +16,10 @@ import {
   type OrderedViewParagraph,
 } from './compose/context.ts';
 import { containerPropertiesAfter } from './compose/properties.ts';
-import { isControlSegment, openOfSegment, segmentsOf } from './containers.ts';
+import { isControlSegment, openOfSegment, segmentsOf, sharedDepth } from './containers.ts';
 import type { Ctx } from './edits/context.ts';
 import { isHidden } from './model/document.ts';
+import { isControl } from './model/prompt-marks.ts';
 import { OrderedRefusal } from './model/refusal.ts';
 import type { OrderedItem } from './model/types.ts';
 import { attributeOf, childNamed, isWml, withChildren } from './ooxml-nodes.ts';
@@ -63,6 +64,70 @@ function lockOf(ctx: Ctx, open: OrderedItem): ContentControlLockFlags {
 
 /** A control whose lock keeps its content from edits (`contentLocked`, `sdtContentLocked`). */
 const contentLocked = (ctx: Ctx) => (open: OrderedItem) => lockOf(ctx, open).content;
+
+/**
+ * A group control (`w:group`): its own content, outside the controls nested in it, takes no edit
+ * (the engine's `ownContentLockOf`).
+ */
+function isGroup(open: OrderedItem): boolean {
+  return propertiesOf(open)?.children.some((c) => isWml(c, 'group')) === true;
+}
+
+const GROUP = "a group control's own content";
+
+/** Refuse a place whose innermost control (of `controls`, outermost first) is a group. */
+function refuseGroupOwn(controls: readonly OrderedItem[]): void {
+  const innermost = controls.filter(isControl).at(-1);
+  if (innermost !== undefined && isGroup(innermost)) {
+    throw new OrderedRefusal('locked', GROUP);
+  }
+}
+
+/**
+ * Refuse an edit of view characters `[start, end)` in a group control's own content: a character
+ * whose innermost control is a group. A caret is in the controls on both its sides, or in
+ * `inside`, the control the keyboard types in.
+ */
+function refuseGroupContent(
+  ctx: Ctx,
+  p: OrderedViewParagraph,
+  start: number,
+  end: number,
+  inside?: OrderedItem
+): void {
+  const blocks = p.blocks.filter(isControl);
+  // Each control once, however many characters of a long range sit in it
+  const opens = new Map<string, OrderedItem | null>();
+  const controlsOf = (segments: readonly string[]): OrderedItem[] => {
+    const own = segments.filter(isControlSegment).at(-1);
+    if (own === undefined) {
+      return blocks;
+    }
+
+    if (!opens.has(own)) {
+      opens.set(own, openOfSegment(ctx.story, own));
+    }
+
+    const open = opens.get(own);
+    return open ? [open] : [];
+  };
+  if (end > start) {
+    for (const char of p.chars.slice(start, end)) {
+      refuseGroupOwn(controlsOf(segmentsOf(char.containers)));
+    }
+
+    return;
+  }
+
+  if (inside !== undefined) {
+    refuseGroupOwn([inside]);
+    return;
+  }
+
+  const before = segmentsOf(p.chars[start - 1]?.containers ?? '');
+  const after = segmentsOf(p.chars[start]?.containers ?? '');
+  refuseGroupOwn(controlsOf(before.slice(0, sharedDepth(before, after))));
+}
 
 /** The inline controls a view character sits in that `kept` names, by their segments. */
 function keptControls(char: OrderedViewChar | undefined, kept: (segment: string) => boolean) {
@@ -109,14 +174,20 @@ function reachesInside(
 
 const LOCKED = 'the content of a content-locked control';
 
-/**
- * Refuse a change inside block containers (a paragraph's, or the ones around a table) when one
- * of them is a control whose lock keeps its content (`locked`).
- */
-export function refuseLockedBlocks(ctx: Ctx, blocks: readonly OrderedItem[]): void {
+/** Refuse a change inside block containers when one of them keeps its content by its lock. */
+function refuseContentLockedBlocks(ctx: Ctx, blocks: readonly OrderedItem[]): void {
   if (blocks.some(contentLocked(ctx))) {
     throw new OrderedRefusal('locked', LOCKED);
   }
+}
+
+/**
+ * Refuse a change inside block containers (a paragraph's, or the ones around a table) when one
+ * of them is a control whose lock keeps its content, or the innermost is a group (`locked`).
+ */
+export function refuseLockedBlocks(ctx: Ctx, blocks: readonly OrderedItem[]): void {
+  refuseContentLockedBlocks(ctx, blocks);
+  refuseGroupOwn(blocks);
 }
 
 /**
@@ -139,6 +210,10 @@ export function refuseLockedWithin(
       throw new OrderedRefusal('locked', LOCKED);
     }
 
+    if (isGroup(item)) {
+      throw new OrderedRefusal('locked', GROUP);
+    }
+
     if (removes && lock.wrapper) {
       throw new OrderedRefusal('locked', 'a control that may not be removed');
     }
@@ -154,8 +229,9 @@ export function paragraphOfItem(ctx: Ctx, item: OrderedItem): OrderedViewParagra
 /**
  * Refuse a change of one item when a control around it keeps its content: a paragraph's mark (a
  * section break), an object (a picture's size, an equation), a note reference (a conversion), a
- * link's open item (its target). For a container's open item only the controls around it count,
- * as the engine asks a node's enclosing controls.
+ * link's open item (its target), or when the innermost control around it is a group. For a
+ * container's open item only the controls around it count, as the engine asks a node's enclosing
+ * controls.
  */
 export function refuseLockedAt(ctx: Ctx, item: OrderedItem): void {
   const p = paragraphOfItem(ctx, item);
@@ -163,28 +239,37 @@ export function refuseLockedAt(ctx: Ctx, item: OrderedItem): void {
     return;
   }
 
-  refuseLockedBlocks(ctx, p.blocks);
   if (item.kind === 'mark') {
+    refuseLockedBlocks(ctx, p.blocks);
     return;
   }
 
+  refuseContentLockedBlocks(ctx, p.blocks);
   const own = `${item.token === 'hyperlink' ? 'h' : 'c'}:${item.space}`;
   const char = p.chars.find((c) =>
     item.kind === 'open' ? segmentsOf(c.containers).includes(own) : c.item === item
   );
   if (!char) {
+    refuseGroupOwn(p.blocks);
     return;
   }
 
   const segments = segmentsOf(char.containers);
   const around = item.kind === 'open' ? segments.slice(0, segments.indexOf(own)) : segments;
   const locked = contentLocked(ctx);
+  const controls = [...p.blocks];
   for (const segment of around) {
     const open = isControlSegment(segment) ? openOfSegment(ctx.story, segment) : null;
     if (open && locked(open)) {
       throw new OrderedRefusal('locked', LOCKED);
     }
+
+    if (open) {
+      controls.push(open);
+    }
   }
+
+  refuseGroupOwn(controls);
 }
 
 /**
@@ -208,12 +293,15 @@ export function refuseContentLock(
   ctx: Ctx,
   p: OrderedViewParagraph,
   start: number,
-  end: number
+  end: number,
+  inside?: OrderedItem
 ): void {
-  refuseLockedBlocks(ctx, p.blocks);
+  refuseContentLockedBlocks(ctx, p.blocks);
   if (reachesInside(ctx, p, start, end, contentLocked(ctx))) {
     throw new OrderedRefusal('locked', LOCKED);
   }
+
+  refuseGroupContent(ctx, p, start, end, inside);
 }
 
 /**
@@ -233,16 +321,18 @@ export function refusesTyping(ctx: Ctx, open: OrderedItem): boolean {
 /**
  * Refuse an edit of view characters `[start, end)` (a caret when they are equal) that reaches
  * content the engine keeps from edits: a table of contents, a bound control's content, a locked
- * control's content. A format names its `properties`: a locked control's content may then take
- * it (`formatPassesContentLock`).
+ * control's content, a group control's own content. A format names its `properties`: a locked
+ * control's content may then take it (`formatPassesContentLock`). Typing names the control the
+ * keyboard types in (`inside`), where its text goes.
  */
 export function refuseLocked(
   ctx: Ctx,
   p: OrderedViewParagraph,
   start: number,
   end: number,
-  properties?: readonly OoxmlProperty[]
+  options: { readonly properties?: readonly OoxmlProperty[]; readonly inside?: OrderedItem } = {}
 ): void {
+  const { properties, inside } = options;
   const toc = p.blocks.find(isTableOfContents);
   if (toc && reachesTocField(ctx, toc, p, start, end)) {
     throw new OrderedRefusal('not-covered', 'a table of contents result is generated');
@@ -253,6 +343,6 @@ export function refuseLocked(
   }
 
   if (properties === undefined || !formatPassesContentLock(ctx, properties)) {
-    refuseContentLock(ctx, p, start, end);
+    refuseContentLock(ctx, p, start, end, inside);
   }
 }

@@ -131,7 +131,7 @@ export function insertText(
   text: string,
   options: InsertOptions = {}
 ): string {
-  refuseLocked(ctx, p, offset, offset);
+  refuseLocked(ctx, p, offset, offset, { inside: options.inside });
   const site =
     (options.outsidePrompt ? null : promptSite(ctx, p, offset)) ??
     (options.inside ? insideSite(ctx, p, offset, options.inside) : null) ??
@@ -599,7 +599,7 @@ export function formatText(
   write: OrderedFormatWrite,
   into: OrderedSuggestion | null
 ): string | null {
-  refuseLocked(ctx, p, start, end, write.properties);
+  refuseLocked(ctx, p, start, end, { properties: write.properties });
   const chars = p.chars.slice(start, end);
   let suggestion = into;
   let result: string | null = into?.id ?? null;
