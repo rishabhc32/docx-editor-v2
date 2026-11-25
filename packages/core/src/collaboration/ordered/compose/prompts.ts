@@ -70,19 +70,10 @@ export function hidePrompt(
   original: OoxmlNode | undefined,
   { hide = true, retain = true, inline = false }: HidePromptOptions
 ): readonly OoxmlNode[] {
-  let named: string | undefined;
-  if (retain && original && original.kind !== 'textValue') {
-    named = placeholderNameOf(original);
-    const retained = promptToRetain(partHolding(ctx, original, inline), original, {
-      retainPrompt: () => undefined,
-      placeholderBlocks: (name) => ctx.doc.placeholders.get(name),
-    });
-    if (retained) {
-      named = retained.name;
-      if (!ctx.prompts.some((prompt) => prompt.name === retained.name)) ctx.prompts.push(retained);
-    }
-  }
-
+  const named =
+    retain && original && original.kind !== 'textValue'
+      ? retainedPromptName(ctx, original, inline)
+      : undefined;
   return props.map((child) => {
     if (child.kind === 'textValue' || !isWml(child, 'sdtPr')) return child;
     const kept = hide ? child.children.filter((c) => !isWml(c, 'showingPlcHdr')) : child.children;
@@ -92,6 +83,30 @@ export function hidePrompt(
     });
     return withChildren(child, orderedContentControlProperties([...kept, reference]));
   });
+}
+
+/**
+ * The name of the placeholder block that keeps `original`'s prompt, reporting the block for the
+ * caller to write when the glossary lacks it (`promptToRetain`), or the block the control names.
+ */
+export function retainedPromptName(
+  ctx: ComposeContext,
+  original: OoxmlElement,
+  inline: boolean
+): string | undefined {
+  const retained = promptToRetain(partHolding(ctx, original, inline), original, {
+    retainPrompt: () => undefined,
+    placeholderBlocks: (name) => ctx.doc.placeholders.get(name),
+  });
+  if (!retained) {
+    return placeholderNameOf(original);
+  }
+
+  if (!ctx.prompts.some((prompt) => prompt.name === retained.name)) {
+    ctx.prompts.push(retained);
+  }
+
+  return retained.name;
 }
 
 /**

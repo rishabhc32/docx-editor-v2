@@ -20,7 +20,12 @@ import {
 } from './context.ts';
 import { isNotesStory, notesWithHiddenReferences } from './note-references.ts';
 import { withStoryBlocks } from './paragraph-ops.ts';
-import { composeParagraph, hideBlockPrompt, viewOfParagraph } from './paragraph.ts';
+import {
+  composeParagraph,
+  hideBlockPrompt,
+  keepGonePrompts,
+  viewOfParagraph,
+} from './paragraph.ts';
 import { withControlRecords, withRestoredPrompts } from './prompts.ts';
 import { withCheckpointNamespace } from '../model/checkpoint-labels.ts';
 
@@ -78,6 +83,7 @@ interface StoryDrawing {
 function composeStory(doc: OrderedDocument, name: string, options: ComposeOptions): StoryDrawing {
   const ctx = new ComposeContext(doc, storyNamed(doc, name), options);
   const { children, paragraphs } = composeBlocks(ctx);
+  keepGonePrompts(ctx);
   const composed = {
     children,
     paragraphs,

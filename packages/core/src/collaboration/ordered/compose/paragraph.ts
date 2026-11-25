@@ -3,8 +3,8 @@
 
 import type { OoxmlElement, OoxmlNode } from '../../../store/package/ooxml-tree.ts';
 import { build } from '../../../store/store/tree-op-tracked.ts';
-import { isLabelled, isSplitEdge, movedAwayBy } from '../model/document.ts';
-import { isFilledPrompt } from '../model/prompt-marks.ts';
+import { isLabelled, isSplitEdge, movedAwayBy, storyOfItem } from '../model/document.ts';
+import { isFilledPrompt, promptedControlsOf } from '../model/prompt-marks.ts';
 import { REVISION_ROLE } from '../model/revision-ids.ts';
 import {
   isUnit,
@@ -18,6 +18,7 @@ import { composeInline } from './inline.ts';
 import { keptLinkEdges } from './kept-links.ts';
 import { isNotesStory } from './note-references.ts';
 import { faceAfter, paragraphPropertiesAfter, withNumberingRecords } from './properties.ts';
+import { retainedPromptName } from './prompts.ts';
 import { withMarkSection } from './sections.ts';
 import { textBoxesUntouched } from './text-boxes.ts';
 
@@ -425,6 +426,30 @@ export function hideBlockPrompt(ctx: ComposeContext, open: OrderedItem): void {
 
   for (const item of [...prompts, ...going]) {
     ctx.hiddenPrompts.add(item);
+  }
+}
+
+/**
+ * Keep the glossary block of each prompt control of the story that no longer shows (its row's or
+ * its own deletion accepted, its insertion rejected) once a suggestion filled its prompt: the
+ * engine's glossary keeps the block it wrote then, whatever happens to the control.
+ */
+export function keepGonePrompts(ctx: ComposeContext): void {
+  for (const open of promptedControlsOf(ctx.doc)) {
+    const shell = open.node;
+    if (!ctx.gone(open) || !shell || shell.kind === 'textValue') {
+      continue;
+    }
+
+    const original = ctx.doc.originals.get(shell.id);
+    if (!original || original.kind === 'textValue' || storyOfItem(ctx.doc, open) !== ctx.story) {
+      continue;
+    }
+
+    const items = [...ownItems(ctx.story.tree.items(ctx.story.tree.next(open)), open)];
+    if (isFilledPrompt(ctx.doc, open.space) || items.some((item) => filledBy(ctx, open, item))) {
+      retainedPromptName(ctx, original, open.token === 'sdt');
+    }
   }
 }
 

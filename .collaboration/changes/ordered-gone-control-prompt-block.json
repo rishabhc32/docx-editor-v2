@@ -1,0 +1,13 @@
+{
+  "impact": "compatible",
+  "fields": [],
+  "before": "Compose reported a glossary block for a prompt that a suggestion filled only while it drew the control. Once the control went for good (its row's deletion accepted, for example), the room's Word file lost the block, while the editor alone and a fold taken before the decision kept it.",
+  "after": "compose/paragraph.ts keepGonePrompts reports the block of each prompt control of the story that no longer shows once a suggestion filled its prompt (filledBy, isFilledPrompt), through the same retainedPromptName that hidePrompt uses.",
+  "reason": "Change messages, the change log and its kinds keep their meaning, and the Yjs document format and the checkpoint format do not change. Only the room's Word file after such a decision changes: it keeps a glossary block, as the editor alone and a fold do. An ordered room admits only clients of its own code version.",
+  "tests": [
+    "packages/core/src/collaboration/ordered/__tests__/checkpoint-fold-prompts.test.ts",
+    "packages/core/src/collaboration/ordered/__tests__/client/editor-controls-emptied-more.test.ts"
+  ],
+  "changeset": "ordered-gone-control-prompt-block",
+  "migration": null
+}

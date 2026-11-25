@@ -316,6 +316,31 @@ describe("a control's prompt shown again, decided card by card after a fold", ()
     });
   }
 
+  // Ana's pick hides the drop-down's prompt, so the glossary keeps it as a block: the block stays
+  // once the row goes with the control, as the engine's glossary keeps it, live and after a fold
+  for (const who of ['Ana', 'Ben']) {
+    test(`a pick in a drop-down, then its row deleted by ${who}`, async () => {
+      const list =
+        '<w:sdt><w:sdtPr><w:id w:val="3"/><w:showingPlcHdr/><w:dropDownList>' +
+        '<w:listItem w:displayText="Net 60" w:value="60"/></w:dropDownList></w:sdtPr>' +
+        `<w:sdtContent>${t('Choose an item.', face)}</w:sdtContent></w:sdt>`;
+      const cell = (inner: string) =>
+        `<w:tc><w:tcPr><w:tcW w:w="3000" w:type="dxa"/></w:tcPr>${p(inner)}</w:tc>`;
+      const table =
+        '<w:tbl><w:tblPr><w:tblW w:w="0" w:type="auto"/></w:tblPr><w:tblGrid>' +
+        '<w:gridCol w:w="3000"/><w:gridCol w:w="3000"/></w:tblGrid>' +
+        `<w:tr>${cell(t('Terms'))}${cell(t('Net: ') + list)}</w:tr></w:tbl>`;
+      const file = docx(p(t('Before.')) + table + p(t('After.')));
+      const { document: doc, base } = openOrderedWordFile(file, { file: 1 });
+      const value = { kind: 'listItem', value: '60' } as const;
+      const control = addressOf(opens(doc, 'sdt')[0]!);
+      apply(doc, 'ana:1', { kind: 'control-value', ...EDIT, control, value });
+      const row = addressOf(opens(doc, 'tr')[0]!);
+      apply(doc, `${who.toLowerCase()}:2`, { kind: 'delete-row', ...EDIT, row }, who);
+      await checkFold(doc, base, mediaStore(base), `a pick, then its row deleted by ${who}`);
+    });
+  }
+
   // The prompt a party typed over holds a combo box: after a fold the glossary gives it back, and a
   // reject of the typing shows the combo box in it again, not its words alone, and each of its
   // paragraphs. They are the prompt's own: typing in its first drops the second, as live
