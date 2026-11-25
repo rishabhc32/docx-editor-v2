@@ -380,10 +380,11 @@ export function withRetainedPrompts(
 }
 
 /**
- * Whether the glossary can keep each relationship id `prompt` names under that id, and if so
- * the ids claimed for it. Ids are per part (OPC), and a restore puts the block back where its ids
- * already resolve, so an id must name the same relationship in the glossary as in the part that
- * showed the prompt: one the glossary or an earlier prompt holds for another target fails.
+ * Whether the glossary can keep each relationship id `prompt` names under that id; if it can,
+ * `claimed` records the ids for the prompts after it. Ids are per part (OPC), and a restore puts
+ * the block back where its ids already resolve, so an id must name the same relationship in the
+ * glossary as in the part that showed the prompt: one the glossary or an earlier prompt holds for
+ * another target fails.
  */
 function keepsRelationships(
   pkg: OoxmlPackage,
