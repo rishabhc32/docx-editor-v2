@@ -1,0 +1,10 @@
+{
+  "impact": "compatible",
+  "fields": [],
+  "before": "After a fold, a take-back of typing over a control's prompt left the room's page with an empty control, while the Word file and the room with no fold showed the prompt: the fold keeps the prompt in the glossary only, and taken-back words did not count as emptying the control.",
+  "after": "A control whose words were all taken back is emptied, as compose finds it, so the room gives it its prompt again as units (Went.takenBack); taken-back words are still no words that went.",
+  "reason": "Change messages, the change log and its kinds keep their meaning, and the Yjs document format and the checkpoint format do not change. Only the room's units of such a control after the take-back change, and they now equal live and the Word file. An ordered room admits only clients of its own code version.",
+  "tests": ["packages/core/src/collaboration/ordered/__tests__/checkpoint-fold-prompts.test.ts"],
+  "changeset": "taken-back-prompt-after-fold",
+  "migration": null
+}

@@ -71,10 +71,14 @@ interface Emptied {
   readonly edges: readonly OrderedItem[];
 }
 
-/** The units a control lost so far, and whether a decision took one of them away. */
+/**
+ * The units a control lost so far, whether a decision took one of them away, and whether units
+ * that filled it were taken back: they never were, but the control they filled is empty.
+ */
 interface Went {
   readonly units: OrderedItem[];
   decided: boolean;
+  takenBack: boolean;
 }
 
 /** A control a direct edit emptied, as it was before its prompt: given back if its words are. */
@@ -245,6 +249,7 @@ function takeWent(ctx: ComposeContext, item: OrderedItem, went: Went): boolean {
   }
 
   if (insertionTakenBack(ctx.doc, item)) {
+    went.takenBack = true;
     return true;
   }
 
@@ -265,7 +270,7 @@ function emptiedInline(
   story: OrderedStory,
   open: OrderedItem
 ): Emptied | null {
-  const went: Went = { units: [], decided: false };
+  const went: Went = { units: [], decided: false, takenBack: false };
   for (let item = story.tree.next(open); item; item = story.tree.next(item)) {
     if (item.kind === 'close' && item.pair === open.pair) {
       // A part of a control Enter split ends at its edge; an Enter taken back leaves no edge
@@ -273,7 +278,7 @@ function emptiedInline(
         continue;
       }
 
-      if (went.units.length === 0) {
+      if (went.units.length === 0 && !went.takenBack) {
         return null;
       }
 
@@ -302,12 +307,12 @@ function emptiedInline(
  * emptied control, its first (`valueContent`), so the later ones go (`dropParagraphs`).
  */
 function emptiedBlock(ctx: ComposeContext, story: OrderedStory, open: OrderedItem): Emptied | null {
-  const went: Went = { units: [], decided: false };
+  const went: Went = { units: [], decided: false, takenBack: false };
   const marks: OrderedItem[] = [];
   for (let item = story.tree.next(open); item; item = story.tree.next(item)) {
     if (item.kind === 'close' && item.pair === open.pair) {
       const [mark, ...dropped] = marks;
-      if (isSplitEdge(item) || went.units.length === 0 || !mark) {
+      if (isSplitEdge(item) || (went.units.length === 0 && !went.takenBack) || !mark) {
         return null;
       }
 

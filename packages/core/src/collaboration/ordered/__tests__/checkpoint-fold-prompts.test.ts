@@ -14,8 +14,9 @@ import {
   EDIT,
   opens,
   partsOf,
+  textOf,
 } from './change-apply-fixture.ts';
-import { checkEveryCard, folded, mediaStore } from './fold-check.ts';
+import { checkEveryCard, checkFold, folded, mediaStore } from './fold-check.ts';
 import { docx, p, t } from './word-fixtures.ts';
 
 describe("a control's prompt shown again, decided card by card after a fold", () => {
@@ -123,10 +124,39 @@ describe("a control's prompt shown again, decided card by card after a fold", ()
     await checkEveryCard(doc, base, blobs, "a move's words all went");
   });
 
+  // Typing over a prompt, taken back after a fold, never was: the prompt shows again, as live,
+  // where the fold kept it in the glossary
+  const face = '<w:rStyle w:val="PlaceholderText"/>';
+  const terms =
+    '<w:sdt><w:sdtPr><w:id w:val="3"/><w:showingPlcHdr/><w:dropDownList w:lastValue="30">' +
+    '<w:listItem w:displayText="Net 30" w:value="30"/></w:dropDownList></w:sdtPr>' +
+    `<w:sdtContent>${t('Choose an item.', face)}</w:sdtContent></w:sdt>`;
+  const notes =
+    '<w:sdt><w:sdtPr><w:id w:val="5"/><w:showingPlcHdr/></w:sdtPr>' +
+    `<w:sdtContent>${p(t('Add notes.', face))}</w:sdtContent></w:sdt>`;
+  for (const [name, body, place, shown] of [
+    ['an inline', p(t('Terms are ') + terms + t(' from today.')), [0, 24], 'Choose an item.'],
+    ['a block', p(t('Notes:')) + notes + p(t('Signed.')), [1, 3], 'Add notes.'],
+  ] as const) {
+    test(`typing over ${name} control's prompt taken back after a fold`, async () => {
+      const { document: doc, base } = openOrderedWordFile(docx(body), { file: 1 });
+      const blobs = mediaStore(base);
+      const [index, n] = place;
+      const typing = { kind: 'insert', ...EDIT, place: at(doc, index, n), text: ' due' } as const;
+      apply(doc, 'olive:1', typing, 'Olive');
+      const copy = await folded(doc, base, 2, blobs);
+      for (const room of [doc, copy.document]) {
+        apply(room, 'olive:2', { kind: 'retract', suggestions: ['S:olive:1.1'] }, 'Olive');
+        expect(textOf(room, index)).toContain(shown);
+      }
+
+      await checkFold(copy.document, copy.base, blobs, `${name} prompt after a fold`);
+    });
+  }
+
   // The prompt a party typed over holds a combo box: after a fold the glossary gives it back, and a
   // reject of the typing shows the combo box in it again, not its words alone, and each of its
   // paragraphs. They are the prompt's own: typing in its first drops the second, as live
-  const face = '<w:rStyle w:val="PlaceholderText"/>';
   const city =
     '<w:sdt><w:sdtPr><w:id w:val="9204"/><w:showingPlcHdr/><w:comboBox>' +
     '<w:listItem w:displayText="Mumbai" w:value="Mumbai"/></w:comboBox></w:sdtPr>' +
