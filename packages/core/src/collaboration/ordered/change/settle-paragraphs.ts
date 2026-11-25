@@ -6,16 +6,17 @@ import { moveItems, relabel } from '../model/mutations.ts';
 import type { OrderedDocument, OrderedItem, OrderedStory } from '../model/types.ts';
 
 /**
- * Move each run of items that `decided` left before a block with no paragraph mark of its own
- * into the next paragraph that shows, with that paragraph's containers. A decision that takes a
- * paragraph mark away joins its words to the next paragraph; when a table or a block control
- * starts there, the next paragraph is inside it (its first cell), as compose draws them, the
- * editor alone's reject puts them, and a fold loads them. So a later decision on that table or
- * control takes the words with it, as in the editor alone, live as after a fold.
+ * Move each run of items that `suggestions` (decided, or taken back by their author) left before
+ * a block with no paragraph mark of its own into the next paragraph that shows, with that
+ * paragraph's containers. A change that takes a paragraph mark away joins its words to the next paragraph;
+ * when a table or a block control starts there, the next paragraph is inside it (its first
+ * cell), as compose draws them, the editor alone's reject puts them, and a fold loads them. So a
+ * later decision on that table or control takes the words with it, as in the editor alone, live
+ * as after a fold.
  */
-export function settleLooseWords(doc: OrderedDocument, decided: readonly string[]): void {
+export function settleLooseWords(doc: OrderedDocument, suggestions: readonly string[]): void {
   const walked = new Set<OrderedItem>();
-  for (const id of decided) {
+  for (const id of suggestions) {
     for (const mark of doc.labelled.get(id) ?? []) {
       if (mark.kind !== 'mark' || walked.has(mark) || !isHidden(doc, mark)) {
         continue;

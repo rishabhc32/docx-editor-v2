@@ -358,7 +358,9 @@ function applyChange(
       }
 
       const undone = undoOwnEdits(doc, change.undo ?? []);
-      return { suggestions: [...new Set([...change.suggestions, ...undone])], replaced: [] };
+      const suggestions = [...new Set([...change.suggestions, ...undone])];
+      settleLooseWords(doc, suggestions);
+      return { suggestions, replaced: [] };
     }
     case 'revert':
       for (const id of change.suggestions) {

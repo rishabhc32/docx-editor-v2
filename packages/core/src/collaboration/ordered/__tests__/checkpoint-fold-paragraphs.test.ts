@@ -3,6 +3,7 @@
 // paragraph is in the table's first cell that shows, as compose draws the words, the editor
 // alone's reject puts them and a fold loads them. Before, the room kept them before the table,
 // in no paragraph: a later decision on that cell's row kept them live and took them after a fold.
+// A take-back of the table by its author leaves the same words.
 
 import { describe, expect, test } from 'bun:test';
 import { orderedCardOf } from '../card-of.ts';
@@ -68,5 +69,24 @@ describe('words whose paragraph mark a decision took away before a table', () =>
     expect(textOf(doc, 8)).toBe('LtdDue in 30 days.');
     await checkFold(doc, base, blobs, 'after the reject of the table');
     await checkEveryCard(doc, base, blobs, 'after the reject of the table');
+  });
+});
+
+describe('words whose paragraph mark a take-back took away before a table', () => {
+  test('go into the next paragraph when its author takes the new table back', async () => {
+    const opened = openOrderedWordFile(APPLY_FILE, { file: 1 });
+    const doc = opened.document;
+    const table = {
+      kind: 'insert-table',
+      ...EDIT,
+      rows: 2,
+      columns: 2,
+      columnWidth: 2400,
+    } as const;
+    apply(doc, 'ben:1', { ...table, place: at(doc, 8, 0) }, 'Ben');
+    apply(doc, 'ana:2', { kind: 'insert', ...EDIT, place: markOf(doc, 8), text: 'Ltd' });
+    apply(doc, 'ben:2', { kind: 'retract', suggestions: ['S:ben:1.1'] }, 'Ben');
+    expect(textOf(doc, 8)).toBe('LtdDue in 30 days.');
+    await checkFold(doc, opened.base, mediaStore(opened.base), 'the new table taken back');
   });
 });

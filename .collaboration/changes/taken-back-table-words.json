@@ -1,0 +1,10 @@
+{
+  "impact": "compatible",
+  "fields": [],
+  "before": "A take-back of a new table whose added paragraph held another person's words left those words before the next block in no paragraph in the room, while compose and a fold put them in the next paragraph, as after a reject.",
+  "after": "A take-back settles the words it leaves before a block into the next paragraph (settleLooseWords), as a decision does; the organiser's undo of a direct edit moves nothing, so its redo stays exact.",
+  "reason": "Change messages, the change log and its kinds keep their meaning, and the Yjs document format and the checkpoint format do not change. Only where the room keeps such words after a take-back changes, and it now equals compose and a fold. An ordered room admits only clients of its own code version.",
+  "tests": ["packages/core/src/collaboration/ordered/__tests__/checkpoint-fold-paragraphs.test.ts"],
+  "changeset": "taken-back-table-words",
+  "migration": null
+}
