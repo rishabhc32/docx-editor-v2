@@ -216,6 +216,8 @@ export function insertNote(
   let owner: string;
   if (ctx.direct) {
     directInsert(ctx, p, offset, '', { pieces });
+
+    // Settled with the edit: in another person's insertion it labels nothing and shows nowhere
     sid = suggestionFor(ctx).id;
     owner = insertionHolding(ctx, atom) ?? sid;
   } else {
