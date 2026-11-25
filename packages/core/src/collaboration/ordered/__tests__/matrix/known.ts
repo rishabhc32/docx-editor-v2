@@ -65,6 +65,17 @@ const inside = (containers: readonly string[], items: readonly string[]) => (kin
   containers.some((c) => items.some((i) => kind === `${i} in ${c}`));
 const all = () => true;
 
+// A group control's own content takes no edit, and a control nested in it does (Word, rows 235
+// and 243 of the sp.5 list). These are the nested kinds that are controls of their own; typing at
+// the leading edge enters the ones that take text.
+const NESTED_CONTROLS = ['checkbox', 'piccontrol', 'plain', 'rich', 'dropdown', 'dropprompt'];
+const TYPED_INTO = ['plain', 'rich', 'dropdown', 'dropprompt'];
+const inGroup =
+  (items: (item: string) => boolean) =>
+  (kind: string): boolean =>
+    kind.endsWith(' in group') && items(kind.slice(0, -' in group'.length));
+const GROUP_OWN = "Both refuse an edit of a group control's own content, as Word does (`locked`)";
+
 export const KNOWN: readonly KnownDifference[] = [
   // ---- the engine ----
   {
@@ -186,7 +197,7 @@ export const KNOWN: readonly KnownDifference[] = [
     owner: 'engine',
     codes: 'E',
     sets: ['nested'],
-    kinds: inside(['plain', 'rich', 'group', 'gallery'], ['simple']),
+    kinds: inside(['plain', 'rich', 'gallery'], ['simple']),
     edits: ['type before it', 'type after it', 'Ana types in it, Ben deletes the container'],
   },
   {
@@ -195,7 +206,7 @@ export const KNOWN: readonly KnownDifference[] = [
     owner: 'engine',
     codes: 'VD',
     sets: ['nested'],
-    kinds: inside(['plain', 'rich', 'group', 'gallery'], ['simple']),
+    kinds: inside(['plain', 'rich', 'gallery'], ['simple']),
     edits: ['delete it', 'delete the container', 'delete across its start'],
   },
   {
@@ -326,6 +337,82 @@ export const KNOWN: readonly KnownDifference[] = [
     edits: ['Ana inserts a column, Ben inserts one too'],
   },
   // ---- Word's form, and the model's limits ----
+  {
+    cause: GROUP_OWN,
+    owner: 'both',
+    codes: 'R',
+    sets: ['single'],
+    kinds: ['group'],
+    edits: [
+      'type inside',
+      'Enter inside',
+      'delete it',
+      'delete across',
+      'replace across',
+      'delete from the paragraph before',
+      'delete into the paragraph after',
+      'bold across',
+      'italic it',
+    ],
+  },
+  {
+    cause: GROUP_OWN,
+    owner: 'both',
+    codes: 'R',
+    sets: ['pairs'],
+    kinds: ['group'],
+    edits: (edit) => edit !== 'Ana types after, Olive deletes across',
+  },
+  {
+    cause: `${GROUP_OWN}: every edit around a kind that is the group's own content`,
+    owner: 'both',
+    codes: 'R',
+    sets: ['nested'],
+    kinds: inGroup((item) => !NESTED_CONTROLS.includes(item)),
+    edits: all,
+  },
+  {
+    cause: `${GROUP_OWN}: at the edges of a control nested in it (deleting the control whole goes)`,
+    owner: 'both',
+    codes: 'R',
+    sets: ['nested'],
+    kinds: inGroup((item) => NESTED_CONTROLS.includes(item)),
+    edits: ['Enter before it', 'delete across its start', 'delete the container'],
+  },
+  {
+    cause: `${GROUP_OWN}: typing after a nested control (a prompt takes it instead)`,
+    owner: 'both',
+    codes: 'R',
+    sets: ['nested'],
+    kinds: inGroup((item) => NESTED_CONTROLS.includes(item) && item !== 'dropprompt'),
+    edits: ['type after it'],
+  },
+  {
+    cause: `${GROUP_OWN}: typing before a nested control that typing never enters`,
+    owner: 'both',
+    codes: 'R',
+    sets: ['nested'],
+    kinds: inGroup((item) => NESTED_CONTROLS.includes(item) && !TYPED_INTO.includes(item)),
+    edits: ['type before it', 'Ana types in it, Ben deletes the container'],
+  },
+  {
+    cause:
+      "Open: typing at the leading edge of a control nested in a group. The engine types into the nested control; the room, sent no `inside`, types beside it in the group's own content (rule 1) and refuses. The editor's keyboard names the control (`inside`), so a real editor agrees; an insertion without it differs",
+    owner: 'model',
+    codes: 'S',
+    sets: ['nested'],
+    kinds: inGroup((item) => TYPED_INTO.includes(item)),
+    edits: ['type before it', 'Ana types in it, Ben deletes the container'],
+  },
+  {
+    cause:
+      "Open: a direct cut or deletion over a whole group. The editor removes the control whole, as a content-locked control goes whole; the room refuses the deletion of the group's own content",
+    owner: 'model',
+    codes: 'S',
+    sets: ['single', 'pairs'],
+    kinds: ['group'],
+    edits: ['move it', 'Ana types after, Olive deletes across'],
+  },
   {
     cause:
       "Both refuse another person's change of a cell's or a table's properties over a pending one: Word keeps one change record for each (`unsupported-revision`)",

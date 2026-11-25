@@ -52,7 +52,6 @@ export const PROMPT_IN_CONTAINER: readonly string[] = [
   'dropprompt in bookmark',
   'dropprompt in comment',
   'dropprompt in gallery',
-  'dropprompt in group',
   'dropprompt in link',
   'dropprompt in plain',
   'dropprompt in rich',
