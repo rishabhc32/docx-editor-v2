@@ -510,7 +510,7 @@ const placementOf = (pr: OoxmlElement | undefined, container: keyof typeof PLACE
     .map(([name, fallback]) => number(pr && child(pr, name), 'val', fallback))
     .join();
 
-/** The owner (a row or a cell) with its pending property record (`w:trPrChange`, `w:tcPrChange`) updated. */
+/** A row or a cell with its pending property record (`w:trPrChange`, `w:tcPrChange`) updated. */
 function withOwnRecord(
   owner: OoxmlElement,
   container: keyof typeof PLACEMENT,
