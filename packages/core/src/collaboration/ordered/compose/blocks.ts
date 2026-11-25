@@ -103,7 +103,8 @@ export function showsPastJoin(ctx: ComposeContext, item: OrderedItem): boolean {
 /**
  * Whether a mark is the last of its note: a note that shows keeps a paragraph, as the engine keeps
  * a story's last one, so its last mark draws when a decision took it away (a struck note whose
- * other reference stays) and what shows before it stays in that paragraph.
+ * other reference stays) and what shows before it joins that paragraph, as the other marks' accept
+ * joins it. The walk stops at the next mark, so it passes each item once.
  */
 function endsNote(ctx: ComposeContext, mark: OrderedItem): boolean {
   for (let next = ctx.story.tree.next(mark); next; next = ctx.story.tree.next(next)) {
@@ -111,7 +112,7 @@ function endsNote(ctx: ComposeContext, mark: OrderedItem): boolean {
       return true;
     }
 
-    if (!ctx.gone(next)) {
+    if (next.kind === 'mark' || !ctx.gone(next)) {
       return false;
     }
   }

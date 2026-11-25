@@ -291,4 +291,38 @@ describe('a struck note whose other reference stays, decided', () => {
       rejected: ['footnote reference 1', FEES, ANNEX],
     });
   });
+
+  // Both paragraphs of the note struck: the accept joins the first into the last, so the note
+  // keeps one empty paragraph, as the engine keeps a story's last one, live as after a fold
+  test('a note of two paragraphs keeps one', async () => {
+    const footnotes = String(MATRIX_EXTRAS.parts?.['word/footnotes.xml']).replace(
+      '</w:p></w:footnote></w:footnotes>',
+      `</w:p>${p(t('A second note paragraph.'))}</w:footnote></w:footnotes>`
+    );
+    const parts = { ...MATRIX_EXTRAS.parts, 'word/footnotes.xml': footnotes };
+    const file = docx(
+      p(t('Payment') + FOOTNOTE + t(' Terms apply here.')) + p(t('The second paragraph.')),
+      { ...MATRIX_EXTRAS, parts }
+    );
+    const paragraphs: number[] = [];
+    for (const folds of [0, 1]) {
+      let room = openOrderedWordFile(file, { file: 1 });
+      const blobs = mediaStore(room.base);
+      const ids = strikeCopy(room.document);
+      if (folds > 0) {
+        room = await folded(room.document, room.base, 2, blobs);
+      }
+
+      const suggestions = ids.flatMap((id) => orderedCardSeen(room.document, id) ?? []);
+      const decide = { kind: 'decide', cards: [{ suggestions }], status: 'accepted' } as const;
+      apply(room.document, 'olga:1', decide);
+      const written = unzipSync(orderedPackageBytes(room.document, room.base, { blobs }));
+      const note = /<w:footnote w:id="1">(.*?)<\/w:footnote>/s.exec(
+        strFromU8(written['word/footnotes.xml']!)
+      );
+      paragraphs.push(note?.[1]?.match(/<w:p[ >/]/g)?.length ?? 0);
+    }
+
+    expect(paragraphs).toEqual([1, 1]);
+  });
 });
