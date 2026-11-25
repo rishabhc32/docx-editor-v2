@@ -540,7 +540,7 @@ function applyValidatedTreeOp(part: OoxmlPart, op: TreeDocOp, options?: EditOpti
           return promptKept(part, paragraph.id);
         }
         const deleted = applyDeleteTracked(part, paragraph, op.start, op.end, op.revision, options);
-        return withOwnEmptiedPrompts(part, deleted, paragraph.id, options);
+        return withOwnEmptiedPrompts(paragraph, deleted, options);
       }
       return applyDeleteText(part, paragraph, op.start, op.end, options);
     case 'insertHyperlink':

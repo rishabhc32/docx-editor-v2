@@ -200,6 +200,29 @@ describe('typing over a prompt in suggesting mode', () => {
     }
   });
 
+  // The same rule for a block control: it shows its prompt again only when the deletion leaves
+  // it with no content, so a second line of other words keeps it as it is.
+  test("deleting one's own words in a block control shows its prompt only when it empties", () => {
+    const own =
+      '<w:p><w:ins w:id="7" w:author="Bea" w:date="2026-11-25T00:00:00Z">' +
+      '<w:r><w:t>ab</w:t></w:r></w:ins></w:p>';
+    const block = (paragraphs: string) =>
+      '<w:sdt><w:sdtPr><w:placeholder><w:docPart w:val="PartyName"/></w:placeholder></w:sdtPr>' +
+      `<w:sdtContent>${paragraphs}</w:sdtContent></w:sdt><w:p><w:r><w:t>end.</w:t></w:r></w:p>`;
+    for (const [paragraphs, emptied] of [
+      [own, true],
+      [own + '<w:p><w:r><w:t>kept</w:t></w:r></w:p>', false],
+    ] as const) {
+      const surface = suggesting(block(paragraphs));
+      select(surface, 0, 2);
+      surface.deleteBackward();
+      expect(surface.state().lastRejection).toBeFalsy();
+      expect(showsPrompt(surface)).toBe(emptied);
+      expect(content(surface)).toContain(emptied ? PROMPT_RUN : '<w:t>kept</w:t>');
+      expect(collectReviewItems({ storyPart: surface.session.part() })).toEqual([]);
+    }
+  });
+
   test('undo gives the prompt back as it was', () => {
     const surface = suggesting();
     const before = serializeOoxmlPart(surface.session.part());

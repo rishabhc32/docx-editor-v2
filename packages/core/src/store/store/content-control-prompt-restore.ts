@@ -211,30 +211,35 @@ export function withDecisionPrompt(
 }
 
 /**
- * `result` with each control in or around a paragraph that held content in `before` and holds
- * none now showing its prompt again: an author's deletion of their own pending words takes them
- * out with no revision, and Word then shows the control's prompt as after a decision, with no
- * `w:sdtEndPr` (Word for Mac, 2026-11-25, `w58-after-own-delete.docx`).
+ * `result` with each control a deletion in `paragraph` emptied showing its prompt again: an
+ * author's deletion of their own pending words takes them out with no revision, and Word then
+ * shows the control's prompt as after a decision, with no `w:sdtEndPr` (Word for Mac,
+ * 2026-11-25, `w58-after-own-delete.docx`). Struck text is content, so a strike empties none.
+ *
+ * `paragraph` is the paragraph before the deletion. Only `result.part` is looked up: the edit
+ * moved the id index to it, and a lookup in the part before would index it again per op.
  */
 export function withOwnEmptiedPrompts(
-  before: OoxmlPart,
+  paragraph: OoxmlNode,
   result: TreeOpResult,
-  paragraphId: string,
   options?: EditOptions
 ): TreeOpResult {
-  const paragraph = findNode(before, paragraphId);
-  if (!result.ok || !paragraph) {
+  if (!result.ok) {
     return result;
   }
 
-  const controls = [
-    ...enclosingContentControls(before, paragraphId),
-    ...contentControlsIn(paragraph).map((entry) => entry.node),
-  ];
+  // The deletion changes only this paragraph, so a control around it empties only when the
+  // paragraph does, and a control inside it only when it held content.
+  const now = findNode(result.part, paragraph.id);
+  const emptied = now !== null && holdsContent(paragraph, 0) && !holdsContent(now, 0);
+  const around = emptied ? enclosingContentControls(result.part, paragraph.id) : [];
+  const inside = contentControlsIn(paragraph)
+    .map((entry) => entry.node)
+    .filter(controlHoldsContent);
   let part = result.part;
-  for (const control of controls) {
-    const now = findContentControl(part, control.id);
-    if (now && controlHoldsContent(control) && !controlHoldsContent(now)) {
+  for (const control of [...around, ...inside]) {
+    const current = findContentControl(part, control.id);
+    if (current && !controlHoldsContent(current)) {
       part = withDecisionPrompt(part, control.id, options, false);
     }
   }
