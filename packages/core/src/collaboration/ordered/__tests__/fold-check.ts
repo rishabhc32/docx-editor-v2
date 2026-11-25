@@ -180,10 +180,12 @@ function drawnNowhere(doc: OrderedDocument, story: OrderedStory): ReadonlySet<Or
 
 /**
  * The units that show in no paragraph: words a mark that shows does not end before a block starts
- * or ends, or before the story ends. Live and after a fold, every unit is in a paragraph.
+ * or ends, or before the story ends. Live and after a fold, every unit is in a paragraph. A note
+ * or a text box that compose leaves out (`CardRead.isLeftOut`) shows nowhere.
  */
 function unitsOutsideParagraphs(doc: OrderedDocument): string[] {
   const out: string[] = [];
+  const read = new CardRead(doc);
   for (const story of doc.stories.values()) {
     const nowhere = drawnNowhere(doc, story);
     let loose: OrderedItem[] = [];
@@ -201,7 +203,8 @@ function unitsOutsideParagraphs(doc: OrderedDocument): string[] {
       } else if (
         !(item.kind === 'zero' && item.block) &&
         !isOrderedItemHidden(doc, item) &&
-        !nowhere.has(item)
+        !nowhere.has(item) &&
+        !read.isLeftOut(item, story)
       ) {
         loose.push(item);
       }
