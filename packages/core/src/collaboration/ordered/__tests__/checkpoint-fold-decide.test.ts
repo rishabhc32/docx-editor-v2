@@ -538,6 +538,14 @@ describe("a fold of a table's records", () => {
     });
   }
 
+  // A table width on the first row's second cell: it takes Bob's table records
+  const tableWidth = (doc: OrderedDocument, id: string, columnWidthTwips: number) => {
+    const on = [addressOf(opens(doc, 'tc')[1]!)];
+    const tableWidthTwips = columnWidthTwips + 3000;
+    const op = { op: 'setTableRightEdgeWidth', columnWidthTwips, tableWidthTwips } as const;
+    apply(doc, id, { kind: 'table-property', ...EDIT, on, op }, 'Bob');
+  };
+
   // A table width takes the row height's table record. Once the row height is decided, that
   // record takes over nothing, but it stays apart: the file's one change record holds it, and a
   // fold gives it back
@@ -545,10 +553,7 @@ describe("a fold of a table's records", () => {
     test(`a row height, a table width on its row, then the row height ${status}`, async () => {
       const { document: doc, base } = openOrderedWordFile(APPLY_FILE, { file: 1 });
       rowHeight(doc, 'bob:1', 0, '2026-10-28T09:06:00Z');
-      const on = [addressOf(opens(doc, 'tc')[1]!)];
-      const width = { columnWidthTwips: 2600, tableWidthTwips: 5600 };
-      const op = { op: 'setTableRightEdgeWidth', ...width } as const;
-      apply(doc, 'bob:2', { kind: 'table-property', ...EDIT, on, op }, 'Bob');
+      tableWidth(doc, 'bob:2', 2600);
       const suggestions = orderedCardSeen(doc, 'S:bob:1.1')!;
       apply(doc, 'olive:1', { kind: 'decide', cards: [{ suggestions }], status }, 'Olive');
       await checkFold(doc, base, mediaStore(base), `a table width over a ${status} row height`);
@@ -563,6 +568,17 @@ describe("a fold of a table's records", () => {
       );
     });
   }
+
+  // A take-back gives a suggestion back the records another took from it, two of one target:
+  // Word's one change record holds them, and a fold reads one record that sets what both set
+  test('two table widths over a row height, then the second taken back', async () => {
+    const { document: doc, base } = openOrderedWordFile(APPLY_FILE, { file: 1 });
+    rowHeight(doc, 'bob:1', 0, '2026-10-28T09:06:00Z');
+    tableWidth(doc, 'bob:2', 2600);
+    tableWidth(doc, 'bob:3', 2400);
+    apply(doc, 'bob:4', { kind: 'retract', suggestions: ['S:bob:3.1'] }, 'Bob');
+    await checkFold(doc, base, mediaStore(base), 'a table width taken back over another');
+  });
 
   // A decision on a column gives its width back as the engine's reject does, from the table
   // before the decision: the cell the column took width from at the width it lent, the others as

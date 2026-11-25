@@ -1,0 +1,10 @@
+{
+  "impact": "compatible",
+  "fields": [],
+  "before": "A take-back gives a suggestion back the table records another took from it, so the room can hold two records of one suggestion for one table, row or cell properties element with no takeover between them. The checkpoint named both in its change records, Word's one change record loaded as one record, and the checkpoint did not open.",
+  "after": "The checkpoint names such records as one, the last, with every child they set, as the file's change record loads. The open reads it as before and refuses a manifest that does not fit.",
+  "reason": "Change messages, the change log and the Yjs document format do not change. The manifest and its version 5 stay: the change records keep their form, and an older reader reads them as before. Exported Word files do not change. Ordered rooms are not deployed yet, so no room needs a migration.",
+  "tests": ["packages/core/src/collaboration/ordered/__tests__/checkpoint-fold-decide.test.ts"],
+  "changeset": "ordered-fold-joined-records",
+  "migration": null
+}

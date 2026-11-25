@@ -402,15 +402,38 @@ function recordsOpens(doc: OrderedDocument): RecordsOpen[] {
         }
       }
 
-      const recorded = open.props.filter(
+      const others = open.props.filter(
         (record): record is OrderedElementRecord =>
           record.kind === 'element' &&
-          (record.merge !== undefined || record.tableCells !== undefined) &&
           record.untracked !== true &&
           UNTRACKED_CONTAINERS.has(record.target) &&
           pending(record.suggestion) &&
           !byTarget.get(record.target)?.includes(record)
       );
+
+      // Word writes one change record for a suggestion's records of a target that hold no
+      // takeover (a take-back gives back records another took from it), and a load reads it as
+      // one record: the last, which the target shows, setting every child they set
+      const recorded = others.flatMap((record) => {
+        const same = others.filter(
+          (r) =>
+            r.target === record.target &&
+            r.suggestion === record.suggestion &&
+            r.replaced === undefined
+        );
+        if (record.replaced === undefined && same[same.length - 1] !== record) {
+          return [];
+        }
+
+        let merge = record.merge;
+        if (record.replaced === undefined && same.length > 1) {
+          merge = same.some((r) => r.merge === undefined)
+            ? undefined
+            : [...new Set(same.flatMap((r) => r.merge ?? []))];
+        }
+
+        return merge !== undefined || record.tableCells !== undefined ? [{ ...record, merge }] : [];
+      });
       if (byTarget.size > 0 || recorded.length > 0) {
         out.push({ story, shell, byTarget, recorded });
       }
