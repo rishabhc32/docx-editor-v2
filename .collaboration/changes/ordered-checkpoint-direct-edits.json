@@ -1,0 +1,14 @@
+{
+  "impact": "compatible",
+  "fields": [],
+  "before": "The checkpoint manifest did not say which suggestions were the organiser's direct edits. A fold read a direct edit's kept table records as a decided suggestion's, so a reject of a pending row or cell record no longer reset the row's cells that hold only direct records (a direct column's new cell kept its direct width), where live and the editor alone reset them.",
+  "after": "A suggestion entry of the manifest has an optional `direct: true` for a direct edit's suggestion; the open marks the suggestion direct again. A reader refuses the mark on a pending suggestion as checkpoint-manifest.",
+  "reason": "The field is optional and written only for a direct edit's suggestion: a checkpoint without it reads as before, version 5 stays and the golden checkpoints open to the same prints. An older reader refuses a checkpoint that holds the field as checkpoint-manifest; an ordered room admits only clients of its own code version, and ordered rooms are not deployed yet, so no room needs a migration. Change messages, the change log and the Yjs format do not change.",
+  "tests": [
+    "packages/core/src/collaboration/ordered/__tests__/checkpoint-fold-decide.test.ts",
+    "packages/core/src/collaboration/ordered/__tests__/checkpoint.test.ts",
+    "packages/core/src/collaboration/ordered/__tests__/checkpoint-golden.test.ts"
+  ],
+  "changeset": "ordered-checkpoint-direct-edits",
+  "migration": null
+}
