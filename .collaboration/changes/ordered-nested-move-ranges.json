@@ -1,0 +1,10 @@
+{
+  "impact": "compatible",
+  "fields": [],
+  "before": "A load gave a move range end the move of the last move wrapper before it. Where one range holds another (after a fold, a move to a paragraph's end goes inside another move's range there), the outer range's end went with the inner move, so an accept of the outer move left an orphan range end in the file.",
+  "after": "A load gives a range end to the move whose range start has the same w:id (load/moves.ts), and to the last wrapper's move only when no start has that id, so a decision gives the same file live and after a fold.",
+  "reason": "Change messages, the change log and its kinds keep their meaning, and the Yjs document format and the checkpoint format (version 5) do not change. Only how a load labels a move range end changes, as the file says. An ordered room admits only clients of its own code version, and ordered rooms are not deployed yet, so no room needs a migration.",
+  "tests": ["packages/core/src/collaboration/ordered/__tests__/checkpoint-fold-moves.test.ts"],
+  "changeset": "ordered-nested-move-ranges",
+  "migration": null
+}

@@ -258,8 +258,10 @@ export interface MoveRange {
   start: OoxmlElement | null;
   /** The range start's item, labelled once the first wrapper names the move's suggestion. */
   startIndex: number | null;
-  /** The suggestion of the move's last wrapper: the range end's. */
+  /** The suggestion of the move's last wrapper: the range end's when its `w:id` names no start. */
   last: string | null;
+  /** Each range's suggestion, by its start's `w:id`: a range end names its start by that id. */
+  readonly byId: Map<string, string>;
 }
 
 /** The move's name: its range's, or one per author when the file names none. */
@@ -302,8 +304,8 @@ export function newLoadState(
     revisions,
     budget,
     prompts: new Set(),
-    moveFrom: { name: null, start: null, startIndex: null, last: null },
-    moveTo: { name: null, start: null, startIndex: null, last: null },
+    moveFrom: { name: null, start: null, startIndex: null, last: null, byId: new Map() },
+    moveTo: { name: null, start: null, startIndex: null, last: null, byId: new Map() },
     home: null,
   };
 }

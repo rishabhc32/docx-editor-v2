@@ -46,7 +46,9 @@ export function loadMoveRangeMarker(
     return true;
   }
 
-  pushZero(state, node, range.last === null ? labels : whilePending(range.last, labels), {
+  // A range inside another ends before it: its end names its own start
+  const suggestion = range.byId.get(attributeOf(node, 'id') ?? '') ?? range.last;
+  pushZero(state, node, suggestion === null ? labels : whilePending(suggestion, labels), {
     moveRange: true,
     ...more,
   });
@@ -68,6 +70,11 @@ export function movedBy(
     const rangeRole =
       range === state.moveFrom ? REVISION_ROLE.moveFromRange : REVISION_ROLE.moveToRange;
     state.revisions.keepId(suggestion, rangeRole, range.start);
+    const id = attributeOf(range.start, 'id');
+    if (id !== undefined) {
+      range.byId.set(id, suggestion);
+    }
+
     range.start = null;
   }
 
