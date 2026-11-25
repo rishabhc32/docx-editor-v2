@@ -392,8 +392,8 @@ export interface OrderedItemSummary {
 
 /**
  * One item. Fields other than the labels never change once the item is in a story. Nothing is
- * removed or moved: struck text that is accepted, and inserted text that is rejected, stay in
- * the list, hidden.
+ * removed: struck text that is accepted, and inserted text that is rejected, stay in the list,
+ * hidden. Only a loose run of words moves, into the next paragraph (`moveItems`, design D1).
  *
  * @public
  */

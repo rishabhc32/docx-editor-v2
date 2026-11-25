@@ -6,15 +6,30 @@ import { promptRemovedForGood, showsBlockPrompt } from '../compose/paragraph.ts'
 import { insertionTakenBack, isHidden, storyOfItem } from '../model/document.ts';
 import { relabel } from '../model/mutations.ts';
 import { recordPromptMarkChange, promptControlsOf, promptMarksOf } from '../model/prompt-marks.ts';
+import { recordUndo } from '../model/undo-record.ts';
 import type { OrderedDocument, OrderedItem, OrderedStory } from '../model/types.ts';
 import { itemsInside } from '../placement.ts';
 import { replacedPromptUnit } from './settle-named-prompts.ts';
 
 /**
- * A prompt mark's control: items never move, so the answer holds while the mark and the control's
- * open item are in a story. A settle can put another open item in its place (`settle-emptied.ts`).
+ * A prompt mark's control: the answer holds while the mark and the control's open item are in a
+ * story and the mark does not move. A settle can put another open item in its place
+ * (`settle-emptied.ts`). Only a loose run moves (`settle-paragraphs.ts`): it forgets the marks it
+ * moves (`forgetPromptControls`).
  */
 const controlOfMark = new WeakMap<OrderedItem, OrderedItem | null>();
+
+/** Forget the control of each item that a settle moves, now and when its undo moves it back. */
+export function forgetPromptControls(doc: OrderedDocument, items: readonly OrderedItem[]): void {
+  const forget = (): void => {
+    for (const item of items) {
+      controlOfMark.delete(item);
+    }
+  };
+
+  forget();
+  recordUndo(doc, forget);
+}
 
 /**
  * Show or hide the marks of every block prompt of two or more paragraphs, by its control's

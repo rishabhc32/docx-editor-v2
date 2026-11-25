@@ -5,15 +5,17 @@ import { isBlockToken } from '../compose/blocks.ts';
 import { isHidden, storyOfItem } from '../model/document.ts';
 import { moveItems, relabel } from '../model/mutations.ts';
 import type { OrderedDocument, OrderedItem, OrderedStory } from '../model/types.ts';
+import { forgetPromptControls } from './settle-prompts.ts';
 
 /**
  * Move each run of items that `suggestions` (decided, or taken back by their author) left before
- * a block with no paragraph mark of its own into the next paragraph that shows, with that
+ * a block edge with no paragraph mark of its own into the next paragraph that shows, with that
  * paragraph's containers. A change that takes a paragraph mark away joins its words to the next
  * paragraph; when a table or a block control starts there, the next paragraph is inside it (its
  * first cell), as compose draws them, the editor alone's reject puts them, and a fold loads them.
  * So a later decision on that table or control takes the words with it, as in the editor alone,
- * live as after a fold.
+ * live as after a fold. A block's end counts too: words left at the end of a cell or a control go
+ * past it to the next paragraph that shows, as compose carries them over.
  */
 export function settleLooseWords(doc: OrderedDocument, suggestions: readonly string[]): void {
   for (const { story, run } of looseRuns(doc, suggestions)) {
@@ -115,6 +117,7 @@ function intoNextParagraph(doc: OrderedDocument, story: OrderedStory, run: Order
   }
 
   moveItems(doc, story, run, edge);
+  forgetPromptControls(doc, run);
   const { within } = target;
   for (const item of run) {
     relabel(doc, story, item, { within });

@@ -299,7 +299,7 @@ export function nextSeq(doc: OrderedDocument): number {
 }
 
 /**
- * Change a suggestion's status. Every item it labels gets its sums again; nothing moves.
+ * Change a suggestion's status. Every item it labels gets its sums again; no item moves.
  *
  * @public
  */
