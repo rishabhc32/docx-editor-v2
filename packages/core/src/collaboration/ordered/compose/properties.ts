@@ -759,7 +759,8 @@ function containerAfter(ctx: ComposeContext, open: OrderedItem, child: OoxmlNode
   const under = [...earlier, ...unrecorded].sort(bySeq);
   let inner: readonly OoxmlNode[] = child.children;
   for (const record of under) inner = applyProperties(record, inner, keepNone);
-  let old = inner;
+  const loaded = inner;
+  let old = loaded;
   const taken: DrawnTakeover[] = [];
   for (const record of [...pending, ...later]) {
     const before = inner;
@@ -775,7 +776,9 @@ function containerAfter(ctx: ComposeContext, open: OrderedItem, child: OoxmlNode
 
   // The record names the author of the latest change it records
   const latest = pending.filter((p) => p.untracked !== true).at(-1);
-  const own = fileRecordAlone(ctx.doc, under, pending);
+  // The file's record holds the original as the load read it: a change of it made later (a width
+  // lent, a grid a column changed) takes a record of copies
+  const own = old === loaded ? fileRecordAlone(ctx.doc, under, pending) : undefined;
   const container = CONTAINERS[target];
   if (own) inner = [...inner, own];
   else if (latest && container !== null) {

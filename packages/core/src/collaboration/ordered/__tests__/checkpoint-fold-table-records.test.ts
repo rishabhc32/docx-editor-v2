@@ -7,7 +7,7 @@ import { orderedCardSeen } from '../change/apply-decide.ts';
 import { openOrderedWordFile } from '../client/open.ts';
 import type { OrderedDocument } from '../model/types.ts';
 import { addressOf, apply, APPLY_FILE, at, DIRECT, EDIT, opens } from './change-apply-fixture.ts';
-import { checkFold, mediaStore } from './fold-check.ts';
+import { checkFold, folded, mediaStore } from './fold-check.ts';
 
 const ANA_1 = '2026-10-28T09:01:00Z';
 
@@ -103,6 +103,35 @@ describe('row heights made in turn', () => {
     apply(doc, 'ben:2', { kind: 'table-property', ...EDIT, on, op }, 'Ben', ANA_1);
     await checkFold(doc, base, mediaStore(base), 'a taken record before a direct deletion');
   });
+});
+
+// A table record the load read from the file's change record, and a column made after a fold
+// that changes its original: the record holds the changed original after another fold, as live
+test("a party's row height and widths, a fold, then the organiser's column", async () => {
+  const first = openOrderedWordFile(APPLY_FILE, { file: 1 });
+  const blobs = mediaStore(first.base);
+  const row = (doc: OrderedDocument, k: number) => addressOf(opens(doc, 'tr')[k]!);
+  const height = (doc: OrderedDocument, k: number, heightTwips: number) =>
+    ({
+      kind: 'table-property',
+      on: [row(doc, k)],
+      op: { op: 'setTableRowHeight', heightTwips },
+    }) as const;
+  apply(
+    first.document,
+    'ben:1',
+    { kind: 'delete-row', ...EDIT, row: row(first.document, 0) },
+    'Ben'
+  );
+  apply(first.document, 'ana:1', { ...height(first.document, 0, 700), ...EDIT }, 'Ana');
+  const on = [addressOf(opens(first.document, 'tc')[0]!)];
+  const op = { op: 'setTableColumnWidths', leftWidthTwips: 3600, rightWidthTwips: 2400 } as const;
+  apply(first.document, 'ana:2', { kind: 'table-property', ...EDIT, on, op }, 'Ana', ANA_1);
+  const { document: doc, base } = await folded(first.document, first.base, 2, blobs);
+  apply(doc, 'olive:1', { ...height(doc, 1, 400), ...DIRECT }, 'Olive');
+  const right = { cell: addressOf(opens(doc, 'tc')[2]!), where: 'right' } as const;
+  apply(doc, 'olive:2', { kind: 'insert-column', ...EDIT, ...right }, 'Olive');
+  await checkFold(doc, base, blobs, 'a column over a file record of widths');
 });
 
 describe("the organiser's direct columns at a decision", () => {
