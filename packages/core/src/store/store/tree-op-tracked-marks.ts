@@ -216,6 +216,7 @@ export function insertedMarkProperties(pPr: OoxmlNode): OoxmlNode | undefined {
   if (children.length === 0) {
     return undefined;
   }
+
   return { ...pPr, children } as OoxmlNode;
 }
 

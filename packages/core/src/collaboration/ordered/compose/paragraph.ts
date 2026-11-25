@@ -225,6 +225,7 @@ function markProperties(
         []
       )
     );
+
   // A decision on the mark's own insertion or deletion leaves no empty properties, as the
   // engine's leaves none (`heldOnlyResolvedMarks`): a direct edit taken back is no decision
   const decided =

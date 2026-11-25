@@ -28,7 +28,10 @@ export function withTailStyle(
   tailStyleId: string | null | undefined,
   nextId: () => string
 ): OoxmlNode | undefined {
-  if (tailStyleId === undefined) return pPr ? cloneSplitProperties(pPr, nextId) : undefined;
+  if (tailStyleId === undefined) {
+    return pPr ? cloneSplitProperties(pPr, nextId) : undefined;
+  }
+
   const currentStyle = pPr?.children.find(
     (child) => child.kind !== 'textValue' && child.localName === 'pStyle'
   );
