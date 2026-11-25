@@ -18,6 +18,7 @@ import {
   type ReviewFormattingChange,
 } from './review-formatting.ts';
 import { collectRevisionSites } from './tree-op-revisions.ts';
+import { revisionKey } from './tree-op-tracked-adjacency.ts';
 import type { RevisionAddress } from './tree-op-types.ts';
 import {
   commentAnchorsOfStory,
@@ -69,7 +70,7 @@ function wmlAttribute(node: OoxmlElement, localName: string): string | undefined
 }
 
 function addressKey(address: RevisionAddress): string {
-  return `${address.id}\u0000${address.author}\u0000${address.date ?? ''}`;
+  return revisionKey(address.id, address.author, address.date);
 }
 
 const CONTENT_KINDS: Readonly<Record<string, ReviewRevisionKind>> = {

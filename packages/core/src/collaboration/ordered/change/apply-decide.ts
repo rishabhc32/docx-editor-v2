@@ -4,6 +4,7 @@
 import { reviewItemKey } from '../../../store/store/review-items.ts';
 import { revisionItemsOf } from '../../../store/store/review-reads.ts';
 import { decidedAsBatch, planRevisionBatch } from '../../../store/store/revision-batch.ts';
+import { revisionKey } from '../../../store/store/tree-op-tracked-adjacency.ts';
 import { noCardRefusal, orderedCardOf, type OrderedCard } from '../card-of.ts';
 import { composeStoryPart } from '../compose/compose.ts';
 import { itemAt, storyOfItem } from '../model/document.ts';
@@ -46,10 +47,6 @@ function cardAsSeen(doc: OrderedDocument, seen: OrderedSeenCard): OrderedCard | 
     return new OrderedRefusal('stale-decision', 'the card holds other suggestions now');
   return card;
 }
-
-/** A revision mark by its `w:id`, author and date, as the engine's review reads it. */
-const markKey = (id: string, author: string, date: string | undefined): string =>
-  `${id}\u0000${author}\u0000${date ?? ''}`;
 
 /**
  * The part an item draws in, with the item of that part's story it draws with: for an item of a
@@ -96,7 +93,7 @@ function engineLeft(
     for (const id of card.suggestions) {
       const { author, date } = doc.suggestions.get(id)?.attribution ?? { author: '' };
       for (const mark of revisionIdsOf(doc, id)) {
-        cardOfMark.set(markKey(mark, author, date), card);
+        cardOfMark.set(revisionKey(mark, author, date), card);
       }
 
       for (const item of doc.labelled.get(id) ?? []) {
@@ -117,7 +114,7 @@ function engineLeft(
     const cardOfKey = new Map<string, OrderedCard>();
     const batched = new Set<string>();
     for (const item of revisionItemsOf(part)) {
-      const marks = item.addresses.map(({ id, author, date }) => markKey(id, author, date));
+      const marks = item.addresses.map(({ id, author, date }) => revisionKey(id, author, date));
       const card = marks.map((mark) => cardOfMark.get(mark)).find((c) => c !== undefined);
       if (card === undefined) {
         continue;

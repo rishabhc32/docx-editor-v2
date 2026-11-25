@@ -6,6 +6,7 @@ import type { OoxmlElement, OoxmlNode } from '../../../../store/package/ooxml-tr
 import type { TreeDocOp } from '../../../../store/store/tree-op-types.ts';
 import { holdsMathRunContent } from '../../../../store/store/revision-math-runs.ts';
 import { revisionGroupKey } from '../../../../store/store/tree-op-revisions.ts';
+import { revisionKey } from '../../../../store/store/tree-op-tracked-adjacency.ts';
 import { orderedCardOf } from '../../card-of.ts';
 import { orderedCardSeen } from '../../change/apply-decide.ts';
 import type { OrderedSeenCard } from '../../change/types.ts';
@@ -39,11 +40,6 @@ interface RevisionTriple {
 /** A revision triple, with no date when the mark has none. */
 function tripleOf(id: string, author: string, date: string | undefined): RevisionTriple {
   return { id, author, ...(date === undefined ? {} : { date }) };
-}
-
-/** One key for each triple: the same marks of one suggestion are read once. */
-function tripleKey(triple: RevisionTriple): string {
-  return `${triple.id}\u0000${triple.author}\u0000${triple.date ?? ''}`;
 }
 
 /** Every element under a part's root, the root first, in one walk with no recursion. */
@@ -247,7 +243,7 @@ export function triplesOfSites(batch: OrderedTranslateBatch, siteNodeIds: readon
       const grid = gridRecordTriple(batch.doc, node);
       if (!grid)
         throw new OrderedClientRefusal('ordered-refused', 'out-of-step', 'a grid record decided');
-      triples.set(tripleKey(grid), grid);
+      triples.set(revisionKey(grid.id, grid.author, grid.date), grid);
       continue;
     }
 
@@ -258,7 +254,7 @@ export function triplesOfSites(batch: OrderedTranslateBatch, siteNodeIds: readon
 
     // Every mark of one suggestion names its triple: each is read once
     const triple = tripleOf(revision, author, attributeOf(node, 'date'));
-    triples.set(tripleKey(triple), triple);
+    triples.set(revisionKey(triple.id, triple.author, triple.date), triple);
   }
 
   return [...triples.values()];
