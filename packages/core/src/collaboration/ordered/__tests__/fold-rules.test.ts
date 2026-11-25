@@ -384,7 +384,7 @@ const STORY_RESOURCE: ResourceRules<'story'> = {
 const PART_RESOURCE: ResourceRules<'part'> = {
   kind: KIND,
   key: KEY,
-  suggestion: open('new', "the file's after a fold: a reject of the pasted chart keeps the part"),
+  suggestion: open('124', "the file's after a fold: a reject of the pasted chart keeps the part"),
   part: file('a part of the file'),
   type: file("the part's content type and relationship type"),
   root: file('the part as written'),
@@ -393,7 +393,7 @@ const PART_RESOURCE: ResourceRules<'part'> = {
 const RELATIONSHIP: ResourceRules<'relationship'> = {
   kind: KIND,
   key: KEY,
-  suggestion: open('new', "the file's after a fold: only an image's goes with its last use"),
+  suggestion: open('123', "the file's after a fold: only an image's goes with its last use"),
   owner: file('load/load.ts `recordFileNames`'),
   id: file('load/load.ts `recordFileNames`: the id minted from the key'),
   type: file('the relationship as written'),
@@ -408,13 +408,13 @@ const LIST: ResourceRules<'list'> = {
   abstractNumId: derived('from the key (`orderedListNumber`)'),
   levels: file('client/lists.ts: the definition the numbering part holds'),
   definition: file('client/lists.ts: the definition the numbering part holds'),
-  bullets: open('new', "a list with picture bullets stays the file's: a reject keeps it"),
+  bullets: open('125', "a list with picture bullets stays the file's: a reject keeps it"),
 };
 
 const LIST_LEVEL: ResourceRules<'list-level'> = {
   kind: KIND,
   key: KEY,
-  suggestion: open('new', "the file's after a fold: a reject of the indent keeps the level"),
+  suggestion: open('122', "the file's after a fold: a reject of the indent keeps the level"),
   numId: file('the numbering part'),
   level: file('the numbering part'),
   format: file('the numbering part'),
