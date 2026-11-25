@@ -7,6 +7,7 @@
 
 import { describe, expect, test } from 'bun:test';
 import type { OoxmlNode, OoxmlPart } from '../package/ooxml-tree.ts';
+import { BLANK_PROMPT_TEXT } from '../store/content-control-prompt-restore.ts';
 import { revisionItemsOf } from '../store/review-reads.ts';
 import { applyTreeOp } from '../store/tree-op-apply.ts';
 import { ADA, apply, paragraphId, part, xml } from './tracked-edit-fixture.ts';
@@ -925,6 +926,8 @@ describe('a tracked page field', () => {
   test('retracting a control’s only pending content keeps the w:sdtContent element', () => {
     // A control is document structure, not a revision wrapper: dropping its emptied
     // content element left a `w:sdt` husk with properties and nowhere to type back into.
+    // Its author's deletion of their own words shows the prompt again, as Word does (a
+    // control that names no prompt shows Word's blank one)
     const before = part(
       '<w:p><w:sdt><w:sdtPr><w:tag w:val="t1"/></w:sdtPr><w:sdtContent>' +
         '<w:ins w:id="9" w:author="Ada Lovelace" w:date="2026-01-02T03:04:05Z">' +
@@ -938,7 +941,10 @@ describe('a tracked page field', () => {
       revision: ADA,
     });
     const out = xml(after);
-    expect(out).toContain('<w:sdtContent/>');
+    expect(out).toContain('<w:showingPlcHdr/>');
+    expect(out).toContain(
+      `<w:sdtContent><w:r><w:t xml:space="preserve">${BLANK_PROMPT_TEXT}</w:t>`
+    );
     expect(out).not.toContain('mine');
   });
 
