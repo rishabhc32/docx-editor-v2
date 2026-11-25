@@ -11,7 +11,7 @@ import { OrderedRefusal } from '../model/refusal.ts';
 import type { OrderedFormatWrite, OrderedParagraphOp } from '../model/types.ts';
 import { withUndoRecord, type OrderedUndoRecorded } from '../model/undo-record.ts';
 import { siblings } from '../placement.ts';
-import { refuseLockedPlace } from '../locked-content.ts';
+import { controlEnteredAt, refuseLockedPlace } from '../locked-content.ts';
 import { breakPiece, type OrderedBreak, type OrderedBreakClear } from './breaks.ts';
 import {
   contextOf,
@@ -391,10 +391,11 @@ function run(ctx: Ctx, edit: OrderedEdit): (string | null)[] {
     case 'insert': {
       const text = checkText(edit.text);
       const at = resolve(ctx, edit.at);
-      const inside =
+      const named =
         edit.inside === undefined
-          ? {}
-          : { inside: shownItemAt(ctx.doc, ctx.story, edit.inside, 'open', ['sdt']) };
+          ? controlEnteredAt(ctx, at.paragraph, at.offset)
+          : shownItemAt(ctx.doc, ctx.story, edit.inside, 'open', ['sdt']);
+      const inside = named === undefined ? {} : { inside: named };
       if (ctx.direct) {
         directInsert(ctx, at.paragraph, at.offset, text, inside);
         return [];

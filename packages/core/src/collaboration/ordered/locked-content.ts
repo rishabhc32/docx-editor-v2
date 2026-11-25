@@ -11,6 +11,7 @@ import {
   type ControlLockProperties,
 } from '../../store/package/content-control-nodes.ts';
 import { formattingPassesContentLock } from '../../store/store/content-lock-policy.ts';
+import { refusesTypedContent } from '../../store/store/tree-op-nodes.ts';
 import type { OoxmlProperty } from '../../store/store/tree-op-types.ts';
 import { orderedViewParagraph } from './compose/compose.ts';
 import {
@@ -48,23 +49,28 @@ export function isTableOfContents(open: OrderedItem): boolean {
 }
 
 /**
- * What the lock rule reads of a control (its `w:lock` and its type) as it shows now: the file's,
- * or the organiser's later change of it (`control-property`), a record on the open item that
- * compose writes.
+ * A control's element with its properties as they show now: the file's, or the organiser's later
+ * change of them (`control-property`), a record on the open item that compose writes. Undefined
+ * for an item that is no control.
  */
-function lockPropertiesOf(ctx: Ctx, open: OrderedItem): ControlLockProperties {
+function shownControl(ctx: Ctx, open: OrderedItem): OoxmlElement | undefined {
   const node = open.node;
   if ((open.token !== 'sdt' && open.token !== 'sdtBlock') || !node || node.kind === 'textValue') {
-    return lockPropertiesIn(undefined);
+    return undefined;
   }
 
   if (open.props.length === 0) {
-    return lockPropertiesIn(childNamed(node, 'sdtPr'));
+    return node;
   }
 
   const compose = new ComposeContext(ctx.doc, ctx.story, {});
-  const shown = withChildren(node, containerPropertiesAfter(compose, open, node.children));
-  return lockPropertiesIn(childNamed(shown, 'sdtPr'));
+  return withChildren(node, containerPropertiesAfter(compose, open, node.children));
+}
+
+/** What the lock rule reads of a control (its `w:lock` and its type) as it shows now. */
+function lockPropertiesOf(ctx: Ctx, open: OrderedItem): ControlLockProperties {
+  const shown = shownControl(ctx, open);
+  return lockPropertiesIn(shown === undefined ? undefined : childNamed(shown, 'sdtPr'));
 }
 
 /** The refusal of an edit in a control's own content that its lock keeps. */
@@ -83,10 +89,47 @@ function lockedRefusal(control: ControlLockProperties | undefined): OrderedRefus
  * a control nested in it.
  */
 export function refuseLockedPlace(ctx: Ctx, containers: readonly OrderedItem[]): void {
-  const chain = containers.filter(isControl).map((open) => lockPropertiesOf(ctx, open));
-  if (lockForbidsEdit(lockInForce(chain))) {
+  const chain = lockingChain(ctx, containers);
+  if (chain !== null) {
     throw lockedRefusal(chain.at(-1));
   }
+}
+
+/** The controls around a place (`containers`, outermost first) when their lock keeps it, or null. */
+function lockingChain(
+  ctx: Ctx,
+  containers: readonly OrderedItem[]
+): ControlLockProperties[] | null {
+  const chain = containers.filter(isControl).map((open) => lockPropertiesOf(ctx, open));
+  return lockForbidsEdit(lockInForce(chain)) ? chain : null;
+}
+
+/**
+ * The inline control that typed text enters at a caret on its leading edge when no control is
+ * named, as the engine enters it: only where the place beside it is locked (a group's own content,
+ * say), so the control is the one place there that takes the text, and only when typing may enter
+ * it (`refusesTyping`). Elsewhere typed text goes beside a control (placement rule 1).
+ */
+export function controlEnteredAt(
+  ctx: Ctx,
+  p: OrderedViewParagraph,
+  offset: number
+): OrderedItem | undefined {
+  const before = segmentsOf(p.chars[offset - 1]?.containers ?? '');
+  const after = segmentsOf(p.chars[offset]?.containers ?? '');
+  const shared = before.slice(0, sharedDepth(before, after));
+  const starting = after[shared.length];
+  const entered =
+    starting !== undefined && isControlSegment(starting)
+      ? openOfSegment(ctx.story, starting)
+      : null;
+  if (entered === null || refusesTyping(ctx, entered)) {
+    return undefined;
+  }
+
+  return lockingChain(ctx, [...p.blocks, ...controlsOf(ctx, shared)]) === null
+    ? undefined
+    : entered;
 }
 
 /** The open items of the inline controls that container segments name, outermost first. */
@@ -255,11 +298,12 @@ export function formatPassesContentLock(ctx: Ctx, properties: readonly OoxmlProp
 }
 
 /**
- * Whether typing never enters a control (the engine's `refusesTypedContent`): bound, or its own
- * content locked.
+ * Whether typing never enters a control, by the engine's own rule (`refusesTypedContent`): bound,
+ * its own content locked, or a checkbox or picture control.
  */
 export function refusesTyping(ctx: Ctx, open: OrderedItem): boolean {
-  return isBound(open) || lockForbidsEdit(ownContentLockOf(lockPropertiesOf(ctx, open)));
+  const shown = shownControl(ctx, open);
+  return shown !== undefined && refusesTypedContent(shown);
 }
 
 /**

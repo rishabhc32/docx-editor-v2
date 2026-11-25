@@ -185,14 +185,25 @@ describe('a lock keeps its own content, not a control nested in it (Word)', () =
     );
 
   test('an unlocked control inside a content-locked one takes typing; the own words do not', () => {
-    // "A x[in]y": a caret after the own "x" at 3, inside the inner control at 4
+    // "A x[in]y": the own "x" at 2, the inner control at 3 to 5
     const { doc, send } = nestedIn('contentLocked');
     expect(
       send('party', { kind: 'insert', ...edit('party'), place: at(doc, 0, 4), text: 'Q' })
     ).toBe('accepted');
     expect(
-      send('party', { kind: 'insert', ...edit('party'), place: at(doc, 0, 3), text: 'Q' })
+      send('party', { kind: 'delete', ...edit('party'), from: at(doc, 0, 2), to: at(doc, 0, 3) })
     ).toBe('apply-refused/locked');
+  });
+
+  test("typing at the inner control's leading edge goes into it, as the engine puts it", () => {
+    // The place beside it is the locked control's own content; no client names the control
+    const { doc, send } = nestedIn('contentLocked');
+    expect(
+      send('party', { kind: 'insert', ...edit('party'), place: at(doc, 0, 3), text: 'Q' })
+    ).toBe('accepted');
+    expect(insideControls(doc, 0)).toBe('xQiny');
+    const q = orderedViewParagraph(doc, BODY, 0)?.chars.find((c) => c.ch === 'Q');
+    expect(q?.containers.split('>')).toHaveLength(2);
   });
 
   test('an sdtContentLocked control still keeps a control nested in it (Word not checked)', () => {

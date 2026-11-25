@@ -377,7 +377,12 @@ export const KNOWN: readonly KnownDifference[] = [
     codes: 'R',
     sets: ['nested'],
     kinds: inGroup((item) => NESTED_CONTROLS.includes(item)),
-    edits: ['Enter before it', 'delete across its start', 'delete the container'],
+    edits: [
+      'Enter before it',
+      'delete across its start',
+      'delete the container',
+      'Ana types in it, Ben deletes the container',
+    ],
   },
   {
     cause: `${GROUP_OWN}: typing after a nested control (a prompt takes it instead)`,
@@ -393,16 +398,7 @@ export const KNOWN: readonly KnownDifference[] = [
     codes: 'R',
     sets: ['nested'],
     kinds: inGroup((item) => NESTED_CONTROLS.includes(item) && !TYPED_INTO.includes(item)),
-    edits: ['type before it', 'Ana types in it, Ben deletes the container'],
-  },
-  {
-    cause:
-      "Open: typing at the leading edge of a control nested in a group. The engine types into the nested control; the room, sent no `inside`, types beside it in the group's own content (rule 1) and refuses. The editor's keyboard names the control (`inside`), so a real editor agrees; an insertion without it differs",
-    owner: 'model',
-    codes: 'S',
-    sets: ['nested'],
-    kinds: inGroup((item) => TYPED_INTO.includes(item)),
-    edits: ['type before it', 'Ana types in it, Ben deletes the container'],
+    edits: ['type before it'],
   },
   {
     cause:
