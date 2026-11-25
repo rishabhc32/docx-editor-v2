@@ -237,7 +237,10 @@ export function withOwnEmptiedPrompts(
     .map((entry) => entry.node)
     .filter(controlHoldsContent);
   let part = result.part;
-  for (const control of [...around, ...inside]) {
+
+  // Innermost first, as a decision empties controls (`resolveKeepingControlState`): an inner
+  // control's prompt is content its emptied outer control holds
+  for (const control of [...around, ...inside].reverse()) {
     const current = findContentControl(part, control.id);
     if (current && !controlHoldsContent(current)) {
       part = withDecisionPrompt(part, control.id, options, false);

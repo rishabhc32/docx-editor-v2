@@ -230,3 +230,39 @@ describe("an edit in a prompt keeps a control inside it, with a party's insertio
     });
   }
 });
+
+// Word for Mac (`w58-after-own-delete.docx`): an author's deletion of all of their own words takes
+// them out and the control shows its prompt. Inside another control, the inner control shows it,
+// innermost first: the outer control holds that prompt, so it keeps the inner control. The room
+// reads a nested control that shows as content (`takeWent`), the editor alone goes innermost first
+// (`withOwnEmptiedPrompts`), and both keep it.
+describe("a party's deletion of their own words in a nested control", () => {
+  const inner =
+    '<w:sdt><w:sdtPr><w:tag w:val="inner"/><w:showingPlcHdr/><w:text/></w:sdtPr><w:sdtContent>' +
+    `${t('Type here.', FACE)}</w:sdtContent></w:sdt>`;
+  const outer = (tagged: string) =>
+    `<w:sdt><w:sdtPr><w:tag w:val="outer"/></w:sdtPr><w:sdtContent>${tagged}</w:sdtContent></w:sdt>`;
+  for (const [where, body, start] of [
+    ['an inline', p(t('A: ') + outer(inner)), 3],
+    ['a block', outer(`<w:p>${inner}</w:p>`), 0],
+  ] as const) {
+    test(`keeps the inner control in ${where} control`, async () => {
+      const file = docx(body + p(t('Signed.')));
+      const room = localRoom(file);
+      const olive = await join(room, 'Olive', { mode: 'edit', login: ORGANISER, wordFile: file });
+      const bob = await join(room, 'Bob', { wordFile: file });
+      caretAt(bob, 0, start, start + 'Type here.'.length);
+      surface(bob).insertPlainText('ab');
+      await settle();
+      caretAt(bob, 0, start, start + 2);
+      surface(bob).deleteBackward();
+      await settle();
+      converged(room, olive, bob);
+      const xml = serializeOoxmlPart(composeOrderedPart(room.room.document, BODY).part);
+      expect(xml).toContain('<w:tag w:val="outer"/></w:sdtPr>');
+      expect(xml).toContain('<w:tag w:val="inner"/><w:showingPlcHdr/>');
+      expect(xml.match(/<w:showingPlcHdr\/>/g)).toHaveLength(1);
+      expect(xml).not.toContain('<w:ins ');
+    });
+  }
+});

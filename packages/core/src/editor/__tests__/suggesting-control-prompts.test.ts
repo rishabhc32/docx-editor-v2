@@ -223,6 +223,30 @@ describe('typing over a prompt in suggesting mode', () => {
     }
   });
 
+  // Innermost first, as a decision empties controls: the inner control shows its prompt, and the
+  // control around it holds that prompt, so it keeps the inner control (an inline or a block one).
+  test("deleting one's own words in a nested control keeps the inner control", () => {
+    const inner =
+      '<w:sdt><w:sdtPr><w:tag w:val="inner"/><w:text/></w:sdtPr><w:sdtContent>' +
+      '<w:ins w:id="7" w:author="Bea" w:date="2026-11-25T00:00:00Z"><w:r><w:t>ab</w:t></w:r>' +
+      '</w:ins></w:sdtContent></w:sdt>';
+    const outer = (tagged: string) =>
+      `<w:sdt><w:sdtPr><w:tag w:val="outer"/></w:sdtPr><w:sdtContent>${tagged}</w:sdtContent></w:sdt>`;
+    for (const [body, start] of [
+      [`<w:p><w:r><w:t xml:space="preserve">A: </w:t></w:r>${outer(inner)}</w:p>`, 3],
+      [`${outer(`<w:p>${inner}</w:p>`)}<w:p><w:r><w:t>end.</w:t></w:r></w:p>`, 0],
+    ] as const) {
+      const surface = suggesting(body);
+      select(surface, start, start + 2);
+      surface.deleteBackward();
+      const xml = serializeOoxmlPart(surface.session.part());
+      expect(surface.state().lastRejection).toBeFalsy();
+      expect(xml).toContain('<w:tag w:val="outer"/></w:sdtPr>');
+      expect(xml).toContain('<w:tag w:val="inner"/><w:showingPlcHdr/>');
+      expect(xml.match(/<w:showingPlcHdr\/>/g)).toHaveLength(1);
+    }
+  });
+
   test('undo gives the prompt back as it was', () => {
     const surface = suggesting();
     const before = serializeOoxmlPart(surface.session.part());
