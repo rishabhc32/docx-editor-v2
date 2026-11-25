@@ -261,12 +261,13 @@ interface Survivors {
 
 /**
  * The survivors of each row with a removed cell, by how the engine holds them before the
- * decision. A cell a removed column took width from shows the width it lent (`lent`): Word
- * writes no record of it, so the cell shows its width from before the column, where the engine
- * holds it lent until the decision gives the removed cell's width back. A cell whose shown
- * `w:tcPr` was taken when a removed cell of its row did not show (already removed, or not added
- * yet) holds no width of it (`kept`). The record of what a column lent names the cell it took
- * width from, so every other cell's own properties hold that column's cell.
+ * decision. A cell whose shown `w:tcPr` was taken while the removed cell showed is widened by
+ * the engine's rule. A cell a removed column took width from, under that column's record, shows
+ * the width it lent (`lent`): Word writes no record of it, so the cell shows its width from before
+ * the column, where the engine holds it lent until the decision gives the removed cell's width
+ * back. Any other cell whose shown `w:tcPr` was taken when the removed cell did not show (already
+ * removed, or not added yet) holds no width of it (`kept`). A column's record names the cell it
+ * took width from, so every other cell's own properties hold that column's cell.
  */
 function survivorsOf(
   ctx: ComposeContext,
@@ -286,26 +287,34 @@ function survivorsOf(
       const space = tokenSpace(ctx.doc.file, c.id);
       const open =
         c.kind !== 'textValue' && isCell(c) ? itemAt(ctx.story, { space, offset: 0 }) : null;
-      return open ? [{ id: c.id, open, lends: lendingOf(ctx, open, suggestions) }] : [];
+      return open ? [{ id: c.id, open, lends: lendingsOf(ctx, open, suggestions) }] : [];
     });
     const gone = cells.filter((c) => columns.has(c.id));
-    const lentInRow = new Set(cells.flatMap((c) => (c.lends ? [c.lends.suggestion] : [])));
+    const lending = new Set(cells.flatMap((c) => c.lends.map((r) => r.suggestion)));
     for (const { id, open, lends } of gone.length === 0 ? [] : cells) {
-      const width = lends?.element ? childNamed(lends.element, 'tcW') : undefined;
       if (columns.has(id)) {
         continue;
       }
 
-      if (width) {
-        lent.set(id, width);
+      const shown = shownRecord(ctx, open, 'tcPr');
+      const holds = (cell: (typeof gone)[number]): boolean => {
+        const column = columns.get(cell.id) ?? '';
+        if (shown !== null) {
+          return holdsCell(shown, open, cell.open);
+        }
+
+        const lender = lends.some((r) => r.suggestion === column);
+        return !lender && (lending.has(column) || holdsCell(null, open, cell.open));
+      };
+      if (gone.every(holds)) {
         continue;
       }
 
-      const shown = shownRecord(ctx, open, 'tcPr');
-      const holds = (cell: (typeof gone)[number]) =>
-        (shown === null && lentInRow.has(columns.get(cell.id) ?? '')) ||
-        holdsCell(shown, open, cell.open);
-      if (!gone.every(holds)) {
+      const last = lends.at(-1)?.element;
+      const width = last ? childNamed(last, 'tcW') : undefined;
+      if (width) {
+        lent.set(id, width);
+      } else {
         kept.add(id);
       }
     }
@@ -314,12 +323,12 @@ function survivorsOf(
   return { kept, lent };
 }
 
-/** The last record of what a removed column (of `suggestions`) lent a cell, once it shows no more. */
-function lendingOf(
+/** The records of what removed columns (of `suggestions`) lent a cell, once they show no more. */
+function lendingsOf(
   ctx: ComposeContext,
   open: OrderedItem,
   suggestions: ReadonlySet<string>
-): OrderedElementRecord | undefined {
+): OrderedElementRecord[] {
   const records = open.props.filter(
     (r): r is OrderedElementRecord =>
       r.kind === 'element' &&
@@ -328,7 +337,7 @@ function lendingOf(
       suggestions.has(r.suggestion) &&
       ctx.rejectedOrDrawnSo(r.suggestion)
   );
-  return records.sort((a, b) => a.seq - b.seq).at(-1);
+  return records.sort((a, b) => a.seq - b.seq);
 }
 
 /** A cell's span over grid columns (`w:gridSpan`), 1 when absent. */
