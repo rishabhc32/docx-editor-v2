@@ -74,9 +74,9 @@ function* notesWithOwner(
  * whole note plain), so the notes part alone cannot say so. The plain items take the suggestion
  * (unmarked, as the note's paragraph marks are), and so do the items of an insertion with the
  * reference's author and date (the note's runs, joined with their `w:id`s). Text typed in it at
- * another time keeps its own label. A note that a reference of the file's own text cites is no
- * new note, though a suggestion inserts another reference to it: a move's copy of a reference
- * names the note its source names (null in `cited`).
+ * another time keeps its own label. A note that a reference of the file's own text or a move's
+ * copy of a reference cites is no new note (null in `cited`): the copy names the note its source
+ * names (design D20), also once a direct deletion took the source.
  */
 export function linkNewNotes(doc: OrderedDocument): void {
   const cited = new Map<string, string | null>();
@@ -88,7 +88,7 @@ export function linkNewNotes(doc: OrderedDocument): void {
     for (const item of story.tree.items()) {
       const key = referenceKeyOf(item);
       if (key !== undefined && cited.get(key) !== null) {
-        cited.set(key, item.by);
+        cited.set(key, item.move === null ? item.by : null);
       }
     }
   }

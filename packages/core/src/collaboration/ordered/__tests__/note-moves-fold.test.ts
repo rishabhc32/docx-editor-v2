@@ -9,7 +9,7 @@ import { orderedCardSeen } from '../change/apply-decide.ts';
 import { openOrderedWordFile, type OrderedWordFile } from '../client/open.ts';
 import { orderedPackageBytes } from '../compose/package.ts';
 import type { OrderedDocument } from '../model/types.ts';
-import { apply, at, DIRECT, EDIT, FOOTNOTES } from './change-apply-fixture.ts';
+import { apply, at, DIRECT, EDIT, FOOTNOTES, markOf } from './change-apply-fixture.ts';
 import { checkFold, folded, mediaStore } from './fold-check.ts';
 import { docx, MATRIX_EXTRAS, p, t } from './word-fixtures.ts';
 
@@ -179,6 +179,35 @@ describe("the organiser's direct deletion of a moved copy of a note reference", 
     await checkNotes(fileWith(FOOTNOTE), edit, {
       accepted: [ANNEX],
       rejected: ['footnote reference 1', FEES, ANNEX],
+    });
+  });
+});
+
+// Ana centres the note's paragraph; the organiser's direct deletion takes the move's struck source,
+// so only the copy cites the note. The note stays the file's own (a moved reference names its
+// source's note), and Ana's change stays a card of its own, as the editor alone keeps them. A
+// reject takes the copy, and the note goes with its last reference.
+describe("the organiser's direct deletion of a move's struck source", () => {
+  test("the note stays the file's own, and its change a card of its own", async () => {
+    const edit = (doc: OrderedDocument) => {
+      const centred = apply(
+        doc,
+        'ana:1',
+        {
+          kind: 'paragraph-property',
+          ...NOTE_EDIT,
+          marks: [markOf(doc, 2, FOOTNOTES)],
+          properties: [{ localName: 'jc', attributes: { val: 'center' } }],
+        },
+        'Ana'
+      );
+      const moved = moveTerms(doc);
+      apply(doc, 'olive:2', { kind: 'delete', ...DIRECT, from: at(doc, 0, 7), to: at(doc, 0, 14) });
+      return [...centred.suggestions, ...moved];
+    };
+    await checkNotes(fileWith(FOOTNOTE), edit, {
+      accepted: ['footnote reference 1', FEES, ANNEX],
+      rejected: [ANNEX],
     });
   });
 });

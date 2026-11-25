@@ -1,0 +1,10 @@
+{
+  "impact": "compatible",
+  "fields": [],
+  "before": "A load read a note whose every shown reference a suggestion inserted as a new note of that suggestion, a move's copy of a reference too. Once the organiser's direct deletion took a pending move's source, a fold gave the file's own note to the move, and another person's change in the note joined the move's card.",
+  "after": "A move's copy of a note reference makes no new note on a load: it names the note its source names (design D20), as the live room and the editor alone read it. The cards and the decided files are the same live and after each fold.",
+  "reason": "Change messages, the change log and the Yjs document format do not change. The checkpoint manifest and its version 5 stay. Only how a load reads the owner of a note that a move's copy cites changes; every copy loads with the same code version, so the copies agree. Ordered rooms are not deployed yet, so no room needs a migration.",
+  "tests": ["packages/core/src/collaboration/ordered/__tests__/note-moves-fold.test.ts"],
+  "changeset": "ordered-moved-note-copy",
+  "migration": null
+}
