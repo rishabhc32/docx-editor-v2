@@ -1596,7 +1596,7 @@ export type PerformanceDiagnosticCode = 'performance.slow-interaction';
 export type ReviewChangeKind = 'insert' | 'delete' | 'replace' | 'moveFrom' | 'moveTo' | 'format' | 'paragraphMark' | 'structural';
 
 // @public
-export type ReviewDiagnosticCode = 'review.revision-unsupported' | 'review.incomplete-group' | 'review.retained-structure' | 'review.stale-revision';
+export type ReviewDiagnosticCode = 'review.revision-unsupported' | 'review.incomplete-group' | 'review.retained-structure' | 'review.stale-revision' | 'review.protected-content';
 
 // @public
 export function reviewDiagnosticCode(reason: string): ReviewDiagnosticCode | null;
@@ -1654,7 +1654,7 @@ export interface RevisionBatchResult {
 export type RevisionBatchSkipDetail = RevisionSiteRefusal | 'unrecorded-properties' | 'read-only' | 'no-sites';
 
 // @public
-export type RevisionBatchSkipReason = 'unsupported-revision' | 'incomplete-group' | 'retained-structure' | 'unknown-revision';
+export type RevisionBatchSkipReason = 'unsupported-revision' | 'incomplete-group' | 'retained-structure' | 'unknown-revision' | 'locked';
 
 // @public
 export type RevisionSiteRefusal = 'unaddressed' | 'misplaced-marker' | 'nested-marker' | 'unsupported-structure' | 'unsupported-move';

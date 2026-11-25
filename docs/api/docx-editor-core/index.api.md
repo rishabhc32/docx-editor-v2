@@ -3203,7 +3203,7 @@ export interface ReviewCustomPlacement extends ReviewItemPlacementBase {
 }
 
 // @public
-export type ReviewDiagnosticCode = 'review.revision-unsupported' | 'review.incomplete-group' | 'review.retained-structure' | 'review.stale-revision';
+export type ReviewDiagnosticCode = 'review.revision-unsupported' | 'review.incomplete-group' | 'review.retained-structure' | 'review.stale-revision' | 'review.protected-content';
 
 // @public
 export type ReviewDisplayMode = RevisionDisplayMode | 'simple-markup';

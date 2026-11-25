@@ -3533,7 +3533,9 @@ export interface PersistencePort {
 export function planRevisionAuthorChange(part: OoxmlPart, revision: RevisionAttributionInput, keys?: readonly string[], scopeRoot?: OoxmlNode, authors?: readonly string[]): RevisionAuthorPlan;
 
 // @internal
-export function planRevisionBatch(part: OoxmlPart, action: 'accept' | 'reject', keys?: readonly string[], scopeRoot?: OoxmlNode): {
+export function planRevisionBatch(part: OoxmlPart, action: 'accept' | 'reject', keys?: readonly string[], scopeRoot?: OoxmlNode, options?: {
+    readonly skipLocked?: boolean;
+}): {
     ops: readonly TreeDocOp[];
     result: RevisionBatchResult;
 };
@@ -4125,7 +4127,7 @@ export interface RevisionBatchResult {
 export type RevisionBatchSkipDetail = RevisionSiteRefusal | 'unrecorded-properties' | 'read-only' | 'no-sites';
 
 // @public
-export type RevisionBatchSkipReason = 'unsupported-revision' | 'incomplete-group' | 'retained-structure' | 'unknown-revision';
+export type RevisionBatchSkipReason = 'unsupported-revision' | 'incomplete-group' | 'retained-structure' | 'unknown-revision' | 'locked';
 
 // @public
 export function revisionItemsOf(part: OoxmlPart): readonly ReviewRevisionItem[];
