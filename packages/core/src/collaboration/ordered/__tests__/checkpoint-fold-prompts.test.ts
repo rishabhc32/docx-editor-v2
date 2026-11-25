@@ -315,4 +315,30 @@ describe("a control's prompt shown again, decided card by card after a fold", ()
       expect(shown(copy.document)).toEqual(shown(doc));
     });
   }
+
+  // Olive's link round two letters of the prompt, kept by a fold, her bold on the prompt, then
+  // her value: the prompt goes whole, the link and its words too. Before, a load marked the
+  // link's edges as the prompt's, so the link read as a control in the prompt and its words with
+  // her bold stayed beside the value
+  test('a link round prompt words, formatted, then a value over the prompt', async () => {
+    const prompt = t('Click here to enter text.', '<w:rStyle w:val="PlaceholderText"/>');
+    const control =
+      '<w:sdt><w:sdtPr><w:id w:val="4"/><w:showingPlcHdr/><w:text/></w:sdtPr>' +
+      `<w:sdtContent>${prompt}</w:sdtContent></w:sdt>`;
+    const file = docx(p(t('Signed by ') + control + t(' for the buyer.')));
+    const opened = openOrderedWordFile(file, { file: 1 });
+    const blobs = mediaStore(opened.base);
+    const [from, to] = [at(opened.document, 0, 11), at(opened.document, 0, 13)];
+    const href = 'https://example.com/fees';
+    const link = { kind: 'insert-link', ...DIRECT, from, to, href } as const;
+    apply(opened.document, 'olive:1', link, 'Olive');
+    const { document: doc, base } = await folded(opened.document, opened.base, 2, blobs);
+    const bold = { kind: 'format', ...EDIT, properties: [{ localName: 'b' }] } as const;
+    apply(doc, 'olive:2', { ...bold, from: at(doc, 0, 10), to: at(doc, 0, 35) }, 'Olive');
+    const box = addressOf(opens(doc, 'sdt')[0]!);
+    const value = { kind: 'text', text: 'Party a' } as const;
+    apply(doc, 'olive:3', { kind: 'control-value', ...EDIT, control: box, value }, 'Olive');
+    expect(partsOf(doc).join('')).not.toContain('li</w:t>');
+    await checkEveryCard(doc, base, blobs, 'a link round prompt words');
+  });
 });

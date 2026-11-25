@@ -1,0 +1,10 @@
+{
+  "impact": "compatible",
+  "fields": [],
+  "before": "A load marked the edges of a link inside a control's prompt as prompt items, while the room makes a new link round prompt words with unmarked edges. The loaded link then read as a control inside the prompt, so content over the prompt left the link and its words when a pending suggestion was on them, unlike the same room before a fold.",
+  "after": "A load marks a prompt's words and a control's open item, not the edges of a link or another container in it (markPrompt in load/state.ts), so a link in a prompt reads the same live and after a fold.",
+  "reason": "Change messages, the change log and its kinds keep their meaning, and the Yjs document format and the checkpoint format (version 5) do not change. Only how a load labels a link's edges in a prompt changes, as the room labels them. An ordered room admits only clients of its own code version, and ordered rooms are not deployed yet, so no room needs a migration.",
+  "tests": ["packages/core/src/collaboration/ordered/__tests__/checkpoint-fold-prompts.test.ts"],
+  "changeset": "ordered-link-in-prompt-load",
+  "migration": null
+}
