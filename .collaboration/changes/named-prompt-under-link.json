@@ -1,0 +1,10 @@
+{
+  "impact": "compatible",
+  "fields": [],
+  "before": "A reject of a value over a control's prompt that the organiser had linked kept the room's own prompt with the link and its relationship, while the control named a glossary block: after a fold the file showed that block, as the engine does.",
+  "after": "A control emptied by the decision is drawn with no runs and no links (emptied), so the engine's restore shows the block the control names, live as after a fold.",
+  "reason": "Change messages, the change log and its kinds keep their meaning, and the Yjs document format and the checkpoint format do not change. Only the room's units and Word file of such a control after the decision change, and they now equal the editor alone and a fold. An ordered room admits only clients of its own code version.",
+  "tests": ["packages/core/src/collaboration/ordered/__tests__/checkpoint-fold-prompts.test.ts"],
+  "changeset": "named-prompt-under-link",
+  "migration": null
+}

@@ -1,6 +1,7 @@
 // A control that names a glossary prompt shows that prompt once its content went, settled after
 // each change (task 9.6). The writes go in the change's undo record.
 
+import { isHyperlinkNode } from '../../../store/package/hyperlink.ts';
 import { createNodeIdAllocator, replaceNode } from '../../../store/package/ooxml-edit.ts';
 import { ooxmlTreesEqual } from '../../../store/package/ooxml-serialize.ts';
 import type { OoxmlElement, OoxmlNode } from '../../../store/package/ooxml-tree.ts';
@@ -480,19 +481,25 @@ const isPromptControl = (item: OrderedItem): boolean =>
 const isRun = (node: OoxmlNode): boolean => node.kind === 'run' || isWml(node, 'r');
 const isParagraph = (node: OoxmlNode): boolean => node.kind === 'paragraph' || isWml(node, 'p');
 
+/** A run, or a link with its runs: the engine drops a link whose words all went. */
+const isWords = (node: OoxmlNode): boolean => isRun(node) || isHyperlinkNode(node);
+
 /**
- * The control as an edit that took all its content leaves it: no prompt flag, and no runs in its
- * content (at block level, its paragraph keeps its properties and markers).
+ * The control as an edit that took all its content leaves it: no prompt flag, and no runs or
+ * links in its content (at block level, its paragraph keeps its properties and markers).
  */
 function emptied(control: OoxmlElement): OoxmlElement {
-  const withoutRuns = (nodes: readonly OoxmlNode[]): OoxmlNode[] =>
+  const withoutWords = (nodes: readonly OoxmlNode[]): OoxmlNode[] =>
     nodes.flatMap((node) => {
-      if (node.kind === 'textValue' || isRun(node)) return [];
+      if (node.kind === 'textValue' || isWords(node)) {
+        return [];
+      }
+
       return isParagraph(node)
         ? [
             withChildren(
               node,
-              node.children.filter((c) => !isRun(c))
+              node.children.filter((c) => !isWords(c))
             ),
           ]
         : [node];
@@ -506,7 +513,7 @@ function emptied(control: OoxmlElement): OoxmlElement {
           child,
           child.children.filter((c) => !isWml(c, 'showingPlcHdr'))
         );
-      return isControlContent(child) ? withChildren(child, withoutRuns(child.children)) : child;
+      return isControlContent(child) ? withChildren(child, withoutWords(child.children)) : child;
     })
   );
 }

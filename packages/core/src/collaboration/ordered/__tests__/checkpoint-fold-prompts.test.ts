@@ -154,6 +154,41 @@ describe("a control's prompt shown again, decided card by card after a fold", ()
     });
   }
 
+  // After a fold the control names the glossary block Ben's value kept: a reject of Ana's value
+  // over the prompt shows that block, not Olive's link she made on the prompt, as the engine does
+  test('a link on a prompt that names a block, under a value rejected', async () => {
+    const prompt = t('Click here to enter text.', '<w:rStyle w:val="PlaceholderText"/>');
+    const control =
+      '<w:sdt><w:sdtPr><w:id w:val="4"/><w:showingPlcHdr/><w:text/></w:sdtPr>' +
+      `<w:sdtContent>${prompt}</w:sdtContent></w:sdt>`;
+    const file = docx(p(t('Signed by ') + control + t(' for the buyer.')));
+    const { document: doc, base } = openOrderedWordFile(file, { file: 1 });
+    const blobs = mediaStore(base);
+    const value = (room: OrderedDocument, text: string) =>
+      ({
+        kind: 'control-value',
+        ...EDIT,
+        control: addressOf(opens(room, 'sdt')[0]!),
+        value: { kind: 'text', text },
+      }) as const;
+    const reject = (room: OrderedDocument, id: string) =>
+      ({
+        kind: 'decide',
+        cards: [{ suggestions: orderedCardSeen(room, id) ?? [] }],
+        status: 'rejected',
+      }) as const;
+    apply(doc, 'ben:1', value(doc, 'Acme'), 'Ben');
+    apply(doc, 'olive:1', reject(doc, 'S:ben:1.1'), 'Olive');
+    const { document: room, base: named } = await folded(doc, base, 2, blobs);
+    const link = { kind: 'insert-link', ...DIRECT, href: 'https://example.com/fees' } as const;
+    apply(room, 'olive:2', { ...link, from: at(room, 0, 31), to: at(room, 0, 33) }, 'Olive');
+    apply(room, 'ana:1', value(room, 'Acme due'));
+    await checkFold(room, named, blobs, 'a link on a named prompt');
+    apply(room, 'olive:3', reject(room, 'S:ana:1.1'), 'Olive');
+    expect(textOf(room, 0)).toBe('Signed by Click here to enter text. for the buyer.');
+    expect(partsOf(room).join('')).not.toContain('hyperlink');
+  });
+
   // The prompt a party typed over holds a combo box: after a fold the glossary gives it back, and a
   // reject of the typing shows the combo box in it again, not its words alone, and each of its
   // paragraphs. They are the prompt's own: typing in its first drops the second, as live
