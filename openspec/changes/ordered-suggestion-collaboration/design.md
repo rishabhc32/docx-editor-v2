@@ -47,6 +47,7 @@ Layout inside the folder:
 | `compose/` | items to Word part, whole story or one paragraph; revision ids |
 | `edits/` | insert, delete, format, split, join, paragraph and table properties, controls, links, moves, direct edits |
 | `placement.ts` | the engine's placement rules, one function |
+| `locked-content.ts` | the content the engine keeps from edits: a table of contents, a bound control, a content-locked control |
 | `decide.ts` | accept, reject, card grouping |
 | `change/` | change types, validation, id minting, apply |
 | `change/kinds/` | the change kinds each group of section 9 adds: one file for each group, one table (`registry.ts`) |

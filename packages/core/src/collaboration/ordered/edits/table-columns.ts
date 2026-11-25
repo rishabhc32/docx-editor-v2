@@ -9,7 +9,8 @@ import { insertItems, relabel } from '../model/mutations.ts';
 import { OrderedRefusal } from '../model/refusal.ts';
 import type { OrderedItem, OrderedPropertyTarget, OrderedSuggestion } from '../model/types.ts';
 import { childNamed, isWml, withChildren } from '../ooxml-nodes.ts';
-import { closeOf, itemsInside, refuseLockedTable } from '../placement.ts';
+import { closeOf, itemsInside } from '../placement.ts';
+import { refuseLockedTable } from '../locked-content.ts';
 import { retractSuggestion } from './retract.ts';
 import { holdWithin, nestedIn, suggestionFor, takeBack, withNewIds, type Ctx } from './context.ts';
 import {

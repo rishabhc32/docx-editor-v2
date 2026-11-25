@@ -15,13 +15,8 @@ import { insertItems, relabel } from '../model/mutations.ts';
 import type { OrderedItem } from '../model/types.ts';
 import { engineRefusal, OrderedRefusal } from '../model/refusal.ts';
 import { isWml } from '../ooxml-nodes.ts';
-import {
-  closeOf,
-  itemsInside,
-  refuseLockedBlocks,
-  refuseLockedTable,
-  refuseLockedWithin,
-} from '../placement.ts';
+import { closeOf, itemsInside } from '../placement.ts';
+import { refuseLockedBlocks, refuseLockedTable, refuseLockedWithin } from '../locked-content.ts';
 import { holdWithin, nestedIn, pendingOwn, suggestionFor, takeBack, type Ctx } from './context.ts';
 import { takeBackNotesOf } from './note-body.ts';
 import { othersPending } from './retract.ts';

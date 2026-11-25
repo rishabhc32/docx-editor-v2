@@ -6,7 +6,7 @@ import { insertItems, isolateUnits, relabel } from '../model/mutations.ts';
 import { OrderedRefusal } from '../model/refusal.ts';
 import { currentFace, suggestionFor, withNewIds, type Ctx } from './context.ts';
 import { moveRangeItems } from './marker.ts';
-import { refuseLocked } from '../placement.ts';
+import { refuseLocked } from '../locked-content.ts';
 import { groupBySpace, insertText, type Piece } from './text.ts';
 
 /** Refuse words a move or a copy cannot carry: a prompt, a field, or an object outside a run. */

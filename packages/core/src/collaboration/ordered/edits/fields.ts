@@ -26,7 +26,8 @@ import {
   type OrderedItem,
 } from '../model/types.ts';
 import { attributeOf, withChildren } from '../ooxml-nodes.ts';
-import { firstItemOf, isTableOfContents, refuseLocked } from '../placement.ts';
+import { firstItemOf } from '../placement.ts';
+import { isTableOfContents, refuseLocked } from '../locked-content.ts';
 import { strikeItems, suggestionFor, withNewIds, type Ctx } from './context.ts';
 import { directInsert, settle } from './direct.ts';
 import { freshDecimal, newMarkerItem } from './marker.ts';

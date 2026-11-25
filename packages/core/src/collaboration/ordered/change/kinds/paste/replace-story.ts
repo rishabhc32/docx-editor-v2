@@ -9,7 +9,7 @@ import { createOrderedItem } from '../../../model/document.ts';
 import { insertItems, relabel } from '../../../model/mutations.ts';
 import { OrderedRefusal } from '../../../model/refusal.ts';
 import type { OrderedItem } from '../../../model/types.ts';
-import { refuseLockedWithin } from '../../../placement.ts';
+import { refuseLockedWithin } from '../../../locked-content.ts';
 import { at, fieldPath, Invalid, list, plainText, required } from '../../read.ts';
 import { ORDERED_CHANGE_LIMITS, type OrderedEditBase } from '../../types.ts';
 import { orderedKindSpec } from '../spec.ts';

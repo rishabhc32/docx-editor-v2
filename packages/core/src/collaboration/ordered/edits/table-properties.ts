@@ -10,7 +10,7 @@ import { relabel } from '../model/mutations.ts';
 import { OrderedRefusal } from '../model/refusal.ts';
 import type { OrderedElementRecord, OrderedItem, OrderedPropertyTarget } from '../model/types.ts';
 import { childNamed } from '../ooxml-nodes.ts';
-import { refuseLockedTable } from '../placement.ts';
+import { refuseLockedTable } from '../locked-content.ts';
 import { pendingOwn, suggestionFor, type Ctx } from './context.ts';
 import {
   blockOf,

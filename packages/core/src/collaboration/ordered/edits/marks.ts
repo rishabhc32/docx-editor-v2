@@ -31,16 +31,18 @@ import { attributeOf, childNamed, isWml, withChildren, withId } from '../ooxml-n
 import {
   breakSite,
   commonContainers,
-  formatPassesContentLock,
   insertAtSite,
   itemsInside,
-  refuseContentLock,
-  refuseLocked,
-  refuseLockedBlocks,
   siblings,
   withoutSectionBreak,
   type Site,
 } from '../placement.ts';
+import {
+  formatPassesContentLock,
+  refuseContentLock,
+  refuseLocked,
+  refuseLockedBlocks,
+} from '../locked-content.ts';
 import {
   currentFace,
   pendingOwn,

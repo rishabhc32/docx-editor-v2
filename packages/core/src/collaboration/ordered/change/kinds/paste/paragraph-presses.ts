@@ -11,7 +11,7 @@ import {
 import { settle } from '../../../edits/direct.ts';
 import { resolveOrderedPlace } from '../../../edits/places.ts';
 import type { OrderedParagraphOp } from '../../../model/types.ts';
-import { refuseLockedBlocks } from '../../../placement.ts';
+import { refuseLockedBlocks } from '../../../locked-content.ts';
 import type { OrderedChangeAddress } from '../../types.ts';
 
 /** One paragraph's press: its mark, and the op it takes. */

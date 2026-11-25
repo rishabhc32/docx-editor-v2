@@ -20,10 +20,10 @@ import {
   commonContainers,
   insertAtSite,
   promptSite,
-  refuseLocked,
   siteAt,
   type Site,
 } from '../../placement.ts';
+import { refuseLocked } from '../../locked-content.ts';
 import { nestedIn, type Ctx } from '../context.ts';
 import { holdsLines, promptBreakSite, splitContainers } from '../marks.ts';
 import { newParagraphIdentity, withParagraphIdentity } from '../para-ids.ts';

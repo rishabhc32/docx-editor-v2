@@ -25,13 +25,8 @@ import {
   type OrderedSuggestion,
 } from '../model/types.ts';
 import { relationshipIdAttribute, withChildren, withId, wmlAttribute } from '../ooxml-nodes.ts';
-import {
-  closeOf,
-  itemsInside,
-  refuseLocked,
-  refuseLockedAt,
-  refuseLockedWithin,
-} from '../placement.ts';
+import { closeOf, itemsInside } from '../placement.ts';
+import { refuseLocked, refuseLockedAt, refuseLockedWithin } from '../locked-content.ts';
 import {
   currentFace,
   pendingOwn,

@@ -26,7 +26,7 @@ import type { OrderedObjectOp, OrderedObjectRecord } from '../model/objects.ts';
 import { OrderedRefusal } from '../model/refusal.ts';
 import { orderedRelationshipId } from '../model/resources.ts';
 import type { OrderedItem } from '../model/types.ts';
-import { refuseLockedAt } from '../placement.ts';
+import { refuseLockedAt } from '../locked-content.ts';
 import { scratchCompose, type Ctx } from './context.ts';
 import { directInsert, settle } from './direct.ts';
 import { resolveOrderedPlace, type OrderedPlace } from './places.ts';

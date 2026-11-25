@@ -23,7 +23,7 @@ import { insertItems } from '../model/mutations.ts';
 import { engineRefusal, OrderedRefusal } from '../model/refusal.ts';
 import type { OrderedItem } from '../model/types.ts';
 import { isControlContent, isWml } from '../ooxml-nodes.ts';
-import { refuseLocked } from '../placement.ts';
+import { refuseLocked } from '../locked-content.ts';
 import { strikeItems, suggestionFor, type Ctx } from './context.ts';
 import { engineApply } from './control-shell.ts';
 import { templateItems, viewPart } from './templates.ts';

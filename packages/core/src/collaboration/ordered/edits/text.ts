@@ -27,11 +27,11 @@ import {
   insertAtSite,
   insideSite,
   promptSite,
-  refuseLocked,
   siteAt,
   withComplexScript,
   type Site,
 } from '../placement.ts';
+import { refuseLocked } from '../locked-content.ts';
 import {
   currentFace,
   pendingOwn,
@@ -373,7 +373,9 @@ function pendingSuggestionsOf(
 const holdsChangeRecord = (properties: OoxmlElement | null, name: string): boolean =>
   properties?.children.some((child) => isWml(child, name)) === true;
 
-/** The pending suggestions of an item's records of `target` that Word writes a change record for. */
+/**
+ * The pending suggestions of an item's records of `target` that Word writes a change record for.
+ */
 export const recordedPending = (
   ctx: Pick<Ctx, 'doc'>,
   item: OrderedItem,

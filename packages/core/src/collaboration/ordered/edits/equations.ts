@@ -11,7 +11,7 @@ import { isHidden } from '../model/document.ts';
 import { OrderedRefusal } from '../model/refusal.ts';
 import type { OrderedItem } from '../model/types.ts';
 import { withChildren, withId } from '../ooxml-nodes.ts';
-import { refuseLockedAt } from '../placement.ts';
+import { refuseLockedAt } from '../locked-content.ts';
 import { withNewIds, type Ctx } from './context.ts';
 import { directDelete, directInsert } from './direct.ts';
 import { deleteText, insertText, type Piece } from './text.ts';

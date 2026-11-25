@@ -40,7 +40,7 @@ import type {
   OrderedPropertyRecord,
   OrderedSuggestion,
 } from '../model/types.ts';
-import { paragraphOfItem, refuseLockedAt } from '../placement.ts';
+import { paragraphOfItem, refuseLockedAt } from '../locked-content.ts';
 import { pendingOwn, scratchCompose, suggestionFor, withNewIds, type Ctx } from './context.ts';
 import { withPropertyRecord } from './text.ts';
 
