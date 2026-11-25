@@ -1,4 +1,5 @@
-// A checkpoint's run and paragraph properties drawn only for change records (design D14).
+// A checkpoint's run and paragraph properties drawn only for change records, and a table's grid
+// record drawn only for a row height's anchor (design D14).
 
 import type { OoxmlElement } from '../../../store/package/ooxml-tree.ts';
 import { createOrderedItem } from '../model/document.ts';
@@ -11,7 +12,9 @@ import { childWhere, isParagraphProperties, withChildren, withMarkFace } from '.
  * only for change records (`oc:drawn`, by node id in `drawn`) and that holds nothing once the
  * load took its records out. The room drew it where the run or the paragraph has none, so a
  * decision that takes the records away draws none, after a fold as in the room. A file's own
- * empty properties carry no mark and stay, as the engine keeps them.
+ * empty properties carry no mark and stay, as the engine keeps them. A container's record of one
+ * the checkpoint marks (the grid record of a height on its row's own anchor) is no record of the
+ * room's: compose writes it again while the height is pending (`compose/row-heights.ts`).
  */
 export function withoutDrawnProperties(doc: OrderedDocument, drawn: ReadonlySet<string>): void {
   if (drawn.size === 0) {
@@ -27,8 +30,14 @@ export function withoutDrawnProperties(doc: OrderedDocument, drawn: ReadonlySet<
     for (let item = story.tree.first(); item !== null; item = story.tree.next(item)) {
       const face = empty(item.face) ? null : item.face;
       const node = item.kind === 'mark' ? markShell(item, face, empty) : item.node;
-      if (face !== item.face || node !== item.node) {
-        const next = createOrderedItem({ ...item, face, node });
+      const props = item.props.filter(
+        (record) =>
+          record.kind !== 'element' ||
+          record.fileRecord === undefined ||
+          !drawn.has(record.fileRecord.id)
+      );
+      if (face !== item.face || node !== item.node || props.length !== item.props.length) {
+        const next = createOrderedItem({ ...item, face, node, props });
         replaceItems(doc, story, [item], [next]);
         item = next;
       }

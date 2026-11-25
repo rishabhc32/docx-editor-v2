@@ -103,6 +103,20 @@ describe('row heights made in turn', () => {
     await checkFold(doc, base, mediaStore(base), 'a height beside a column taken back');
   });
 
+  // A height that leaned on another party's table anchor leans on its own row's once that one is
+  // decided: compose writes the anchor's grid record, which is no record of the room after a fold
+  test.each(['accepted', 'rejected'] as const)(
+    "a party's height on the table's anchor, another's height, then the first %s",
+    async (status) => {
+      const { document: doc, base } = openOrderedWordFile(APPLY_FILE, { file: 1 });
+      apply(doc, 'ben:1', { ...height(doc, 0, 500), ...EDIT }, 'Ben');
+      apply(doc, 'ana:1', { ...height(doc, 1, 600), ...EDIT }, 'Ana', ANA_1);
+      const suggestions = orderedCardSeen(doc, 'S:ben:1.1')!;
+      apply(doc, 'olive:1', { kind: 'decide', cards: [{ suggestions }], status }, 'Olive');
+      await checkFold(doc, base, mediaStore(base), `a height on its row's anchor, ${status}`);
+    }
+  );
+
   // An accepted height keeps the records it took from its author's table style after a fold, on
   // a row whose cells keep every record (another party's column lent them width)
   test("a party's table style and height, another's column, then the height accepted", async () => {
