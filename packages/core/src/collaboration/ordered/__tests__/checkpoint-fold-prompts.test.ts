@@ -316,6 +316,30 @@ describe("a control's prompt shown again, decided card by card after a fold", ()
     });
   }
 
+  // Olive's direct deletion empties a control of the file in a row Ana struck: another pending
+  // suggestion on the control's row does not keep its prompt away (`settleEmptiedControls`), live
+  // and after a fold
+  test("a control a direct deletion emptied in another person's struck row", async () => {
+    const control =
+      '<w:sdt><w:sdtPr><w:id w:val="4"/><w:text/></w:sdtPr>' +
+      `<w:sdtContent>${t('Two')}</w:sdtContent></w:sdt>`;
+    const cell =
+      '<w:tc><w:tcPr><w:tcW w:w="3000" w:type="dxa"/></w:tcPr>' +
+      p(t('Fee: ') + control) +
+      '</w:tc>';
+    const table =
+      '<w:tbl><w:tblPr><w:tblW w:w="0" w:type="auto"/></w:tblPr>' +
+      `<w:tblGrid><w:gridCol w:w="3000"/></w:tblGrid><w:tr>${cell}</w:tr></w:tbl>`;
+    const file = docx(p(t('Before.')) + table + p(t('After.')));
+    const { document: doc, base } = openOrderedWordFile(file, { file: 1 });
+    apply(doc, 'ana:1', { kind: 'delete-row', ...EDIT, row: addressOf(opens(doc, 'tr')[0]!) });
+    const words = { kind: 'delete', ...DIRECT, from: at(doc, 1, 5), to: at(doc, 1, 8) } as const;
+    apply(doc, 'olive:1', words, 'Olive');
+    expect(opens(doc, 'sdt')[0]?.prompt).toBe(true);
+    expect(textOf(doc, 1)).toBe('Fee: Click or tap here to enter text.');
+    await checkFold(doc, base, mediaStore(base), 'a control a direct deletion emptied');
+  });
+
   // Ben's italic on his new control's prompt is part of his insertion: Ana's typing over the
   // prompt keeps it in the glossary with the italic, as the engine keeps the prompt as it shows,
   // and the accept of his control shows the same block, live and after a fold

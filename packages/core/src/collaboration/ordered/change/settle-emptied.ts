@@ -122,9 +122,10 @@ export function settleContext(
 
 /**
  * Give each control an edit or a decision emptied its prompt as units, and take the prompt of a
- * control a direct edit emptied away again when its words come back. Left as they were: a
- * control with another pending insertion or deletion on it, one that is another person's pending
- * insertion and a decision emptied, and a block control that holds a block of its own.
+ * control a direct edit emptied away again when its words come back. Another pending suggestion
+ * on the control or around it (a struck row, a new cell) does not keep the prompt away. Left as
+ * they were: a control that is a pending insertion with nothing else pending on it and that a
+ * decision emptied, and a block control that holds a block of its own.
  */
 export function settleEmptiedControls(doc: OrderedDocument, apply: OrderedApplyContext): void {
   unprompt(doc);
