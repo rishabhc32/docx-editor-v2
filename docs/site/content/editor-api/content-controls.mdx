@@ -65,7 +65,9 @@ For an existing placeholder, prefer replacing the control value. For untracked r
 
 The runtime combines lock assignments on the same proxy. Changing one lock preserves the other without loading it first. Effective ancestor locks and binding checks still apply; lock setters do not bypass protection. `ContentControlLockState` exports `unlocked`, `sdtLocked`, `contentLocked`, and `sdtContentLocked` as vocabulary. There is no public combined `lock` property taking that alias.
 
-A group control (`w:group`) protects the content it holds outside its nested controls, as Word does. Writes and revision decisions there fail as protected content. A nested control's own content follows its own lock.
+A content lock keeps the control's own content: the content it holds outside its nested controls. A control nested in a `contentLocked` control stays editable, as Word does, and `cannotEdit` reads the lock over the control's own content. An `sdtContentLocked` control also keeps the content of the controls nested in it. A group control (`w:group`) protects its own content whatever its lock says, and Word saves every group as `contentLocked`, so the fields inside a group can be filled. Writes and revision decisions in a locked control's own content fail as protected content.
+
+`document.revisions.acceptAll()` and `rejectAll()`, and the same calls on `body.revisions`, leave the revisions in locked content and decide the others, as Word's Accept All and Reject All do. A collection from `Range.revisions` refuses the whole decision when a lock keeps one of its revisions.
 
 If you create the browser runtime over an editor that sets `contentLockPolicy.allowFormattingInLockedContent`, untracked font writes pass a content lock. Text writes, and font writes while `document.changeTrackingMode` tracks changes, still refuse. The server runtime does not take this option. For more information, see [Content controls](/docs/2.x/guides/content-controls#formatting-content-locked-controls).
 

@@ -1,0 +1,14 @@
+{
+  "impact": "compatible",
+  "fields": [],
+  "before": "A content lock in a room bound the content of every control nested in the locked control, for the organiser and a party alike, as the engine did, so a field in a Word-saved group (always contentLocked) could not be filled. A decision on a card in locked content was allowed in the room, and the editor alone refused a whole Accept All when one change sat in locked content.",
+  "after": "A content lock binds only the control's own content (lockInForce, the room's refuseLockedPlace): a control nested in a contentLocked control or a group takes edits, as in Word, and the outer control's own words stay refused by the same name (locked). sdtContentLocked and the removal half still bind nested controls. Typed text at a group's edge goes beside it. A decision on a card a lock keeps is left as locked, and the other cards are decided, as Word's Accept All and the editor alone's bulk decision do.",
+  "reason": "Change messages, the change log and its kinds keep their meaning, and the Yjs document format and the checkpoint format do not change. The room refuses by an existing reason; it now accepts edits in nested controls that Word accepts, and leaves locked cards of a decision, as the engine does. An ordered room admits only clients of its own code version, and ordered rooms are not deployed yet, so no room needs a migration.",
+  "tests": [
+    "packages/core/src/collaboration/ordered/__tests__/client/editor-controls-locked-group.test.ts",
+    "packages/core/src/collaboration/ordered/__tests__/client/editor-decide-all-locked.test.ts",
+    "packages/core/src/collaboration/ordered/__tests__/room-locked-places.test.ts"
+  ],
+  "changeset": "content-lock-own-content",
+  "migration": null
+}

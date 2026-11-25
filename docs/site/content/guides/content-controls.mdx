@@ -259,7 +259,7 @@ A new dropdown or combo box has no items. Add its items in Word, or fill a contr
 
 | Operation | Refusal condition | Reason |
 | --- | --- | --- |
-| Fill or edit | The control or an ancestor locks its content | `locked` |
+| Fill or edit | The control's own lock keeps its content, or an `sdtContentLocked` ancestor does | `locked` |
 | Remove | The control or an ancestor locks its wrapper | `locked` |
 | Fill | The control declares `w:dataBinding` | `bound` |
 | Fill | The value does not match the control type | `typeMismatch` |
