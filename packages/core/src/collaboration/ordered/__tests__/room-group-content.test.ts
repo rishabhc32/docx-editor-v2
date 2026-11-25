@@ -60,6 +60,7 @@ function verdicts(file: Uint8Array, cases: Readonly<Record<string, Make>>): stri
       out.push(`${name} ${who}: ${verdict}${changed ? ' (changed)' : ''}`);
     }
   }
+
   return out;
 }
 

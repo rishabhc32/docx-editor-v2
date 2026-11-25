@@ -554,6 +554,7 @@ describe('a control is written through the document’s own write path', () => {
     } catch (error) {
       inner = isDocxEditorError(error) ? (error.debugInfo.innerError?.code ?? '') : '';
     }
+
     expect(inner).toBe('edit.protected-content');
     expect(await mainXmlOf(runtime)).toBe(before);
   });
@@ -564,6 +565,7 @@ describe('a control is written through the document’s own write path', () => {
       const field = context.document.body.paragraphs.getLast();
       field.insertText('Q', 'End');
       await context.sync();
+
       // Reads answer the document as the batch was planned, so the text is read after the write
       field.load('text');
       await context.sync();

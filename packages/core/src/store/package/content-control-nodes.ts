@@ -806,6 +806,7 @@ export function ownContentLockOf(properties: ContentControlProperties): ContentC
   if (properties.type !== 'group') {
     return properties.lock;
   }
+
   return lockForbidsRemoval(properties.lock) ? 'sdtContentLocked' : 'contentLocked';
 }
 

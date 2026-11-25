@@ -31,6 +31,7 @@ function parseDoc(bodyInner: string): OoxmlPart {
   if (!result.ok) {
     throw new Error(result.reason);
   }
+
   return result.part;
 }
 

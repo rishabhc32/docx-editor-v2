@@ -14,19 +14,29 @@ import type { OffsetSpan } from './tree-op-segments.ts';
  * clipped itself to the unlocked side would silently do something other than what was asked.
  */
 export function intersects(span: OffsetSpan | null, range: OffsetSpan, writes: boolean): boolean {
-  if (span === null) return false;
+  if (span === null) {
+    return false;
+  }
+
   if (range.end <= range.start) {
     return writes
       ? range.start >= span.start && range.start < span.end
       : range.start > span.start && range.start < span.end;
   }
+
   return range.start < span.end && range.end > span.start;
 }
 
 /** Whether an op addresses only characters this control holds: the "filling in a field" case. */
 export function encloses(span: OffsetSpan | null, range: OffsetSpan, writes: boolean): boolean {
-  if (span === null) return false;
-  if (range.end <= range.start) return intersects(span, range, writes);
+  if (span === null) {
+    return false;
+  }
+
+  if (range.end <= range.start) {
+    return intersects(span, range, writes);
+  }
+
   return range.start >= span.start && range.end <= span.end;
 }
 
@@ -35,6 +45,7 @@ export function clipped(range: OffsetSpan, within: OffsetSpan | null): OffsetSpa
   if (within === null || range.end <= range.start) {
     return range;
   }
+
   return { start: Math.max(range.start, within.start), end: Math.min(range.end, within.end) };
 }
 
@@ -50,6 +61,7 @@ export function reachesOutside(
   if (range.end <= range.start) {
     return !spans.some((span) => intersects(span, range, writes));
   }
+
   const sorted = spans
     .filter((span): span is OffsetSpan => span !== null)
     .sort((a, b) => a.start - b.start);
@@ -58,10 +70,12 @@ export function reachesOutside(
     if (span.start > from) {
       return true;
     }
+
     from = Math.max(from, span.end);
     if (from >= range.end) {
       return false;
     }
   }
+
   return true;
 }

@@ -682,6 +682,7 @@ export function resolveReach(part: OoxmlPart, reach: TreeOpReach): ResolvedReach
         ? landingControls(part, reach.at, own)
         : [];
     const line = mergedLine(chain, landing);
+
     // The write lands in the innermost landing control, or else in the named one
     const owner = landing[landing.length - 1] ?? own;
     return {
@@ -728,6 +729,7 @@ export function resolveReach(part: OoxmlPart, reach: TreeOpReach): ResolvedReach
         const span = offsets.spanOf(entry.node);
         return span !== null && caret > span.start && caret < span.end;
       });
+
       // The new control goes into the own content of the innermost control around the caret
       touches.push(...touchesAlong(enclosing, split.length === 0));
       for (const entry of split) {
@@ -780,6 +782,7 @@ export function resolveReach(part: OoxmlPart, reach: TreeOpReach): ResolvedReach
       offsets ??= paragraphOffsetIndex(node);
       return offsets.spanOf(control);
     };
+
     // Whether the op reaches a place in `within` outside the controls `nested`: always, for a
     // whole node
     const range = target.range;
@@ -845,7 +848,10 @@ export function resolveReach(part: OoxmlPart, reach: TreeOpReach): ResolvedReach
  * other file-driven descent in this module.
  */
 function discardedContentControls(own: OoxmlNode, replacesContent: boolean): ControlTouch[] {
-  if (!replacesContent) return [];
+  if (!replacesContent) {
+    return [];
+  }
+
   return contentControlsIn(own).map((entry) => ({
     control: entry.node,
     locks: locksOf([...entry.ancestors, entry.node], true),
@@ -908,13 +914,19 @@ function resolveRevisionReach(
   }
   let seen = 0;
   const walk = (node: OoxmlNode, controls: readonly OoxmlNode[]): void => {
-    if (node.kind === 'textValue' || seen > MAX_REVISION_NODES) return;
-    if (!holdsRevisionContainer(node)) return;
+    if (node.kind === 'textValue' || seen > MAX_REVISION_NODES || !holdsRevisionContainer(node)) {
+      return;
+    }
+
     if (isRevisionNode(node, revision, localName, siteNodeIdSet)) {
       seen += 1;
-      if (controls.length === 0) unprotected.push(node.id);
+      if (controls.length === 0) {
+        unprotected.push(node.id);
+      }
+
       // The revision sits in the innermost control's own content
       touches.push(...touchesAlong(controls, true));
+
       // Only the direction that removes a revision wrapper's content removes nested controls.
       // The keep direction still reaches the marker and its enclosing controls above.
       if (revisionNodeRemovesContent(node, action)) {
@@ -947,10 +959,14 @@ function resolveRevisionReach(
     ...(scopeRootId === undefined ? {} : { scopeRootId }),
   });
   const walkStructural = (node: OoxmlNode, controls: readonly OoxmlNode[]): void => {
-    if (node.kind === 'textValue' || structural.size === 0) return;
+    if (node.kind === 'textValue' || structural.size === 0) {
+      return;
+    }
+
     const removed = structural.get(node.id);
     if (removed !== undefined) {
       touches.push(...touchesAlong(controls, true));
+
       // A control the decision removes loses its own content; one it moves keeps it
       for (const entry of contentControlsIn(node)) {
         touches.push({

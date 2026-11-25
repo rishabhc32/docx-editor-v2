@@ -96,6 +96,7 @@ function refuseGroupContent(
   inside?: OrderedItem
 ): void {
   const blocks = p.blocks.filter(isControl);
+
   // Each control once, however many characters of a long range sit in it
   const opens = new Map<string, OrderedItem | null>();
   const controlsOf = (segments: readonly string[]): OrderedItem[] => {
