@@ -139,6 +139,9 @@ const ITEM: Rules<OrderedItem> = {
     'they draw nothing and hold no card; only the undo of the press reads them'
   ),
   props: file('load/properties.ts and load/sections.ts read each change record of properties'),
+  takenBackLendings: dropped(
+    'only the cells of a column its author took back read them, and a fold keeps no such cell'
+  ),
   move: file('load/moves.ts: `w:moveFrom`, `w:moveTo` and the range name'),
   retracted: dropped('taken back by its author: compose writes none of it'),
   taken: UNDO_ONLY,

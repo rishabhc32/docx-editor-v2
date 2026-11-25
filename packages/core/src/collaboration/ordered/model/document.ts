@@ -83,6 +83,7 @@ export function createOrderedItem(init: OrderedItemInit): OrderedItem {
     fmts: NONE,
     cancelledFmts: NONE,
     props: NONE,
+    takenBackLendings: NONE,
     move: null,
     retracted: false,
     gone: false,

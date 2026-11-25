@@ -8,6 +8,7 @@ import { OrderedRefusal } from '../model/refusal.ts';
 import { takenFrom, withTakenFrom } from '../model/takeovers.ts';
 import type {
   OrderedDocument,
+  OrderedElementRecord,
   OrderedFormatRecord,
   OrderedItem,
   OrderedItemLabels,
@@ -55,6 +56,10 @@ function recordsWithout<T extends OrderedFormatRecord | OrderedPropertyRecord>(
 
   return out;
 }
+
+/** A column's width lent from a cell: Word writes no change record for it. */
+const isLentWidth = (record: OrderedPropertyRecord): boolean =>
+  record.kind === 'element' && record.target === 'tcPr' && record.untracked === true;
 
 /**
  * Take back `suggestion` for `maker`: what it inserted is taken back (it never existed for
@@ -119,8 +124,16 @@ export function retractSuggestion(
       change.cancelledFmts = item.cancelledFmts.filter((f) => f.suggestion !== suggestion);
     }
 
-    if (item.props.some((r) => r.suggestion === suggestion))
+    if (item.props.some((r) => r.suggestion === suggestion)) {
       change.props = recordsWithout(doc, item.props, suggestion);
+      const lent = item.props.filter(
+        (r): r is OrderedElementRecord => r.suggestion === suggestion && isLentWidth(r)
+      );
+      if (lent.length > 0) {
+        change.takenBackLendings = [...item.takenBackLendings, ...lent];
+      }
+    }
+
     if (item.within.dels.includes(suggestion))
       change.within = {
         by: item.within.by,

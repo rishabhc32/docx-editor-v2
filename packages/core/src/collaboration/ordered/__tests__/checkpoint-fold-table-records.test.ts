@@ -2,11 +2,23 @@
 // order they were made, and the organiser's direct columns are the table's own, live as after a
 // fold and as in the editor alone.
 
-import { describe, test } from 'bun:test';
+import { describe, expect, test } from 'bun:test';
+import { serializeOoxmlPart } from '../../../store/package/ooxml-tree.ts';
 import { orderedCardSeen } from '../change/apply-decide.ts';
 import { openOrderedWordFile } from '../client/open.ts';
+import { composeOrderedPart } from '../compose/compose.ts';
+import { orderedCards } from '../decide.ts';
 import type { OrderedDocument } from '../model/types.ts';
-import { addressOf, apply, APPLY_FILE, at, DIRECT, EDIT, opens } from './change-apply-fixture.ts';
+import {
+  addressOf,
+  apply,
+  APPLY_FILE,
+  at,
+  BODY,
+  DIRECT,
+  EDIT,
+  opens,
+} from './change-apply-fixture.ts';
 import { checkFold, folded, mediaStore } from './fold-check.ts';
 import { docx, p, t } from './word-fixtures.ts';
 
@@ -225,6 +237,50 @@ describe('a column removed under a later one', () => {
     apply(doc, 'ben:3', { kind: 'delete-column', ...EDIT, cell: cell(doc, 2) }, 'Ben');
     await checkFold(doc, base, mediaStore(base), 'a column taken back beside a later cell');
   });
+
+  /** The grid's widths and each row's cell widths, as compose draws them. */
+  const widths = (doc: OrderedDocument): string[] =>
+    (
+      serializeOoxmlPart(composeOrderedPart(doc, BODY).part).match(
+        /<w:(tblGrid|tr)>.*?<\/w:\1>/g
+      ) ?? []
+    ).map((row) =>
+      [...row.matchAll(/<w:(?:gridCol|tcW)[^>]*w:w="(\d+)"/g)].map((m) => m[1]).join(',')
+    );
+  const decide = (
+    doc: OrderedDocument,
+    id: string,
+    suggestion: string,
+    status: 'accepted' | 'rejected'
+  ) =>
+    apply(
+      doc,
+      id,
+      { kind: 'decide', cards: [{ suggestions: orderedCardSeen(doc, suggestion)! }], status },
+      'Olive'
+    );
+
+  // A take-back is its author's undo: the editor alone withdraws its own pending column by
+  // rejecting its cells, so the cell the column took width from gets back what is left of the
+  // column's cell after a later column took part of it, as a reject gives it back
+  test.each(['taken back', 'rejected'])(
+    "a party's column %s, after the party's column made from its cell",
+    async (how) => {
+      const { document: doc } = openOrderedWordFile(TABLE_FILE, { file: 1 });
+      apply(doc, 'ben:1', column(doc, 0), 'Ben');
+      apply(doc, 'ben:2', column(doc, 1), 'Ben');
+      if (how === 'taken back') {
+        apply(doc, 'ben:3', { kind: 'delete-column', ...EDIT, cell: cell(doc, 1) }, 'Ben');
+      } else {
+        decide(doc, 'olive:1', 'S:ben:1.1', 'rejected');
+      }
+
+      expect(widths(doc)).toEqual(['2250,750,3000', '2250,750,3000', '2250,750,3000']);
+      expect(orderedCards(doc).map((card) => card.suggestions)).toEqual([['S:ben:2.1']]);
+      decide(doc, 'olive:2', 'S:ben:2.1', 'rejected');
+      expect(widths(doc)).toEqual(['3000,3000', '3000,3000', '3000,3000']);
+    }
+  );
 });
 
 describe("the organiser's direct columns at a decision", () => {

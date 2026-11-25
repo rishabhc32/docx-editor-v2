@@ -284,19 +284,24 @@ function survivorsOf(
   return { kept, lent };
 }
 
-/** The records of what removed columns (of `suggestions`) lent a cell, once they show no more. */
+/**
+ * The records of what removed columns (of `suggestions`) lent a cell, once they show no more:
+ * rejected, or taken back by their author.
+ */
 function lendingsOf(
   ctx: ComposeContext,
   open: OrderedItem,
   suggestions: ReadonlySet<string>
 ): OrderedElementRecord[] {
-  const records = open.props.filter(
+  const shown = open.props.filter(
     (r): r is OrderedElementRecord =>
       r.kind === 'element' &&
       r.target === 'tcPr' &&
       r.untracked === true &&
-      suggestions.has(r.suggestion) &&
       ctx.rejectedOrDrawnSo(r.suggestion)
+  );
+  const records = [...shown, ...open.takenBackLendings].filter((r) =>
+    suggestions.has(r.suggestion)
   );
   return records.sort((a, b) => a.seq - b.seq);
 }

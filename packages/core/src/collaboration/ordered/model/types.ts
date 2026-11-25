@@ -341,6 +341,12 @@ export interface OrderedItemLabels {
   cancelledFmts: readonly OrderedFormatRecord[];
   /** Property records (marks and container open items), applied in `seq` order. */
   props: readonly OrderedPropertyRecord[];
+  /**
+   * The width records a column lent from this cell, once its author took the column back. They
+   * draw nothing and hold no card; the column's cells give their width back by them, as a reject
+   * does (the editor alone withdraws its own pending column by rejecting it).
+   */
+  takenBackLendings: readonly OrderedElementRecord[];
   /** A move's name: it links the struck source and the inserted destination. */
   move: string | null;
   /** Taken back by its own author: it never existed for anyone else. */

@@ -124,6 +124,7 @@ const LABEL_KEYS = [
   'fmts',
   'cancelledFmts',
   'props',
+  'takenBackLendings',
   'move',
   'retracted',
   'taken',
