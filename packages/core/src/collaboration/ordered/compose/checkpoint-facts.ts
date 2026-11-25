@@ -3,7 +3,7 @@
 // rules of the day, so neither is kept.
 
 import { glossaryPartOf } from '../../../store/package/building-blocks.ts';
-import { ensureNumberingLevel } from '../../../store/package/numbering-part.ts';
+import { declaresNumberingLevel } from '../../../store/package/numbering-part.ts';
 import type { OoxmlPackage } from '../../../store/package/ooxml-package.ts';
 import type { OoxmlElement } from '../../../store/package/ooxml-tree.ts';
 import { partNameKey } from '../../../store/package/opc-names.ts';
@@ -40,7 +40,6 @@ import type { OrderedPerson } from '../model/person.ts';
 import { OrderedRefusal } from '../model/refusal.ts';
 import {
   orderedResourceShows,
-  type OrderedListLevelResource,
   type OrderedRelationshipResource,
   type OrderedResource,
 } from '../model/resources.ts';
@@ -324,8 +323,9 @@ function resourceEntry(
       return targets.has(resource.key) ? { kind: 'part', type: resource.type } : null;
     case 'list-level': {
       const { numId, level, format } = resource;
-      const fileLevel = loaded !== null && declaresLevel(loaded, resource);
-      const shown = orderedResourceShows(doc, resource) && declaresLevel(pkg, resource);
+      const fileLevel = loaded !== null && declaresNumberingLevel(loaded, numId, level);
+      const shown =
+        orderedResourceShows(doc, resource) && declaresNumberingLevel(pkg, numId, level);
       return shown && !fileLevel ? { kind: 'list-level', numId, level, format } : null;
     }
     case 'relationship': {
@@ -338,10 +338,6 @@ function resourceEntry(
       return null;
   }
 }
-
-/** Whether a package's numbering declares a list level's level. */
-const declaresLevel = (pkg: OoxmlPackage, { numId, level, format }: OrderedListLevelResource) =>
-  ensureNumberingLevel(pkg, numId, level, format) === pkg;
 
 /** Whether a package writes a relationship, to a part or to an address outside. */
 function writesRelationship(

@@ -3,11 +3,8 @@
 
 import { ensureNumberingLevel } from '../../../store/package/numbering-part.ts';
 import { withPart, type OoxmlPackage } from '../../../store/package/ooxml-package.ts';
-import {
-  serializeOoxmlPart,
-  type OoxmlNode,
-  type OoxmlPart,
-} from '../../../store/package/ooxml-tree.ts';
+import { ooxmlTreesEqual } from '../../../store/package/ooxml-serialize.ts';
+import type { OoxmlNode, OoxmlPart } from '../../../store/package/ooxml-tree.ts';
 import { partNameKey } from '../../../store/package/opc-names.ts';
 import {
   relsPartNameFor,
@@ -219,14 +216,20 @@ export function withoutCheckpointLevels(
       continue;
     }
 
+    // The engine declares the level as the file's definition of the list has it, in its place
     done.add(`${numId} ${level}`);
     const without = withoutLevel(next, numId, level);
-    const declared = without && ensureNumberingLevel(without, numId, level, format);
-    if (!without || !declared || numberingXml(declared) !== numberingXml(next)) {
+    if (without === null) {
       return null;
     }
 
-    next = without;
+    const declared = ensureNumberingLevel(without.pkg, numId, level, format);
+    const after = declared && numberingPartOf(declared)?.root.children[without.at];
+    if (!after || !ooxmlTreesEqual(without.definition, after)) {
+      return null;
+    }
+
+    next = without.pkg;
   }
 
   return { pkg: next, taken };
@@ -242,14 +245,15 @@ export const placeOf = (children: readonly OoxmlNode[], name: string, id: string
 export const numberingPartOf = (pkg: OoxmlPackage): OoxmlPart | undefined =>
   [...pkg.parts.values()].find((candidate) => isWml(candidate.root, 'numbering'));
 
-/** The numbering part's XML, or '' when there is none. */
-function numberingXml(pkg: OoxmlPackage): string {
-  const part = numberingPartOf(pkg);
-  return part === undefined ? '' : serializeOoxmlPart(part);
-}
-
-/** The package without level `level` of the definition list `numId` names, or null. */
-function withoutLevel(pkg: OoxmlPackage, numId: string, level: number): OoxmlPackage | null {
+/**
+ * The package without level `level` of the definition list `numId` names, with that definition
+ * as it was and its place in the numbering part; or null.
+ */
+function withoutLevel(
+  pkg: OoxmlPackage,
+  numId: string,
+  level: number
+): { readonly pkg: OoxmlPackage; readonly definition: OoxmlNode; readonly at: number } | null {
   const part = numberingPartOf(pkg);
   const children = part?.root.children ?? [];
   const num = children[placeOf(children, 'num', 'numId', numId)];
@@ -277,7 +281,8 @@ function withoutLevel(pkg: OoxmlPackage, numId: string, level: number): OoxmlPac
 
   const rest = [...children];
   rest[at] = withChildren(abstract, levels);
-  return withPart(pkg, { ...part, root: withChildren(part.root, rest) });
+  const without = withPart(pkg, { ...part, root: withChildren(part.root, rest) });
+  return { pkg: without, definition: abstract, at };
 }
 
 /** The kind of relationship a change adds of a full type, or undefined. */

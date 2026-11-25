@@ -448,6 +448,19 @@ export function ensureNumberingLevel(
   return withPart(pkg, inserted.part);
 }
 
+/**
+ * Whether the definition of the list `numId` declares `level` itself: the level
+ * {@link ensureNumberingLevel} keeps as it is, read without writing a package.
+ */
+export function declaresNumberingLevel(pkg: OoxmlPackage, numId: string, level: number): boolean {
+  const found = abstractNumOf(pkg, numId);
+  return (
+    found !== null &&
+    childrenNamed(found.abstract, 'numStyleLink').length === 0 &&
+    childrenNamed(found.abstract, 'lvl').some((node) => parsedIlvl(node) === level)
+  );
+}
+
 /** The numbering part and the `w:abstractNum` that the list `numId` names, or null. */
 function abstractNumOf(
   pkg: OoxmlPackage,
