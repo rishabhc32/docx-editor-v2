@@ -31,6 +31,7 @@ import {
   withoutCheckpointLists,
   withoutCheckpointStyles,
 } from './lists.ts';
+import { withCheckpointMadeOver } from './made-over.ts';
 import { withCheckpointRuns } from './room-runs.ts';
 import { withCheckpointTakeovers } from './takeovers.ts';
 import { withCheckpointTypers } from './typers.ts';
@@ -184,6 +185,7 @@ function openCheckpointRead(pkg: OoxmlPackage, options: OrderedWordFileOptions):
     !withCheckpointStyles(doc, styles.taken, listedIds) ||
     !withCheckpointResources(doc, [...levels.taken, ...objects.taken], listedIds) ||
     !withCheckpointTakeovers(doc, marks.labels, facts.takeovers, listedIds) ||
+    !withCheckpointMadeOver(doc, marks.labels, facts.madeOver, listedIds) ||
     !withCheckpointUntracked(doc, marks.labels, facts.untracked, listedIds) ||
     !withCheckpointChangeRecords(doc, marks.labels, facts.changeRecords, listedIds) ||
     !withCheckpointTypers(doc, marks.typers, facts.namespacePersons) ||

@@ -10,9 +10,13 @@ import type { OrderedFormatWrite, OrderedParagraphOp } from '../model/types.ts';
 import { ORDERED_CHANGE_LIMITS as LIMITS, type OrderedChangeProperty } from './types.ts';
 
 const TWIPS = /^-?\d{1,6}$/;
-const NUM_ID = /^\d{1,9}$/;
 const LEVEL = /^[0-8]$/;
-const ALIGNMENTS: Readonly<Record<string, TabStopWrite['alignment']>> = {
+
+/** A list number, as Word writes `w:numId`. */
+export const NUM_ID = /^\d{1,9}$/;
+
+/** A tab's alignment, as Word writes it, by the engine's name. */
+export const ALIGNMENTS: Readonly<Record<string, TabStopWrite['alignment']>> = {
   left: 'left',
   start: 'left',
   center: 'center',
@@ -21,7 +25,17 @@ const ALIGNMENTS: Readonly<Record<string, TabStopWrite['alignment']>> = {
   decimal: 'decimal',
   bar: 'bar',
 };
-const LEADERS = new Set<string>(['none', 'dot', 'hyphen', 'underscore', 'heavy', 'middleDot']);
+
+/** The tab leaders the engine writes. */
+export const TAB_LEADERS = [
+  'none',
+  'dot',
+  'hyphen',
+  'underscore',
+  'heavy',
+  'middleDot',
+] as const satisfies readonly NonNullable<TabStopWrite['leader']>[];
+const LEADERS = new Set<string>(TAB_LEADERS);
 
 const refuse = (detail: string): never => {
   throw new OrderedRefusal('invalid-edit', detail);

@@ -21,7 +21,7 @@ import type {
 type FaceRecord = Extract<OrderedFormatRecord, { readonly kind: 'face' }>;
 
 /** A loaded record that holds a file's change record, and the item it is on. */
-interface Holder {
+export interface Holder {
   readonly story: OrderedStory;
   readonly item: OrderedItem;
   readonly record: FaceRecord | OrderedElementRecord;
@@ -80,7 +80,7 @@ export function withCheckpointTakeovers(
 }
 
 /** Every loaded record that holds a file's change record, by that record. */
-function holdersOf(doc: OrderedDocument): Map<OoxmlElement, Holder[]> {
+export function holdersOf(doc: OrderedDocument): Map<OoxmlElement, Holder[]> {
   const out = new Map<OoxmlElement, Holder[]>();
   const add = (element: OoxmlElement, holder: Holder) => {
     const list = out.get(element);

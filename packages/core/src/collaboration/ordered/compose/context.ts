@@ -22,8 +22,10 @@ import { withAttributes } from '../ooxml-nodes.ts';
 import type {
   OrderedAttribution,
   OrderedDocument,
+  OrderedFormatRecord,
   OrderedItem,
   OrderedItemAddress,
+  OrderedPropertyRecord,
   OrderedStory,
   OrderedSuggestionStatus,
 } from '../model/types.ts';
@@ -114,11 +116,22 @@ export interface DrawnTakeover {
   readonly after: readonly OoxmlNode[];
 }
 
-/** A change record a drawing wrote that holds records by takeover. */
+/**
+ * Records drawn over a change record's pending ones with no change record of their own, which it
+ * does not hold (`over`: a direct write, a format on its author's own new words), and the
+ * properties drawn without them, without their own change record.
+ */
+export interface DrawnOver {
+  readonly own: readonly OoxmlNode[];
+  readonly records: readonly (OrderedFormatRecord | OrderedPropertyRecord)[];
+}
+
+/** A change record a drawing wrote that holds records by takeover, or has records drawn over it. */
 export interface HeldTakeovers {
   /** The change record's local name: `rPrChange`, `pPrChange`, `tcPrChange`, ... */
   readonly record: string;
   readonly taken: readonly DrawnTakeover[];
+  readonly over?: DrawnOver;
 }
 
 /** Bookkeeping of a revision wrapper compose wrote. */
@@ -509,16 +522,21 @@ export class ComposeContext {
 
   /**
    * Keep the takeovers a drawn change record holds: `children` hold the record (a properties
-   * element's children), and `taken` the records it took over, as drawn.
+   * element's children), `taken` the records it took over, as drawn, and `over` the records drawn
+   * over it.
    */
-  keepTakeovers(children: readonly OoxmlNode[], taken: readonly DrawnTakeover[]): void {
-    if (taken.length === 0) {
+  keepTakeovers(
+    children: readonly OoxmlNode[],
+    taken: readonly DrawnTakeover[],
+    over?: DrawnOver
+  ): void {
+    if (taken.length === 0 && over === undefined) {
       return;
     }
 
     const record = children.find(isChangeRecord);
     if (record !== undefined) {
-      this.takeovers.set(record.id, { record: record.localName, taken });
+      this.takeovers.set(record.id, { record: record.localName, taken, over });
     }
   }
 

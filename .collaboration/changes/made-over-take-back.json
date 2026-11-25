@@ -1,0 +1,14 @@
+{
+  "impact": "compatible",
+  "fields": [],
+  "before": "A direct format, paragraph, page, table or cell write, or a format on its author's own new words, made over another person's pending record shows in Word's one change record, which a load read as part of the pending suggestion's record: after a fold, that person's take-back of the record took the write away too, while live keeps it.",
+  "after": "The checkpoint manifest has an optional section madeOver: for each run's, paragraph's or section's change record with such records, by its label, the properties the pending records give without them and each record's write, read with the readers of the change that makes it. The open puts them back after the takeovers. A table's or a cell's properties with such a record are listed in untracked with every record. An entry that does not fit the file refuses the checkpoint as checkpoint-manifest.",
+  "reason": "The section is optional and new, and left out when empty: a checkpoint without it reads as before, version 5 stays and the golden checkpoints open to the same prints. Change messages, the change log and the Yjs format do not change. An ordered room admits only clients of its own code version, and the reader refuses a checkpoint it cannot read as checkpoint-manifest. Ordered rooms are not deployed yet, so no room needs a migration.",
+  "tests": [
+    "packages/core/src/collaboration/ordered/__tests__/checkpoint-fold-over.test.ts",
+    "packages/core/src/collaboration/ordered/__tests__/fold-rules.test.ts",
+    "packages/core/src/collaboration/ordered/__tests__/checkpoint-golden.test.ts"
+  ],
+  "changeset": "made-over-take-back",
+  "migration": null
+}

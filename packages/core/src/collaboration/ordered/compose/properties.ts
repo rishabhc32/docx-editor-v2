@@ -38,7 +38,12 @@ import type {
   OrderedStyleWrite,
 } from '../model/types.ts';
 import { attributeOf, isWml, withAttributes, withChildren, wmlAttribute } from '../ooxml-nodes.ts';
-import { isChangeRecord, type ComposeContext, type DrawnTakeover } from './context.ts';
+import {
+  isChangeRecord,
+  type ComposeContext,
+  type DrawnOver,
+  type DrawnTakeover,
+} from './context.ts';
 import { withoutRemoved, withParagraphOp } from './paragraph-ops.ts';
 
 type AnyRecord = OrderedFormatRecord | OrderedPropertyRecord;
@@ -206,6 +211,38 @@ export function madeOverRejected(
   });
 }
 
+/**
+ * `start` under the decided records drawn over pending ones (`later`), in their order. When some
+ * were made over a pending record with no change record of their own (`over`), also those
+ * records and `start` under the others: Word's one change record does not hold them, so a
+ * checkpoint keeps them.
+ */
+export function drawnLater<T, R extends AnyRecord>(
+  start: T,
+  later: readonly R[],
+  apply: (current: T, record: R) => T,
+  childrenOf: (current: T) => readonly OoxmlNode[]
+): { readonly drawn: T; readonly over: DrawnOver | undefined } {
+  let drawn = start;
+  for (const record of later) {
+    drawn = apply(drawn, record);
+  }
+
+  const records = later.filter((record) => 'over' in record && (record.over?.length ?? 0) > 0);
+  if (records.length === 0) {
+    return { drawn, over: undefined };
+  }
+
+  let own = start;
+  for (const record of later) {
+    if (!records.includes(record)) {
+      own = apply(own, record);
+    }
+  }
+
+  return { drawn, over: { own: childrenOf(own).filter((c) => !isChangeRecord(c)), records } };
+}
+
 /** The decided records drawn: the accepted ones, less those a reject took away. */
 const shownAccepted = <T extends AnyRecord>(
   ctx: ComposeContext,
@@ -241,11 +278,18 @@ export function faceAfter(
   }
 
   // A decided change made after a pending one shows on top, and the record keeps the original
-  for (const record of later) children = applyFormat(record, children, ctx.mint);
+  const drawn = drawnLater(
+    children,
+    later,
+    (current, record) => applyFormat(record, current, ctx.mint),
+    (current) => current
+  );
+  children = drawn.drawn;
   const latest = pending[pending.length - 1];
   const own = fileRecordAlone(ctx.doc, shown.accepted, pending);
-  if (own) children = [...children, own];
-  else if (latest) {
+  if (own) {
+    children = [...children, own];
+  } else if (latest) {
     // One record: the original, under the latest author (the engine's rule)
     children = ctx.withRecordAttributes(
       withPropertyChangeRecord({
@@ -261,9 +305,9 @@ export function faceAfter(
       latest.suggestion,
       REVISION_ROLE.format
     );
-    ctx.keepTakeovers(children, taken);
   }
 
+  ctx.keepTakeovers(children, taken, drawn.over);
   if (children.length === 0 && !base) return null;
   return withChildren(
     base ?? ctx.drawn(build(ctx.mint(), 'runProperties', 'rPr', [], [])),
@@ -370,8 +414,14 @@ export function paragraphPropertiesAfter(
 
   // A decided change made after a pending one shows on top; the pending record stays
   const keepRecord = (c: OoxmlNode) => keptByMark(c) || isWml(c, 'pPrChange');
-  for (const record of later) current = withDecidedMarkRecord(ctx, current, record, keepRecord);
-  ctx.keepTakeovers(current?.children ?? [], taken);
+  const drawn = drawnLater(
+    current,
+    later,
+    (under, record) => withDecidedMarkRecord(ctx, under, record, keepRecord),
+    (under) => under?.children ?? []
+  );
+  current = drawn.drawn;
+  ctx.keepTakeovers(current?.children ?? [], taken, drawn.over);
   return current && current.children.length === 0 && !base ? null : current;
 }
 

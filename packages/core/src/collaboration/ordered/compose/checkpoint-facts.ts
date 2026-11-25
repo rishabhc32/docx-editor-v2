@@ -15,6 +15,11 @@ import type {
   CheckpointResourceKind,
   CheckpointStyle,
 } from '../model/checkpoint-lists.ts';
+import type {
+  CheckpointMadeOver,
+  CheckpointOverRecord,
+  CheckpointOverWrite,
+} from '../model/checkpoint-over.ts';
 import type { CheckpointSuggestion } from '../model/checkpoint-suggestions.ts';
 import { withCheckpointLabels } from '../model/checkpoint-labels.ts';
 import {
@@ -41,7 +46,9 @@ import { revisionIdsOf } from '../model/revision-ids.ts';
 import type {
   OrderedDocument,
   OrderedElementRecord,
+  OrderedFormatRecord,
   OrderedItem,
+  OrderedPropertyRecord,
   OrderedPropertyTarget,
   OrderedStory,
   OrderedSuggestion,
@@ -183,6 +190,7 @@ export function checkpointFacts(
     namespacePersons: typers,
     untracked: checkpointUntracked(doc, opens, labels, list),
     changeRecords: checkpointChangeRecords(doc, opens, labels, list),
+    madeOver: checkpointMadeOver(doc, held, labels, list),
     lists: checkpointLists(doc, pkg, list),
     styles: checkpointStyles(doc, pkg, list),
     resources: checkpointResources(doc, pkg, list),
@@ -349,7 +357,7 @@ function checkpointTakeovers(
   for (const records of held.values()) {
     for (const [id, found] of records) {
       const label = labels.get(id);
-      if (label === undefined) {
+      if (label === undefined || found.taken.length === 0) {
         continue;
       }
 
@@ -367,6 +375,66 @@ function checkpointTakeovers(
   }
 
   return takeovers;
+}
+
+/**
+ * Each change record of the file with records made over its pending ones, by its label: the
+ * properties drawn without them, and each record's write.
+ */
+function checkpointMadeOver(
+  doc: OrderedDocument,
+  held: OrderedPartTakeovers,
+  labels: ReadonlyMap<string, number>,
+  list: SuggestionList
+): CheckpointMadeOver[] {
+  const listed = (id: string): number[] => {
+    const suggestion = doc.suggestions.get(id);
+    return suggestion === undefined ? [] : [list.indexOf(suggestion)];
+  };
+  const out: CheckpointMadeOver[] = [];
+  for (const records of held.values()) {
+    for (const [id, { record, over: drawn }] of records) {
+      const label = labels.get(id);
+      if (label === undefined || drawn === undefined) {
+        continue;
+      }
+
+      const madeOver = drawn.records.flatMap((made): CheckpointOverRecord[] => {
+        const write = overWrite(made);
+        const [suggestion] = listed(made.suggestion);
+        if (write === undefined || suggestion === undefined) {
+          return [];
+        }
+
+        const over = 'over' in made ? (made.over ?? []) : [];
+        const untracked = 'untracked' in made ? made.untracked : undefined;
+        return [{ suggestion, over: over.flatMap(listed), untracked, write }];
+      });
+      if (madeOver.length > 0) {
+        out.push({ label, properties: takenProperties(record, drawn.own), records: madeOver });
+      }
+    }
+  }
+
+  return out;
+}
+
+/** A record's write as the manifest keeps it; undefined for a record of no such kind. */
+function overWrite(
+  record: OrderedFormatRecord | OrderedPropertyRecord
+): CheckpointOverWrite | undefined {
+  switch (record.kind) {
+    case 'properties': {
+      const { properties, remove, style } = record;
+      return { format: { properties, remove, style } };
+    }
+    case 'paragraphOp':
+      return { paragraphOp: record.op };
+    case 'sectionOp':
+      return { sectionOp: record.op };
+    default:
+      return undefined;
+  }
 }
 
 /**
@@ -406,6 +474,14 @@ function inRoomOrder(
         ...r,
         suggestion: renumbered(r.suggestion),
         replaced: r.replaced === undefined ? undefined : renumbered(r.replaced),
+      })),
+    })),
+    madeOver: facts.madeOver.map((m) => ({
+      ...m,
+      records: m.records.map((r) => ({
+        ...r,
+        suggestion: renumbered(r.suggestion),
+        over: r.over.map(renumbered),
       })),
     })),
     lists: facts.lists.map((l) => ({ ...l, suggestion: renumbered(l.suggestion) })),

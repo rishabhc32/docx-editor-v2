@@ -35,7 +35,7 @@ import type {
   OrderedSuggestion,
   OrderedWithin,
 } from '../model/types.ts';
-import { addressOf, apply, APPLY_FILE, DIRECT, EDIT, opens } from './change-apply-fixture.ts';
+import { addressOf, apply, APPLY_FILE, at, DIRECT, EDIT, opens } from './change-apply-fixture.ts';
 import {
   PASTED_LIST,
   ROOM_FACTS,
@@ -64,6 +64,7 @@ const SECTIONS = {
   lists: (read: CheckpointOpened) => read.facts.lists.length,
   styles: (read: CheckpointOpened) => read.facts.styles.length,
   resources: (read: CheckpointOpened) => read.facts.resources.length,
+  madeOver: (read: CheckpointOpened) => read.facts.madeOver.length,
 };
 
 type ManifestSection = keyof typeof SECTIONS;
@@ -94,7 +95,6 @@ const manifest = (section: ManifestSection, field: string, how: string): FoldRul
 });
 const derived = (how: string): FoldRule => ({ rule: 'derived', how });
 const dropped = (how: string): FoldRule => ({ rule: 'dropped', how });
-const open = (row: string, how: string): FoldRule => ({ rule: 'open', row, how });
 
 /** Every key of `T`, each with its rule. */
 type Rules<T> = Record<keyof T, FoldRule>;
@@ -170,7 +170,7 @@ const PROPERTIES_FORMAT: Rules<PropertiesFormat> = {
   remove: file("load/runs.ts: the run's `w:rPr` without them"),
   style: file("load/runs.ts: the run's `w:rStyle`"),
   replaced: TAKEN,
-  over: open('111', "Word's one `w:rPrChange` holds it, so a take-back of the record takes it too"),
+  over: manifest('madeOver', 'records.over', "by the label on Word's one `w:rPrChange`"),
   untracked: file("written as its author's new words' own `w:rPr`; a reject takes the words"),
   change: UNDO_ONLY,
 };
@@ -210,7 +210,7 @@ const PARAGRAPH_OP_RECORD: Rules<OrderedParagraphOpRecord> = {
   op: file("load/properties.ts: the paragraph's `w:pPr` and its `w:pPrChange`"),
   untracked: file("written as its author's new paragraph's own `w:pPr`; a reject takes it"),
   replaced: TAKEN,
-  over: open('111', "Word's one `w:pPrChange` holds it, so a take-back of the record takes it too"),
+  over: manifest('madeOver', 'records.over', "by the label on Word's one `w:pPrChange`"),
 };
 
 const SECTION_RECORD: Rules<OrderedSectionRecord> = {
@@ -222,7 +222,7 @@ const SECTION_RECORD: Rules<OrderedSectionRecord> = {
   untracked: file("written as its author's new mark's own `w:sectPr`; a reject takes the mark"),
   keptOnReject: file("written as the section's own `w:type`, which every decision keeps"),
   replaced: TAKEN,
-  over: open('111', "Word's one `w:sectPrChange` holds it, so a take-back takes it too"),
+  over: manifest('madeOver', 'records.over', "by the label on Word's one `w:sectPrChange`"),
 };
 
 const OBJECT_RECORD: Rules<OrderedObjectRecord> = {
@@ -541,6 +541,27 @@ const DIRECT_OVER: CheckpointRoom = {
   },
 };
 
+/**
+ * Olive's suggested bold over Ana's new words, then Olive's direct italic on them: made over the
+ * bold's record (section `madeOver`).
+ */
+const FORMAT_OVER: CheckpointRoom = {
+  name: 'direct format over a pending one',
+  source: APPLY_FILE,
+  edit: (doc) => {
+    const format = (mode: typeof EDIT | typeof DIRECT, localName: string) =>
+      ({
+        kind: 'format',
+        ...mode,
+        from: at(doc, 0, 0),
+        to: at(doc, 0, 4),
+        properties: [{ localName }],
+      }) as const;
+    apply(doc, 'olive:1', format(EDIT, 'b'), 'Olive');
+    apply(doc, 'olive:2', format(DIRECT, 'i'), 'Olive');
+  },
+};
+
 /** The rooms whose checkpoints hold a fact of each section. */
 const ROOMS: readonly CheckpointRoom[] = [
   ROOM_FACTS,
@@ -551,6 +572,7 @@ const ROOMS: readonly CheckpointRoom[] = [
   PASTED_LIST,
   TABLE_RECORDS,
   DIRECT_OVER,
+  FORMAT_OVER,
   ...RESOURCE_ROOMS,
 ];
 
@@ -603,8 +625,11 @@ describe('every fact of the model has a fold rule', () => {
   });
 
   test('each section the writer writes has a rule', async () => {
-    const [checkpoint] = await CHECKPOINTS;
-    const written = Object.keys(checkpoint!.json).filter((key) => !HEADER.has(key));
+    // A section with no entries is left out, so one room's checkpoint may not hold it
+    const checkpoints = await CHECKPOINTS;
+    const written = checkpoints
+      .flatMap(({ json }) => Object.keys(json))
+      .filter((key) => !HEADER.has(key));
     const named = RULES.flatMap((rule) => (rule.rule === 'manifest' ? [rule.section] : []));
     const sections = new Set(Object.keys(SECTIONS));
     expect(new Set(written)).toEqual(sections);

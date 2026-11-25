@@ -44,6 +44,7 @@ import { withStoryBlocks } from './paragraph-ops.ts';
 import {
   acceptedAndPending,
   aroundPending,
+  drawnLater,
   fileRecordAlone,
   madeOverRejected,
   noteTakeover,
@@ -299,10 +300,13 @@ export function sectionAfter(
     noteTakeover(ctx, taken, record, before, section?.children ?? []);
   }
 
-  for (const record of later) {
-    section = applyDecided(ctx, section, record, records);
-  }
-
+  const drawn = drawnLater(
+    section,
+    later,
+    (under, record) => applyDecided(ctx, under, record, records),
+    (under) => under?.children ?? []
+  );
+  section = drawn.drawn;
   if (section === null) return null;
   const fileRecord = fileRecordAlone(ctx.doc, accepted, pending);
   const latest = pending.at(-1);
@@ -320,9 +324,9 @@ export function sectionAfter(
     children = [...children, record];
   }
 
-  const drawn = cloneWithNewIds(withChildren(section, children), ids) as OoxmlElement;
-  ctx.keepTakeovers(drawn.children, taken);
-  return drawn;
+  const written = cloneWithNewIds(withChildren(section, children), ids) as OoxmlElement;
+  ctx.keepTakeovers(written.children, taken, drawn.over);
+  return written;
 }
 
 /**
