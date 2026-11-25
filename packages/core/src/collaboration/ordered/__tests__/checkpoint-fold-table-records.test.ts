@@ -285,7 +285,7 @@ describe('a column removed under a later one', () => {
 
   // The cell that takes a removed cell's space holds the widths that cell lent after a fold, in
   // the order they were made: the organiser's direct widths, made later, still show on top
-  test("a party's column rejected, after its column made from its cell and direct widths", async () => {
+  test("a party's column rejected, after its column from its cell and direct widths", async () => {
     const { document: doc, base } = openOrderedWordFile(TABLE_FILE, { file: 1 });
     apply(doc, 'ben:1', column(doc, 0), 'Ben');
     apply(doc, 'ben:2', column(doc, 1), 'Ben');

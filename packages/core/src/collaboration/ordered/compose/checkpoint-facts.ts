@@ -427,7 +427,9 @@ function checkpointMadeOver(
   return out;
 }
 
-/** A record as the manifest keeps it; undefined when a suggestion it names is not the document's. */
+/**
+ * A record as the manifest keeps it; undefined when a suggestion it names is not the document's.
+ */
 function overRecord(
   doc: OrderedDocument,
   list: SuggestionList,
@@ -763,7 +765,9 @@ function writtenElement(
   return recordWithoutRemoved(drawnStory(doc, story, drawn), record, shell.id) ?? record.element;
 }
 
-/** What the room holds of each pending record with a change record, by the label on its container. */
+/**
+ * What the room holds of each pending record with a change record, by the label on its container.
+ */
 function checkpointChangeRecords(
   doc: OrderedDocument,
   opens: readonly RecordsOpen[],

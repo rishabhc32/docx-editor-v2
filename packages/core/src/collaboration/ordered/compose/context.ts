@@ -179,7 +179,9 @@ export class ComposeContext {
   readonly decisionEmptied = new Set<string>();
   /** Controls a decision reached: their value record follows the text they show. */
   readonly reached: string[] = [];
-  /** Controls whose value record the words a reject took away stated: words of no value clear it. */
+  /**
+   * Controls whose value record the words a reject took away stated: words of no value clear it.
+   */
   readonly stale = new Set<string>();
   /** Whether this drawing put a checkpoint's attribute on an element: its part declares it. */
   markedAny = false;

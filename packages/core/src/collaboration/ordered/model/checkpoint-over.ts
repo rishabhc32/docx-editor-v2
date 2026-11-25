@@ -28,7 +28,9 @@ export interface CheckpointFormatWrite extends OrderedFormatWrite {
   readonly style?: OrderedStyleWrite;
 }
 
-/** A record's write, for a record the room made: a format, a paragraph press or a section's write. */
+/**
+ * A record's write, for a record the room made: a format, a paragraph press or a section's write.
+ */
 export type CheckpointOverWrite =
   | { readonly format: CheckpointFormatWrite }
   | { readonly paragraphOp: OrderedParagraphOp }
