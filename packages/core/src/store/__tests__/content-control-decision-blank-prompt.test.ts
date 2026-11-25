@@ -123,7 +123,10 @@ describe("a decision that empties a control with no prompt gives Word's blank pr
       `${inserted}${comment('commentRangeStart')}${inserted}${comment('commentRangeEnd')}${anchor}`
     );
     const decided = applyTreeOp(parse(body), { op: 'rejectAllRevisions' });
-    if (!decided.ok) throw new Error(decided.reason);
+    if (!decided.ok) {
+      throw new Error(decided.reason);
+    }
+
     expect(controlXml(decided.part)).toBe(
       wordInline('601', '<w:text/>').replace(
         BLANK,
