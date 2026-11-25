@@ -1,7 +1,7 @@
 import { retainedNestedRowSites } from './revision-table-preserve-nested.ts';
 import { unboundTableHistories } from './revision-table-unbound-history.ts';
 import { deferredTableGridSites } from './revision-table-grid-history.ts';
-import { planOrdinaryMoves } from './revision-move-ranges.ts';
+import { ordinaryMoveRanges, planOrdinaryMoves } from './revision-move-ranges.ts';
 import {
   tableRevisionContentTarget,
   tableRevisionRemovals,
@@ -67,6 +67,19 @@ export interface RevisionBatchResult {
   }[];
   /** All pending decisions in the addressed scope, including excluded and unsupported changes. */
   readonly remaining: number;
+}
+
+/**
+ * Whether one review item's decision is planned with its dependencies (`planRevisionBatch`): a
+ * grouped row or column decision can remove later sites, so does a move, and a format record over
+ * several sites resolves together. Any other item resolves its own sites.
+ */
+export function decidedAsBatch(item: ReviewRevisionItem, part: OoxmlPart): boolean {
+  return (
+    item.revisionKind === 'structural' ||
+    ordinaryMoveRanges(part.root).length > 0 ||
+    (item.revisionKind === 'format' && revisionSiteNodeIdsOf(item).length > 1)
+  );
 }
 
 /** @internal Pure preflight; callers commit its operations through their normal write guards. */

@@ -1,9 +1,16 @@
 // A decision change: the organiser accepts or rejects review cards as they saw them. A decision
 // only changes statuses, so decisions give one document in every order.
 
+import { reviewItemKey } from '../../../store/store/review-items.ts';
+import { revisionItemsOf } from '../../../store/store/review-reads.ts';
+import { decidedAsBatch, planRevisionBatch } from '../../../store/store/revision-batch.ts';
 import { noCardRefusal, orderedCardOf, type OrderedCard } from '../card-of.ts';
+import { composeOrderedPart } from '../compose/compose.ts';
+import { storyOfItem } from '../model/document.ts';
 import { setStatus } from '../model/mutations.ts';
 import { OrderedRefusal } from '../model/refusal.ts';
+import { revisionIdsOf } from '../model/revision-ids.ts';
+import { textBoxHostOf } from '../model/text-boxes.ts';
 import type { OrderedDocument } from '../model/types.ts';
 import type { OrderedDecideChange, OrderedSeenCard, OrderedSeenSuggestion } from './types.ts';
 
@@ -36,6 +43,65 @@ function cardAsSeen(doc: OrderedDocument, seen: OrderedSeenCard): OrderedCard | 
   return card;
 }
 
+/** A revision mark by its `w:id`, author and date, as the engine's review reads it. */
+const markKey = (id: string, author: string, date: string | undefined): string =>
+  `${id}\u0000${author}\u0000${date ?? ''}`;
+
+/**
+ * The cards the engine's own plan leaves, each with the engine's reason: the editor alone
+ * refuses to decide them (a column deletion whose struck cells hold another record of its
+ * author), so the room refuses them too, and no copy decides what another cannot. One plan for
+ * each part the cards are in, of what the editor plans: every item of a decision of many cards,
+ * as its Accept All; an item of one card that it plans with its dependencies (`decidedAsBatch`).
+ */
+function engineLeft(
+  doc: OrderedDocument,
+  cards: readonly OrderedCard[],
+  status: OrderedDecideChange['status']
+): Map<OrderedCard, OrderedRefusal> {
+  const action = status === 'accepted' ? 'accept' : 'reject';
+  const cardOfMark = new Map<string, OrderedCard>();
+  const parts = new Set<string>();
+  for (const card of cards) {
+    for (const id of card.suggestions) {
+      const { author, date } = doc.suggestions.get(id)?.attribution ?? { author: '' };
+      for (const mark of revisionIdsOf(doc, id)) {
+        cardOfMark.set(markKey(mark, author, date), card);
+      }
+
+      for (const item of doc.labelled.get(id) ?? []) {
+        const story = storyOfItem(doc, item)?.name;
+        if (story !== undefined) {
+          parts.add(textBoxHostOf(doc, story)?.host ?? story);
+        }
+      }
+    }
+  }
+
+  const left = new Map<OrderedCard, OrderedRefusal>();
+  for (const name of parts) {
+    const part = composeOrderedPart(doc, name).part;
+    const cardOfKey = new Map<string, OrderedCard>();
+    for (const item of revisionItemsOf(part)) {
+      const marks = item.addresses.map(({ id, author, date }) => markKey(id, author, date));
+      const card = marks.map((mark) => cardOfMark.get(mark)).find((c) => c !== undefined);
+      if (card !== undefined && (cards.length > 1 || decidedAsBatch(item, part))) {
+        cardOfKey.set(reviewItemKey(item), card);
+      }
+    }
+
+    for (const { key, reason } of planRevisionBatch(part, action, [...cardOfKey.keys()]).result
+      .skipped) {
+      const card = cardOfKey.get(key);
+      if (card !== undefined && !left.has(card)) {
+        left.set(card, new OrderedRefusal('engine-refused', `${action}: ${reason}`));
+      }
+    }
+  }
+
+  return left;
+}
+
 /**
  * Each card the change names, judged on the document as it is now, before any status turns.
  * As the host refuses a decision on a card that changed after the organiser saw it, the change
@@ -57,7 +123,12 @@ function judge(doc: OrderedDocument, change: OrderedDecideChange): DecisionVerdi
     else cards.push(card);
   }
 
-  return { cards, left };
+  const refused = engineLeft(doc, cards, change.status);
+  for (const card of cards) {
+    left ??= refused.get(card) ?? null;
+  }
+
+  return { cards: cards.filter((card) => !refused.has(card)), left };
 }
 
 /**

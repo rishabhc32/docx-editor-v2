@@ -1,4 +1,3 @@
-import { ordinaryMoveRanges } from '../store/store/revision-move-ranges.ts';
 import type {
   EditorModuleRegistry,
   ReviewDisplayMode,
@@ -9,7 +8,11 @@ import type {
 import { storyScopeOfPartName } from './surface-scope.ts';
 import { partOfReviewItem } from './review-item-part.ts';
 import { stylesPartOf } from '../store/package/ooxml-indexes.ts';
-import { planRevisionBatch, type RevisionBatchResult } from '../store/store/revision-batch.ts';
+import {
+  decidedAsBatch,
+  planRevisionBatch,
+  type RevisionBatchResult,
+} from '../store/store/revision-batch.ts';
 import {
   invalidRevisionAuthorInput,
   planRevisionAuthorChange,
@@ -630,13 +633,8 @@ function resolutionOps(
 ): TreeDocOp[] {
   const op = action === 'accept' ? 'acceptRevision' : 'rejectRevision';
   if (!part) return [];
-  // A grouped row decision can remove later constituents. Resolve its sites
-  // together, with the same dependency preflight as the bulk command.
-  if (
-    item.revisionKind === 'structural' ||
-    ordinaryMoveRanges(part.root).length > 0 ||
-    (item.revisionKind === 'format' && revisionSiteNodeIdsOf(item).length > 1)
-  ) {
+  // Resolved with the same dependency preflight as the bulk command
+  if (decidedAsBatch(item, part)) {
     return [...planRevisionBatch(part, action, resolutionKeysOf(item)).ops];
   }
   const nodeIds = new Set(revisionSiteNodeIdsOf(item));
