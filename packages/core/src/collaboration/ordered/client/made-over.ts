@@ -122,12 +122,9 @@ function putBack(
   target: CheckpointOverTarget,
   restored: readonly Restored[]
 ): boolean {
-  // The holder's own record keeps the file's change record, which states the properties before
-  // it, as the room's record that a load read does
-  const fileRecordOf = (r: Restored) =>
-    r.suggestion === record.suggestion && r.replaced === undefined && r.write === undefined
-      ? record.fileRecord
-      : undefined;
+  // A record that gives properties, as a load reads one, keeps the file's change record, which
+  // states the properties before it, as the room's does: also one another suggestion took over
+  const fileRecordOf = (r: Restored) => (r.write === undefined ? record.fileRecord : undefined);
 
   if (record.kind !== 'face') {
     if (record.target !== target) {

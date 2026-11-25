@@ -255,6 +255,19 @@ describe('a direct page write after a fold, over a pending one', () => {
     apply(doc, 'olive:1', pageWrite(doc, DIRECT, { orientation: 'portrait' }), 'Olive');
     await checkFold(doc, base, blobs, 'a direct portrait page after a fold');
   });
+
+  // Ben's margins take his landscape record over: the taken record keeps the file's record
+  test('a portrait page over a landscape one another suggestion took over', async () => {
+    const opened = openOrderedWordFile(docx(TEXT), { file: 1 });
+    const landscape = pageWrite(opened.document, EDIT, { orientation: 'landscape' });
+    apply(opened.document, 'ben:1', landscape, 'Ben');
+    const blobs = mediaStore(opened.base);
+    const { document: doc, base } = await folded(opened.document, opened.base, 2, blobs);
+    const margins = { marginTopTwips: 720, marginBottomTwips: 720 };
+    apply(doc, 'ben:2', pageWrite(doc, EDIT, margins), 'Ben');
+    apply(doc, 'olive:1', pageWrite(doc, DIRECT, { orientation: 'portrait' }), 'Olive');
+    await checkFold(doc, base, blobs, 'a direct portrait page over a taken record');
+  });
 });
 
 // After a fold the pending page write is the file's record; a direct break copies it, and the
