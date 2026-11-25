@@ -101,12 +101,6 @@ const DATE = parseDoc(
     `<w:sdtContent><w:r><w:t>2020-01-02</w:t></w:r></w:sdtContent></w:sdt></w:p>`
 );
 
-/** A date control with no `w:dateFormat`: Word shows it in the application's default form. */
-const UNFORMATTED_DATE = parseDoc(
-  `<w:p><w:sdt><w:sdtPr><w:date><w:lid w:val="en-US"/></w:date></w:sdtPr>` +
-    `<w:sdtContent><w:r><w:t>Soon</w:t></w:r></w:sdtContent></w:sdt></w:p>`
-);
-
 describe('setContentControlValue writes the value each type accepts', () => {
   test('a plain-text control takes a string and keeps its run formatting', () => {
     const id = controlIds(PLAIN_TEXT)[0]!;
@@ -236,41 +230,6 @@ describe('setContentControlValue writes the value each type accepts', () => {
         value: { kind: 'text', text: 'x' },
       })
     ).toBe('unknown-content-control');
-  });
-
-  test('a date takes a full ISO-8601 instant, whichever form the value takes', () => {
-    const controlId = controlIds(UNFORMATTED_DATE)[0]!;
-    const iso = '2026-09-15T10:30:00+02:00';
-    for (const value of [iso, { kind: 'date', iso }] as const) {
-      const next = apply(UNFORMATTED_DATE, { op: 'setContentControlValue', controlId, value });
-      expect(contentControlPropertiesOf(controlOf(next)).date?.fullDate).toBe(iso);
-      expect(contentControlTextOf(controlOf(next))).toBe('9/15/2026');
-    }
-  });
-
-  test('a weekday and a time show as Word shows them, whichever form the value takes', () => {
-    const part = parseDoc(
-      `<w:p><w:sdt><w:sdtPr><w:date><w:dateFormat w:val="dddd, MMMM d, yyyy h:mm AM/PM"/>` +
-        `<w:lid w:val="en-US"/></w:date></w:sdtPr>` +
-        `<w:sdtContent><w:r><w:t>Soon</w:t></w:r></w:sdtContent></w:sdt></w:p>`
-    );
-    const controlId = controlIds(part)[0]!;
-    const iso = '2026-09-15T14:05:00Z';
-    for (const value of [iso, { kind: 'date', iso }] as const) {
-      const next = apply(part, { op: 'setContentControlValue', controlId, value });
-      expect(contentControlTextOf(controlOf(next))).toBe('Tuesday, September 15, 2026 2:05 PM');
-    }
-  });
-
-  test("a date with no format shows Word's en-US default, whichever form the value takes", () => {
-    const controlId = controlIds(UNFORMATTED_DATE)[0]!;
-    for (const value of ['2026-09-15', { kind: 'date', iso: '2026-09-15' }] as const) {
-      const next = apply(UNFORMATTED_DATE, { op: 'setContentControlValue', controlId, value });
-      expect(contentControlTextOf(controlOf(next))).toBe('9/15/2026');
-      expect(contentControlPropertiesOf(controlOf(next)).date?.fullDate).toBe(
-        '2026-09-15T00:00:00Z'
-      );
-    }
   });
 });
 

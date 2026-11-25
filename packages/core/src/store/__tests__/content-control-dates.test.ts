@@ -2,9 +2,42 @@
 
 import { describe, expect, test } from 'bun:test';
 import {
+  contentControlPropertiesOf,
+  contentControlsIn,
+  contentControlTextOf,
+  readOoxmlPart,
+} from '../index.ts';
+import {
   formatContentControlDate,
   parseContentControlDate,
 } from '../store/content-control-dates.ts';
+import { applyTreeOp } from '../store/tree-op-apply.ts';
+
+const W = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main';
+
+/** The text and the `w:fullDate` of a date control in `dateFormat` (none: no format) after `value`. */
+function dateSet(dateFormat: string | undefined, value: string | { kind: 'date'; iso: string }) {
+  const format = dateFormat === undefined ? '' : `<w:dateFormat w:val="${dateFormat}"/>`;
+  const read = readOoxmlPart(
+    `<w:document xmlns:w="${W}"><w:body><w:p><w:sdt><w:sdtPr><w:date>${format}` +
+      `<w:lid w:val="en-US"/></w:date></w:sdtPr><w:sdtContent><w:r><w:t>Soon</w:t></w:r>` +
+      `</w:sdtContent></w:sdt></w:p></w:body></w:document>`,
+    { name: '/word/document.xml', contentType: 'application/xml' }
+  );
+  if (!read.ok) {
+    throw new Error(read.reason);
+  }
+
+  const controlId = contentControlsIn(read.part.root)[0]!.node.id;
+  const result = applyTreeOp(read.part, { op: 'setContentControlValue', controlId, value });
+  if (!result.ok) {
+    throw new Error(`refused: ${result.reason}`);
+  }
+
+  const control = contentControlsIn(result.part.root)[0]!.node;
+  const fullDate = contentControlPropertiesOf(control).date?.fullDate;
+  return { text: contentControlTextOf(control), fullDate };
+}
 
 describe('reading a date back from its text', () => {
   test('gives back every date the formatter writes, in the patterns Word writes', () => {
@@ -101,5 +134,35 @@ describe('the fields of a date format Word writes', () => {
       day: 15,
     });
     expect(parseContentControlDate('September 15', 'MMMM d', null)).toBeNull();
+  });
+});
+
+describe('a date value, whichever form it takes: the editor string or the typed value', () => {
+  const both = (iso: string) => [iso, { kind: 'date' as const, iso }];
+
+  test("shows Word's en-US default with no format", () => {
+    for (const value of both('2026-09-15')) {
+      expect(dateSet(undefined, value)).toEqual({
+        text: '9/15/2026',
+        fullDate: '2026-09-15T00:00:00Z',
+      });
+    }
+  });
+
+  test('takes a full ISO-8601 instant, with its time and offset', () => {
+    for (const value of both('2026-09-15T10:30:00+02:00')) {
+      expect(dateSet(undefined, value)).toEqual({
+        text: '9/15/2026',
+        fullDate: '2026-09-15T10:30:00+02:00',
+      });
+    }
+  });
+
+  test('shows a weekday and a time as Word shows them', () => {
+    for (const value of both('2026-09-15T14:05:00Z')) {
+      expect(dateSet('dddd, MMMM d, yyyy h:mm AM/PM', value).text).toBe(
+        'Tuesday, September 15, 2026 2:05 PM'
+      );
+    }
   });
 });

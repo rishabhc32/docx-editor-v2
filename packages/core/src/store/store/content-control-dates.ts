@@ -16,11 +16,15 @@ const FULL_DATE =
 
 /** Days in `month` (1–12) for a Gregorian `year`, or 0 when the month is out of range. */
 function daysInGregorianMonth(year: number, month: number): number {
-  if (month < 1 || month > 12) return 0;
+  if (month < 1 || month > 12) {
+    return 0;
+  }
+
   if (month === 2) {
     const leap = (year % 4 === 0 && year % 100 !== 0) || year % 400 === 0;
     return leap ? 29 : 28;
   }
+
   return month === 4 || month === 6 || month === 9 || month === 11 ? 30 : 31;
 }
 
@@ -32,40 +36,70 @@ function daysInGregorianMonth(year: number, month: number): number {
  */
 export function normalizeSdtFullDate(value: string): string | null {
   const match = FULL_DATE.exec(value.trim());
-  if (!match) return null;
+  if (!match) {
+    return null;
+  }
+
   const year = Number(match[1]);
   const month = Number(match[2]);
   const day = Number(match[3]);
   const maxDay = daysInGregorianMonth(year, month);
-  if (maxDay === 0 || day < 1 || day > maxDay) return null;
+  if (maxDay === 0 || day < 1 || day > maxDay) {
+    return null;
+  }
 
   const date = `${match[1]}-${match[2]}-${match[3]}`;
-  if (match[4] === undefined) return `${date}T00:00:00Z`;
+  if (match[4] === undefined) {
+    return `${date}T00:00:00Z`;
+  }
 
   const hour = Number(match[4]);
   const minute = Number(match[5]);
   const second = Number(match[6]);
-  if (hour > 23 || minute > 59 || second > 59) return null;
+  if (hour > 23 || minute > 59 || second > 59) {
+    return null;
+  }
 
   const fraction = match[7] !== undefined ? `.${match[7]}` : '';
   const zone = match[8] ?? 'Z';
-  if (!isValidXsdDateTimeZone(zone)) return null;
+  if (!isValidXsdDateTimeZone(zone)) {
+    return null;
+  }
+
   return `${date}T${match[4]}:${match[5]}:${match[6]}${fraction}${zone}`;
 }
 
 /** Whether `zone` is a legal `xsd:dateTime` timezone: `Z` or a numeric offset within ±14:00. */
 function isValidXsdDateTimeZone(zone: string): boolean {
-  if (zone === 'Z') return true;
-  if (zone.length !== 6 || (zone[0] !== '+' && zone[0] !== '-')) return false;
+  if (zone === 'Z') {
+    return true;
+  }
+
+  if (zone.length !== 6 || (zone[0] !== '+' && zone[0] !== '-')) {
+    return false;
+  }
+
   const sign = zone[0] === '+' ? 1 : -1;
   const zoneHour = Number(zone.slice(1, 3));
   const zoneMinute = Number(zone.slice(4, 6));
-  if (!Number.isInteger(zoneHour) || !Number.isInteger(zoneMinute)) return false;
-  if (zoneHour < 0 || zoneMinute < 0 || zoneMinute > 59) return false;
+  if (!Number.isInteger(zoneHour) || !Number.isInteger(zoneMinute)) {
+    return false;
+  }
+
+  if (zoneHour < 0 || zoneMinute < 0 || zoneMinute > 59) {
+    return false;
+  }
+
   const totalMinutes = sign * (zoneHour * 60 + zoneMinute);
-  if (totalMinutes > 14 * 60 || totalMinutes < -14 * 60) return false;
+  if (totalMinutes > 14 * 60 || totalMinutes < -14 * 60) {
+    return false;
+  }
+
   // The bound is exactly ±14:00; a fourteen-hour offset must carry `:00` minutes.
-  if (Math.abs(totalMinutes) === 14 * 60 && zoneMinute !== 0) return false;
+  if (Math.abs(totalMinutes) === 14 * 60 && zoneMinute !== 0) {
+    return false;
+  }
+
   return true;
 }
 
