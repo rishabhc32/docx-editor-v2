@@ -76,8 +76,11 @@ function pendingAround(
   return container === null ? null : { by: container, quiet: true };
 }
 
-/** The pending insertion of a new inline control around the item, in its paragraph, if any. */
-function pendingControlAround(
+/**
+ * The pending insertion of a new inline control around the item, in its paragraph, if any: one
+ * `w:ins` holds the control whole, with all that is in it.
+ */
+export function pendingControlAround(
   doc: OrderedDocument,
   story: OrderedStory,
   item: OrderedItem

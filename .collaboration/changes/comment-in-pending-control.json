@@ -1,0 +1,10 @@
+{
+  "impact": "compatible",
+  "fields": [],
+  "before": "A comment made with its start, end or reference inside another person's pending new inline control was no one's live, but the inserter's after a fold (the file writes it inside the control's one w:ins): a reject kept the marker live and took it away after a fold and in the editor alone.",
+  "after": "A comment's marker in a pending new inline control is part of that insertion when the comment is made (pendingControlAround in insertComment), live as after a fold: a reject or a take-back of the control takes it with the control.",
+  "reason": "Change messages, the change log and its kinds keep their meaning, and the Yjs document format and the checkpoint format do not change. Only the labels of such markers in the room change, and they now equal a fold and the editor alone. An ordered room admits only clients of its own code version.",
+  "tests": ["packages/core/src/collaboration/ordered/__tests__/checkpoint-fold-decide.test.ts"],
+  "changeset": "comment-in-pending-control",
+  "migration": null
+}

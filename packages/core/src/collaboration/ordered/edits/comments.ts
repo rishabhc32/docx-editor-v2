@@ -15,7 +15,7 @@ import {
   type OrderedCommentMarker,
 } from '../model/comments.ts';
 import { createOrderedItem } from '../model/document.ts';
-import { insertItems } from '../model/mutations.ts';
+import { insertItems, relabel } from '../model/mutations.ts';
 import { OrderedRefusal } from '../model/refusal.ts';
 import { recordUndo } from '../model/undo-record.ts';
 import type {
@@ -27,6 +27,7 @@ import type {
 } from '../model/types.ts';
 import { withChildren } from '../ooxml-nodes.ts';
 import type { Ctx } from './context.ts';
+import { pendingControlAround } from './direct.ts';
 import { freshDecimal, itemBefore, wml } from './marker.ts';
 import { mintParagraph } from './para-ids.ts';
 import type { OrderedResolvedPlace } from './places.ts';
@@ -194,6 +195,16 @@ export function insertComment(
   // Read after the start went in: at a caret, the end follows the start
   const last = itemBefore(ctx, to);
   insertItems(ctx.doc, ctx.story, ctx.story.tree.prev(last), [markers.end, markers.reference]);
+
+  // A marker in a pending new control is part of its insertion, as Word writes it in the one
+  // `w:ins` that holds the control: a reject takes it with the control
+  for (const marker of [markers.start, markers.end, markers.reference]) {
+    const by = pendingControlAround(ctx.doc, ctx.story, marker);
+    if (by !== null) {
+      relabel(ctx.doc, ctx.story, marker, { by });
+    }
+  }
+
   putRange(ctx.doc, id, ctx.story, markers);
   addComment(ctx, id, text, null);
   return id;

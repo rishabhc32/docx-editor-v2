@@ -19,6 +19,7 @@ import {
   apply,
   APPLY_FILE,
   at,
+  BODY,
   DIRECT,
   EDIT,
   markOf,
@@ -304,6 +305,36 @@ describe('a decision after a fold, beside a pending control value', () => {
       'a pick partly taken back'
     );
   });
+});
+
+// A comment's marker inside a party's pending new control is part of its insertion, as Word writes
+// it inside the one `w:ins` that holds the control: a reject takes it with the control, as in the
+// editor alone, live as after a fold (Word evidence is still to come)
+describe('a decision after a fold, on a comment in a pending new control', () => {
+  // Places as paragraph and offset: Ana's words in the control are 9 to 12, after the words she
+  // struck
+  for (const [name, from, to] of [
+    ['its start in the control', [0, 10], [1, 2]],
+    ['its end in the control', [0, 2], [0, 11]],
+    ['the whole comment in the control', [0, 10], [0, 11]],
+  ] as const) {
+    test(name, async () => {
+      await foldOf(
+        p(t('Cloud and serverless.')) + p(t('After.')),
+        (doc) => {
+          const wrap = {
+            from: at(doc, 0, 6),
+            to: at(doc, 0, 9),
+            control: { type: 'comboBox' },
+          } as const;
+          apply(doc, 'ana:1', { kind: 'wrap-control', ...EDIT, ...wrap });
+          const range = { from: at(doc, from[0], from[1]), to: at(doc, to[0], to[1]) };
+          apply(doc, 'olive:1', { kind: 'comment', part: BODY, ...range, text: 'Why?' }, 'Olive');
+        },
+        name
+      );
+    });
+  }
 });
 
 describe('a decision after a fold, on a value in a pending control', () => {
