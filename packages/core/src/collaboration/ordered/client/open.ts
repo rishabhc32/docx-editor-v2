@@ -200,11 +200,15 @@ function openCheckpointRead(pkg: OoxmlPackage, options: OrderedWordFileOptions):
   withoutDrawnProperties(doc, marks.drawn);
   withCheckpointRuns(doc, marks.runs);
 
-  // The versions the room gave, after every step above: an open is no write of a suggestion
-  for (const { id, version } of facts.suggestions) {
+  // The versions the room gave, after every step above: an open is no write of a suggestion. A
+  // direct edit whose records the manifest keeps stays one (a row's reject resets no cell for it)
+  for (const { id, version, direct } of facts.suggestions) {
     const suggestion = doc.suggestions.get(id);
     if (suggestion !== undefined) {
       suggestion.version = version ?? 0;
+      if (direct === true) {
+        suggestion.direct = true;
+      }
     }
   }
 

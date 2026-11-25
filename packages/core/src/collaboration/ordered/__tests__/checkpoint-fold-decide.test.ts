@@ -573,6 +573,21 @@ describe("a fold of a table's records", () => {
     await checkFold(doc, base, mediaStore(base), "a party's deletion of a direct column");
   });
 
+  // The organiser's direct widths over a pending cell fill in the same row: a reject of the fill
+  // resets the row's cells with no record of their own (the direct column's new cell), after a
+  // fold as live: a fold keeps which suggestions were direct edits
+  test("a pending cell fill, then the organiser's direct column and widths", async () => {
+    const { document: doc, base } = openOrderedWordFile(APPLY_FILE, { file: 1 });
+    const cell = (k: number) => addressOf(opens(doc, 'tc')[k]!);
+    const fill = { op: 'setTableCellFill', color: { kind: 'hex', value: 'FFCC00' } } as const;
+    apply(doc, 'olive:1', { kind: 'table-property', ...EDIT, on: [cell(0)], op: fill }, 'Olive');
+    const right = { cell: cell(1), where: 'right' } as const;
+    apply(doc, 'olive:2', { kind: 'insert-column', ...DIRECT, ...right }, 'Olive');
+    const op = { op: 'setTableColumnWidths', leftWidthTwips: 3600, rightWidthTwips: 2400 } as const;
+    apply(doc, 'olive:3', { kind: 'table-property', ...DIRECT, on: [cell(1)], op }, 'Olive');
+    await checkFold(doc, base, mediaStore(base), 'direct widths over a pending fill');
+  });
+
   // Ben strikes a row that Olive's new table then goes in, and the organiser adds a row to that
   // table directly: the new row is in Ben's struck row as the table's other rows are, as a load
   // reads it, so an accept of Ben's deletion takes it too, after a fold as live

@@ -5,7 +5,7 @@ import type { OoxmlAttribute } from '../../../store/package/ooxml-tree.ts';
 import { isXmlNCName } from '../../../store/package/qname.ts';
 import { isValidXmlText } from '../../../store/package/sinks.ts';
 import { ORDERED_NAMESPACE_PATTERN } from '../change/ids.ts';
-import { at, int, Invalid, list, oneOf, plainFields, required, str } from '../change/read.ts';
+import { at, bool, int, Invalid, list, oneOf, plainFields, required, str } from '../change/read.ts';
 import { suggestionId } from '../change/values.ts';
 import { isTripleAttribute, MAX_OTHER_ATTRIBUTES } from '../load/state.ts';
 import { readPerson } from './person.ts';
@@ -31,6 +31,8 @@ export interface CheckpointSuggestion {
    * when absent.
    */
   readonly version?: number;
+  /** A direct edit's suggestion (`OrderedSuggestion.direct`): decided, never a card. */
+  readonly direct?: boolean;
 }
 
 /** A list of the manifest, of at least `min` entries: the manifest's byte cap bounds it. */
@@ -70,7 +72,7 @@ const DECIDED: readonly OrderedSuggestionStatus[] = ['accepted', 'rejected'];
 
 /** The suggestions as the manifest lists them. */
 export function suggestionsJson(suggestions: readonly CheckpointSuggestion[]): unknown[] {
-  return suggestions.map(({ id, attribution, revisions, record, status, version }) => ({
+  return suggestions.map(({ id, attribution, revisions, record, status, version, direct }) => ({
     id,
     author: attribution.author,
     ...(attribution.date === undefined ? {} : { date: attribution.date }),
@@ -89,6 +91,7 @@ export function suggestionsJson(suggestions: readonly CheckpointSuggestion[]): u
     ...(record === undefined ? {} : { record }),
     ...(status === undefined || status === 'pending' ? {} : { status }),
     ...(version === undefined || version === 0 ? {} : { version }),
+    ...(direct === true ? { direct } : {}),
   }));
 }
 
@@ -121,7 +124,18 @@ function readSuggestion(value: unknown, path: string): CheckpointSuggestion {
     ...(f.has('record') ? { record: readRecord(f.get('record'), path, revisions) } : {}),
     ...(f.has('status') ? { status: oneOf(f.get('status'), at(path, 'status'), DECIDED) } : {}),
     ...(f.has('version') ? { version: int(f.get('version'), at(path, 'version')) } : {}),
+    ...(f.has('direct') ? { direct: readDirect(f.get('direct'), f.has('status'), path) } : {}),
   };
+}
+
+/** A direct edit's mark: only on a decided suggestion, as the room makes one accepted. */
+function readDirect(value: unknown, decided: boolean, path: string): boolean {
+  const direct = bool(value, at(path, 'direct'));
+  if (direct && !decided) {
+    throw new Invalid('invalid-value', at(path, 'direct'), 'a pending suggestion');
+  }
+
+  return direct;
 }
 
 /** A change record's local name, of a suggestion with its one `w:id`. */

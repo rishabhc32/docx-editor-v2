@@ -519,6 +519,9 @@ describe('a file of another kind is refused by name', () => {
       }),
       (m) => ({ ...m, suggestions: [{ ...ANA_SUGGESTION, version: -1 }] }),
       (m) => ({ ...m, suggestions: [{ ...ANA_SUGGESTION, version: '2' }] }),
+      // A direct edit is decided: never a pending suggestion, and the mark is a boolean
+      (m) => ({ ...m, suggestions: [{ ...ANA_SUGGESTION, direct: true }] }),
+      (m) => ({ ...m, suggestions: [{ ...ANA_SUGGESTION, status: 'accepted', direct: 1 }] }),
       (m) => ({ ...m, changeRecords: [{ label: 0, target: 'tcPr', records: [] }] }),
       // A label on no element of the file
       (m) => ({
