@@ -228,12 +228,13 @@ export function foldPrint(doc: OrderedDocument, base: OoxmlPackage, blobs: FoldB
       by: key(by),
       dels: keys(item.dels),
       fmts: keys(roles.fmt),
-      // A decided record takes over nothing: a fold resolves it
+      // A decided record takes over nothing: a fold resolves it. Records apply in their order of
+      // creation, and a fold puts the records taken in front of their holder's
       replaced: keys(
         [...item.fmts, ...item.props].flatMap((r) =>
           r.replaced === undefined || key(r.suggestion) === null ? [] : [r.replaced]
         )
-      ),
+      ).sort(),
       // Records apply in their order of creation, whatever their place in the list
       props: keys(roles.prop).sort(),
       // A move's name stays on its words after its decision: they show as a pending move's
