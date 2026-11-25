@@ -248,9 +248,11 @@ export interface OrderedElementRecord {
   /** The suggestions it was taken from before `replaced`, oldest first. */
   readonly replacedEarlier?: readonly string[];
   /**
-   * A direct change made over pending records of the same properties: their suggestions. Word
-   * keeps one record, the properties before the first pending change, so a reject of one of
-   * them takes this change away too, as the engine's reject does.
+   * A direct change, or a column's lent width or grid, made over pending records of the same
+   * properties: their suggestions. Word keeps one record, the properties before the first
+   * pending change, so a reject of one of them takes a direct change away too, as the engine's
+   * reject does; the engine lent the column from that record too, so a lent width or grid stays
+   * lent (a lent grid's `element` keeps the record's original as the engine split it).
    */
   readonly over?: readonly string[];
   /**

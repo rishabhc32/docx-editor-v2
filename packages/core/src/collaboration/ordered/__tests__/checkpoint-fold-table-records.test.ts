@@ -106,33 +106,47 @@ describe('row heights made in turn', () => {
 });
 
 // A table record the load read from the file's change record, and a column made after a fold
-// that changes its original: the record holds the changed original after another fold, as live
-test("a party's row height and widths, a fold, then the organiser's column", async () => {
-  const first = openOrderedWordFile(APPLY_FILE, { file: 1 });
-  const blobs = mediaStore(first.base);
-  const row = (doc: OrderedDocument, k: number) => addressOf(opens(doc, 'tr')[k]!);
-  const height = (doc: OrderedDocument, k: number, heightTwips: number) =>
-    ({
-      kind: 'table-property',
-      on: [row(doc, k)],
-      op: { op: 'setTableRowHeight', heightTwips },
-    }) as const;
-  apply(
-    first.document,
-    'ben:1',
-    { kind: 'delete-row', ...EDIT, row: row(first.document, 0) },
-    'Ben'
-  );
-  apply(first.document, 'ana:1', { ...height(first.document, 0, 700), ...EDIT }, 'Ana');
-  const on = [addressOf(opens(first.document, 'tc')[0]!)];
-  const op = { op: 'setTableColumnWidths', leftWidthTwips: 3600, rightWidthTwips: 2400 } as const;
-  apply(first.document, 'ana:2', { kind: 'table-property', ...EDIT, on, op }, 'Ana', ANA_1);
-  const { document: doc, base } = await folded(first.document, first.base, 2, blobs);
-  apply(doc, 'olive:1', { ...height(doc, 1, 400), ...DIRECT }, 'Olive');
-  const right = { cell: addressOf(opens(doc, 'tc')[2]!), where: 'right' } as const;
-  apply(doc, 'olive:2', { kind: 'insert-column', ...EDIT, ...right }, 'Olive');
-  await checkFold(doc, base, blobs, 'a column over a file record of widths');
-});
+// that changes its original: the record holds the changed original after another fold, as live,
+// and a reject of the record keeps the column lent once it is accepted
+test.each([false, true])(
+  "a party's row height and widths, a fold, then the organiser's column (accepted: %p)",
+  async (accepted) => {
+    const first = openOrderedWordFile(APPLY_FILE, { file: 1 });
+    const blobs = mediaStore(first.base);
+    const row = (doc: OrderedDocument, k: number) => addressOf(opens(doc, 'tr')[k]!);
+    const height = (doc: OrderedDocument, k: number, heightTwips: number) =>
+      ({
+        kind: 'table-property',
+        on: [row(doc, k)],
+        op: { op: 'setTableRowHeight', heightTwips },
+      }) as const;
+    apply(
+      first.document,
+      'ben:1',
+      { kind: 'delete-row', ...EDIT, row: row(first.document, 0) },
+      'Ben'
+    );
+    apply(first.document, 'ana:1', { ...height(first.document, 0, 700), ...EDIT }, 'Ana');
+    const on = [addressOf(opens(first.document, 'tc')[0]!)];
+    const op = { op: 'setTableColumnWidths', leftWidthTwips: 3600, rightWidthTwips: 2400 } as const;
+    apply(first.document, 'ana:2', { kind: 'table-property', ...EDIT, on, op }, 'Ana', ANA_1);
+    const { document: doc, base } = await folded(first.document, first.base, 2, blobs);
+    apply(doc, 'olive:1', { ...height(doc, 1, 400), ...DIRECT }, 'Olive');
+    const right = { cell: addressOf(opens(doc, 'tc')[2]!), where: 'right' } as const;
+    apply(doc, 'olive:2', { kind: 'insert-column', ...EDIT, ...right }, 'Olive');
+    if (accepted) {
+      const suggestions = orderedCardSeen(doc, 'S:olive:2.1')!;
+      apply(
+        doc,
+        'olive:3',
+        { kind: 'decide', cards: [{ suggestions }], status: 'accepted' },
+        'Olive'
+      );
+    }
+
+    await checkFold(doc, base, blobs, 'a column over a file record of widths');
+  }
+);
 
 describe("the organiser's direct columns at a decision", () => {
   // The organiser's direct deletion of a column, after a party's row height and the organiser's

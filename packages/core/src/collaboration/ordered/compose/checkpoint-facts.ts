@@ -652,8 +652,8 @@ function checkpointUntracked(
         if (kept !== undefined) {
           const { element, untracked, recordUnchanged } = record;
 
-          // A direct record goes with a reject of the pending records it was made over, after a
-          // fold too
+          // A direct record goes with a reject of the pending records it was made over, and a
+          // column's lent record stays lent, after a fold too
           const over = record.over && listedOf(doc, list, record.over);
           const earlier = listedOf(doc, list, record.replacedEarlier ?? []);
           const replacedEarlier = earlier.length > 0 ? earlier : undefined;

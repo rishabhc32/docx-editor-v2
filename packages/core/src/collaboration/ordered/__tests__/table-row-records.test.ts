@@ -36,13 +36,15 @@ import { docx, packageOf, p, t } from './word-fixtures.ts';
 
 const cell = (text: string) =>
   `<w:tc><w:tcPr><w:tcW w:w="2340" w:type="dxa"/></w:tcPr>${p(t(text))}</w:tc>`;
-// One row of two cells
-const FILE = docx(
-  '<w:tbl><w:tblPr><w:tblW w:w="4680" w:type="dxa"/></w:tblPr>' +
-    '<w:tblGrid><w:gridCol w:w="2340"/><w:gridCol w:w="2340"/></w:tblGrid>' +
-    `<w:tr>${cell('A1')}${cell('B1')}</w:tr></w:tbl>` +
-    p(t('After.'))
-);
+/** One row of two cells, with the row's own properties. */
+const oneRow = (trPr = '') =>
+  docx(
+    '<w:tbl><w:tblPr><w:tblW w:w="4680" w:type="dxa"/></w:tblPr>' +
+      '<w:tblGrid><w:gridCol w:w="2340"/><w:gridCol w:w="2340"/></w:tblGrid>' +
+      `<w:tr>${trPr}${cell('A1')}${cell('B1')}</w:tr></w:tbl>` +
+      p(t('After.'))
+  );
+const FILE = oneRow();
 
 const tableXml = (part: OoxmlPart): string =>
   serializeOoxmlPart(part).match(/<w:tbl>.*<\/w:tbl>/)?.[0] ?? '';
@@ -232,6 +234,74 @@ describe("a party's new column over another party's pending row height", () => {
 
   test('saves and reopens with the same view and decisions', () => {
     checkSaveAndLoad(suggested('height first'), 'new column over a row height', packageOf(FILE));
+  });
+});
+
+// The engine lends a new column's width and grid column from the original a pending record holds
+// too (`withRecordLending`, `lentGrid`), so a reject of that record keeps the column lent, whether
+// the column is pending or accepted then
+describe("a party's new column over another party's pending widths", () => {
+  // The height is the row's own record on a row with properties (Word's form)
+  const file = oneRow('<w:trPr><w:cantSplit/></w:trPr>');
+
+  /**
+   * Cy suggests a row height and A1 wider (the engine lends from a recorded width under a row
+   * record only); Ana suggests a column right of A1, which takes half of its width.
+   */
+  function widened(): OrderedDocument {
+    const doc = loadOrderedPackage(packageOf(file));
+    const row = [addressOf(opens(doc, 'tr')[0]!)];
+    const height = { op: 'setTableRowHeight', heightTwips: 480 } as const;
+    apply(doc, 'cy:1', { kind: 'table-property', ...EDIT, on: row, op: height }, 'Cy');
+    const on = [addressOf(opens(doc, 'tc')[0]!)];
+    const op = { op: 'setTableColumnWidths', leftWidthTwips: 3000, rightWidthTwips: 1680 } as const;
+    apply(doc, 'cy:2', { kind: 'table-property', ...EDIT, on, op }, 'Cy');
+    const cell = addressOf(opens(doc, 'tc')[0]!);
+    apply(doc, 'ana:1', { kind: 'insert-column', ...EDIT, cell, where: 'right' });
+    return doc;
+  }
+
+  test("writes the engine's form: the grid record's original split as the engine splits it", () => {
+    const xml = tableXml(composeOrderedPart(widened(), BODY).part);
+    const grid = (part: string) => [...part.matchAll(/<w:gridCol w:w="(\d+)"/g)].map((m) => m[1]);
+    const history = /<w:tblGridChange\b.*?<\/w:tblGridChange>/.exec(xml)?.[0] ?? '';
+    expect(grid(history)).toEqual(['1170', '1170', '2340']);
+    expect(widths(xml)).toEqual({
+      shown: ['1500', '1500', '1680'],
+      recorded: ['840', '1500', '2340'],
+    });
+  });
+
+  test.each([
+    ['Cy', 'reject', 'Ana', 'accept', ['840', '1500', '2340']],
+    ['Ana', 'accept', 'Cy', 'reject', ['840', '1500', '2340']],
+    ['Cy', 'reject', 'Ana', 'reject', ['2340', '2340']],
+    ['Cy', 'accept', 'Ana', 'reject', ['3000', '1680']],
+  ] as const)(
+    'decided in the room and by the engine alike: %s %s, then %s %s',
+    (first, how, second, then, end) => {
+      const doc = widened();
+      let part = composeOrderedPart(doc, BODY).part;
+      const sids = (author: string) =>
+        author === 'Ana' ? ['S:ana:1.1'] : ['S:cy:1.1', 'S:cy:2.1'];
+      for (const [author, action] of [
+        [first, how],
+        [second, then],
+      ] as const) {
+        part = engineDecides(part, author, action);
+        for (const sid of sids(author)) {
+          setStatus(doc, sid, action === 'accept' ? 'accepted' : 'rejected');
+        }
+
+        expect(plainTable(composeOrderedPart(doc, BODY).part)).toBe(plainTable(part));
+      }
+
+      expect(widths(tableXml(part)).shown).toEqual([...end]);
+    }
+  );
+
+  test('saves and reopens with the same view and decisions', () => {
+    checkSaveAndLoad(widened(), 'new column over pending widths', packageOf(file));
   });
 });
 

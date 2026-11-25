@@ -78,7 +78,10 @@ export interface CheckpointUntrackedRecord extends CheckpointChangeRecord {
   /** Shown with no change record. */
   readonly untracked?: boolean;
   readonly recordUnchanged?: boolean;
-  /** A direct record's pending records it was made over: their suggestions, by their places. */
+  /**
+   * A direct record's (or a column's lent record's) pending records it was made over: their
+   * suggestions, by their places.
+   */
   readonly over?: readonly number[];
 }
 

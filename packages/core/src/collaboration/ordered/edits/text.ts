@@ -366,6 +366,17 @@ function pendingSuggestionsOf(
 const holdsChangeRecord = (properties: OoxmlElement | null, name: string): boolean =>
   properties?.children.some((child) => isWml(child, name)) === true;
 
+/** The pending suggestions of an item's records of `target` that Word writes a change record for. */
+export const recordedPending = (
+  ctx: Ctx,
+  item: OrderedItem,
+  target: OrderedPropertyRecord['target']
+): string[] =>
+  pendingSuggestionsOf(
+    ctx,
+    item.props.filter((kept) => kept.target === target && writesRecord(kept))
+  );
+
 /**
  * A format or property record Word writes a change record for: not one shown with none
  * (`untracked`: a format on the author's own pending words, a column's lent width), nor one
@@ -449,11 +460,10 @@ export function withPropertyRecord(
   // (`over`). A paragraph press that changes nothing writes no record. A change Word records
   // nowhere (a column's lent width) leaves the record too
   if (ctx.direct) {
-    const pending = props.filter((kept) => kept.target === record.target && writesRecord(kept));
     const shows =
       record.target !== 'pPr' ||
       holdsChangeRecord(shownParagraphProperties(ctx, item), 'pPrChange');
-    const over = shows ? pendingSuggestionsOf(ctx, pending) : [];
+    const over = shows ? recordedPending(ctx, item, record.target) : [];
     const namesOver = record.kind !== 'object';
     return [...props, over.length > 0 && namesOver ? { ...record, over } : record];
   }

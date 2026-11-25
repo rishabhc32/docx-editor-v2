@@ -38,7 +38,14 @@ import type {
   OrderedPropertyTarget,
   OrderedStyleWrite,
 } from '../model/types.ts';
-import { attributeOf, isWml, withAttributes, withChildren, wmlAttribute } from '../ooxml-nodes.ts';
+import {
+  attributeOf,
+  childNamed,
+  isWml,
+  withAttributes,
+  withChildren,
+  wmlAttribute,
+} from '../ooxml-nodes.ts';
 import {
   isChangeRecord,
   type ComposeContext,
@@ -196,9 +203,10 @@ function holderOf(records: readonly AnyRecord[], suggestion: string): string | u
 }
 
 /**
- * Whether a direct record was made over a pending record whose holder is now rejected (or drawn
- * so): Word keeps one record, the properties before the first pending change, so the reject
- * takes the direct change away too. `keeps` names a rejected suggestion whose reject keeps them.
+ * Whether a direct record (or a column's lent record) was made over a pending record whose holder
+ * is now rejected (or drawn so): Word keeps one record, the properties before the first pending
+ * change, so the reject takes the direct change away too. `keeps` names a rejected suggestion
+ * whose reject keeps them.
  */
 export function madeOverRejected(
   ctx: ComposeContext,
@@ -675,6 +683,16 @@ function withLentWidth(
 }
 
 /**
+ * The original of a pending grid record a column's grid was lent over, as the engine split it
+ * (`lentGrid`): the lent record keeps it, as only it says where the column went. Undefined for a
+ * grid lent over none.
+ */
+function lentGridOriginal(record: OrderedElementRecord): readonly OoxmlNode[] | undefined {
+  const history = record.element ? childNamed(record.element, 'tblGridChange') : undefined;
+  return history ? childNamed(history, 'tblGrid')?.children : undefined;
+}
+
+/**
  * An open item's properties children (`w:tblPr`, `w:tblGrid`, `w:trPr`, `w:tcPr`) under their
  * records.
  */
@@ -752,26 +770,70 @@ function containerAfter(ctx: ComposeContext, open: OrderedItem, child: OoxmlNode
   const kept = records.filter(
     (record) => ctx.rejectedOrDrawnSo(record.suggestion) && loneGrid(record.suggestion)
   );
+
+  // A column's lent width or grid (untracked) over a record now rejected stays: it was lent from
+  // that record's original too, as the engine lends it
+  const lent = (record: OrderedElementRecord) =>
+    record.untracked === true && (target === 'tcPr' || target === 'tblGrid');
+  const lentOverRejected = (record: OrderedElementRecord) =>
+    lent(record) && madeOverRejected(ctx, record, records, loneGrid);
   const decided = shown.accepted.filter(
-    (record) => !madeOverRejected(ctx, record, records, loneGrid)
+    (record) => lentOverRejected(record) || !madeOverRejected(ctx, record, records, loneGrid)
   );
+
+  // Over a rejected record, a grid shows that original as the engine split it, and a width lends
+  // what it lent from what showed then (the records drawn, those it was lent over and what was
+  // made over them) from what shows now
+  const draw = (record: OrderedElementRecord, current: readonly OoxmlNode[]) => {
+    const given = applyProperties(record, current, keepNone);
+    if (!lentOverRejected(record)) {
+      return given;
+    }
+
+    if (target === 'tblGrid') {
+      return lentGridOriginal(record) ?? given;
+    }
+
+    const over = new Set(record.over);
+    const keeps = (suggestion: string) => over.has(suggestion) || loneGrid(suggestion);
+    const showed = new Set([
+      ...shown.accepted.filter((r) => !madeOverRejected(ctx, r, records, keeps)),
+      ...shown.pending,
+      ...kept,
+      ...records.filter((r) => over.has(r.suggestion)),
+    ]);
+    let lentFrom: readonly OoxmlNode[] = child.children;
+    for (const r of [...showed].filter((r) => r.seq < record.seq).sort(bySeq)) {
+      lentFrom = applyProperties(r, lentFrom, keepNone);
+    }
+
+    return withLentWidth(current, lentFrom, given);
+  };
   const [earlier, later] = aroundPending([...decided, ...kept].sort(bySeq), pending);
   const under = [...earlier, ...unrecorded].sort(bySeq);
   let inner: readonly OoxmlNode[] = child.children;
-  for (const record of under) inner = applyProperties(record, inner, keepNone);
+  for (const record of under) {
+    inner = draw(record, inner);
+  }
+
   const loaded = inner;
   let old = loaded;
   const taken: DrawnTakeover[] = [];
   for (const record of [...pending, ...later]) {
     const before = inner;
-    inner = applyProperties(record, inner, keepNone);
+    inner = draw(record, inner);
     noteTakeover(ctx, taken, record, before, inner);
 
     // A width lent after it is lent from the record's original too, as the engine lends it;
-    // so is a grid a column changed after it (a row height's grid record, Word's form)
-    if (record.untracked === true && target === 'tcPr') old = withLentWidth(old, before, inner);
-    if (record.untracked === true && target === 'tblGrid')
-      old = applyProperties(record, old, keepNone);
+    // so is a grid a column changed after it (a row height's grid record, Word's form), as the
+    // engine split it
+    if (lent(record) && target === 'tcPr') {
+      old = withLentWidth(old, before, inner);
+    }
+
+    if (lent(record) && target === 'tblGrid') {
+      old = lentGridOriginal(record) ?? applyProperties(record, old, keepNone);
+    }
   }
 
   // The record names the author of the latest change it records

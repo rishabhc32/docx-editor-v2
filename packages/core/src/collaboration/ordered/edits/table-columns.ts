@@ -11,7 +11,7 @@ import type { OrderedItem, OrderedPropertyTarget, OrderedSuggestion } from '../m
 import { childNamed, isWml, withChildren } from '../ooxml-nodes.ts';
 import { closeOf, itemsInside, refuseLockedTable } from '../placement.ts';
 import { retractSuggestion } from './retract.ts';
-import { holdWithin, nestedIn, suggestionFor, takeBack, type Ctx } from './context.ts';
+import { holdWithin, nestedIn, suggestionFor, takeBack, withNewIds, type Ctx } from './context.ts';
 import {
   blockOf,
   cellsOf,
@@ -34,7 +34,7 @@ import {
   viewPart,
 } from './templates.ts';
 import { takeBackNotesOf } from './note-body.ts';
-import { struckAlready } from './text.ts';
+import { recordedPending, struckAlready } from './text.ts';
 
 /** The cell with a template `w:cellIns`, so it loads as the edit's suggestion's own cell. */
 function asInsertedCell(ctx: Ctx, cell: OoxmlElement): OoxmlElement {
@@ -143,12 +143,32 @@ function recordWidths(
   const flags = ctx.direct ? {} : { untracked: true };
   const record = (target: OrderedPropertyTarget, element: OoxmlElement) =>
     elementRecord(ctx, sid, target, element, tableCells, flags);
+
+  // A suggestion lends from the original of the pending records of the grid and of a cell's width
+  // too (the engine's `lentGrid`, `withRecordLending`): the record names them (`over`), so their
+  // reject keeps the column lent. The grid's keeps that original as the engine split it
+  // (`w:tblGridChange`): only it says where the column went
+  const lent = (open: OrderedItem, target: 'tblGrid' | 'tcPr', element: OoxmlElement) => {
+    const given = record(target, element);
+    const over = ctx.direct ? [] : recordedPending(ctx, open, target);
+    if (over.length === 0 || given.element === null) {
+      return given;
+    }
+
+    const original = childNamed(element, 'tblGridChange');
+    const children = [...given.element.children, ...(original ? [withNewIds(ctx, original)] : [])];
+    return { ...given, over, element: withChildren(given.element, children) };
+  };
   const tableOpen = openOf(ctx, before);
   if (!tableOpen) throw new OrderedRefusal('malformed-story', 'a table with no open item');
   for (const name of ['tblPr', 'tblGrid'] as const) {
     const was = childNamed(before, name);
     const now = childNamed(after, name);
-    if (now && !same(was, now)) withRecord(ctx, tableOpen, record(name, now));
+    if (!now || same(was, now)) {
+      continue;
+    }
+
+    withRecord(ctx, tableOpen, name === 'tblGrid' ? lent(tableOpen, name, now) : record(name, now));
   }
 
   const old = cellsOf(before);
@@ -157,7 +177,9 @@ function recordWidths(
     const now = childNamed(cell, 'tcPr');
     if (!now || (was && same(childNamed(was, 'tcPr'), now))) continue;
     const open = was ? openOf(ctx, cell) : added.get(id);
-    if (open) withRecord(ctx, open, record('tcPr', now));
+    if (open) {
+      withRecord(ctx, open, lent(open, 'tcPr', now));
+    }
   }
 
   // A row's columns skipped before or after its cells, which Word's column rules for merged
