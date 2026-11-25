@@ -28,6 +28,7 @@ import { withUniqueIds } from './unique-ids.ts';
 import { MEDIA_PLACE, withFileMediaBytes, withFileMediaPlaces } from './file-media.ts';
 import { withoutComments } from './without-comments.ts';
 import type { ComposeOptions, HeldTakeovers, OrderedRetainedPrompt } from './context.ts';
+import { laterRelationshipsOf } from './relationship-targets.ts';
 import {
   isAddedStory,
   mediaBytesOf,
@@ -116,7 +117,10 @@ function composeWithMedia(
   }
 
   // The prompts a suggestion hid, kept as placeholder blocks in the glossary
-  pkg = withDecidedPrompts(withRetainedPrompts(pkg, prompts, new Set()), doc);
+  pkg = withDecidedPrompts(
+    withRetainedPrompts(pkg, prompts, new Set(), laterRelationshipsOf(doc)),
+    doc
+  );
   pkg = withoutUnusedLoadedMedia(pkg, doc);
 
   // The file's tracked changes outside the stories as the decisions leave them, before the

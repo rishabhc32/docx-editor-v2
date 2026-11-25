@@ -22,6 +22,7 @@ import {
   withOrderedCommentRoots,
   type OrderedCommentRoots,
 } from '../compose/comments.ts';
+import { laterRelationshipsOf } from '../compose/relationship-targets.ts';
 import {
   isAddedStory,
   mediaBytesOf,
@@ -296,7 +297,12 @@ export class OrderedPublisher {
   #finished(composed: OoxmlPackage, keep: boolean, comments: boolean): OoxmlPackage {
     let pkg = composed;
     if (this.#prompts.size > 0) {
-      pkg = withRetainedPrompts(pkg, [...this.#prompts.values()], new Set());
+      pkg = withRetainedPrompts(
+        pkg,
+        [...this.#prompts.values()],
+        new Set(),
+        laterRelationshipsOf(this.#doc)
+      );
     }
 
     this.#plain = pkg;

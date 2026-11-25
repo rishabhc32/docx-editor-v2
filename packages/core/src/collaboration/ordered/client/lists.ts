@@ -6,7 +6,7 @@ import type { OoxmlElement, OoxmlNode, OoxmlPart } from '../../../store/package/
 import { partNameKey } from '../../../store/package/opc-names.ts';
 import { withoutPart } from '../../../store/package/package-edit.ts';
 import { resolveRelationship } from '../../../store/package/relationships.ts';
-import { RELATIONSHIP_TYPES } from '../compose/relationship-types.ts';
+import { RELATIONSHIP_TYPES } from '../compose/relationship-targets.ts';
 import { styleElementResource } from '../edits/resources.ts';
 import type { CheckpointList, CheckpointStyle } from '../model/checkpoint-lists.ts';
 import {

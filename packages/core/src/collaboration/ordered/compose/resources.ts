@@ -56,7 +56,12 @@ import {
   wmlAttribute,
 } from '../ooxml-nodes.ts';
 import { customXmlBindingKey, hasCustomXml, withCustomXml } from './custom-xml.ts';
-import { OFFICE_RELATIONSHIPS, RELATIONSHIP_TYPES } from './relationship-types.ts';
+import {
+  OFFICE_RELATIONSHIPS,
+  RELATIONSHIP_TYPES,
+  targetFrom,
+  targetOf,
+} from './relationship-targets.ts';
 import { withSettings } from './settings.ts';
 
 const PACKAGE_RELATIONSHIPS = 'http://schemas.openxmlformats.org/package/2006/relationships';
@@ -185,12 +190,6 @@ function compareKeys(a: OrderedResource, b: OrderedResource): number {
   if (a.key < b.key) return -1;
   if (a.key > b.key) return 1;
   return 0;
-}
-
-/** A relationship target from its owner: relative within the owner's folder, else absolute. */
-export function targetFrom(owner: string, part: string): string {
-  const folder = owner.slice(0, owner.lastIndexOf('/') + 1);
-  return part.startsWith(folder) ? part.slice(folder.length) : part;
 }
 
 /** What a package writes of the resources: the keys that show and are used. */
@@ -499,14 +498,6 @@ function withRelationships(
       }))
     );
   return next;
-}
-
-function targetOf(doc: OrderedDocument, resource: OrderedRelationshipResource, owner: string) {
-  if ('external' in resource.target) return resource.target.external;
-  const target = doc.resources.added.get(resource.target.resource);
-  if (!target || (target.kind !== 'media' && target.kind !== 'story' && target.kind !== 'part'))
-    throw new OrderedRefusal('unknown-address', `no part for ${resource.key}`);
-  return targetFrom(owner, target.part);
 }
 
 /** A part of the main document's by relationship type, or null. */

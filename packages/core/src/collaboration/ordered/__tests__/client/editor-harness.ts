@@ -136,6 +136,8 @@ export async function join(
     readonly onApplyError?: OrderedCollaborationOptions['onApplyError'];
     /** The editor's `contentLockPolicy` option. Default: none, Word's lock. */
     readonly contentLockPolicy?: ContentLockPolicy;
+    /** The session's namespace, which names its change ids. Default: a new one. */
+    readonly namespace?: string;
   } = {}
 ): Promise<Person> {
   const refusals: OrderedClientRefusalReport[] = [];
@@ -163,6 +165,7 @@ export async function join(
     ...(options.suggests === undefined ? {} : { suggests: options.suggests }),
     ...(options.offlineEditing === undefined ? {} : { offlineEditing: options.offlineEditing }),
     ...(options.onApplyError === undefined ? {} : { onApplyError: options.onApplyError }),
+    ...(options.namespace === undefined ? {} : { namespace: options.namespace }),
   });
   const container = document.createElement('div');
   document.body.append(container);

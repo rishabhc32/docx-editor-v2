@@ -345,12 +345,18 @@ function bindingsFor(
   return clash ? null : added;
 }
 
+/** A relationship a caller writes after the prompts are kept (the room's own), by owner and id. */
+export type LaterRelationships = (
+  owner: string,
+  id: string
+) => Omit<RelationshipRecord, 'order'> | undefined;
+
 /**
  * `pkg` with each prompt as a glossary block, creating the glossary when the package has none,
  * and each part that changed named in `touched`. A block of the same name is not written twice,
- * nor one whose relationship ids the glossary cannot keep (`keepsRelationships`). Returns `pkg`
- * itself when the glossary cannot be written, so a decision falls back to the type's own prompt
- * rather than refusing the edit.
+ * nor one whose relationship ids the glossary cannot keep (`keepsRelationships`); `later` names
+ * the relationships the caller writes after this. Returns `pkg` itself when the glossary cannot be
+ * written, so a decision falls back to the type's own prompt rather than refusing the edit.
  *
  * The op that replaces a prompt only reports the block (`EditOptions.retainPrompt`); the store
  * transaction that ran the op writes it here, in the same package edit, so one undo step and one
@@ -359,7 +365,8 @@ function bindingsFor(
 export function withRetainedPrompts(
   pkg: OoxmlPackage,
   prompts: readonly RetainedPrompt[],
-  touched: Set<string>
+  touched: Set<string>,
+  later?: LaterRelationships
 ): OoxmlPackage {
   const glossary = glossaryPartOf(pkg)?.name;
   const claimed = new Map<string, string>();
@@ -367,7 +374,7 @@ export function withRetainedPrompts(
     (prompt, index) =>
       prompts.findIndex((other) => other.name === prompt.name) === index &&
       placeholderBlocksIn(pkg, prompt.name) === undefined &&
-      keepsRelationships(pkg, glossary, prompt, claimed)
+      keepsRelationships(pkg, glossary, prompt, claimed, later)
   );
   if (pending.length === 0) return pkg;
   const written = glossary ? withBlocksAdded(pkg, pending) : withNewGlossary(pkg, pending);
@@ -390,10 +397,11 @@ function keepsRelationships(
   pkg: OoxmlPackage,
   glossary: string | undefined,
   prompt: RetainedPrompt,
-  claimed: Map<string, string>
+  claimed: Map<string, string>,
+  later?: LaterRelationships
 ): boolean {
   const named = [...relationshipIdsIn(prompt.nodes)].map(
-    (id) => [id, relationshipKey(pkg, prompt.owner, id)] as const
+    (id) => [id, relationshipKey(pkg, prompt.owner, id, later)] as const
   );
   for (const [id, key] of named) {
     const held =
@@ -415,13 +423,18 @@ function keepsRelationships(
 
 /**
  * What relationship `id` of `owner` names: its type, its mode and its target, an internal one as
- * the part it resolves to. An id `owner` does not hold yet (the room writes its own later) is the
- * same only in that part.
+ * the part it resolves to, written or written `later`. An id that names none is the same only in
+ * that part.
  */
-function relationshipKey(pkg: OoxmlPackage, owner: string, id: string): string {
-  const record = relationshipOf(pkg, owner, id);
+function relationshipKey(
+  pkg: OoxmlPackage,
+  owner: string,
+  id: string,
+  later?: LaterRelationships
+): string {
+  const record = relationshipOf(pkg, owner, id) ?? later?.(owner, id);
   if (!record) {
-    return `unwritten ${owner} ${id}`;
+    return `none ${owner} ${id}`;
   }
 
   const resolved =

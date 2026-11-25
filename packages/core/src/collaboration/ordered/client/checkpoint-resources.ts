@@ -13,7 +13,7 @@ import {
 } from '../../../store/package/package-edit.ts';
 import { resolveRelationship } from '../../../store/package/relationships.ts';
 import { FRAGMENT_PART_CONTENT_TYPES } from '../change/fragment-names-objects.ts';
-import { RELATIONSHIP_TYPES } from '../compose/relationship-types.ts';
+import { RELATIONSHIP_TYPES } from '../compose/relationship-targets.ts';
 import { isSafeLinkAddress } from '../edits/resources.ts';
 import type { CheckpointResource } from '../model/checkpoint-lists.ts';
 import {

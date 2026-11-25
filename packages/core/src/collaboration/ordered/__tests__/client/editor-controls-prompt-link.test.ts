@@ -148,16 +148,16 @@ describe("a link on a prompt's words, once a party's typing fills the control", 
 });
 
 /**
- * A glossary with relationships of its own, as Word writes one: `rIdLink` names `held` there, the
- * id the main part gives the prompt's link.
+ * A glossary with relationships of its own, as Word writes one: `id` (by default `rIdLink`, the id
+ * the main part gives the prompt's link) names `held` there.
  */
-const glossaryHolding = (held: string): PackageExtras => ({
+const glossaryHolding = (held: string, id = 'rIdLink'): PackageExtras => ({
   parts: {
     'word/glossary/document.xml': `<w:glossaryDocument xmlns:w="${W}"><w:docParts/></w:glossaryDocument>`,
     'word/glossary/styles.xml': `<w:styles xmlns:w="${W}"/>`,
     'word/glossary/_rels/document.xml.rels':
       '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">' +
-      `<Relationship Id="rIdLink" ${held}/></Relationships>`,
+      `<Relationship Id="${id}" ${held}/></Relationships>`,
   },
   contentTypes:
     `<Override PartName="/word/glossary/document.xml" ContentType="${WML_CT}.document.glossary+xml"/>` +
@@ -216,4 +216,51 @@ describe('a link whose id the glossary already holds', () => {
       }
     });
   }
+});
+
+// The room mints its own id for the organiser's link (`rO<namespace>_1_1`) and writes it after the
+// glossary keeps the prompt. Here the glossary already holds that id for the same link. The room
+// once read the id as not written yet and left the prompt out, where the editor alone keeps it.
+describe("the room's own link id, which the glossary already holds for the same link", () => {
+  test('the room keeps the prompt with its link, as the editor alone does', async () => {
+    const minted = 'rOolga-1_1_1';
+    const fees = `Type="${R}/hyperlink" Target="https://example.com/fees" TargetMode="External"`;
+    const file = prompt(t('here', FACE), glossaryHolding(fees, minted));
+    const review = reviewTestModule();
+    const room = localRoom(file, { policy: suggestionsOnlyPolicy() });
+    const olga = await join(room, 'Olga', {
+      mode: 'edit',
+      login: ORGANISER,
+      wordFile: file,
+      review,
+      namespace: 'olga-1',
+    });
+    const cy = await join(room, 'Cy', { wordFile: file, review });
+    select(olga.editor, 0, 12, 16);
+    expect(
+      olga.editor.exec({ type: 'insertHyperlink', href: 'https://example.com/fees' })
+    ).toMatchObject({ ok: true });
+    await settle();
+    expect(editorXml(cy)).toContain(`r:id="${minted}"`);
+
+    caretAt(cy, 0, 8);
+    surface(cy).insertPlainText('Q');
+    await settle();
+    converged(room, [olga, cy]);
+    expect(editorTexts(cy)).toEqual(FILLED);
+    for (const pkg of [
+      roomFile(room.room.document, file),
+      reread(new Uint8Array(await cy.editor.save())),
+    ]) {
+      expect(unresolvedRelationships(pkg)).toEqual([]);
+      expect(serializeOoxmlPart(pkg.parts.get(GLOSSARY)!)).toContain(`r:id="${minted}"`);
+    }
+
+    // A reject of the typing gives the prompt back with its link
+    rejectAll(olga);
+    await settle();
+    converged(room, [olga, cy]);
+    expect(editorTexts(cy)).toEqual(PROMPT);
+    expect(editorXml(cy)).toContain('<w:hyperlink');
+  });
 });
