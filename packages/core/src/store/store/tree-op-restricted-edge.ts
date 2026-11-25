@@ -3,9 +3,20 @@
 // Kept apart from `tree-op-segments.ts`, which resolves every other insertion site, and
 // imports only its types: the segments module passes in the offset index it already built.
 
-import type { OoxmlElement, OoxmlNode, OoxmlParagraphNode } from '../package/ooxml-tree.ts';
+import type {
+  OoxmlElement,
+  OoxmlNode,
+  OoxmlParagraphNode,
+  OoxmlPart,
+} from '../package/ooxml-tree.ts';
 import { isFieldChrome } from '../package/field-nodes.ts';
-import { inlineContainersOf, isContentControlNode, refusesTypedContent } from './tree-op-nodes.ts';
+import {
+  contentControlAncestorsOf,
+  effectiveContentLockAt,
+  inlineContainersOf,
+  isContentControlNode,
+  refusesTypedContent,
+} from './tree-op-nodes.ts';
 import type { InsertionSite, ParagraphOffsetIndex } from './tree-op-segments.ts';
 
 /**
@@ -76,6 +87,41 @@ function lastSegmentEndingAt(offsets: ParagraphOffsetIndex, runId: string, offse
 const holdsControl = new WeakMap<OoxmlParagraphNode, boolean>();
 
 /** Whether any content control sits inside the paragraph. Paragraph nodes are immutable. */
+/**
+ * The inline control an unowned tracked insertion enters at a caret on its leading edge: only
+ * where the place beside it is locked (a group's own content, say), so the control is the one
+ * place there that takes typed text, as the untracked rule and the room put it (the room's
+ * `controlEnteredAt`). Elsewhere a tracked insertion stays beside a control. Null when typing may
+ * not enter the control.
+ */
+export function controlEnteredAtLockedEdge(
+  part: OoxmlPart,
+  paragraph: OoxmlParagraphNode,
+  offset: number,
+  offsets: ParagraphOffsetIndex
+): OoxmlElement | null {
+  const after = offsets.segments.find((segment) => segment.start === offset);
+  if (after === undefined || !holdsContentControl(paragraph)) {
+    return null;
+  }
+
+  const before = [...offsets.segments].reverse().find((segment) => segment.end === offset);
+  const outer = contentControlAncestorsOf(part, before?.runId ?? paragraph.id);
+  const inner = contentControlAncestorsOf(part, after.runId);
+  let shared = 0;
+  while (shared < inner.length && inner[shared]!.id === outer[shared]?.id) {
+    shared += 1;
+  }
+
+  const entered = inner[shared];
+  if (entered === undefined || refusesTypedContent(entered)) {
+    return null;
+  }
+
+  const place = inner[shared - 1]?.id ?? paragraph.id;
+  return effectiveContentLockAt(part, place).content ? entered : null;
+}
+
 export function holdsContentControl(paragraph: OoxmlParagraphNode): boolean {
   let held = holdsControl.get(paragraph);
   if (held === undefined) {

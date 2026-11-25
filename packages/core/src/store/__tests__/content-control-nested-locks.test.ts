@@ -148,6 +148,33 @@ describe('a content lock keeps its own content, not a control nested in it (Word
   });
 });
 
+describe("typing at a nested control's leading edge in a locked control", () => {
+  // The place beside the nested control is the locked control's own content, so the nested
+  // control is the one place there that takes the words, tracked or not, as the room puts them
+  for (const revision of [undefined, { author: 'Ana', date: DATE }]) {
+    test(`${revision ? 'a tracked' : 'an'} insertion goes into the nested control`, () => {
+      const part = nested(WORD_GROUP);
+      const [id] = paragraphIds(part);
+      const op: TreeDocOp = {
+        op: 'insertText',
+        paragraphId: id!,
+        offset: 5,
+        text: 'Q',
+        ...(revision ? { revision } : {}),
+      };
+      const result = applyTreeOp(part, op);
+      if (!result.ok) {
+        throw new Error(result.reason);
+      }
+
+      const field = contentControlsIn(result.part.root)[1]!.node;
+      expect(serializeOoxmlPart(result.part)).toContain('G </w:t>');
+      // Untracked, the words join the field's run; tracked, they are a run of their own
+      expect(JSON.stringify(field)).toMatch(/"Q(ab)?"/);
+    });
+  }
+});
+
 describe('what still binds a nested control (Word not checked)', () => {
   test('an sdtContentLocked control keeps the content of a control nested in it', () => {
     const part = nested(lock('sdtContentLocked'));

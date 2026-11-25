@@ -61,6 +61,7 @@ import { build, revisionAttributes } from './tree-op-tracked-builders.ts';
 import { emptyParagraphRunProperties } from './mark-character-style-run.ts';
 import { liftedOutOfForeignInsertions } from './tree-op-tracked-foreign-split.ts';
 import { struckRunsAround } from './tree-op-tracked-struck-face.ts';
+import { controlEnteredAtLockedEdge } from './tree-op-restricted-edge.ts';
 
 export { sameEditingMoment } from './tree-op-tracked-adjacency.ts';
 export { build, revisionAttributes } from './tree-op-tracked-builders.ts';
@@ -401,8 +402,11 @@ function applyTrackedInsertion(
   const fieldProperties = () => (fieldLeftRun ? insertedRunProperties(mint, fieldLeftRun) : []);
   // A right bias or a named owner, such as the control the caret types into (Word keeps typing
   // inside it at its trailing edge), says which container the words belong in.
+  const named =
+    owner ??
+    (bias === 'left' ? controlEnteredAtLockedEdge(part, paragraph, offset, offsets) : null);
   const requestedDestination =
-    bias === 'right' || owner ? insertionDestination(paragraph, offset, owner, bias) : null;
+    bias === 'right' || named ? insertionDestination(paragraph, offset, named, bias) : null;
   // A run inside this author's own insertion inside the requested destination: the words extend it
   const extendsOwnInsertionAtDestination = (stack: readonly OoxmlNode[], node: OoxmlNode) =>
     requestedDestination !== null &&
