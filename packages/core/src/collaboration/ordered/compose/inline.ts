@@ -498,13 +498,18 @@ function textElement(
 }
 
 function runKey(ctx: ComposeContext, item: OrderedItem): string {
+  const by = ctx.insertedBy(item) ?? '';
+  const del = ctx.struckBy(item) ?? '';
+
+  // A move's name parts runs only inside its revision: a decided move's words join their run
+  const move = by || del ? (item.move ?? '') : '';
   return [
     item.run,
     item.face ? item.face.id : '',
     item.fmts.map((f) => `${f.id}:${f.suggestion}`).join(','),
-    ctx.insertedBy(item) ?? '',
-    ctx.struckBy(item) ?? '',
-    item.move ?? '',
+    by,
+    del,
+    move,
     item.instr ? 'instr' : '',
   ].join('|');
 }

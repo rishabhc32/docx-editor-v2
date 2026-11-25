@@ -7,6 +7,7 @@
 
 import { describe, expect, test } from 'bun:test';
 import { applyOrderedChange } from '../change/apply.ts';
+import { orderedCardSeen } from '../change/apply-decide.ts';
 import { orderedChangeId, orderedIdMinter } from '../change/ids.ts';
 import { validateOrderedChange } from '../change/validate.ts';
 import { openOrderedWordFile } from '../client/open.ts';
@@ -624,6 +625,24 @@ describe('a fold of a move with words inside it', () => {
       'Olive'
     );
     await checkFold(doc, base, blobs, 'a range whose words went');
+  });
+
+  // A rejected move's words are in their run again, which a fold reads with no move: the room
+  // draws them in that run too, also in a cell a pending column deletion strikes
+  test('a rejected move out of a struck cell', async () => {
+    const { document: doc, base } = openOrderedWordFile(APPLY_FILE, { file: 1 });
+    apply(doc, 'ana:1', {
+      kind: 'move',
+      ...EDIT,
+      from: at(doc, 5, 1),
+      to: at(doc, 5, 2),
+      place: at(doc, 0, 0),
+    });
+    apply(doc, 'ana:2', { kind: 'delete-column', ...EDIT, cell: addressOf(opens(doc, 'tc')[1]!) });
+    const suggestions = orderedCardSeen(doc, 'S:ana:1.1')!;
+    const decide = { kind: 'decide', cards: [{ suggestions }], status: 'rejected' } as const;
+    apply(doc, 'olive:1', decide, 'Olive');
+    await checkFold(doc, base, mediaStore(base), 'a rejected move out of a struck cell');
   });
 });
 
