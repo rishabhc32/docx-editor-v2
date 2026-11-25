@@ -138,6 +138,8 @@ export interface RetainedPrompt {
   readonly inline: boolean;
   /** The control's `w:sdtContent` children as the prompt showed them. */
   readonly nodes: readonly OoxmlNode[];
+  /** The part that showed the prompt, whose relationships its nodes name. */
+  readonly owner: string;
 }
 
 /**

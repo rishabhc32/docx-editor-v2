@@ -10,7 +10,10 @@ import {
   extendedBindings,
 } from '../../../store/package/ooxml-serialize.ts';
 import type { OoxmlNode, OoxmlPart } from '../../../store/package/ooxml-tree.ts';
-import { withRetainedPrompts } from '../../../store/store/content-control-prompt-glossary.ts';
+import {
+  withPromptRelationships,
+  withRetainedPrompts,
+} from '../../../store/store/content-control-prompt-glossary.ts';
 import { withPackageShellOf } from '../../../store/store/tree-package-remote.ts';
 import { composeOrderedPart } from '../compose/compose.ts';
 import type { OrderedRetainedPrompt } from '../compose/context.ts';
@@ -316,13 +319,17 @@ export class OrderedPublisher {
       }
     }
 
+    const resourced = withoutDroppedFurniture(
+      this.#doc.resources.added.size === 0
+        ? decided
+        : withOrderedResources(decided, this.#doc, this.#added, this.#media),
+      this.#doc
+    );
+
+    // The glossary's own copy of each relationship a kept prompt names, now that the room's are
+    // written
     const published = withFileMediaBytes(
-      withoutDroppedFurniture(
-        this.#doc.resources.added.size === 0
-          ? decided
-          : withOrderedResources(decided, this.#doc, this.#added, this.#media),
-        this.#doc
-      ),
+      withPromptRelationships(resourced, [...this.#prompts.values()]),
       this.#doc,
       this.#media
     );

@@ -98,6 +98,8 @@ export interface OrderedRetainedPrompt {
   readonly inline: boolean;
   /** The control's content as it showed the prompt. */
   readonly nodes: readonly OoxmlNode[];
+  /** The story part that showed the prompt, whose relationships its nodes name. */
+  readonly owner: string;
 }
 
 /**

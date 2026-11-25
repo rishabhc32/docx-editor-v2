@@ -10,7 +10,10 @@ import {
 } from '../../../store/package/ooxml-package.ts';
 import { partNameKey } from '../../../store/package/opc-names.ts';
 import { zipPartWriter } from '../../../store/package/zip.ts';
-import { withRetainedPrompts } from '../../../store/store/content-control-prompt-glossary.ts';
+import {
+  withPromptRelationships,
+  withRetainedPrompts,
+} from '../../../store/store/content-control-prompt-glossary.ts';
 import { OrderedRefusal } from '../model/refusal.ts';
 import { isTextBoxStoryName } from '../model/text-boxes.ts';
 import type { OrderedMediaReference } from '../model/resources.ts';
@@ -124,6 +127,10 @@ function composeWithMedia(
   // is used (media, new story parts, relationships, list definitions, styles and settings)
   const commented = removesComments ? pkg : withOrderedComments(pkg, doc);
   pkg = withoutDroppedFurniture(withOrderedResources(commented, doc, added, bytes), doc);
+
+  // The glossary's own copy of each relationship a kept prompt names, now that the room's are
+  // written
+  pkg = withPromptRelationships(pkg, prompts);
 
   // No comment, before the media bytes: a picture only a comment showed is not read
   if (removesComments) {

@@ -6,24 +6,34 @@ import { relativeTarget } from '../package/custom-xml-part.ts';
 import {
   createNodeIdAllocator,
   insertChildren,
+  replaceNode,
   type EditOptions,
   type RetainedPrompt,
 } from '../package/ooxml-edit.ts';
-import { withPart, type OoxmlPackage } from '../package/ooxml-package.ts';
 import {
+  recordPutRelationship,
+  runWithoutJournalCapture,
+} from '../package/canonical-primitive-capture.ts';
+import { withPart, type OoxmlPackage } from '../package/ooxml-package.ts';
+import { resolveInternalTarget, validateExternalTarget } from '../package/opc-names.ts';
+import {
+  relationshipsOf,
   relsPartNameFor,
   withNewPart,
   withRelationship,
   withRelationshipsPartFor,
 } from '../package/package-edit.ts';
+import type { RelationshipRecord } from '../package/relationships.ts';
 import { fnv1a32 } from '../package/para-id.ts';
 import { W14_NAMESPACE_URI, WML_NAMESPACE_URI } from '../package/ooxml-shared.ts';
 import {
   readOoxmlPart,
   type OoxmlElement,
+  type OoxmlNamespaceBinding,
   type OoxmlNode,
   type OoxmlPart,
 } from '../package/ooxml-tree.ts';
+import { relationshipIdsIn } from './clipboard-fragment-closure.ts';
 import { isInlineControl, isWml } from './content-control-checkbox.ts';
 import { wmlElement } from './tree-op-content-controls.ts';
 import {
@@ -38,6 +48,7 @@ const GLOSSARY_CONTENT_TYPE =
   'application/vnd.openxmlformats-officedocument.wordprocessingml.document.glossary+xml';
 const GLOSSARY_RELATIONSHIP_TYPE =
   'http://schemas.openxmlformats.org/officeDocument/2006/relationships/glossaryDocument';
+const REL = 'http://schemas.openxmlformats.org/package/2006/relationships';
 
 /** Bounds on the walk that names a prompt: its content comes from the file. */
 const MAX_DEPTH = 64;
@@ -129,6 +140,7 @@ export function promptToRetain(
     name: named ?? blockNameFor(`${inline ? 'inline' : 'block'}\n${source}`),
     inline,
     nodes,
+    owner: part.name,
   };
 }
 
@@ -181,8 +193,15 @@ function withNewGlossary(pkg: OoxmlPackage, prompts: readonly RetainedPrompt[]):
   const docParts = root.children.find((child) => isWml(child, 'docParts'));
   if (!docParts || docParts.kind === 'textValue') return pkg;
   const nextId = createNodeIdAllocator(parsed.part);
-  const filled = { ...docParts, children: prompts.map((p) => placeholderBlock(p, nextId)) };
-  const whole = { ...root, children: [filled] } as OoxmlElement;
+  const blocks = prompts.map((p) => placeholderBlock(p, nextId));
+  const bindings = bindingsFor(root, blocks);
+  if (bindings === null) {
+    return pkg;
+  }
+
+  const namespaceBindings = [...root.namespaceBindings, ...bindings];
+  const filled = { ...docParts, children: blocks };
+  const whole = { ...root, namespaceBindings, children: [filled] } as OoxmlElement;
   const created = withNewPart(rels, GLOSSARY_PART_NAME, whole, GLOSSARY_CONTENT_TYPE);
   if (!created.parts.has(GLOSSARY_PART_NAME)) return pkg;
   const related = withRelationship(
@@ -249,10 +268,85 @@ function withBlocksAdded(pkg: OoxmlPackage, prompts: readonly RetainedPrompt[]):
   if (!glossary || !docParts || docParts.kind === 'textValue') return pkg;
   const nextId = createNodeIdAllocator(glossary);
   const blocks = prompts.map((prompt) => placeholderBlock(prompt, nextId));
-  const written = insertChildren(glossary, docParts.id, docParts.children.length, blocks, {
-    deferValidation: true,
-  });
+  const bindings = bindingsFor(glossary.root, blocks);
+  if (bindings === null) {
+    return pkg;
+  }
+
+  // The root binds the blocks' prefixes in the same edit, through the edit primitives
+  const options = { deferValidation: true };
+  const root = {
+    ...glossary.root,
+    namespaceBindings: [...glossary.root.namespaceBindings, ...bindings],
+  };
+  const bound =
+    bindings.length === 0
+      ? { ok: true as const, part: glossary }
+      : replaceNode(glossary, root.id, root, options);
+  if (!bound.ok) {
+    return pkg;
+  }
+
+  const written = insertChildren(
+    bound.part,
+    docParts.id,
+    docParts.children.length,
+    blocks,
+    options
+  );
   return written.ok ? withPart(pkg, written.part) : pkg;
+}
+
+/**
+ * The bindings that the prefixes of `blocks` need and `root` lacks, or null when `root` binds
+ * one of them to another namespace. A block keeps the prefixes of the part that showed it (`r`
+ * on a link), and a prefix must be bound where it is used; a prefix a block binds itself is
+ * its own.
+ */
+function bindingsFor(
+  root: OoxmlElement,
+  blocks: readonly OoxmlNode[]
+): OoxmlNamespaceBinding[] | null {
+  const bound = new Map(root.namespaceBindings.map((binding) => [binding.prefix, binding]));
+  const added: OoxmlNamespaceBinding[] = [];
+  let clash = false;
+  const need = (prefix: string | undefined, namespaceUri: string, own: ReadonlySet<string>) => {
+    if (prefix === undefined || prefix === 'xml' || own.has(prefix)) {
+      return;
+    }
+
+    const binding = bound.get(prefix);
+    if (binding === undefined) {
+      const minted = { prefix, namespaceUri };
+      bound.set(prefix, minted);
+      added.push(minted);
+    } else if (binding.namespaceUri !== namespaceUri) {
+      clash = true;
+    }
+  };
+  const visit = (node: OoxmlNode, own: ReadonlySet<string>, depth: number): void => {
+    if (node.kind === 'textValue' || depth > MAX_DEPTH) {
+      return;
+    }
+
+    const inScope =
+      node.namespaceBindings.length === 0
+        ? own
+        : new Set([...own, ...node.namespaceBindings.map((binding) => binding.prefix)]);
+    need(node.prefix, node.namespaceUri, inScope);
+    for (const attribute of node.attributes) {
+      need(attribute.prefix, attribute.namespaceUri, inScope);
+    }
+
+    for (const child of node.children) {
+      visit(child, inScope, depth + 1);
+    }
+  };
+  for (const block of blocks) {
+    visit(block, new Set(), 0);
+  }
+
+  return clash ? null : added;
 }
 
 /**
@@ -276,10 +370,124 @@ export function withRetainedPrompts(
       placeholderBlocksIn(pkg, prompt.name) === undefined
   );
   if (pending.length === 0) return pkg;
-  const next = glossaryPartOf(pkg) ? withBlocksAdded(pkg, pending) : withNewGlossary(pkg, pending);
+  const written = glossaryPartOf(pkg)
+    ? withBlocksAdded(pkg, pending)
+    : withNewGlossary(pkg, pending);
+  const next = withPromptRelationships(written, pending);
   for (const [name, part] of next.parts) {
     if (pkg.parts.get(name) !== part) touched.add(name);
   }
 
   return next;
+}
+
+/**
+ * `pkg` with each relationship the kept prompts name copied from the part that showed them to
+ * the glossary, under the same id. Ids are per part (OPC), so a link or a picture in a block
+ * resolves in the glossary's own relationships, and a restore puts the block back where the id
+ * already resolves. An id the glossary already holds, or the part does not, stays as it is. The
+ * room calls this again once it has written its own relationships.
+ */
+export function withPromptRelationships(
+  pkg: OoxmlPackage,
+  prompts: readonly RetainedPrompt[]
+): OoxmlPackage {
+  const glossary = glossaryPartOf(pkg);
+  if (!glossary) {
+    return pkg;
+  }
+
+  let next = pkg;
+  for (const prompt of prompts) {
+    for (const id of relationshipIdsIn(prompt.nodes)) {
+      const record = relationshipOf(next, prompt.owner, id);
+      if (record && relationshipOf(next, glossary.name, id) === undefined) {
+        next = withCopiedRelationship(next, glossary.name, record);
+      }
+    }
+  }
+
+  return next;
+}
+
+/** The relationship `id` of `owner`, internal or external, or undefined. */
+function relationshipOf(
+  pkg: OoxmlPackage,
+  owner: string,
+  id: string
+): RelationshipRecord | undefined {
+  const record = relationshipsOf(pkg, owner).find((entry) => entry.id === id);
+  if (record) {
+    return record;
+  }
+
+  const external = pkg.externalTargets.find(
+    (entry) => entry.ownerPart === owner && entry.id === id
+  );
+  return external === undefined
+    ? undefined
+    : { ...external, targetMode: 'External', order: relationshipsOf(pkg, owner).length };
+}
+
+/**
+ * `pkg` with `record` added to `owner`'s relationships under its own id, an internal target
+ * pointing at the same part from `owner`, or `pkg` itself when it cannot be written.
+ */
+function withCopiedRelationship(
+  pkg: OoxmlPackage,
+  owner: string,
+  record: RelationshipRecord
+): OoxmlPackage {
+  const external = record.targetMode === 'External';
+  const resolved = external ? null : resolveInternalTarget(record.ownerPart, record.rawTarget);
+  if (resolved !== null && !resolved.ok) {
+    return pkg;
+  }
+
+  const rawTarget = resolved === null ? record.rawTarget : relativeTarget(owner, resolved.partName);
+  const prepared = withRelationshipsPartFor(pkg, owner);
+  const relsName = relsPartNameFor(owner);
+  const rels = prepared.parts.get(relsName);
+  if (!rels) {
+    return pkg;
+  }
+
+  const attribute = (localName: string, value: string) => ({
+    kind: 'genericExtension' as const,
+    namespaceUri: '',
+    localName,
+    value,
+  });
+  const node = {
+    id: createNodeIdAllocator(rels)(),
+    kind: 'generic',
+    namespaceUri: REL,
+    localName: 'Relationship',
+    namespaceBindings: [],
+    attributes: [
+      attribute('Id', record.id),
+      attribute('Type', record.type),
+      attribute('Target', rawTarget),
+      ...(external ? [attribute('TargetMode', 'External')] : []),
+    ],
+    children: [],
+  } as unknown as OoxmlElement;
+  const inserted = runWithoutJournalCapture(() =>
+    insertChildren(rels, rels.root.id, rels.root.children.length, [node])
+  );
+  if (!inserted.ok) {
+    return pkg;
+  }
+
+  const owned = relationshipsOf(prepared, owner);
+  const copy = { ...record, ownerPart: owner, rawTarget, order: owned.length };
+  recordPutRelationship(owner, copy);
+  const target = { ownerPart: owner, id: record.id, type: record.type, rawTarget };
+  return Object.freeze({
+    ...withPart(prepared, inserted.part),
+    relationships: new Map([...prepared.relationships, [owner, [...owned, copy]]]),
+    externalTargets: external
+      ? [...prepared.externalTargets, { ...target, sinkSafe: validateExternalTarget(rawTarget).ok }]
+      : prepared.externalTargets,
+  });
 }

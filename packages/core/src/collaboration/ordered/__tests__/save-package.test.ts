@@ -24,6 +24,7 @@ import {
   APPLY_FILE,
   at,
   BODY,
+  DIRECT,
   EDIT,
   HEADER,
   load,
@@ -31,6 +32,7 @@ import {
   opens,
 } from './change-apply-fixture.ts';
 import { normalizedBody, semanticBody } from './matrix/compare.ts';
+import { unresolvedRelationships } from './oracle.ts';
 import { ROOM_FILE } from './room-harness.ts';
 import { bodyOf, docx, MATRIX_EXTRAS, MATRIX_ITEMS, packageOf } from './word-fixtures.ts';
 
@@ -59,10 +61,11 @@ function view(
   return parts;
 }
 
-/** The saved file, read and loaded again. */
+/** The saved file, read and loaded again: each relationship id resolves in its own part. */
 function reopened(doc: OrderedDocument, base: OoxmlPackage) {
   const read = readOoxmlPackage(orderedPackageBytes(doc, base), {});
   if (!read.ok) throw new Error(`the saved file does not open: ${read.reason}`);
+  expect(unresolvedRelationships(read.package)).toEqual([]);
   return { pkg: read.package, again: loadOrderedPackage(read.package) };
 }
 
@@ -223,6 +226,25 @@ describe('whole-document save', () => {
     const { pkg, again } = reopened(doc, base);
     expectSameAfterReopen('placeholder', doc, again);
     expect([...pkg.parts.keys()].some((name) => name.includes('glossary'))).toBe(true);
+  });
+
+  // Relationship ids are per part: the glossary's block names the organiser's link through a
+  // relationship of the glossary's own, and the body keeps its own for a reject
+  test("a filled prompt with the organiser's link keeps it in the glossary's relationships", () => {
+    const item = MATRIX_ITEMS.find((candidate) => candidate.key === 'placeholder');
+    if (!item) {
+      throw new Error('no placeholder fixture');
+    }
+
+    const base = packageOf(docx(bodyOf(item), MATRIX_EXTRAS));
+    const doc = loadOrderedPackage(base);
+    const link = { from: at(doc, 1, 7), to: at(doc, 1, 9), href: 'https://example.com/fees' };
+    apply(doc, 'olive:1', { kind: 'insert-link', ...DIRECT, ...link }, 'Olive');
+    apply(doc, 'ana:2', { kind: 'insert', ...EDIT, place: at(doc, 1, 6), text: 'Acme' });
+    const { pkg, again } = reopened(doc, base);
+    expectSameAfterReopen('a link on the prompt', doc, again);
+    const glossary = pkg.externalTargets.filter((t) => t.ownerPart.includes('glossary'));
+    expect(glossary.map((t) => t.rawTarget)).toEqual(['https://example.com/fees']);
   });
 
   test('a file with no comments part gets one, with its content type and relationship', () => {

@@ -2,6 +2,9 @@
 // (`canonicalOoxmlFingerprint`), with a readable first difference when two parts disagree.
 
 import { expect } from 'bun:test';
+import { isRelationshipReference } from '../../../store/package/canonical-media-references.ts';
+import type { OoxmlPackage } from '../../../store/package/ooxml-package.ts';
+import { relationshipsOf } from '../../../store/package/package-edit.ts';
 import {
   canonicalOoxmlFingerprint,
   serializeOoxmlPart,
@@ -40,4 +43,31 @@ export function nodeIds(node: OoxmlNode, into: string[] = []): string[] {
   into.push(node.id);
   if (node.kind !== 'textValue') for (const child of node.children) nodeIds(child, into);
   return into;
+}
+
+/**
+ * Each relationship id a part of a read package names that the part's own relationships do not
+ * hold, as `part id`. Ids are per part (OPC): Word may refuse a file that names a missing one.
+ */
+export function unresolvedRelationships(pkg: OoxmlPackage): string[] {
+  const out: string[] = [];
+  for (const part of pkg.parts.values()) {
+    const held = new Set(relationshipsOf(pkg, part.name).map((record) => record.id));
+    const visit = (node: OoxmlNode): void => {
+      if (node.kind === 'textValue') {
+        return;
+      }
+
+      for (const attribute of node.attributes) {
+        if (isRelationshipReference(attribute) && !held.has(attribute.value)) {
+          out.push(`${part.name} ${attribute.value}`);
+        }
+      }
+
+      node.children.forEach(visit);
+    };
+    visit(part.root);
+  }
+
+  return out;
 }
