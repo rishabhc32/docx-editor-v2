@@ -78,7 +78,8 @@ function tabStops(property: OrderedChangeProperty): OrderedParagraphOp {
       continue;
     }
 
-    const alignment = val === undefined ? undefined : ALIGNMENTS[val];
+    const alignment =
+      val !== undefined && Object.hasOwn(ALIGNMENTS, val) ? ALIGNMENTS[val] : undefined;
     if (alignment === undefined) return refuse('a tab of a kind the engine writes');
     const leader = tab.attributes?.leader;
     if (leader !== undefined && !LEADERS.has(leader)) return refuse('a tab leader');

@@ -366,6 +366,20 @@ describe('the change apply', () => {
           ],
         },
       ],
+      ...['constructor', '__proto__'].map((val): [string, Parameters<typeof apply>[2]] => [
+        'invalid-edit',
+        {
+          kind: 'paragraph-property',
+          ...EDIT,
+          marks: [markOf(doc, 0)],
+          properties: [
+            {
+              localName: 'tabs',
+              children: [{ localName: 'tab', attributes: { val, pos: '720' } }],
+            },
+          ],
+        },
+      ]),
       [
         'not-in-table',
         {
