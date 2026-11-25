@@ -5,9 +5,11 @@
 //  - a block control of several paragraphs: the engine keeps the first one, with the prompt,
 //    and typing in an empty paragraph after it goes after it;
 //  - Enter in a prompt that a decision showed, and its undo;
-//  - Enter in a loaded prompt that showed again after a reject of a typing over it.
+//  - Enter in a loaded prompt that showed again after a reject of a typing over it;
+//  - a party's new control round words whose copy she deleted, alone and in a struck row.
 // The room once refused the typing (`text-differs`), drew a prompt over the paragraphs Enter
-// made, or left a control empty where the engine shows its prompt again.
+// made, or left a control empty where the engine shows its prompt again: in a row another person
+// struck, and with the party's own insertion taken off her control.
 
 import { afterEach, describe, expect, test } from 'bun:test';
 import { createDocxEditor } from '../../../../editor/docx-editor.ts';
@@ -31,6 +33,7 @@ import {
   type Person,
 } from './editor-harness.ts';
 import { reviewTestModule } from './review-module.ts';
+import { tableCommand } from './tables-harness.ts';
 
 afterEach(closeAll);
 
@@ -77,7 +80,16 @@ const loaded = (named: boolean) =>
 interface Step {
   readonly who: 'olive' | 'ana';
   readonly mode: 'edit' | 'suggesting';
-  readonly act: 'type' | 'delete' | 'enter' | 'wrap' | 'accept' | 'reject' | 'undo' | 'redo';
+  readonly act:
+    | 'type'
+    | 'delete'
+    | 'enter'
+    | 'wrap'
+    | 'deleteRow'
+    | 'accept'
+    | 'reject'
+    | 'undo'
+    | 'redo';
   readonly line?: number;
   readonly at?: number;
   readonly to?: number;
@@ -111,6 +123,9 @@ function run(person: Person, { mode, act, line = 0, at = 0, to }: Step): void {
     expect(person.editor.exec({ type: 'insertContentControl', subtype: 'plainText' }).ok).toBe(
       true
     );
+  } else if (act === 'deleteRow') {
+    caretAt(person, line, at);
+    expect(tableCommand(person, { type: 'deleteRow' }).ok).toBe(true);
   } else if (act === 'accept' || act === 'reject') {
     const command = { type: 'resolveAllReviewChanges', action: act, scope: 'document' };
     expect(person.editor.exec(command as never).ok).toBe(true);
@@ -340,4 +355,28 @@ describe("a control in another person's pending insertion, emptied directly", ()
       olive('accept'),
       olive('type', 0, 6),
     ]));
+});
+
+describe("a party's new control round words, its copy then deleted by her", () => {
+  // The control she inserted holds nothing then: it shows its prompt inside her insertion, and
+  // her typing replaces the prompt, as in the editor alone
+  test('in a paragraph', () =>
+    inRoom(docx(p(t('Name: Acme Corp')) + p(t('After.'))), [
+      ana('wrap', 0, 6, 10),
+      ana('delete', 0, 10, 14),
+      ana('type', 0, 10),
+    ]));
+
+  test('in a row the organiser struck', () => {
+    const cell = `<w:tc><w:tcPr><w:tcW w:w="3000" w:type="dxa"/></w:tcPr>${p(t('Acme Corp'))}</w:tc>`;
+    const table =
+      '<w:tbl><w:tblPr><w:tblW w:w="0" w:type="auto"/></w:tblPr>' +
+      `<w:tblGrid><w:gridCol w:w="3000"/></w:tblGrid><w:tr>${cell}</w:tr></w:tbl>`;
+    return inRoom(docx(p(t('Name:')) + table + p(t('After.'))), [
+      suggested(olive('deleteRow', 1, 0)),
+      ana('wrap', 1, 0, 4),
+      ana('delete', 1, 4, 8),
+      ana('type', 1, 4),
+    ]);
+  });
 });

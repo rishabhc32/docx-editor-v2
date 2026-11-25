@@ -198,6 +198,11 @@ export class ComposeContext {
    * block that keeps their prompt, even once it shows again.
    */
   readonly filledPrompts = new Set<string>();
+  /**
+   * Open item spaces of the controls whose own insertion hides their prompt (`ofOwnInsertion` in
+   * `paragraph.ts`): the engine keeps no glossary block for it.
+   */
+  readonly ownFilled = new Set<string>();
   /** Glossary blocks the caller must write for the prompts this drawing hides. */
   readonly prompts: OrderedRetainedPrompt[] = [];
   /** Tables whose removed cells this drawing took out, before and after (`table-columns.ts`). */

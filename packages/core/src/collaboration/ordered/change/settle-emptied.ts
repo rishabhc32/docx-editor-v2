@@ -141,11 +141,6 @@ export function settleEmptiedControls(doc: OrderedDocument, apply: OrderedApplyC
       continue;
     }
 
-    const inserted = insertedPending(doc, open);
-    if (!inserted && pending(doc, open)) {
-      continue;
-    }
-
     let ctx = contexts.get(story);
     if (!ctx) {
       ctx = new ComposeContext(doc, story, {});
@@ -156,7 +151,7 @@ export function settleEmptiedControls(doc: OrderedDocument, apply: OrderedApplyC
       open.token === 'sdt' ? emptiedInline(ctx, story, open) : emptiedBlock(ctx, story, open);
 
     // A decision leaves another person's pending control as it was
-    if (!emptied || (inserted && emptied.decided)) {
+    if (!emptied || (emptied.decided && insertedPending(doc, open))) {
       continue;
     }
 
@@ -167,13 +162,14 @@ export function settleEmptiedControls(doc: OrderedDocument, apply: OrderedApplyC
 }
 
 /**
- * Whether a pending suggestion inserted or struck the control, or a container around it. The
- * edge Enter put in to split a control carries the Enter's suggestion, which is no insertion of
- * the control.
+ * The suggestion that inserted a control, or null. The edge Enter put in to split a control
+ * carries the Enter's suggestion, which is no insertion of the control.
  */
+const controlInserter = (open: OrderedItem): string | null => (isSplitEdge(open) ? null : open.by);
+
+/** Whether a pending suggestion inserted or struck the control, or a container around it. */
 export function pending(doc: OrderedDocument, open: OrderedItem): boolean {
-  const by = isSplitEdge(open) ? null : open.by;
-  const ids = [by, ...open.dels, ...open.within.by, ...open.within.dels];
+  const ids = [controlInserter(open), ...open.dels, ...open.within.by, ...open.within.dels];
   return ids.some((id) => id !== null && statusOf(doc, id) === 'pending');
 }
 
@@ -183,7 +179,11 @@ export function pending(doc: OrderedDocument, open: OrderedItem): boolean {
  * the person's `w:ins` around a control whose words the organiser deleted (`untrack`).
  */
 function insertedPending(doc: OrderedDocument, open: OrderedItem): boolean {
-  if (isSplitEdge(open) || open.by === null || statusOf(doc, open.by) !== 'pending') return false;
+  const by = controlInserter(open);
+  if (by === null || statusOf(doc, by) !== 'pending') {
+    return false;
+  }
+
   const others = [...open.dels, ...open.within.by, ...open.within.dels];
   return !others.some((id) => id !== null && statusOf(doc, id) === 'pending');
 }
@@ -209,20 +209,25 @@ function relabelInserted(
 }
 
 /**
- * Take another person's pending insertion off a control a direct edit emptied: it is no longer a
- * suggestion, as the engine drops that person's `w:ins` around it. Taking the edit back gives the
- * insertion back (`unprompt`).
+ * Take another person's pending insertion off a control a direct edit emptied, and off the
+ * `prompt` it shows now: it is no longer a suggestion, as the engine drops that person's `w:ins`
+ * around it. Only an edit that took that person's words does: their own take-back leaves the
+ * insertion. Taking the edit back gives the insertion back (`unprompt`).
  */
 function untrack(
   doc: OrderedDocument,
   story: OrderedStory,
   open: OrderedItem,
-  went: readonly OrderedItem[]
+  went: readonly OrderedItem[],
+  prompt: readonly OrderedItem[]
 ): Untracked | null {
   const by = open.by;
-  if (by === null || !insertedPending(doc, open)) return null;
   const units = went.filter((item) => item.by === by);
-  relabelInserted(doc, story, open, units, null);
+  if (by === null || units.length === 0 || !insertedPending(doc, open)) {
+    return null;
+  }
+
+  relabelInserted(doc, story, open, [...units, ...prompt], null);
   return { by, units };
 }
 
@@ -468,8 +473,13 @@ function promptedControl(
     return null;
   }
 
-  const restore = emptied.decided ? withDecisionPrompt : withRestoredPrompt;
-  const prompted = restore(drawn.scratch, shell.id, drawn.options);
+  // A decision shows Word's decision prompt and a direct edit the type's, as the engine's emptying
+  // edit; words their author took back, and none else, the decision's with no `w:sdtEndPr`, as the
+  // engine shows it after its author's own deletion (`withOwnEmptiedPrompts`)
+  const prompted =
+    emptied.decided || emptied.went.length === 0
+      ? withDecisionPrompt(drawn.scratch, shell.id, drawn.options, emptied.decided)
+      : withRestoredPrompt(drawn.scratch, shell.id, drawn.options);
   if (prompted === drawn.scratch) {
     return null;
   }
@@ -573,7 +583,8 @@ export function promptUnits(ctx: Ctx, control: OoxmlElement, open: OrderedItem):
         continue;
       }
 
-      const labels = { ...item, by: null, dels: [], within: open.within };
+      // Inserted with the control, as a new control's prompt is (`contentUnits`)
+      const labels = { ...item, by: controlInserter(open), dels: [], within: open.within };
       out.push(own ? { ...labels, prompt: true } : labels);
     }
   }
@@ -627,7 +638,7 @@ function givePrompt(
 
   const prompted: OrderedItem = { ...open, prompt: true, node, leaf: undefined };
   replaceItems(doc, story, [open], [prompted]);
-  const untracked = untrack(doc, story, prompted, emptied.went);
+  const untracked = untrack(doc, story, prompted, emptied.went, units);
   const before = doc.originals.get(shell.id);
   setOriginal(doc, shell.id, original);
   if (!emptied.decided) {

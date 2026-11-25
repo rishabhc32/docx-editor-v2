@@ -316,7 +316,8 @@ function blockElement(ctx: ComposeContext, builder: Builder): OoxmlNode {
 
     // Enter removes a prompt for good, with no glossary block, unless a suggestion had filled it
     // before and its words went for good: the engine kept it in the glossary then
-    const retain = !removed || isFilledPrompt(ctx.doc, open.space);
+    const retain =
+      (!removed || isFilledPrompt(ctx.doc, open.space)) && !ctx.ownFilled.has(open.space);
     if (ctx.unprompted.has(open.space)) props = hidePrompt(ctx, props, original, { retain });
     else if (ctx.filledPrompts.has(open.space))
       props = hidePrompt(ctx, props, original, { hide: false });

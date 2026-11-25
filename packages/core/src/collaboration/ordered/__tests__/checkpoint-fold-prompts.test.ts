@@ -284,6 +284,38 @@ describe("a control's prompt shown again, decided card by card after a fold", ()
     expect(partsOf(doc)[0]).not.toContain('<w:i/>');
   });
 
+  // Ben wraps words in a new drop-down list and deletes his copy of them: the control he inserted
+  // is empty, so it shows its prompt inside his insertion, in the list as in the file, live and
+  // after a fold, alone and in a row Ana struck
+  for (const struck of [false, true]) {
+    test(`a new control its maker emptied${struck ? " in another person's struck row" : ''}`, async () => {
+      const cell =
+        '<w:tc><w:tcPr><w:tcW w:w="3000" w:type="dxa"/></w:tcPr>' +
+        p(t('Two per cent')) +
+        '</w:tc>';
+      const table =
+        '<w:tbl><w:tblPr><w:tblW w:w="0" w:type="auto"/></w:tblPr>' +
+        `<w:tblGrid><w:gridCol w:w="3000"/></w:tblGrid><w:tr>${cell}</w:tr></w:tbl>`;
+      const file = docx(p(t('Before.')) + table + p(t('After.')));
+      const { document: doc, base } = openOrderedWordFile(file, { file: 1 });
+      if (struck) {
+        apply(doc, 'ana:1', { kind: 'delete-row', ...EDIT, row: addressOf(opens(doc, 'tr')[0]!) });
+      }
+
+      const wrap = {
+        from: at(doc, 1, 9),
+        to: at(doc, 1, 11),
+        control: { type: 'dropDownList' },
+      } as const;
+      apply(doc, 'ben:1', { kind: 'wrap-control', ...EDIT, ...wrap }, 'Ben');
+      const copy = { kind: 'delete', ...EDIT, from: at(doc, 1, 11), to: at(doc, 1, 13) } as const;
+      apply(doc, 'ben:2', copy, 'Ben');
+      expect(textOf(doc, 1)).toBe('Two per cenChoose an item.t');
+      expect(partsOf(doc)[0]).toMatch(/<w:ins w:author="Ben"[^>]*><w:sdt>/);
+      await checkFold(doc, base, mediaStore(base), 'a new control its maker emptied');
+    });
+  }
+
   // The prompt a party typed over holds a combo box: after a fold the glossary gives it back, and a
   // reject of the typing shows the combo box in it again, not its words alone, and each of its
   // paragraphs. They are the prompt's own: typing in its first drops the second, as live

@@ -3,7 +3,7 @@
 
 import type { OoxmlElement, OoxmlNode } from '../../../store/package/ooxml-tree.ts';
 import { build } from '../../../store/store/tree-op-tracked.ts';
-import { isLabelled, movedAwayBy } from '../model/document.ts';
+import { isLabelled, isSplitEdge, movedAwayBy } from '../model/document.ts';
 import { isFilledPrompt } from '../model/prompt-marks.ts';
 import { REVISION_ROLE } from '../model/revision-ids.ts';
 import {
@@ -253,10 +253,22 @@ function markProperties(
  * Enter at a prompt's edge leaves the prompt as it is, and one inside it removes it (policy 4).
  * Not a direct edit taken back (`revert`): the engine's undo gives the control back as it was.
  * Not a unit a decision took away before the control showed a prompt (`change/settle-emptied.ts`
- * marks it gone): it filled no prompt.
+ * marks it gone): it filled no prompt. Nor one of the control's own insertion (`ofOwnInsertion`).
  */
-const filledBy = (ctx: ComposeContext, item: OrderedItem): boolean =>
-  item.by !== null && !item.retracted && !item.gone && !ctx.revertedDirect(item.by) && isUnit(item);
+const filledBy = (ctx: ComposeContext, open: OrderedItem, item: OrderedItem): boolean =>
+  item.by !== null &&
+  !ofOwnInsertion(open, item) &&
+  !item.retracted &&
+  !item.gone &&
+  !ctx.revertedDirect(item.by) &&
+  isUnit(item);
+
+/**
+ * Whether a unit is part of its control's own insertion: typed over the prompt inside it, the
+ * engine writes it plain and keeps no glossary block for the prompt (`insideOwnInsertion`).
+ */
+const ofOwnInsertion = (open: OrderedItem, item: OrderedItem): boolean =>
+  item.by !== null && item.by === open.by && !isSplitEdge(open);
 
 /**
  * The items after a control's open item up to its close item, each with the open item of the
@@ -342,11 +354,20 @@ function hidePrompts(ctx: ComposeContext, buffer: readonly OrderedItem[]): void 
 function hideInlinePrompt(ctx: ComposeContext, open: OrderedItem, after: Iterable<OrderedItem>) {
   const { own, going } = promptParts(after, open);
   const units = own.filter((item) => !item.prompt && isUnit(item));
-  if (units.some((item) => filledBy(ctx, item)) || isFilledPrompt(ctx.doc, open.space))
+  if (units.some((item) => filledBy(ctx, open, item)) || isFilledPrompt(ctx.doc, open.space)) {
     ctx.filledPrompts.add(open.space);
-  const present = units.some((item) => !ctx.unshown(item));
-  if (!present) return;
+  }
+
+  const present = units.filter((item) => !ctx.unshown(item));
+  if (present.length === 0) {
+    return;
+  }
+
   ctx.unprompted.add(open.space);
+  if (present.every((item) => ofOwnInsertion(open, item))) {
+    ctx.ownFilled.add(open.space);
+  }
+
   for (const item of own) {
     if (item.prompt) {
       ctx.hiddenPrompts.add(item);
@@ -370,7 +391,7 @@ function removedForGood(prompts: readonly OrderedItem[]): boolean {
  */
 export function hideBlockPrompt(ctx: ComposeContext, open: OrderedItem): void {
   const prompts: OrderedItem[] = [];
-  let present = false;
+  const present: OrderedItem[] = [];
   const { own, going } = promptParts(ctx.story.tree.items(ctx.story.tree.next(open)), open);
   for (const item of own) {
     if (item.prompt) {
@@ -379,8 +400,13 @@ export function hideBlockPrompt(ctx: ComposeContext, open: OrderedItem): void {
       continue;
     }
 
-    if (filledBy(ctx, item)) ctx.filledPrompts.add(open.space);
-    if (isUnit(item) && !ctx.gone(item)) present = true;
+    if (filledBy(ctx, open, item)) {
+      ctx.filledPrompts.add(open.space);
+    }
+
+    if (isUnit(item) && !ctx.gone(item)) {
+      present.push(item);
+    }
   }
 
   if (isFilledPrompt(ctx.doc, open.space)) ctx.filledPrompts.add(open.space);
@@ -388,8 +414,15 @@ export function hideBlockPrompt(ctx: ComposeContext, open: OrderedItem): void {
   // Enter in the prompt removed it for good (policy 4): the control shows no prompt
   const removed = removedForGood(prompts);
   if (removed) ctx.promptRemoved.add(open.space);
-  if (!present && !removed) return;
+  if (present.length === 0 && !removed) {
+    return;
+  }
+
   ctx.unprompted.add(open.space);
+  if (present.length > 0 && present.every((item) => ofOwnInsertion(open, item))) {
+    ctx.ownFilled.add(open.space);
+  }
+
   for (const item of [...prompts, ...going]) {
     ctx.hiddenPrompts.add(item);
   }

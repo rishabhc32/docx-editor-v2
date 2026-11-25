@@ -831,7 +831,10 @@ function inlineContainer(ctx: ComposeContext, open: OrderedItem, drawn: OoxmlNod
   const original = ctx.doc.originals.get(shell.id);
   let props = containerPropertiesAfter(ctx, open, shell.children);
   if (ctx.unprompted.has(open.space)) {
-    props = hidePrompt(ctx, props, original, { inline: true });
+    props = hidePrompt(ctx, props, original, {
+      inline: true,
+      retain: !ctx.ownFilled.has(open.space),
+    });
   } else if (ctx.filledPrompts.has(open.space)) {
     props = hidePrompt(ctx, props, original, { hide: false, inline: true });
   }

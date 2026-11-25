@@ -439,7 +439,7 @@ export function promptSite(ctx: Ctx, p: OrderedViewParagraph, offset: number): S
     return {
       after: { item: last, offset: last.offset + Math.max(0, last.length - 1) },
       before: null,
-      neighbour: undefined,
+      neighbour: first ?? at,
       face,
     };
   }
@@ -449,7 +449,7 @@ export function promptSite(ctx: Ctx, p: OrderedViewParagraph, offset: number): S
     return null;
   }
 
-  return { after: null, before: closeOf(ctx.story, open, ctx.doc), neighbour: undefined, face };
+  return { after: null, before: closeOf(ctx.story, open, ctx.doc), neighbour: first ?? at, face };
 }
 
 /**

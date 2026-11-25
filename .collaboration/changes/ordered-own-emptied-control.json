@@ -1,0 +1,13 @@
+{
+  "impact": "compatible",
+  "fields": [],
+  "before": "A party's own new control emptied by her own deletion: the room's page showed an empty control while its Word file and a fold showed a prompt (the settle skipped a control with another person's pending deletion on it); without that deletion, the settle gave the prompt but took the party's own insertion off her control (untrack). Typing over such a prompt nested a second insertion and kept a glossary block the engine does not.",
+  "after": "settle-emptied gives such a control its prompt in every case, in the form the engine now writes after an own deletion (withDecisionPrompt with no w:sdtEndPr), its units carrying the control's insertion (controlInserter); untrack acts only when a direct edit took that person's words. promptSite names the prompt as the neighbour, so typing extends the control's own insertion, and compose keeps no glossary block for a prompt the control's own insertion fills (ofOwnInsertion, ownFilled).",
+  "reason": "Change messages, the change log and its kinds keep their meaning, and the Yjs document format and the checkpoint format do not change. Only the room's list and file after such edits change, and they now equal the editor alone and a fold. An ordered room admits only clients of its own code version.",
+  "tests": [
+    "packages/core/src/collaboration/ordered/__tests__/checkpoint-fold-prompts.test.ts",
+    "packages/core/src/collaboration/ordered/__tests__/client/editor-controls-emptied-more.test.ts"
+  ],
+  "changeset": "ordered-own-emptied-control",
+  "migration": null
+}
