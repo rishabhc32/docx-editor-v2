@@ -324,6 +324,7 @@ export function rebuildRevisionTable(
         type: existing.type === type ? type : undefined,
       });
     }
+
     const cells = tableChildren(row, 'tableCell').map((c) => {
       const extra = additions.get(c.id);
       if (!extra || c.kind !== 'tableCell') return c;
