@@ -7,6 +7,7 @@ import type {
   CheckpointOverRecord,
   CheckpointOverTarget,
 } from '../model/checkpoint-over.ts';
+import type { CheckpointSuggestion } from '../model/checkpoint-suggestions.ts';
 import { createOrderedItem } from '../model/document.ts';
 import { nextSeq, relabel, replaceItems } from '../model/mutations.ts';
 import type {
@@ -35,15 +36,18 @@ type Restored = Omit<
  * manifest names: on each item whose loaded record holds it, the manifest's records take the
  * place of the item's records of those properties (the loaded one and those a takeover put
  * back), in the order they apply, each with a new order after every record of the document.
- * `labels` gives the elements that carry each label. False when an entry does not fit the file:
- * its label on no change record of its properties that a loaded record holds, or on two; a
- * suggestion not listed; a record on its author's own new words whose suggestion is not pending.
+ * `labels` gives the elements that carry each label, `suggestions` the manifest's list. False
+ * when an entry does not fit the file: its label on no change record of its properties that a
+ * loaded record holds, or on two; a suggestion not listed; a record on its author's own new words
+ * of a direct edit or a rejected suggestion; a record made over a pending one with no change
+ * record of its own of no accepted direct edit.
  */
 export function withCheckpointMadeOver(
   doc: OrderedDocument,
   labels: ReadonlyMap<string, readonly OoxmlElement[]>,
   madeOver: readonly CheckpointMadeOver[],
-  listedIds: readonly string[]
+  listedIds: readonly string[],
+  suggestions: readonly CheckpointSuggestion[]
 ): boolean {
   if (madeOver.length === 0) {
     return true;
@@ -53,7 +57,7 @@ export function withCheckpointMadeOver(
   for (const { label, target, records } of madeOver) {
     const held = (labels.get(String(label)) ?? []).filter((e) => holders.has(e));
     const element = held[0];
-    const restored = restoredRecords(doc, records, listedIds);
+    const restored = restoredRecords(doc, records, listedIds, suggestions);
     if (
       held.length !== 1 ||
       element === undefined ||
@@ -72,7 +76,8 @@ export function withCheckpointMadeOver(
 function restoredRecords(
   doc: OrderedDocument,
   records: readonly CheckpointOverRecord[],
-  listedIds: readonly string[]
+  listedIds: readonly string[],
+  suggestions: readonly CheckpointSuggestion[]
 ): Restored[] | null {
   const out: Restored[] = [];
   for (const record of records) {
@@ -80,12 +85,22 @@ function restoredRecords(
     const replaced = record.replaced === undefined ? undefined : listedIds[record.replaced];
     const replacedEarlier = record.replacedEarlier?.flatMap((k) => listedIds[k] ?? []);
     const over = record.over?.flatMap((k) => listedIds[k] ?? []);
+    const made = suggestion === undefined ? undefined : doc.suggestions.get(suggestion);
+    const direct = suggestions[record.suggestion]?.direct === true;
+
+    // A record on its author's own new words is decided with them, never a direct edit's, and a
+    // rejected one is not drawn; one made over a pending record with no change record of its own
+    // is an accepted direct edit's
     if (
       suggestion === undefined ||
+      made === undefined ||
       (record.replaced !== undefined && replaced === undefined) ||
       replacedEarlier?.length !== record.replacedEarlier?.length ||
       over?.length !== record.over?.length ||
-      (record.untracked === true && doc.suggestions.get(suggestion)?.status !== 'pending')
+      (record.untracked === true && (direct || made.status === 'rejected')) ||
+      (record.untracked !== true &&
+        record.over !== undefined &&
+        (!direct || made.status !== 'accepted'))
     ) {
       return null;
     }

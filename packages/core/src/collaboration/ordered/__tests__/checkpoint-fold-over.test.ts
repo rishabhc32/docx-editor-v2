@@ -97,6 +97,15 @@ function pressOverOwnRecord(doc: OrderedDocument): void {
 
 const PRESS = "a press on its author's own new paragraph, over their pending record";
 
+/** Olive's decision of the card that holds `suggestion`. */
+const decideCard = (doc: OrderedDocument, suggestion: string, status: 'accepted' | 'rejected') =>
+  apply(
+    doc,
+    'olive:1',
+    { kind: 'decide', cards: [{ suggestions: orderedCardSeen(doc, suggestion) ?? [] }], status },
+    'Olive'
+  );
+
 /** Each room: its file, the edits, and the suggestion taken back with its author. */
 const ROOMS: readonly (readonly [string, string, (doc: OrderedDocument) => void, string])[] = [
   [
@@ -283,14 +292,19 @@ test("a press on its author's own new paragraph, its record rejected alone", asy
   const blobs = mediaStore(base);
   pressOverOwnRecord(doc);
   await checkFold(doc, base, blobs, 'a press on its own new paragraph');
-  const reject = {
-    kind: 'decide',
-    cards: [{ suggestions: orderedCardSeen(doc, 'S:ben:1.1') ?? [] }],
-    status: 'rejected',
-  } as const;
-  apply(doc, 'olive:1', reject, 'Olive');
+  decideCard(doc, 'S:ben:1.1', 'rejected');
   const body = unzipSync(await checkpointBytes(doc, base, blobs))['word/document.xml']!;
   expect(strFromU8(body)).not.toContain('<w:jc ');
+});
+
+// The press is decided with Ben's new paragraph: after its accept, his indent still pending, a
+// fold keeps the press as the room holds it, and the checkpoint opens
+test("a press on its author's own new paragraph, the paragraph accepted", async () => {
+  const { document: doc, base } = openOrderedWordFile(docx(TEXT), { file: 1 });
+  const blobs = mediaStore(base);
+  pressOverOwnRecord(doc);
+  decideCard(doc, 'S:ben:2.1', 'accepted');
+  await checkFold(doc, base, blobs, 'a press on its accepted new paragraph');
 });
 
 const MANIFEST = 'ordered-checkpoint.json';
