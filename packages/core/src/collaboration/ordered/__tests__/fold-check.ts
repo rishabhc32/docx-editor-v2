@@ -39,6 +39,7 @@ import { orderedSuggestionsOfRevision } from '../client/ops/review.ts';
 import { currentFace } from '../client/properties.ts';
 import { isBlockToken } from '../compose/blocks.ts';
 import { orderedPackageMedia, writeOrderedCheckpoint } from '../compose/checkpoint.ts';
+import { movedLendings } from '../compose/checkpoint-facts.ts';
 import { orderedViewParagraph } from '../compose/compose.ts';
 import { ComposeContext } from '../compose/context.ts';
 import { showsPrompt } from '../compose/paragraph.ts';
@@ -56,6 +57,7 @@ import { isTextBoxStoryName } from '../model/text-boxes.ts';
 import { orderedUnitTyper } from '../model/typers.ts';
 import type {
   OrderedDocument,
+  OrderedElementRecord,
   OrderedItem,
   OrderedStory,
   OrderedSuggestion,
@@ -257,9 +259,15 @@ export function foldPrint(doc: OrderedDocument, base: OoxmlPackage, blobs: FoldB
     }
   };
 
-  // Each unit of an item on its own: a load joins units of one face into one item
-  const units = (story: OrderedStory, item: OrderedItem): string[] => {
+  // Each unit of an item on its own: a load joins units of one face into one item. A removed
+  // cell's lent width records are on the cell that takes its space, as a fold writes them
+  const units = (
+    story: OrderedStory,
+    item: OrderedItem,
+    moved: ReadonlyMap<OrderedItem, readonly OrderedElementRecord[]>
+  ): string[] => {
     const node = nodeName(item);
+    const props = [...item.props, ...(moved.get(item) ?? [])];
 
     // A unit in a new row or note keeps its label in the room, where a load reads it from the
     // container
@@ -280,9 +288,7 @@ export function foldPrint(doc: OrderedDocument, base: OoxmlPackage, blobs: FoldB
       // A suggestion's records of one container's properties are one change record in the file,
       // as the checkpoint writes them (`oneChangeRecord`)
       prop: recorded(
-        item.props.filter(
-          (r, k) => !item.props.slice(k + 1).some((later) => oneChangeRecord(r, later))
-        )
+        props.filter((r, k) => !props.slice(k + 1).some((later) => oneChangeRecord(r, later)))
       ),
       within: [...item.within.by, ...item.within.dels],
     };
@@ -295,7 +301,7 @@ export function foldPrint(doc: OrderedDocument, base: OoxmlPackage, blobs: FoldB
       // A decided record takes over nothing: a fold resolves it. Records apply in their order of
       // creation, and a fold puts the records taken in front of their holder's. Each pending
       // suggestion a record was taken from counts, oldest first: a take-back gives it back
-      replaced: [...item.fmts, ...item.props]
+      replaced: [...item.fmts, ...props]
         .flatMap((r) => (key(r.suggestion) === null ? [] : [keys(takenFrom(r)).join('<')]))
         .filter((chain) => chain !== '')
         .sort(),
@@ -328,7 +334,8 @@ export function foldPrint(doc: OrderedDocument, base: OoxmlPackage, blobs: FoldB
       .flatMap(([name, story]) => {
         const hidden = drawnNowhere(doc, story);
         const shown = story.tree.toArray().filter((i) => showsOn(read, story, i) && !hidden.has(i));
-        const listed = shown.flatMap((item) => units(story, item));
+        const moved = movedLendings(doc, story, new Map());
+        const listed = shown.flatMap((item) => units(story, item, moved));
         return listed.length === 0 ? [] : [[storyLabel(name), ...listed].join('\n')];
       })
       .sort(),

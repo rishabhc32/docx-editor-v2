@@ -43,6 +43,7 @@ import {
   type OrderedRelationshipResource,
   type OrderedResource,
 } from '../model/resources.ts';
+import { isHidden, isLentWidth } from '../model/document.ts';
 import { revisionIdsOf } from '../model/revision-ids.ts';
 import { takenFrom } from '../model/takeovers.ts';
 import type {
@@ -59,7 +60,7 @@ import { attributeOf, eachElement, isWml } from '../ooxml-nodes.ts';
 import { composeBlocks } from './blocks.ts';
 import { ComposeContext, type RoomNumber } from './context.ts';
 import { overOf } from './properties.ts';
-import { recordWithoutRemoved } from './table-columns.ts';
+import { lendingsOnRemoved, recordWithoutRemoved } from './table-columns.ts';
 import { styleResourceKeyOf } from './resources.ts';
 import type { OrderedPartTakeovers } from './package.ts';
 
@@ -158,8 +159,9 @@ export function checkpointFacts(
   }
 
   // A label on each change record that holds a takeover, and on each container and cell an
-  // untracked or table record names
-  const opens = recordsOpens(doc);
+  // untracked or table record names. `drawn` keeps each story drawn for its removed columns once
+  const drawn = new Map<OrderedStory, ComposeContext>();
+  const opens = recordsOpens(doc, drawn);
   const wanted = new Set<string>();
   for (const records of held.values()) {
     for (const id of records.keys()) {
@@ -193,7 +195,7 @@ export function checkpointFacts(
     commentPersons: commentPersons(doc),
     takeovers: checkpointTakeovers(doc, held, labels, list),
     namespacePersons: typers,
-    untracked: checkpointUntracked(doc, opens, labels, list),
+    untracked: checkpointUntracked(doc, opens, labels, list, drawn),
     changeRecords: checkpointChangeRecords(doc, opens, labels, list),
     madeOver: checkpointMadeOver(doc, held, labels, list),
     lists: checkpointLists(doc, pkg, list),
@@ -540,7 +542,10 @@ function commentPersons(doc: OrderedDocument): Map<string, OrderedPerson> {
  * (`resetUnrecordedCells` reads the records of each): where a decided record of a row or a cell
  * is kept, the row and each of its cells keep every record.
  */
-function recordsOpens(doc: OrderedDocument): RecordsOpen[] {
+function recordsOpens(
+  doc: OrderedDocument,
+  drawn: Map<OrderedStory, ComposeContext>
+): RecordsOpen[] {
   const pending = (id: string) => doc.suggestions.get(id)?.status === 'pending';
 
   // Word's one change record holds a pending record's properties and what was made over them
@@ -561,6 +566,7 @@ function recordsOpens(doc: OrderedDocument): RecordsOpen[] {
     }[] = [];
     const rows: OrderedItem[] = [];
     const whole = new Set<OrderedItem>();
+    const moved = movedLendings(doc, story, drawn);
     for (const open of story.tree.items()) {
       if (open.token === 'tr' && open.kind === 'close') {
         rows.pop();
@@ -572,9 +578,10 @@ function recordsOpens(doc: OrderedDocument): RecordsOpen[] {
       }
 
       const shell = open.node;
+      const props = [...open.props, ...(moved.get(open) ?? [])];
       if (
         open.kind !== 'open' ||
-        open.props.length === 0 ||
+        props.length === 0 ||
         shell === null ||
         shell.kind === 'textValue'
       ) {
@@ -582,7 +589,7 @@ function recordsOpens(doc: OrderedDocument): RecordsOpen[] {
       }
 
       const byTarget = new Map<OrderedPropertyTarget, OrderedElementRecord[]>();
-      for (const record of open.props) {
+      for (const record of props) {
         if (record.kind === 'element') {
           const records = byTarget.get(record.target) ?? [];
           records.push(record);
@@ -644,6 +651,41 @@ function recordsOpens(doc: OrderedDocument): RecordsOpen[] {
 }
 
 /**
+ * The lent width records a fold moves from the cells a decision or a take-back removed to the
+ * cell that takes each one's space (`lendingsOnRemoved`), by that cell's open item. The story is
+ * drawn only when a cell that shows nowhere holds a lent width record.
+ */
+export function movedLendings(
+  doc: OrderedDocument,
+  story: OrderedStory,
+  drawn: Map<OrderedStory, ComposeContext>
+): ReadonlyMap<OrderedItem, readonly OrderedElementRecord[]> {
+  for (const open of story.tree.items()) {
+    if (open.token === 'tc' && open.props.some(isLentWidth) && isHidden(doc, open)) {
+      return lendingsOnRemoved(drawnStory(doc, story, drawn));
+    }
+  }
+
+  return new Map();
+}
+
+/** A story drawn once for its removed columns (`ComposeContext.removedColumns`). */
+function drawnStory(
+  doc: OrderedDocument,
+  story: OrderedStory,
+  drawn: Map<OrderedStory, ComposeContext>
+): ComposeContext {
+  let ctx = drawn.get(story);
+  if (ctx === undefined) {
+    ctx = new ComposeContext(doc, story, {});
+    composeBlocks(ctx);
+    drawn.set(story, ctx);
+  }
+
+  return ctx;
+}
+
+/**
  * For each properties element of a container the file writes that a pending record changes with
  * no change record: the container's own properties, and every record of them, decided or not, in
  * the order they were made (a record taken from another too, which its change record also holds).
@@ -652,10 +694,10 @@ function checkpointUntracked(
   doc: OrderedDocument,
   opens: readonly RecordsOpen[],
   labels: ReadonlyMap<string, number>,
-  list: SuggestionList
+  list: SuggestionList,
+  drawn: Map<OrderedStory, ComposeContext>
 ): CheckpointUntracked[] {
   const out: CheckpointUntracked[] = [];
-  const drawn = new Map<OrderedStory, ComposeContext>();
   for (const { story, shell, byTarget } of opens) {
     const label = labels.get(shell.id);
     if (label === undefined) {
@@ -710,14 +752,7 @@ function writtenElement(
     return record.element;
   }
 
-  let ctx = drawn.get(story);
-  if (ctx === undefined) {
-    ctx = new ComposeContext(doc, story, {});
-    composeBlocks(ctx);
-    drawn.set(story, ctx);
-  }
-
-  return recordWithoutRemoved(ctx, record, shell.id) ?? record.element;
+  return recordWithoutRemoved(drawnStory(doc, story, drawn), record, shell.id) ?? record.element;
 }
 
 /** What the room holds of each pending record with a change record, by the label on its container. */

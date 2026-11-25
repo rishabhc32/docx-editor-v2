@@ -260,6 +260,33 @@ function withRecordTakingCell(
   } as OoxmlElement;
 }
 
+/**
+ * The cell that takes each removed cell's grid space, by node id: the survivor before it, or at
+ * the row's start the first survivor after it. A row with no survivor gives its space to none.
+ */
+export function spaceReceivers(
+  cells: readonly OoxmlElement[],
+  removed: ReadonlySet<string>
+): Map<string, string> {
+  const out = new Map<string, string>();
+  const leading: string[] = [];
+  let previous: string | undefined;
+  for (const cell of cells) {
+    if (!removed.has(cell.id)) {
+      previous = cell.id;
+      for (const id of leading.splice(0)) {
+        out.set(id, previous);
+      }
+    } else if (previous === undefined) {
+      leading.push(cell.id);
+    } else {
+      out.set(cell.id, previous);
+    }
+  }
+
+  return out;
+}
+
 /** Word gives deleted cell space to the preceding survivor (or the first following cell). */
 export function rebuildRevisionTable(
   original: OoxmlElement,
@@ -278,38 +305,24 @@ export function rebuildRevisionTable(
     const priorCells = tableChildren(prior, 'tableCell');
     if (!priorCells.some((c) => removed.has(c.id))) return row;
     const additions = new Map<string, { span: number; width: number; type: string | undefined }>();
-    let previous: string | undefined;
-    let leadingSpan = 0,
-      leadingWidth = 0;
-    let leadingType: string | undefined;
+    const receivers = spaceReceivers(priorCells, removed);
     for (const cell of priorCells) {
-      const pr = child(cell, 'tcPr');
-      if (removed.has(cell.id)) {
-        const span = number(pr && child(pr, 'gridSpan'), 'val', 1);
-        const widthNode = pr && child(pr, 'tcW');
-        const width = positiveWidth(widthNode, 0);
-        const type = widthNode && revisionAttribute(widthNode, 'type');
-        if (previous) {
-          const existing = additions.get(previous) ?? { span: 0, width: 0, type };
-          additions.set(previous, {
-            span: existing.span + span,
-            width: existing.width + width,
-            type: existing.type === type ? type : undefined,
-          });
-        } else {
-          leadingType = leadingSpan === 0 ? type : leadingType === type ? type : undefined;
-          leadingSpan += span;
-          leadingWidth += width;
-        }
-      } else {
-        previous = cell.id;
-        if (leadingSpan) {
-          additions.set(cell.id, { span: leadingSpan, width: leadingWidth, type: leadingType });
-          leadingSpan = 0;
-          leadingWidth = 0;
-          leadingType = undefined;
-        }
+      const receiver = receivers.get(cell.id);
+      if (receiver === undefined) {
+        continue;
       }
+
+      const pr = child(cell, 'tcPr');
+      const span = number(pr && child(pr, 'gridSpan'), 'val', 1);
+      const widthNode = pr && child(pr, 'tcW');
+      const width = positiveWidth(widthNode, 0);
+      const type = widthNode && revisionAttribute(widthNode, 'type');
+      const existing = additions.get(receiver) ?? { span: 0, width: 0, type };
+      additions.set(receiver, {
+        span: existing.span + span,
+        width: existing.width + width,
+        type: existing.type === type ? type : undefined,
+      });
     }
     const cells = tableChildren(row, 'tableCell').map((c) => {
       const extra = additions.get(c.id);

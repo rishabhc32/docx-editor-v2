@@ -266,7 +266,7 @@ describe('a column removed under a later one', () => {
   test.each(['taken back', 'rejected'])(
     "a party's column %s, after the party's column made from its cell",
     async (how) => {
-      const { document: doc } = openOrderedWordFile(TABLE_FILE, { file: 1 });
+      const { document: doc, base } = openOrderedWordFile(TABLE_FILE, { file: 1 });
       apply(doc, 'ben:1', column(doc, 0), 'Ben');
       apply(doc, 'ben:2', column(doc, 1), 'Ben');
       if (how === 'taken back') {
@@ -277,6 +277,7 @@ describe('a column removed under a later one', () => {
 
       expect(widths(doc)).toEqual(['2250,750,3000', '2250,750,3000', '2250,750,3000']);
       expect(orderedCards(doc).map((card) => card.suggestions)).toEqual([['S:ben:2.1']]);
+      await checkFold(doc, base, mediaStore(base), `a column ${how} under one made from its cell`);
       decide(doc, 'olive:2', 'S:ben:2.1', 'rejected');
       expect(widths(doc)).toEqual(['3000,3000', '3000,3000', '3000,3000']);
     }

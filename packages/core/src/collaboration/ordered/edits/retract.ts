@@ -1,14 +1,19 @@
 // Undo in a room is a new change that takes back the author's own suggestion, so it never
 // touches another person's text.
 
-import { itemsAddedBy, storyOfItem, statusOf, suggestionsOf } from '../model/document.ts';
+import {
+  isLentWidth,
+  itemsAddedBy,
+  storyOfItem,
+  statusOf,
+  suggestionsOf,
+} from '../model/document.ts';
 import { forgetAdded, isolateUnits, relabel } from '../model/mutations.ts';
 import { sameMaker, type OrderedMaker } from '../model/person.ts';
 import { OrderedRefusal } from '../model/refusal.ts';
 import { takenFrom, withTakenFrom } from '../model/takeovers.ts';
 import type {
   OrderedDocument,
-  OrderedElementRecord,
   OrderedFormatRecord,
   OrderedItem,
   OrderedItemLabels,
@@ -56,10 +61,6 @@ function recordsWithout<T extends OrderedFormatRecord | OrderedPropertyRecord>(
 
   return out;
 }
-
-/** A column's width lent from a cell: Word writes no change record for it. */
-const isLentWidth = (record: OrderedPropertyRecord): boolean =>
-  record.kind === 'element' && record.target === 'tcPr' && record.untracked === true;
 
 /**
  * Take back `suggestion` for `maker`: what it inserted is taken back (it never existed for
@@ -126,9 +127,7 @@ export function retractSuggestion(
 
     if (item.props.some((r) => r.suggestion === suggestion)) {
       change.props = recordsWithout(doc, item.props, suggestion);
-      const lent = item.props.filter(
-        (r): r is OrderedElementRecord => r.suggestion === suggestion && isLentWidth(r)
-      );
+      const lent = item.props.filter(isLentWidth).filter((r) => r.suggestion === suggestion);
       if (lent.length > 0) {
         change.takenBackLendings = [...item.takenBackLendings, ...lent];
       }

@@ -8,9 +8,11 @@ import { createOrderedResources } from './resources.ts';
 import {
   loadedSpace,
   type OrderedDocument,
+  type OrderedElementRecord,
   type OrderedItem,
   type OrderedItemAddress,
   type OrderedItemSummary,
+  type OrderedPropertyRecord,
   type OrderedStory,
   type OrderedSuggestion,
   type OrderedSuggestionStatus,
@@ -434,6 +436,10 @@ export function suggestionsOf(item: OrderedItem): Set<string> {
   for (const id of item.within.dels) ids.add(id);
   return ids;
 }
+
+/** A column's width lent from a cell: Word writes no change record for it. */
+export const isLentWidth = (record: OrderedPropertyRecord): record is OrderedElementRecord =>
+  record.kind === 'element' && record.target === 'tcPr' && record.untracked === true;
 
 /** Put an item in an index's entry. */
 function addTo(index: Map<string, Set<OrderedItem>>, key: string, item: OrderedItem): void {

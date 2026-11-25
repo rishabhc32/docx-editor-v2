@@ -3,10 +3,13 @@
 import { findNode } from '../../../store/package/ooxml-edit.ts';
 import type { OoxmlElement, OoxmlNode } from '../../../store/package/ooxml-tree.ts';
 import { resolveRevisions } from '../../../store/store/tree-op-revisions.ts';
-import { compactRevisionGrid } from '../../../store/store/revision-table-rebuild.ts';
+import {
+  compactRevisionGrid,
+  spaceReceivers,
+} from '../../../store/store/revision-table-rebuild.ts';
 import { build, revisionAttributes } from '../../../store/store/tree-op-tracked.ts';
 import { mintedChange } from '../change/ids.ts';
-import { itemAt, statusOf } from '../model/document.ts';
+import { isLentWidth, itemAt, statusOf } from '../model/document.ts';
 import {
   loadedSpace,
   tokenSpace,
@@ -293,13 +296,7 @@ function lendingsOf(
   open: OrderedItem,
   suggestions: ReadonlySet<string>
 ): OrderedElementRecord[] {
-  const shown = open.props.filter(
-    (r): r is OrderedElementRecord =>
-      r.kind === 'element' &&
-      r.target === 'tcPr' &&
-      r.untracked === true &&
-      ctx.rejectedOrDrawnSo(r.suggestion)
-  );
+  const shown = open.props.filter(isLentWidth).filter((r) => ctx.rejectedOrDrawnSo(r.suggestion));
   const records = [...shown, ...open.takenBackLendings].filter((r) =>
     suggestions.has(r.suggestion)
   );
@@ -576,6 +573,43 @@ export function withoutRemovedCells(
   const after = withoutCandidates(ctx, table, candidates);
   ctx.removedColumns.push({ before: table, after, cells: candidates });
   return after;
+}
+
+/**
+ * The lent width records of the columns that still show on the cells this drawing removed, by
+ * the open item of the cell that takes each removed cell's space (`spaceReceivers`, the engine's
+ * rule). A column made from a removed cell lent part of the width that cell gives its neighbour,
+ * so a fold, which writes no removed cell, keeps the record on that neighbour: a reject of the
+ * column then gives the width back to it, as live. The fold writes the record's width as drawn
+ * (`recordWithoutRemoved`: the record holds the removed cell).
+ */
+export function lendingsOnRemoved(ctx: ComposeContext): Map<OrderedItem, OrderedElementRecord[]> {
+  const out = new Map<OrderedItem, OrderedElementRecord[]>();
+  const openOf = (id: string) =>
+    itemAt(ctx.story, { space: tokenSpace(ctx.doc.file, id), offset: 0 });
+  for (const { before, cells } of ctx.removedColumns) {
+    const removed = new Set(cells.map((cell) => cell.id));
+    for (const row of before.children) {
+      if (row.kind === 'textValue' || !isRow(row)) {
+        continue;
+      }
+
+      const rowCells = row.children.flatMap((c) =>
+        c.kind !== 'textValue' && isCell(c) ? [c] : []
+      );
+      for (const [id, receiver] of spaceReceivers(rowCells, removed)) {
+        const lent = (openOf(id)?.props ?? [])
+          .filter(isLentWidth)
+          .filter((r) => statusOf(ctx.doc, r.suggestion) !== 'rejected');
+        const open = openOf(receiver);
+        if (open !== null && lent.length > 0) {
+          out.set(open, [...(out.get(open) ?? []), ...lent]);
+        }
+      }
+    }
+  }
+
+  return out;
 }
 
 /**
