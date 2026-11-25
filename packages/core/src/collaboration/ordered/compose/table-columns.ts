@@ -385,25 +385,6 @@ function wantedCells(drawn: OoxmlElement, removed: readonly RemovedCell[]): Remo
   return out;
 }
 
-/** A node without its change records (`w:...Change`), deep; bounded by the XML depth. */
-function withoutHistory(node: OoxmlElement, depth = 0): OoxmlElement {
-  if (depth > 64) return node;
-  const children: OoxmlNode[] = [];
-  let changed = false;
-  for (const child of node.children) {
-    if (child.kind !== 'textValue' && /Change$/.test(child.localName)) {
-      changed = true;
-      continue;
-    }
-
-    const next = child.kind === 'textValue' ? child : withoutHistory(child, depth + 1);
-    if (next !== child) changed = true;
-    children.push(next);
-  }
-
-  return changed ? withChildren(node, children) : node;
-}
-
 /** A row's or a cell's properties with the grid placement children `names` from `from`. */
 function withPlacement(
   owner: OoxmlElement,
@@ -451,31 +432,6 @@ const plainOf = (node: OoxmlNode): unknown =>
     ? node.value
     : [node.localName, node.attributes.map((a) => `${a.localName}=${a.value}`).sort()];
 
-/** The grid's widths, in order. */
-const gridWidths = (grid: OoxmlElement): string =>
-  JSON.stringify(
-    grid.children.flatMap((c) =>
-      c.kind !== 'textValue' && isWml(c, 'gridCol') ? [attributeOf(c, 'w') ?? ''] : []
-    )
-  );
-
-/**
- * The grid's record when it holds the grid as it is (a row height's anchor, Word's form): it
- * holds no old grid, so the join goes on and the record follows it. A file's loads as the live
- * one is made: a record that sets nothing (`load/properties.ts`).
- */
-export function unchangedGridRecord(grid: OoxmlElement): OoxmlElement | undefined {
-  const record = grid.children.find((c) => isWml(c, 'tblGridChange'));
-  const old =
-    record && record.kind !== 'textValue' && record.children.find((c) => isWml(c, 'tblGrid'));
-  if (!record || record.kind === 'textValue' || !old || old.kind === 'textValue') return undefined;
-  return gridWidths(old) === gridWidths(grid) ? record : undefined;
-}
-
-/** Whether a grid's pending record holds another grid (`w:tblGridChange`): no join goes on. */
-export const holdsOtherGrid = (grid: OoxmlElement): boolean =>
-  grid.children.some((c) => isWml(c, 'tblGridChange')) && !unchangedGridRecord(grid);
-
 /**
  * The decision (not a direct edit) this drawing makes on a table's, a row's or a cell's own labels
  * or records, if any: the engine fits the table's grid to its cells after it (`withJoinedGrid`).
@@ -518,25 +474,19 @@ export function joinedBy(
 }
 
 /**
- * The resolved table with its grid joined as the engine joins it (`compactRevisionGrid`: a
- * grid boundary no remaining cell uses goes, with its width given to the column before it).
- * The engine keeps the grid as it was while the table holds any pending change record; the
- * list joins it unless a pending grid record (`w:tblGridChange`) holds the old grid, so a
- * decision on a column gives the same table live and after a reopen.
+ * The resolved table with its grid joined as the engine joins it (`compactRevisionGrid`): a grid
+ * boundary no remaining cell uses goes, with its width given to the column before it, unless a
+ * pending grid record holds another grid. So a decision on a column gives the same table live
+ * and after a reopen.
  */
 export function withJoinedGrid(ctx: ComposeContext, resolved: OoxmlElement): OoxmlElement {
   const grid = resolved.children.find((c) => isWml(c, 'tblGrid'));
-  if (!grid || grid.kind === 'textValue') return resolved;
-  if (holdsOtherGrid(grid)) {
+  const compacted = compactRevisionGrid(resolved, ctx.mint);
+  const newGrid = compacted.children.find((c) => isWml(c, 'tblGrid'));
+  if (compacted === resolved || !grid || !newGrid) {
     return resolved;
   }
 
-  const unchanged = unchangedGridRecord(grid);
-  const bare = withoutHistory(resolved);
-  const compacted = compactRevisionGrid(bare, ctx.mint);
-  if (compacted === bare) return resolved;
-  const newGrid = compacted.children.find((c) => isWml(c, 'tblGrid'));
-  if (!newGrid || newGrid.kind === 'textValue') return resolved;
   const rows = new Map<string, OoxmlElement>();
   const cells = new Map<string, OoxmlElement>();
   for (const row of compacted.children) {
@@ -546,39 +496,15 @@ export function withJoinedGrid(ctx: ComposeContext, resolved: OoxmlElement): Oox
       if (cell.kind !== 'textValue' && isCell(cell)) cells.set(cell.id, cell);
   }
 
-  const columns = newGrid.children.filter((c) => isWml(c, 'gridCol'));
   return withChildren(
     resolved,
     resolved.children.map((child) => {
       if (child === grid) {
-        // An unchanged grid record holds the joined grid too
-        const rest = grid.children.filter((c) => !isWml(c, 'gridCol'));
-        return withChildren(grid, [
-          ...columns,
-          ...rest.map((c) =>
-            c === unchanged ? withJoinedGridRecord(unchanged, columns, ctx.mint) : c
-          ),
-        ]);
+        return newGrid;
       }
 
       if (child.kind === 'textValue' || !isRow(child)) return child;
       return withRowPlacements(ctx, child, rows, cells);
-    })
-  );
-}
-
-/** A grid record whose old grid takes the joined grid's columns, under new ids. */
-function withJoinedGridRecord(
-  record: OoxmlElement,
-  columns: readonly OoxmlNode[],
-  mint: () => string
-): OoxmlElement {
-  return withChildren(
-    record,
-    record.children.map((old) => {
-      if (old.kind === 'textValue' || !isWml(old, 'tblGrid')) return old;
-      const copies = columns.map((col) => (col.kind === 'textValue' ? col : withId(col, mint())));
-      return withChildren(old, [...copies, ...old.children.filter((o) => !isWml(o, 'gridCol'))]);
     })
   );
 }

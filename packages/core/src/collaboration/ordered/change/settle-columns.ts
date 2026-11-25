@@ -5,10 +5,11 @@ import {
   type OoxmlElement,
   type OoxmlNode,
 } from '../../../store/package/ooxml-tree.ts';
+import { holdsOtherGrid } from '../../../store/store/revision-table-rebuild.ts';
 import { cloneWithNewIds } from '../../../store/store/tree-op-nodes.ts';
 import { composeBlocks } from '../compose/blocks.ts';
 import { ComposeContext } from '../compose/context.ts';
-import { holdsOtherGrid, type RemovedColumns } from '../compose/table-columns.ts';
+import type { RemovedColumns } from '../compose/table-columns.ts';
 import { cellsOf, rowsOf } from '../edits/table-nodes.ts';
 import { itemAt, statusOf, storyOfItem } from '../model/document.ts';
 import { nextSeq, relabel } from '../model/mutations.ts';

@@ -274,3 +274,81 @@ test('partial planning preserves the original node index and allocator state', (
   expect(first.result.skipped).toEqual([]);
   expect(serializeOoxmlPart(part)).toBe(original);
 });
+
+/** The table after Ada's changes alone are accepted; Grace's stay pending. */
+function acceptAda(body: string): string {
+  const part = load(body);
+  const keys = revisionItemsOf(part)
+    .filter((item) => item.author === 'Ada')
+    .map(reviewItemKey);
+  const batch = planRevisionBatch(part, 'accept', keys);
+  expect(batch.result.skipped).toEqual([]);
+  const result = applyTreeOp(part, batch.ops[0]!);
+  if (!result.ok) throw Error(result.reason);
+  return serializeOoxmlPart(result.part).match(/<w:tbl>.*<\/w:tbl>/)![0];
+}
+
+test('a pending change elsewhere in the table keeps no unused grid boundary', () => {
+  // Word joins the grid beside another pending record (row 227 of the known differences)
+  const grace = 'w:id="9" w:author="Grace"';
+  const formatted = `<w:p><w:r><w:rPr><w:b/><w:rPrChange ${grace}><w:rPr/></w:rPrChange></w:rPr><w:t>c0</w:t></w:r></w:p>`;
+  const body = table(
+    row(cell('c0', 1000).replace(p('c0'), formatted) + cell('gone', 2000, marker('cellDel'))),
+    [1000, 2000]
+  );
+  const xml = acceptAda(body);
+  expect(xml.match(/<w:gridCol w:w="(\d+)"/g)).toEqual(['<w:gridCol w:w="3000"']);
+  expect(xml).not.toContain('gridSpan');
+  expect(xml).toContain('<w:rPrChange ');
+});
+
+test('a pending grid record keeps the grid it holds, or follows the join when it holds this one', () => {
+  const recordOf = (widths: readonly number[]) =>
+    `<w:tblGridChange w:author="Grace" w:id="9"><w:tblGrid>${widths.map((w) => `<w:gridCol w:w="${w}"/>`).join('')}</w:tblGrid></w:tblGridChange>`;
+  const body = (old: readonly number[]) =>
+    table(row(cell('c0', 1000) + cell('gone', 2000, marker('cellDel'))), [1000, 2000]).replace(
+      '</w:tblGrid>',
+      `${recordOf(old)}</w:tblGrid>`
+    );
+  // Another grid in the record: the join waits for its decision
+  const other = acceptAda(body([500, 2500]));
+  expect(other).toContain('<w:tblGrid><w:gridCol w:w="1000"/><w:gridCol w:w="2000"/>');
+  expect(other).toContain(recordOf([500, 2500]));
+  expect(other).toContain('<w:gridSpan w:val="2"/>');
+  // The grid as it is (a row height's anchor): the grid joins and the record holds the join
+  const same = acceptAda(body([1000, 2000]));
+  expect(same).toContain(`<w:tblGrid><w:gridCol w:w="3000"/>${recordOf([3000])}</w:tblGrid>`);
+  expect(same).not.toContain('gridSpan');
+});
+
+test("a new column's reject beside its author's pending records joins the grid; they follow it", () => {
+  // The cells' records hold the widths the column lent (a property over one's own new column)
+  const record = (width: number) =>
+    `<w:tcPrChange w:id="5" w:author="Ada"><w:tcPr><w:tcW w:w="${width}" w:type="dxa"/></w:tcPr></w:tcPrChange>`;
+  const body = table(
+    row(
+      cell('kept', 3000, record(3000)) +
+        cell('lender', 1500, `<w:shd w:val="clear" w:fill="FF0000"/>${record(1500)}`) +
+        cell('new', 1500, marker('cellIns') + record(1500))
+    ),
+    [3000, 1500, 1500]
+  );
+  const part = load(body);
+  const column = revisionItemsOf(part).filter((item) => item.revisionKind === 'structural');
+  const batch = planRevisionBatch(part, 'reject', column.map(reviewItemKey));
+  expect(batch.result.skipped).toEqual([]);
+  const rejected = applyTreeOp(part, batch.ops[0]!);
+  if (!rejected.ok) throw Error(rejected.reason);
+  const xml = serializeOoxmlPart(rejected.part);
+  expect(xml.match(/<w:gridCol w:w="\d+"/g)).toEqual([
+    '<w:gridCol w:w="3000"',
+    '<w:gridCol w:w="3000"',
+  ]);
+  expect(xml).not.toContain('gridSpan');
+  expect(xml).toContain('<w:tcPr><w:tcW w:type="dxa" w:w="3000"/></w:tcPr></w:tcPrChange>');
+  // The records' reject after gives a whole row on the joined grid
+  const records = planRevisionBatch(rejected.part, 'reject');
+  const after = applyTreeOp(rejected.part, records.ops[0]!);
+  if (!after.ok) throw Error(after.reason);
+  expect(serializeOoxmlPart(after.part)).not.toContain('gridSpan');
+});

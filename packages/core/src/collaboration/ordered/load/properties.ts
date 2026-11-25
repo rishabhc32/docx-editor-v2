@@ -4,7 +4,7 @@
 
 import type { OoxmlElement, OoxmlNode } from '../../../store/package/ooxml-tree.ts';
 import { validNumberingRevision } from '../../../store/store/revision-property-records.ts';
-import { unchangedGridRecord } from '../compose/table-columns.ts';
+import { unchangedGridRecord } from '../../../store/store/revision-table-rebuild.ts';
 import { REVISION_ROLE } from '../model/revision-ids.ts';
 import type {
   OrderedFormatRecord,

@@ -216,10 +216,11 @@ function restoreUnrecordedCells(
 }
 
 /**
- * The cell's pending `w:tcPrChange` takes the removed cell's width and grid span too when it holds
- * the cell as it showed: a record taken beside a pending column holds the width the column lent
- * (Word writes no record for it), so a later reject of the record keeps what the column gave
- * back (a party's table or row property over its own new column).
+ * The cell's pending `w:tcPrChange` takes the width and grid span a rejected new column gives back
+ * when it holds the cell as it showed: a record taken beside a pending column holds the width the
+ * column lent (Word writes no record for it), so a later reject of the record keeps what the
+ * column gave back (a party's table or row property over its own new column). An accepted deleted
+ * column's width is not lent: the record keeps the width from before, as Word keeps it.
  */
 function withRecordTakingCell(
   cell: OoxmlElement,
@@ -239,25 +240,16 @@ function withRecordTakingCell(
     number(child(inner, 'gridSpan'), 'val', 1) !== shown.span
   )
     return cell;
-  const followed = patch(
-    record,
-    {
-      tcW: { type, w: String(positiveWidth(shown.width, 0) + taken.width) },
-      gridSpan: { val: String(shown.span + taken.span) },
-    },
-    mint
+  return withOwnRecord(cell, 'tcPr', (own) =>
+    patch(
+      own,
+      {
+        tcW: { type, w: String(positiveWidth(shown.width, 0) + taken.width) },
+        gridSpan: { val: String(shown.span + taken.span) },
+      },
+      mint
+    )
   );
-  return {
-    ...cell,
-    children: cell.children.map((c) =>
-      c === pr
-        ? ({
-            ...pr,
-            children: pr.children.map((r) => (r === record ? followed : r)),
-          } as OoxmlElement)
-        : c
-    ),
-  } as OoxmlElement;
 }
 
 /**
@@ -304,7 +296,10 @@ export function rebuildRevisionTable(
     row = restoreUnrecordedCells(prior, row, restoredProperties, mint);
     const priorCells = tableChildren(prior, 'tableCell');
     if (!priorCells.some((c) => removed.has(c.id))) return row;
-    const additions = new Map<string, { span: number; width: number; type: string | undefined }>();
+    const additions = new Map<
+      string,
+      { span: number; width: number; type: string | undefined; lent: boolean }
+    >();
     const receivers = spaceReceivers(priorCells, removed);
     for (const cell of priorCells) {
       const receiver = receivers.get(cell.id);
@@ -317,11 +312,13 @@ export function rebuildRevisionTable(
       const widthNode = pr && child(pr, 'tcW');
       const width = positiveWidth(widthNode, 0);
       const type = widthNode && revisionAttribute(widthNode, 'type');
-      const existing = additions.get(receiver) ?? { span: 0, width: 0, type };
+      const existing = additions.get(receiver) ?? { span: 0, width: 0, type, lent: true };
       additions.set(receiver, {
         span: existing.span + span,
         width: existing.width + width,
         type: existing.type === type ? type : undefined,
+        // A pending new column's width was lent by its neighbour; a deleted one's is its own
+        lent: existing.lent && pr !== undefined && child(pr, 'cellIns') !== undefined,
       });
     }
 
@@ -381,7 +378,7 @@ export function rebuildRevisionTable(
         },
         mint
       );
-      return takesWidth && added > 0
+      return takesWidth && added > 0 && extra.lent
         ? withRecordTakingCell(
             patched,
             { width, span: currentSpan },
@@ -466,10 +463,148 @@ export function rebuildRevisionTable(
   );
 }
 
-/** Remove grid boundaries unused by any surviving cell; keep pending history in its original grid. */
+/** The columns a row skips before and after its cells. */
+interface RowOffsets {
+  readonly before: number;
+  readonly after: number;
+}
+
+/**
+ * A row (or its record) whose `w:trPr` skips `offsets` (`w:gridBefore`, `w:gridAfter`), first
+ * among its children, as `patch` puts a cell's `w:tcPr`.
+ */
+function withRowOffsets(
+  owner: OoxmlElement,
+  offsets: RowOffsets,
+  mint: () => string
+): OoxmlElement {
+  const pr = child(owner, 'trPr');
+  const placed = [
+    ...(offsets.before
+      ? [element(pr ?? owner, 'gridBefore', { val: String(offsets.before) }, mint)]
+      : []),
+    ...(offsets.after
+      ? [element(pr ?? owner, 'gridAfter', { val: String(offsets.after) }, mint)]
+      : []),
+  ];
+  if (!pr && placed.length === 0) {
+    return owner;
+  }
+
+  const properties =
+    pr?.children.filter((c) => !isWmlNamed(c, 'gridBefore') && !isWmlNamed(c, 'gridAfter')) ?? [];
+  const insertion = properties.findIndex((property) => !isWmlNamed(property, 'cnfStyle'));
+  properties.splice(insertion < 0 ? properties.length : insertion, 0, ...placed);
+  const next = { ...(pr ?? element(owner, 'trPr', {}, mint)), children: properties };
+  return {
+    ...owner,
+    children: [next, ...owner.children.filter((c) => !isWmlNamed(c, 'trPr'))],
+  } as OoxmlElement;
+}
+
+/** The grid placement a join changes in a container, with each value's default. */
+const PLACEMENT = { tcPr: { gridSpan: 1 }, trPr: { gridBefore: 0, gridAfter: 0 } } as const;
+
+const placementOf = (pr: OoxmlElement | undefined, container: keyof typeof PLACEMENT): string =>
+  Object.entries(PLACEMENT[container])
+    .map(([name, fallback]) => number(pr && child(pr, name), 'val', fallback))
+    .join();
+
+/** The owner (a row or a cell) with its pending property record (`w:trPrChange`, `w:tcPrChange`) updated. */
+function withOwnRecord(
+  owner: OoxmlElement,
+  container: keyof typeof PLACEMENT,
+  update: (record: OoxmlElement) => OoxmlElement
+): OoxmlElement {
+  const pr = child(owner, container);
+  const record = pr && child(pr, `${container}Change`);
+  if (!pr || !record) {
+    return owner;
+  }
+
+  const next = update(record);
+  return {
+    ...owner,
+    children: owner.children.map((c) =>
+      c === pr ? { ...pr, children: pr.children.map((r) => (r === record ? next : r)) } : c
+    ),
+  } as OoxmlElement;
+}
+
+/**
+ * The owner with its pending property record placed by `place` too when the record holds the
+ * placement the owner holds: it follows a grid join, as an unchanged grid record does. A record
+ * of another placement (a cell's width and span from before a column went) keeps it.
+ */
+function withRecordFollowing(
+  owner: OoxmlElement,
+  container: keyof typeof PLACEMENT,
+  place: (record: OoxmlElement) => OoxmlElement
+): OoxmlElement {
+  const shown = placementOf(child(owner, container), container);
+  return withOwnRecord(owner, container, (record) =>
+    placementOf(child(record, container), container) === shown ? place(record) : record
+  );
+}
+
+/** The grid's widths, in order. */
+const gridWidths = (grid: OoxmlElement): string[] =>
+  elements(grid)
+    .filter((n) => isWmlNamed(n, 'gridCol'))
+    .map((col) => revisionAttribute(col, 'w') ?? '');
+
+/**
+ * The grid's pending record (`w:tblGridChange`) when it holds the grid as it is (a row height's
+ * anchor, Word's form): it holds no other grid, so a join goes on and the record follows it.
+ */
+export function unchangedGridRecord(grid: OoxmlElement): OoxmlElement | undefined {
+  const record = child(grid, 'tblGridChange');
+  const old = record && child(record, 'tblGrid');
+  if (!record || !old) {
+    return undefined;
+  }
+
+  return gridWidths(old).join() === gridWidths(grid).join() ? record : undefined;
+}
+
+/** Whether a grid's pending record holds another grid: the grid stays until its decision. */
+export const holdsOtherGrid = (grid: OoxmlElement): boolean =>
+  child(grid, 'tblGridChange') !== undefined && unchangedGridRecord(grid) === undefined;
+
+/** The grid with other columns; a record that holds the grid as it is holds them too. */
+function withColumns(
+  grid: OoxmlElement,
+  columns: readonly OoxmlElement[],
+  mint: () => string
+): OoxmlElement {
+  const unchanged = unchangedGridRecord(grid);
+  const followed = (old: OoxmlNode): OoxmlNode =>
+    old.kind !== 'textValue' && isWmlNamed(old, 'tblGrid')
+      ? withColumns(
+          old,
+          columns.map((col) => ({ ...col, id: mint() })),
+          mint
+        )
+      : old;
+  const rest = grid.children
+    .filter((c) => !isWmlNamed(c, 'gridCol'))
+    .map((c) =>
+      c === unchanged ? { ...unchanged, children: unchanged.children.map(followed) } : c
+    );
+  return { ...grid, children: [...columns, ...rest] } as OoxmlElement;
+}
+
+/**
+ * Remove grid boundaries unused by any surviving cell, with their widths given to the column
+ * before, as Word does beside other pending records. A pending grid record that holds another
+ * grid keeps the grid; one that holds this grid follows the join.
+ */
 export function compactRevisionGrid(table: OoxmlElement, mint: () => string): OoxmlElement {
   const grid = child(table, 'tblGrid');
-  if (!grid) return table;
+  if (!grid || holdsOtherGrid(grid)) {
+    return table;
+  }
+
   if (
     tableChildren(table, 'tableRow').some(
       (row) =>
@@ -488,11 +623,6 @@ export function compactRevisionGrid(table: OoxmlElement, mint: () => string): Oo
     )
   )
     return table;
-  const hasHistory = (n: OoxmlNode): boolean =>
-    n.kind !== 'textValue' &&
-    ((n.namespaceUri === WML_NAMESPACE_URI && /Change$/.test(n.localName)) ||
-      n.children.some(hasHistory));
-  if (hasHistory(table)) return table;
   const boundaries = new Set([0]);
   const ranges = new Map<string, [number, number]>();
   const rowRanges = new Map<string, [number, number]>();
@@ -532,43 +662,30 @@ export function compactRevisionGrid(table: OoxmlElement, mint: () => string): Oo
   return {
     ...table,
     children: table.children.map((n) => {
-      if (n.id === grid.id)
-        return {
-          ...grid,
-          children: [...newColumns, ...grid.children.filter((c) => !isWmlNamed(c, 'gridCol'))],
-        } as OoxmlElement;
+      if (n.id === grid.id) {
+        return withColumns(grid, newColumns, mint);
+      }
+
       if (n.kind !== 'tableRow') return n;
       const range = rowRanges.get(n.id)!;
-      const before = positions.get(range[0])!;
-      const after = sorted.length - 1 - positions.get(range[1])!;
-      const pr = child(n, 'trPr');
-      const properties =
-        pr?.children.filter((c) => !isWmlNamed(c, 'gridBefore') && !isWmlNamed(c, 'gridAfter')) ??
-        [];
-      const insertion = properties.findIndex((property) => !isWmlNamed(property, 'cnfStyle'));
-      const offsets = [
-        ...(before ? [element(pr ?? n, 'gridBefore', { val: String(before) }, mint)] : []),
-        ...(after ? [element(pr ?? n, 'gridAfter', { val: String(after) }, mint)] : []),
-      ];
-      properties.splice(insertion < 0 ? properties.length : insertion, 0, ...offsets);
-      const rowProperties = pr
-        ? ({ ...pr, children: properties } as OoxmlElement)
-        : properties.length
-          ? ({ ...element(n, 'trPr', {}, mint), children: properties } as OoxmlElement)
-          : undefined;
+      const offsets: RowOffsets = {
+        before: positions.get(range[0])!,
+        after: sorted.length - 1 - positions.get(range[1])!,
+      };
+      const followed = withRecordFollowing(n, 'trPr', (record) =>
+        withRowOffsets(record, offsets, mint)
+      );
+      const row = withRowOffsets(followed, offsets, mint);
       return {
-        ...n,
-        children: [
-          ...(rowProperties ? [rowProperties] : []),
-          ...n.children
-            .filter((c) => !isWmlNamed(c, 'trPr'))
-            .map((c) => {
-              const range = ranges.get(c.id);
-              if (!range || c.kind !== 'tableCell') return c;
-              const span = positions.get(range[1])! - positions.get(range[0])!;
-              return patch(c, { gridSpan: span === 1 ? null : { val: String(span) } }, mint);
-            }),
-        ],
+        ...row,
+        children: row.children.map((c) => {
+          const range = ranges.get(c.id);
+          if (!range || c.kind !== 'tableCell') return c;
+          const span = positions.get(range[1])! - positions.get(range[0])!;
+          const value = { gridSpan: span === 1 ? null : { val: String(span) } };
+          const cell = withRecordFollowing(c, 'tcPr', (record) => patch(record, value, mint));
+          return patch(cell, value, mint);
+        }),
       } as OoxmlElement;
     }),
   } as OoxmlElement;

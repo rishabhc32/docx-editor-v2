@@ -144,6 +144,41 @@ describe('a tracked column deletion marks the column', () => {
     expect(xml).not.toContain('a1');
   });
 
+  test("Accept beside the author's pending fill joins the grid; the fill's record keeps the old width", () => {
+    // Word accepts the cell deletion alone: the grid joins, and the fill's record holds the width
+    // from before (a file Word saved, row 227 of the known differences)
+    const record = (width: number) =>
+      `<w:tcPrChange ${STAMP} w:id="5"><w:tcPr><w:tcW w:w="${width}" w:type="dxa"/></w:tcPr></w:tcPrChange>`;
+    const fill = '<w:shd w:val="clear" w:color="auto" w:fill="FFFF00"/>';
+    const part = load(
+      BODY().replace(
+        ROW(CELL('a1', 2000), CELL('a2', 3000), CELL('a3', 4000)),
+        ROW(
+          CELL('a1', 2000, fill + record(2000)),
+          CELL('a2', 3000, record(3000)),
+          CELL('a3', 4000, record(4000))
+        )
+      )
+    );
+    const next = apply(part, deleteColumn(part, 1));
+    const column = revisionItemsOf(next).find((item) => item.revisionKind === 'structural')!;
+    const plan = planRevisionBatch(next, 'accept', [reviewItemKey(column)]);
+    expect(plan.result.skipped).toEqual([]);
+    let accepted = next;
+    for (const op of plan.ops) accepted = apply(accepted, op);
+    const xml = tableXml(accepted);
+    expect(widths(xml, 'gridCol')).toEqual([5000, 4000]);
+    expect(xml).not.toMatch(/<w:(cellDel|gridSpan)\b/);
+    const first = xml.match(/<w:tr>.*?<\/w:tr>/)![0];
+    expect(widths(first.replace(/<w:tcPrChange\b.*?<\/w:tcPrChange>/g, ''), 'tcW')).toEqual([
+      5000, 4000,
+    ]);
+    const records = first.match(/<w:tcPrChange\b.*?<\/w:tcPrChange>/g)!;
+    expect(records.map((r) => widths(r, 'tcW'))).toEqual([[2000], [4000]]);
+    expect(first).toContain('w:fill="FFFF00"');
+    expectRoundTrip(accepted);
+  });
+
   test('columns one gesture deletes share one id; the next press is a decision of its own', () => {
     const press = (store: TreeDocumentStore, ...columns: number[]): void => {
       const ops = columns.map((index) => deleteColumn(store.part, index));
