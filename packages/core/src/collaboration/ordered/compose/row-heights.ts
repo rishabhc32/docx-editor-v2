@@ -3,7 +3,7 @@
 import type { OoxmlElement, OoxmlNode } from '../../../store/package/ooxml-tree.ts';
 import {
   tableHeightAnchor,
-  wordHeightRows,
+  wordHeightRow,
 } from '../../../store/store/revision-table-implicit-height.ts';
 import { rowHeightAnchorEdits } from '../../../store/store/revision-table-row-anchor.ts';
 import { inserter, statusOf } from '../model/document.ts';
@@ -42,7 +42,7 @@ export function pendingHeightOf(ctx: ComposeContext, open: OrderedItem): string 
  * height's author, and a `w:tblGridChange` on the grid (Word for Mac,
  * `store/__tests__/fixtures/word-row-height-authors.ts`). This writes the row's, as the engine's
  * decision does (`store/store/revision-table-row-anchor.ts`), on a row Word's form reads as the
- * height (`wordHeightRows`): on another (a row with a record of its own, a cell with none), a
+ * height (`wordHeightRow`): on another (a row with a record of its own, a cell with none), a
  * load would read the anchor as a record of the row.
  */
 export function withRowHeightAnchors(
@@ -69,18 +69,21 @@ export function withRowHeightAnchors(
         ? withChildren(child, ctx.withRecordAttributes(child.children, suggestion, role))
         : child
     );
+    // The row holds its own anchor now, so Word reads its height by the row alone
+    const anchoredRow = withChildren(edits.row, marked);
+    if (wordHeightRow(anchoredRow, undefined) === undefined) {
+      continue;
+    }
+
     const grid = edits.grid;
-    const anchored = withChildren(
+    current = withChildren(
       current,
       current.children.map((child) => {
-        if (child.id === rowId) return withChildren(edits.row, marked);
+        if (child.id === rowId) return anchoredRow;
         if (grid && child.kind !== 'textValue' && isWml(child, 'tblGrid')) return grid;
         return child;
       })
     );
-    if (wordHeightRows(anchored).some((height) => height.row.id === rowId)) {
-      current = anchored;
-    }
   }
 
   return current;

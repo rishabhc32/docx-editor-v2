@@ -103,43 +103,53 @@ function plainHeight(row: OoxmlElement): OoxmlElement | undefined {
  */
 export function wordHeightRows(table: OoxmlElement): WordHeightRow[] {
   const tableAnchor = tableHeightAnchor(table);
-  const found: WordHeightRow[] = [];
-  for (const row of children(table, 'tr')) {
-    const height = plainHeight(row);
-    if (!height) continue;
-    const exceptions = children(row, 'tblPrEx');
-    const rowAnchor =
-      exceptions.length === 1 ? unchangedRecord(exceptions[0]!, 'tblPrExChange') : undefined;
-    if (exceptions.length > 1 || (exceptions.length === 1 && !rowAnchor)) continue;
-    const anchor = rowAnchor ?? tableAnchor;
-    if (!anchor) continue;
-    // Word's cell records hold the cells unchanged. The engine's and a room's record of one
-    // change carry its anchor's own `w:id`, and may hold the same change's other cell
-    // properties too (a fill pressed in the same suggestion)
-    const id = attr(anchor, 'id');
-    const cells = children(row, 'tc').map((cell) => {
-      const properties = children(cell, 'tcPr');
-      if (properties.length !== 1) return undefined;
-      const unchanged = unchangedRecord(properties[0]!, 'tcPrChange');
-      if (unchanged) return unchanged;
-      const records = children(properties[0]!, 'tcPrChange');
-      const own = records.length === 1 ? records[0] : undefined;
-      return own && id !== undefined && attr(own, 'id') === id && sameActor(own, anchor)
-        ? own
-        : undefined;
-    });
-    const first = cells[0];
-    if (!first || !cells.every((cell) => cell !== undefined && sameActor(cell, first))) continue;
-    if (rowAnchor && !sameActor(rowAnchor, first)) continue;
-    found.push({
-      row,
-      height,
-      cells: cells as OoxmlElement[],
-      anchor,
-      rowAnchor: rowAnchor !== undefined,
-    });
+  return children(table, 'tr').flatMap((row) => wordHeightRow(row, tableAnchor) ?? []);
+}
+
+/**
+ * A row's height in Word's form (`wordHeightRows`), on the row's own anchor or on the table's
+ * (`tableAnchor`), or undefined. A row with its own `w:tblPrEx` reads by the row alone.
+ */
+export function wordHeightRow(
+  row: OoxmlElement,
+  tableAnchor: OoxmlElement | undefined
+): WordHeightRow | undefined {
+  const height = plainHeight(row);
+  if (!height) return undefined;
+  const exceptions = children(row, 'tblPrEx');
+  const rowAnchor =
+    exceptions.length === 1 ? unchangedRecord(exceptions[0]!, 'tblPrExChange') : undefined;
+  if (exceptions.length > 1 || (exceptions.length === 1 && !rowAnchor)) return undefined;
+  const anchor = rowAnchor ?? tableAnchor;
+  if (!anchor) return undefined;
+  // Word's cell records hold the cells unchanged. The engine's and a room's record of one
+  // change carry its anchor's own `w:id`, and may hold the same change's other cell
+  // properties too (a fill pressed in the same suggestion)
+  const id = attr(anchor, 'id');
+  const cells = children(row, 'tc').map((cell) => {
+    const properties = children(cell, 'tcPr');
+    if (properties.length !== 1) return undefined;
+    const unchanged = unchangedRecord(properties[0]!, 'tcPrChange');
+    if (unchanged) return unchanged;
+    const records = children(properties[0]!, 'tcPrChange');
+    const own = records.length === 1 ? records[0] : undefined;
+    return own && id !== undefined && attr(own, 'id') === id && sameActor(own, anchor)
+      ? own
+      : undefined;
+  });
+  const first = cells[0];
+  if (!first || !cells.every((cell) => cell !== undefined && sameActor(cell, first))) {
+    return undefined;
   }
-  return found;
+
+  if (rowAnchor && !sameActor(rowAnchor, first)) return undefined;
+  return {
+    row,
+    height,
+    cells: cells as OoxmlElement[],
+    anchor,
+    rowAnchor: rowAnchor !== undefined,
+  };
 }
 
 /** Whether the height's anchor is its author's own record (the row's, or the table's). */
