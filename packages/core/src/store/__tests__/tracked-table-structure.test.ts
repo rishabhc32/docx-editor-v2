@@ -165,7 +165,10 @@ describe('a tracked column deletion marks the column', () => {
     const plan = planRevisionBatch(next, 'accept', [reviewItemKey(column)]);
     expect(plan.result.skipped).toEqual([]);
     let accepted = next;
-    for (const op of plan.ops) accepted = apply(accepted, op);
+    for (const op of plan.ops) {
+      accepted = apply(accepted, op);
+    }
+
     const xml = tableXml(accepted);
     expect(widths(xml, 'gridCol')).toEqual([5000, 4000]);
     expect(xml).not.toMatch(/<w:(cellDel|gridSpan)\b/);

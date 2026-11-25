@@ -680,7 +680,10 @@ export function compactRevisionGrid(table: OoxmlElement, mint: () => string): Oo
         ...row,
         children: row.children.map((c) => {
           const range = ranges.get(c.id);
-          if (!range || c.kind !== 'tableCell') return c;
+          if (!range || c.kind !== 'tableCell') {
+            return c;
+          }
+
           const span = positions.get(range[1])! - positions.get(range[0])!;
           const value = { gridSpan: span === 1 ? null : { val: String(span) } };
           const cell = withRecordFollowing(c, 'tcPr', (record) => patch(record, value, mint));

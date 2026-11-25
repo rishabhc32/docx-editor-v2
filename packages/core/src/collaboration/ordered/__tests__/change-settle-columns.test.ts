@@ -80,6 +80,7 @@ describe('a decided column', () => {
   test('is written into the table: compose draws it from the items alone', () => {
     const doc = decided();
     expect(tableOf(doc)).toEqual(['grid 6000', '6000', '6000']);
+
     // The fill's reject gives the cells their width from before, which its record holds, as the
     // editor alone and Word do; the grid stays joined
     expect(tableOf(doc, 'reject')).toEqual(['grid 6000', '3000', '3000']);
@@ -106,6 +107,7 @@ describe('a decided column', () => {
       'Olive'
     );
     expect(tableOf(doc)).toEqual(['grid 6000', '6000', '6000', '6000']);
+
     // Every later decision keeps it: the row rejected, or accepted. Ana's row height took her
     // fill's record over (one record, as Word keeps), so its reject gives the width from before
     for (const status of ['rejected', 'accepted'] as const) {

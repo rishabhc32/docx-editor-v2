@@ -173,24 +173,24 @@ describe('columns in an ordered room (task 9.7)', () => {
     acceptColumn(olive.editor);
     await settle();
     converged(room, ana, olive);
-    expect(gridOf(ana)).toEqual([6000, 3000]);
-    expect(firstRowWidths(ana)).toEqual([6000, 3000]);
+    expect([...gridOf(ana), ...firstRowWidths(ana)]).toEqual([6000, 3000, 6000, 3000]);
     expect(cards(olive)).toHaveLength(1);
     expect(editorXml(olive)).not.toContain('gridSpan');
     const old = /<w:tcPrChange [^>]*><w:tcPr><w:tcW w:type="dxa" w:w="3000"\/><\/w:tcPr>/g;
     expect(editorXml(olive).match(old)).toHaveLength(2);
     expect(comparedBody(surface(olive).session.part())).toBe(accepted);
+
     // The fill rejected after: the record's width comes back, as in the editor alone
     const decidedFold = await fold();
     await decideAll(olive, 'reject');
     converged(room, ana, olive);
     expect(comparedBody(surface(olive).session.part())).toBe(rejected);
+
     // The same decisions on the room folded before each
-    const folds = [
+    for (const [bytes, decide, expected] of [
       [pendingFold, (p: Person) => acceptColumn(p.editor), accepted],
       [decidedFold, (p: Person) => decideAll(p, 'reject'), rejected],
-    ] as const;
-    for (const [bytes, decide, expected] of folds) {
+    ] as const) {
       const copy = localRoom(bytes, { policy: suggestionsOnlyPolicy(), file: 2 });
       const login = { wordFile: bytes, mode: 'edit', login: ORGANISER, review } as const;
       const organiser = await join(copy, 'Olive', login);
