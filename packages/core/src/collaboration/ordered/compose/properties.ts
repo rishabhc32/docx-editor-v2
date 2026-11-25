@@ -14,6 +14,7 @@ import {
   mergedProperties,
 } from '../../../store/store/direct-properties.ts';
 import { mergedPropertyChildren, RUN_VOCABULARY } from '../../../store/store/tree-op-properties.ts';
+import { cloneWithNewIds } from '../../../store/store/tree-op-nodes.ts';
 import { build } from '../../../store/store/tree-op-tracked.ts';
 import {
   CT_TCPR_SEQUENCE,
@@ -46,7 +47,12 @@ import {
   withChildren,
   wmlAttribute,
 } from '../ooxml-nodes.ts';
-import { isChangeRecord, type ComposeContext, type DrawnTakeover } from './context.ts';
+import {
+  holdsTakeovers,
+  isChangeRecord,
+  type ComposeContext,
+  type DrawnTakeover,
+} from './context.ts';
 import { withoutRemoved, withParagraphOp } from './paragraph-ops.ts';
 
 type AnyRecord = OrderedFormatRecord | OrderedPropertyRecord;
@@ -297,8 +303,12 @@ export function faceAfter(
 
   const latest = pending[pending.length - 1];
   const own = fileRecordAlone(ctx.doc, shown.accepted, pending);
+  const madeOver = madeOverDrawn(drawn);
   if (own) {
-    children = [...children, own];
+    // Each piece of a run draws the file's one record: a piece whose record holds takeovers draws
+    // a copy, so they stay that piece's
+    const held = holdsTakeovers(taken, madeOver);
+    children = [...children, held ? cloneWithNewIds(own, ctx.mint) : own];
   } else if (latest) {
     // One record: the original, under the latest author (the engine's rule)
     children = ctx.withRecordAttributes(
@@ -317,7 +327,7 @@ export function faceAfter(
     );
   }
 
-  ctx.keepTakeovers(children, taken, madeOverDrawn(drawn));
+  ctx.keepTakeovers(children, taken, madeOver);
   if (children.length === 0 && !base) return null;
   return withChildren(
     base ?? ctx.drawn(build(ctx.mint(), 'runProperties', 'rPr', [], [])),

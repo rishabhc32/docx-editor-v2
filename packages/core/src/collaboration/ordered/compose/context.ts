@@ -536,7 +536,7 @@ export class ComposeContext {
     taken: readonly DrawnTakeover[],
     drawn?: readonly (OrderedFormatRecord | OrderedPropertyRecord)[]
   ): void {
-    if (taken.length === 0 && drawn === undefined) {
+    if (!holdsTakeovers(taken, drawn)) {
       return;
     }
 
@@ -550,6 +550,12 @@ export class ComposeContext {
     return revisionIdFor(this.doc, suggestion, role);
   }
 }
+
+/** Whether a drawn change record holds records by takeover or records made over its own. */
+export const holdsTakeovers = (
+  taken: readonly DrawnTakeover[],
+  drawn: readonly (OrderedFormatRecord | OrderedPropertyRecord)[] | undefined
+): boolean => taken.length > 0 || drawn !== undefined;
 
 /** Whether a node is a change record: `w:rPrChange`, `w:pPrChange`, `w:tcPrChange`, ... */
 export const isChangeRecord = (node: OoxmlNode): node is OoxmlElement =>

@@ -838,6 +838,31 @@ describe('a take-back of a takeover of a takeover', () => {
   });
 });
 
+// Olive's bold over Ben's new words, and Ben's own bold over part of them: after a fold, Olive's
+// one record is drawn in two runs, and Ben's bold then reaches into the second. Its piece there
+// keeps Ben's record and the piece after it does not, live and after another fold
+describe("a record made over another's record in one piece of its run", () => {
+  test('stays with that piece after a fold', async () => {
+    const first = openOrderedWordFile(docx(p(run('Paid in ly.'))), { file: 1 });
+    const blobs = mediaStore(first.base);
+    const bold = (doc: OrderedDocument, from: number, to: number) =>
+      ({
+        kind: 'format',
+        ...EDIT,
+        from: at(doc, 0, from),
+        to: at(doc, 0, to),
+        properties: [{ localName: 'b' }],
+      }) as const;
+    const insert = { kind: 'insert', ...EDIT, text: 'Party ne due' } as const;
+    apply(first.document, 'ben:1', { ...insert, place: at(first.document, 0, 8) }, 'Ben');
+    apply(first.document, 'olive:1', bold(first.document, 8, 20), 'Olive');
+    apply(first.document, 'ben:2', bold(first.document, 8, 17), 'Ben');
+    const { document: doc, base } = await folded(first.document, first.base, 2, blobs);
+    apply(doc, 'ben:3', bold(doc, 8, 19), 'Ben');
+    await checkFold(doc, base, blobs, "a record made over another's in one piece");
+  });
+});
+
 describe('a decision after a fold, on properties drawn for a change record', () => {
   // Compose draws a `w:pPr` or a `w:rPr` where the paragraph or the run has none, only to hold a
   // change record: a decision that takes the record away draws none again, after a fold too.

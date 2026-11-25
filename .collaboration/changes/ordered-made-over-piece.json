@@ -1,0 +1,10 @@
+{
+  "impact": "compatible",
+  "fields": [],
+  "before": "Compose drew a file's change record as the same node in each piece of its run. A piece whose record had a record made over it kept that fact under the node's id, and a copy of the next piece's face took the fact over by that id, so the checkpoint gave the made-over record to a piece that did not hold it: after a fold the copy drew one run where live draws two.",
+  "after": "faceAfter draws a copy of the file's change record in a piece whose record holds takeovers or records made over it (holdsTakeovers, the rule keepTakeovers reads too), so each fact stays with the piece that holds it.",
+  "reason": "Change messages, the change log and its kinds keep their meaning, and the Yjs document format and the checkpoint format do not change. Only the label a checkpoint puts on such a change record moves to its own piece: the room's file after a fold now equals the live room's. An ordered room admits only clients of its own code version.",
+  "tests": ["packages/core/src/collaboration/ordered/__tests__/checkpoint-fold-decide.test.ts"],
+  "changeset": "ordered-made-over-piece",
+  "migration": null
+}
