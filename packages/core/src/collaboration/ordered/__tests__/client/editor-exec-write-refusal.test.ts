@@ -21,6 +21,7 @@ import {
   sameAsRoom,
   settle,
   surface,
+  typeKeys,
   type Person,
 } from './editor-harness.ts';
 import { reviewTestModule } from './review-module.ts';
@@ -83,6 +84,26 @@ describe('a write the room refuses is refused through exec', () => {
         expect(sameAsRoom(ana, room)).toBe(true);
       });
     }
+  }
+});
+
+describe('a key the editor refuses is reported to the typist', () => {
+  for (const who of ['Olive (organiser)', 'Ana (party)'] as const) {
+    test(`${who}: typing in the table of contents`, async () => {
+      const { room, olive, ana } = await people();
+      const person = who.startsWith('Olive') ? olive : ana;
+      const before = bodyText(person);
+      caretAt(person, 1, 1);
+
+      await typeKeys(person, 'X');
+
+      expect(person.editor.snapshot().lastRejection).toBeTruthy();
+      expect(person.refusals).toEqual([]);
+      expect(bodyText(olive)).toBe(before);
+      expect(bodyText(ana)).toBe(before);
+      expect(sameAsRoom(olive, room)).toBe(true);
+      expect(sameAsRoom(ana, room)).toBe(true);
+    });
   }
 });
 

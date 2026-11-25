@@ -1258,6 +1258,10 @@ export function createDocxEditor(config: DocxEditorConfig): DocxEditorInstance {
   let cachedFontConfiguration: FontConfigurationBase | undefined;
   function snapshotNow(): EditorSnapshot {
     if (cachedSnapshot && cachedVersion === stateVersion) return cachedSnapshot;
+    // The tick the reads below start at. A page read lands queued typing, which can move the
+    // state after `state()` was read, so the cache keeps this tick and the next read derives
+    // again: a refused key's reason was otherwise lost from the snapshot.
+    const version = stateVersion;
     const previous = cachedSnapshot;
     const fontsUnmoved = fontConfiguration() === cachedFontConfiguration;
     cachedFontConfiguration = fontConfiguration();
@@ -1320,7 +1324,7 @@ export function createDocxEditor(config: DocxEditorConfig): DocxEditorInstance {
       }
     }
     cachedSnapshot = deepFreezeValue(next);
-    cachedVersion = stateVersion;
+    cachedVersion = version;
     return cachedSnapshot;
   }
 
