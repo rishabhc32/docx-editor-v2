@@ -30,11 +30,12 @@ import {
 import type { OrderedDocument, OrderedItem, OrderedStory } from '../model/types.ts';
 import { recordUndo } from '../model/undo-record.ts';
 import { isControlContent, isParagraphProperties, isWml, withChildren } from '../ooxml-nodes.ts';
-import { closeOf } from '../placement.ts';
+import { closeOf, itemsInside } from '../placement.ts';
 import type { OrderedApplyContext } from '../room/room.ts';
 import {
   controlScratch,
   pending,
+  promptPlace,
   promptUnits,
   readsRecordBack,
   setOriginal,
@@ -109,7 +110,9 @@ export function replacedPromptUnit(doc: OrderedDocument, item: OrderedItem): boo
  * content fills the control, so when units that filled it went (by a decision or a deletion, not
  * taken back), the prompt's units go and the glossary's go in after the words that went. Only
  * that moment counts: a later edit of the prompt shown stays. A control that names no block of
- * the glossary keeps its own runs: the engine keeps them in the glossary (`promptToRetain`).
+ * the glossary keeps its own runs: the engine keeps them in the glossary (`promptToRetain`). A
+ * prompt goes where the engine puts it (`promptPlace`), so its own runs go there too when a
+ * marker made on the content stands between them and that place.
  */
 export function settleNamedPrompts(doc: OrderedDocument, apply: OrderedApplyContext): void {
   const controls = promptedControlsOf(doc);
@@ -147,7 +150,7 @@ function settleNamedControl(
 
   const name = placeholderNameOf(shell);
   const blocks = name === undefined ? undefined : doc.placeholders.get(name);
-  if (blocks && giveBack(doc, story, open)) {
+  if (giveBack(doc, story, open)) {
     return;
   }
 
@@ -171,11 +174,13 @@ function settleNamedControl(
 
   const ctx = new ComposeContext(doc, story, {});
   const decided = fresh.filter((item) => ctx.decidedAway(item));
-  if (blocks && !(open.token === 'sdtBlock' && blocks.length > 1)) {
-    const control = glossaryControl(doc, story, open, shell, scan.mark);
-    if (control) {
-      showGlossaryPrompt(doc, story, open, scan, control, apply, decided.length > 0);
-    }
+  const glossary =
+    blocks && !(open.token === 'sdtBlock' && blocks.length > 1)
+      ? glossaryControl(doc, story, open, shell, scan.mark)
+      : null;
+  const control = glossary ?? misplacedPrompt(doc, story, open, shell, scan);
+  if (control) {
+    swapPrompt(doc, story, open, scan, control, apply, decided.length > 0);
   }
 
   // A decision is final: the words it took away go for good, so a later Enter or edit in the
@@ -238,14 +243,28 @@ function keepPrompt(
 
   kept.add(open.space);
   recordUndo(doc, () => kept.delete(open.space));
+  const control = scan.prompt.some(isLabelled) ? drawnPrompt(doc, story, open, shell, scan) : null;
+  if (control) {
+    setOriginal(doc, shell.id, control);
+  }
+}
+
+/** The control's original, its content drawn from the prompt's items as compose draws them. */
+function drawnPrompt(
+  doc: OrderedDocument,
+  story: OrderedStory,
+  open: OrderedItem,
+  shell: OoxmlElement,
+  scan: Scan
+): OoxmlElement | null {
   const original = doc.originals.get(shell.id);
-  if (!original || original.kind === 'textValue' || !scan.prompt.some(isLabelled)) {
-    return;
+  if (!original || original.kind === 'textValue') {
+    return null;
   }
 
   const content = original.children.find(isControlContent);
   if (!content || content.kind === 'textValue') {
-    return;
+    return null;
   }
 
   const prompt = [...ownItems(story.tree.items(story.tree.next(open)), open)].filter(
@@ -265,11 +284,32 @@ function keepPrompt(
           const pPr = paragraph.children.filter(isParagraphProperties);
           return withChildren(paragraph, [...pPr, ...composeInline(ctx, units)]);
         });
-  const control = withChildren(
+  return withChildren(
     original,
     original.children.map((child) => (child === content ? withChildren(content, drawn) : child))
   );
-  setOriginal(doc, shell.id, control);
+}
+
+/**
+ * The control with its own prompt, when the prompt that shows again is not where the engine
+ * shows it (`promptPlace`): a comment made on the content that filled it keeps its range around
+ * the prompt.
+ */
+function misplacedPrompt(
+  doc: OrderedDocument,
+  story: OrderedStory,
+  open: OrderedItem,
+  shell: OoxmlElement,
+  scan: Scan
+): OoxmlElement | null {
+  // In place when the prompt's own items come last, but for the markers that close the content.
+  // A prompt that holds a control stays too: a swap gives back the prompt's units only.
+  const after = promptPlace(doc, story, promptEnd(story, open, scan));
+  if (!after || after.prompt === true || itemsInside(story, open).some(isPromptControl)) {
+    return null;
+  }
+
+  return drawnPrompt(doc, story, open, shell, scan);
 }
 
 /** Mark settled the units that went and were not yet, in the undo record, and return them. */
@@ -369,6 +409,8 @@ function glossaryControl(
   return control;
 }
 
+const isPromptControl = (item: OrderedItem): boolean =>
+  item.kind === 'open' && item.prompt === true;
 const isRun = (node: OoxmlNode): boolean => node.kind === 'run' || isWml(node, 'r');
 const isParagraph = (node: OoxmlNode): boolean => node.kind === 'paragraph' || isWml(node, 'p');
 
@@ -403,8 +445,15 @@ function emptied(control: OoxmlElement): OoxmlElement {
   );
 }
 
-/** Put the glossary's prompt in place of the control's prompt units. */
-function showGlossaryPrompt(
+/** Where a control's prompt ends: its close item inline, its paragraph mark at block level. */
+const promptEnd = (story: OrderedStory, open: OrderedItem, scan: Scan): OrderedItem =>
+  open.token === 'sdt' ? closeOf(story, open) : scan.mark;
+
+/**
+ * Put the control's prompt (the glossary's, or its own at the engine's place) in place of its
+ * prompt units.
+ */
+function swapPrompt(
   doc: OrderedDocument,
   story: OrderedStory,
   open: OrderedItem,
@@ -414,7 +463,7 @@ function showGlossaryPrompt(
   decided: boolean
 ): void {
   const units = promptUnits(settleContext(doc, story, apply), control, open);
-  const after = story.tree.prev(open.token === 'sdt' ? closeOf(story, open) : scan.mark);
+  const after = promptPlace(doc, story, promptEnd(story, open, scan));
   if (units.length === 0 || !after) return;
   insertItems(doc, story, after, units);
   const state = stateOf(doc);

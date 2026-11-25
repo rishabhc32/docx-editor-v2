@@ -22,7 +22,10 @@
 // A date picked over a date in a format that shows no day, rejected, once kept the picked date in
 // the editor alone and after a fold, where the live room gave the file's date back. An accepted
 // deletion of a control's words that do not state its stored value once kept that value when the
-// prompt showed again: the value goes, as Word reads it back from the prompt.
+// prompt showed again: the value goes, as Word reads it back from the prompt. A reject of typing
+// over a plain prompt with the organiser's comment on part of the words once showed the prompt
+// before the comment's range live, after it once folded: it goes inside the range, as the editor
+// alone puts it.
 
 import { afterEach, describe, expect, test } from 'bun:test';
 import { createDocxEditor } from '../../../../editor/docx-editor.ts';
@@ -525,6 +528,41 @@ describe('an accepted deletion of the words of a control with a stored value', (
         live: expected.decided,
         folded: expected.decided,
       });
+    });
+  }
+});
+
+describe("the organiser's comment on part of a party's typing over a plain prompt", () => {
+  // The room writes the comment's markers outside the party's insertion: the editor alone decides
+  // the room's own file
+  const file = line('<w:showingPlcHdr/><w:text/>', t('Click here to enter text.', FACE));
+
+  for (const decision of ['accept', 'reject'] as const) {
+    test(`${decision}ed: the control as the editor alone leaves it, live, saved and folded`, async () => {
+      const seated = await seats(file, 1);
+      caretAt(seated.ben, 0, 6, 31);
+      typing('Acme X')(seated.ben);
+      await settle();
+      caretAt(seated.olive, 0, 8, 10);
+      expect(seated.olive.editor.addComment('Why?').ok).toBe(true);
+      await settle();
+      const saved = new Uint8Array(await seated.olive.editor.save());
+      const expected = alone(saved, [0, 0], () => {}, decision).decided;
+      expect(expected).toContain('<w:commentRangeStart/>');
+      const copies = [
+        saved,
+        await foldedBytes(seated.room.room.document, file, 1),
+        await foldedBytes(seated.room.room.document, file, 2),
+      ];
+      await decide(seated.olive, decision);
+      const decided = [roomControl(seated)];
+      for (const bytes of copies) {
+        const reopened = await seats(bytes, 2);
+        await decide(reopened.olive, decision);
+        decided.push(roomControl(reopened));
+      }
+
+      expect(decided).toEqual([expected, ...copies.map(() => expected)]);
     });
   }
 });

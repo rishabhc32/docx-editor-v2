@@ -3,6 +3,7 @@
 
 import type { EditOptions } from '../../../store/package/ooxml-edit.ts';
 import type { OoxmlElement, OoxmlNode, OoxmlPart } from '../../../store/package/ooxml-tree.ts';
+import { isRangeEnd } from '../../../store/store/content-control-checkbox.ts';
 import {
   withDecisionPrompt,
   withRestoredPrompt,
@@ -228,7 +229,7 @@ function takeWent(ctx: ComposeContext, item: OrderedItem, went: Went): boolean {
 
 /**
  * An inline control whose units all went, as compose's `closeBox` finds it: its prompt's units go
- * right before its close item.
+ * before its close item (`promptPlace`).
  */
 function emptiedInline(
   ctx: ComposeContext,
@@ -247,7 +248,7 @@ function emptiedInline(
         return null;
       }
 
-      const after = story.tree.prev(item);
+      const after = promptPlace(ctx.doc, story, item);
       const mark = shownMarkFrom(ctx.doc, story, item);
       const edges = [open, item].filter(isSplitEdge);
       if (!after || !mark) {
@@ -268,8 +269,8 @@ function emptiedInline(
 
 /**
  * A block control whose units all went, as compose's `blockElement` finds it: its prompt's units
- * go right before its first paragraph's mark. The engine keeps one paragraph of an emptied
- * control, its first (`valueContent`), so the later ones go (`dropParagraphs`).
+ * go before its first paragraph's mark (`promptPlace`). The engine keeps one paragraph of an
+ * emptied control, its first (`valueContent`), so the later ones go (`dropParagraphs`).
  */
 function emptiedBlock(ctx: ComposeContext, story: OrderedStory, open: OrderedItem): Emptied | null {
   const went: Went = { units: [], decided: false };
@@ -281,7 +282,7 @@ function emptiedBlock(ctx: ComposeContext, story: OrderedStory, open: OrderedIte
         return null;
       }
 
-      const after = story.tree.prev(mark);
+      const after = promptPlace(ctx.doc, story, mark);
       if (!after) {
         return null;
       }
@@ -312,6 +313,31 @@ function emptiedBlock(ctx: ComposeContext, story: OrderedStory, open: OrderedIte
 
   return null;
 }
+
+/**
+ * The item a control's prompt goes right after, as the engine puts a value or a prompt in the
+ * control (`withValueRun`): before the range ends and comment anchors that close its content, so
+ * a range over the content covers it. `end` is an inline control's close item, or a block
+ * control's first paragraph mark. Items that show nowhere do not count.
+ */
+export function promptPlace(
+  doc: OrderedDocument,
+  story: OrderedStory,
+  end: OrderedItem
+): OrderedItem | null {
+  let at = story.tree.prev(end);
+  while (at && (isHidden(doc, at) || closesContent(at))) {
+    at = story.tree.prev(at);
+  }
+
+  return at;
+}
+
+/** A range end or a comment's anchor: it stays after a control's value or prompt. */
+const closesContent = (item: OrderedItem): boolean =>
+  item.kind === 'zero' &&
+  item.node !== null &&
+  (isRangeEnd(item.node) || isWml(item.node, 'commentReference'));
 
 /** The first paragraph mark at or after `item` that shows: the paragraph `item` is drawn in. */
 export function shownMarkFrom(

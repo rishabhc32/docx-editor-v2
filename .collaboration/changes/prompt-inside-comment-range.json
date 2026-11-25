@@ -1,0 +1,13 @@
+{
+  "impact": "compatible",
+  "fields": [],
+  "before": "A reject of typing over a plain prompt with another person's comment on part of the words left the editor alone with an empty control and no comment, and the room showed the prompt before the comment's range live, after it once folded.",
+  "after": "A comment's anchor is no content of a control, so the editor alone shows the prompt again; the room puts a prompt that shows again where the engine puts it (promptPlace: before the range ends and comment anchors that close the content), live and after a fold.",
+  "reason": "Change messages, the change log and its kinds keep their meaning, and the Yjs document format and the checkpoint format do not change. Only the composed Word file of such a control after the decision changes, and it now equals across the editor alone, the room and a fold. An ordered room admits only clients of its own code version.",
+  "tests": [
+    "packages/core/src/collaboration/ordered/__tests__/client/editor-controls-value-fold.test.ts",
+    "packages/core/src/store/__tests__/content-control-decision-blank-prompt.test.ts"
+  ],
+  "changeset": "prompt-inside-comment-range",
+  "migration": null
+}
