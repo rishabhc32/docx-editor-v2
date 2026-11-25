@@ -1,0 +1,14 @@
+{
+  "impact": "compatible",
+  "fields": [],
+  "before": "A room applied typing, a deletion or a move into one of Word's own notes (a separator, a continuation separator or a continuation notice), which the editor shows to nobody; a conversion of one was refused as invalid-edit.",
+  "after": "Every change that names a place in one of Word's own notes is refused as hidden-target, for the organiser and a party alike, live and after a fold, at the same place where a note that does not show is refused.",
+  "reason": "Change messages, the change log, checkpoints and the Yjs format do not change; every copy refuses the same changes with the same reason. A room admits only clients of its own code version.",
+  "tests": [
+    "packages/core/src/collaboration/ordered/__tests__/separator-notes.test.ts",
+    "packages/core/src/collaboration/ordered/__tests__/client/editor-notes.test.ts",
+    "packages/core/src/collaboration/ordered/__tests__/note-convert.test.ts"
+  ],
+  "changeset": "ordered-separator-notes-refused",
+  "migration": null
+}
