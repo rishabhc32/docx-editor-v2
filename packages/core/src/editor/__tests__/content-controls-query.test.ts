@@ -127,7 +127,7 @@ describe('contentControls query', () => {
 
   test('nested summaries report effective inherited content locks', () => {
     const body = sdt(
-      `<w:alias w:val="outer"/><w:tag w:val="outer-tag"/><w:lock w:val="contentLocked"/>`,
+      `<w:alias w:val="outer"/><w:tag w:val="outer-tag"/><w:lock w:val="sdtContentLocked"/>`,
       sdt(`<w:alias w:val="inner"/><w:tag w:val="inner-tag"/><w:text/>`, p('nested'))
     );
     const editor = mount(body);
@@ -136,7 +136,7 @@ describe('contentControls query', () => {
     const all = editor.query({ type: 'contentControls' });
     expect(all).toHaveLength(2);
     expect(all[0]).toMatchObject({ alias: 'outer', locked: true });
-    // Inner declares no lock, but the nested union still forbids content edits.
+    // Inner declares no lock, but an sdtContentLocked outer still keeps its content.
     expect(all[1]).toMatchObject({ alias: 'inner', locked: true });
 
     expect(editor.query({ type: 'contentControlAt' })).toMatchObject({

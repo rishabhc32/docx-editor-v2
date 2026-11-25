@@ -574,6 +574,43 @@ describe('a control is written through the document’s own write path', () => {
     expect(text).toBe('Field.Q');
   });
 
+  // Word saves every group with `contentLocked`, and a field nested in it stays editable (Word)
+  const WORD_GROUP = docx(
+    `<w:sdt><w:sdtPr><w:tag w:val="group"/><w:lock w:val="contentLocked"/><w:group/></w:sdtPr>` +
+      `<w:sdtContent><w:p><w:r><w:t>Own words.</w:t></w:r></w:p>` +
+      `<w:sdt><w:sdtPr><w:tag w:val="field"/><w:text/></w:sdtPr><w:sdtContent>` +
+      `<w:p><w:r><w:t>Field.</w:t></w:r></w:p></w:sdtContent></w:sdt></w:sdtContent></w:sdt>`
+  );
+
+  test('a field in a Word-saved group is filled, and its lock is its own', async () => {
+    const runtime = await serverRuntime(WORD_GROUP);
+    const read = await runtime.run(async (context) => {
+      const group = context.document.contentControls.getFirst();
+      const field = group.contentControls.getFirst();
+      group.load('cannotEdit');
+      field.load('cannotEdit');
+      field.insertText('Ana', 'Replace');
+      await context.sync();
+      field.load('text');
+      await context.sync();
+      return { group: group.cannotEdit, field: field.cannotEdit, text: field.text };
+    });
+    expect(read).toEqual({ group: true, field: false, text: 'Ana' });
+  });
+
+  test("a write in a Word-saved group's own words is refused", async () => {
+    const runtime = await serverRuntime(WORD_GROUP);
+    const before = await mainXmlOf(runtime);
+    const code = await codeOf(() =>
+      runtime.run(async (context) => {
+        context.document.body.paragraphs.getFirst().insertText('Q', 'End');
+        await context.sync();
+      })
+    );
+    expect(code).not.toBe('');
+    expect(await mainXmlOf(runtime)).toBe(before);
+  });
+
   test('a location no control has is refused before anything is sent', async () => {
     const runtime = await serverRuntime(CONTROLS);
     const code = await codeOf(() =>

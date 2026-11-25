@@ -320,9 +320,9 @@ describe('ST_Lock content edits', () => {
     expect(paragraphTextOf(part, PARAGRAPH)).toBe('aaBBcc');
   });
 
-  test('nested locks union — outer contentLocked blocks edits in an unlocked inner', () => {
+  test('nested locks union — outer sdtContentLocked blocks edits in an unlocked inner', () => {
     const part = load(
-      '<w:p><w:sdt><w:sdtPr><w:lock w:val="contentLocked"/></w:sdtPr><w:sdtContent>' +
+      '<w:p><w:sdt><w:sdtPr><w:lock w:val="sdtContentLocked"/></w:sdtPr><w:sdtContent>' +
         '<w:sdt><w:sdtPr/><w:sdtContent><w:r><w:t>in</w:t></w:r></w:sdtContent></w:sdt>' +
         '</w:sdtContent></w:sdt></w:p>'
     );

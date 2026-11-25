@@ -350,13 +350,15 @@ describe('the boundary is where the refusal starts and stops', () => {
           `<w:sdtContent><w:r><w:t>deep</w:t></w:r></w:sdtContent></w:sdt></w:sdtContent></w:sdt>` +
           `<w:r><w:t>z</w:t></w:r></w:p>`
       );
-      // Both controls start at offset 1. The outer lock covers the inner control, so the text
-      // leaves both of them; one character further in, the outer lock refuses it.
+      // Both controls start at offset 1. Typing at the locked outer control's edge leaves both
+      // of them; one character further in, the text goes into the inner control, which the
+      // outer lock does not keep (Word).
       const paragraphId = firstParagraph(part).id;
       const written = applied(part, { op: 'insertText', paragraphId, offset: 1, text: '#' });
       expect(textOf(written)).toBe('a#deepz');
       expect(controlTextOf(written)).toBe('deep');
-      expect(refusal(part, { op: 'insertText', paragraphId, offset: 2, text: '#' })).toBe('locked');
+      const inside = applied(part, { op: 'insertText', paragraphId, offset: 2, text: '#' });
+      expect(textOf(inside)).toBe('ad#eepz');
     });
   });
 

@@ -27,18 +27,20 @@ import {
   contentControlPropertiesOf,
   controlLevelOf,
   mapContentControlType,
-  parseContentControlLock,
   propertyChild,
   propertyVal,
 } from './content-control-properties.ts';
 import {
-  effectiveContentControlLock,
+  lockInForce,
+  lockPropertiesIn,
+  type ControlLockProperties,
+} from '../store/package/content-control-nodes.ts';
+import {
   unionLayoutBoxes,
   type BlockFragmentRecord,
   type ContentControlBoundaryRecord,
   type ContentControlGeometryFragment,
   type ContentControlLevel,
-  type ContentControlLock,
   type LayoutBox,
   type PageRecord,
   type SemanticLayout,
@@ -56,7 +58,8 @@ export { contentControlContextToken };
 export interface CollectedControl {
   readonly control: OoxmlElement;
   readonly nestingDepth: number;
-  readonly lockStack: readonly ContentControlLock[];
+  /** What the lock rule reads of the control and each control around it, outermost first. */
+  readonly lockStack: readonly ControlLockProperties[];
   readonly level: ContentControlLevel;
   readonly paragraphId?: string;
   readonly range?: { readonly start: number; readonly end: number };
@@ -173,7 +176,7 @@ function collectControlLists(part: OoxmlPart): readonly (readonly CollectedContr
     paragraph: OoxmlParagraphNode,
     depth: number,
     containerDepth: number,
-    lockStack: readonly ContentControlLock[]
+    lockStack: readonly ControlLockProperties[]
   ): void => {
     if (containerDepth >= MAX_INLINE_CONTAINER_DEPTH) return;
     for (const child of nodes) {
@@ -184,8 +187,7 @@ function collectControlLists(part: OoxmlPart): readonly (readonly CollectedContr
         const range = paragraphOffsetIndex(paragraph).spanOf(child);
         if (!range) continue;
         const properties = contentControlPropertiesOf(child);
-        const lock = parseContentControlLock(propertyVal(properties, 'lock'));
-        const nextStack = [...lockStack, lock];
+        const nextStack = [...lockStack, lockPropertiesIn(properties)];
         walkInline(
           contentControlContentChildren(child),
           paragraph,
@@ -213,7 +215,7 @@ function collectControlLists(part: OoxmlPart): readonly (readonly CollectedContr
   const walkBlocks = (
     nodes: readonly OoxmlNode[],
     depth: number,
-    lockStack: readonly ContentControlLock[],
+    lockStack: readonly ControlLockProperties[],
     containerDepth = 0
   ): void => {
     for (const child of nodes) {
@@ -246,8 +248,7 @@ function collectControlLists(part: OoxmlPart): readonly (readonly CollectedContr
       }
       if (depth >= MAX_SDT_NESTING) continue;
       const properties = contentControlPropertiesOf(child);
-      const lock = parseContentControlLock(propertyVal(properties, 'lock'));
-      const nextStack = [...lockStack, lock];
+      const nextStack = [...lockStack, lockPropertiesIn(properties)];
       const level = controlLevelOf(child);
       const content = blockStoryContainerChildren(child) ?? [];
       if (level === 'inline') {
@@ -986,8 +987,8 @@ function recordWithoutGeometry(collected: CollectedControl): ContentControlBound
     ...(chrome.alias !== undefined ? { alias: chrome.alias } : {}),
     ...(chrome.tag !== undefined ? { tag: chrome.tag } : {}),
     controlType: chrome.controlType,
-    lock: collected.lockStack[collected.lockStack.length - 1] ?? 'unlocked',
-    effectiveLock: effectiveContentControlLock(collected.lockStack),
+    lock: collected.lockStack.at(-1)?.lock ?? 'unlocked',
+    effectiveLock: lockInForce(collected.lockStack),
     placeholder: chrome.placeholder,
     bound: chrome.bound,
     nestingDepth: collected.nestingDepth,

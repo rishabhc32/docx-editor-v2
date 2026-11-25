@@ -4,6 +4,7 @@ import {
   formsProtectionRefusal,
 } from '../store/store/tree-op-content-controls.ts';
 import { trackedValueRefusal } from '../store/store/tracked-content-control-value.ts';
+import { effectiveLockOf } from '../store/store/tree-op-nodes.ts';
 import { settingsPartOf } from '../store/package/note-properties.ts';
 // Content-control query derivation for the Editor facade.
 //
@@ -148,33 +149,17 @@ function contentEditingLocked(properties: OoxmlElement | undefined): boolean {
 }
 
 /**
- * Effective content-edit lock — nested union matching store `effectiveLockOf` content axis.
- * An unlocked inner under a `contentLocked` outer is still locked for editing.
- */
-function effectiveContentLocked(part: OoxmlPart, control: OoxmlElement): boolean {
-  if (contentEditingLocked(propertiesOf(control))) return true;
-  let current = parentNodeOf(part, control.id);
-  while (current) {
-    if (isContentControlNode(current) && contentEditingLocked(propertiesOf(current))) {
-      return true;
-    }
-    current = parentNodeOf(part, current.id);
-  }
-  return false;
-}
-
-/**
  * Project a control into a public summary.
  *
- * When `part` is provided, `locked` is the nested content-edit union so an unlocked inner
- * under a `contentLocked` outer reports `locked: true`. Without a part (unit mocks), fall
- * back to the control's own declaration.
+ * When `part` is provided, `locked` is the lock in force over the control's own content (the
+ * store's `effectiveLockOf`). Without a part (unit mocks), fall back to the control's own
+ * declaration.
  */
 function summaryOf(control: OoxmlElement, part?: OoxmlPart): ContentControlSummary {
   const properties = propertiesOf(control);
   const tag = childVal(properties, 'tag');
   const alias = childVal(properties, 'alias');
-  const locked = part ? effectiveContentLocked(part, control) : contentEditingLocked(properties);
+  const locked = part ? effectiveLockOf(part, control).content : contentEditingLocked(properties);
   return {
     id: control.id,
     controlType: controlTypeOf(properties),
@@ -198,7 +183,7 @@ function contentLockAncestorKey(part: OoxmlPart, control: OoxmlElement): string 
   let current = parentNodeOf(part, control.id);
   while (current) {
     if (isContentControlNode(current)) {
-      parts.push(`${current.id}:${contentEditingLocked(propertiesOf(current)) ? 1 : 0}`);
+      parts.push(`${current.id}:${childVal(propertiesOf(current), 'lock') ?? ''}`);
     }
     current = parentNodeOf(part, current.id);
   }

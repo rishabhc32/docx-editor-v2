@@ -17,7 +17,6 @@ import {
   contentControlLevelOf,
   contentControlPropertiesOf,
   contentControlsIn,
-  resolveContentControlLock,
   type ContentControlDataBinding,
   type ContentControlKind,
   type ContentControlLevel,
@@ -25,6 +24,7 @@ import {
   type OoxmlNode,
   type OoxmlPart,
 } from '@docx-editor.dev/core/store';
+import { lockInForce } from '../store/package/content-control-nodes.ts';
 import type { BlockFragmentRecord, LayoutBox, SemanticLayout } from './semantic-records.ts';
 
 /** One page-local rectangle covering the part of a control that sits on that page. */
@@ -162,10 +162,7 @@ export function contentControlBoundaries(
   const records: ContentControlBoundaryRecord[] = [];
   for (const entry of entries) {
     const properties = contentControlPropertiesOf(entry.node);
-    const chain = [
-      ...entry.ancestors.map((ancestor) => contentControlPropertiesOf(ancestor).lock),
-      properties.lock,
-    ];
+    const chain = [...entry.ancestors.map(contentControlPropertiesOf), properties];
     const paragraphIds: readonly string[] = paragraphs.get(entry.node.id) ?? [];
 
     const byPage = new Map<number, LayoutBox>();
@@ -185,7 +182,7 @@ export function contentControlBoundaries(
       level: contentControlLevelOf(entry.node),
       depth: entry.depth,
       lock: properties.lock,
-      effectiveLock: resolveContentControlLock(chain),
+      effectiveLock: lockInForce(chain),
       showingPlaceholder: properties.showingPlaceholder,
       temporary: properties.temporary,
       ...(properties.tag === undefined ? {} : { tag: properties.tag }),

@@ -166,7 +166,7 @@ describe('setContentControlValue command', () => {
 
   test('can() refuses setValue under an inherited content lock', () => {
     const body = sdt(
-      `<w:lock w:val="contentLocked"/><w:alias w:val="outer"/>`,
+      `<w:lock w:val="sdtContentLocked"/><w:alias w:val="outer"/>`,
       sdt(`<w:alias w:val="inner"/><w:text/>`, p('nested'))
     );
     const editor = mount(body);

@@ -509,15 +509,16 @@ describe('\\v in written text', () => {
     expect(paragraphTexts(host, body)).toEqual(['A\vB', 'Single', 'Date']);
   });
 
-  test('a paragraph inside a building-block or group control takes a line break', () => {
-    const wrapped = (properties: string, text: string) =>
-      `<w:sdt><w:sdtPr>${properties}</w:sdtPr><w:sdtContent>${p(text)}</w:sdtContent></w:sdt>`;
+  test('a paragraph inside a building-block control or a field in a group takes a line break', () => {
+    const wrapped = (properties: string, inner: string) =>
+      `<w:sdt><w:sdtPr>${properties}</w:sdtPr><w:sdtContent>${inner}</w:sdtContent></w:sdt>`;
+    // A group's own content takes no edit (Word); a rich text field nested in it does
     const host = open(
       docx(
         wrapped(
           '<w:docPartObj><w:docPartGallery w:val="Page Numbers (Bottom of Page)"/></w:docPartObj>',
-          'Page'
-        ) + wrapped('<w:group/>', 'Form')
+          p('Page')
+        ) + wrapped('<w:group/>', wrapped('<w:richText/>', p('Form')))
       )
     );
     const { body } = roots(host);

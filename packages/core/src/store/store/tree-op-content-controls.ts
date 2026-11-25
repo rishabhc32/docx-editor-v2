@@ -35,8 +35,9 @@ import {
   contentControlsIn,
   lockForbidsEdit,
   lockForbidsRemoval,
+  lockInForce,
+  locksOverPlace,
   orderedContentControlProperties,
-  ownContentLockOf,
   resolveContentControlLock,
   type ContentControlEntry,
   type ContentControlKind,
@@ -163,13 +164,9 @@ export function enclosingContentControls(part: OoxmlPart, nodeId: string): reado
   return ancestors;
 }
 
-/** The lock in force at a node: every enclosing control's, resolved conservatively. */
+/** The lock in force at a node, in the own content of its innermost control (`lockInForce`). */
 export function contentControlLockAt(part: OoxmlPart, nodeId: string): ContentControlLock {
-  return resolveContentControlLock(
-    enclosingContentControls(part, nodeId).map(
-      (control) => contentControlPropertiesOf(control).lock
-    )
-  );
+  return lockInForce(enclosingContentControls(part, nodeId).map(contentControlPropertiesOf));
 }
 
 // ---------------------------------------------------------------------------
@@ -592,7 +589,7 @@ export function treeOpReach(op: TreeDocOp): TreeOpReach {
 /** One control an op would affect, and how. */
 interface ControlTouch {
   readonly control: OoxmlNode;
-  /** Every lock in force on it: its own and each of its ancestors'. */
+  /** Each control's lock over the place the op reaches in it: its own and its ancestors'. */
   readonly locks: readonly ContentControlLock[];
   /** The control itself would be removed, not merely edited — and the caller ASKED for that. */
   readonly removed: boolean;
@@ -619,13 +616,10 @@ const NOTHING: ResolvedReach = { touches: [], unprotected: [] };
 
 /**
  * The locks along a chain of controls, outermost first. `own` says the op reaches the last
- * control's own content, outside the controls nested in it (`ownContentLockOf`).
+ * control's own content, outside the controls nested in it (`locksOverPlace`).
  */
 function locksOf(chain: readonly OoxmlNode[], own = false): readonly ContentControlLock[] {
-  return chain.map((control, index) => {
-    const properties = contentControlPropertiesOf(control);
-    return own && index === chain.length - 1 ? ownContentLockOf(properties) : properties.lock;
-  });
+  return locksOverPlace(chain.map(contentControlPropertiesOf), own);
 }
 
 /** Each control along `line` edited, outermost first; `own` as {@link locksOf} reads it. */
@@ -967,11 +961,15 @@ function resolveRevisionReach(
     if (removed !== undefined) {
       touches.push(...touchesAlong(controls, true));
 
-      // A control the decision removes loses its own content; one it moves keeps it
+      // A control the decision removes loses its own content. One it moves keeps its content,
+      // and its own lock keeps it in place.
       for (const entry of contentControlsIn(node)) {
+        const line = [...controls, ...entry.ancestors, entry.node];
         touches.push({
           control: entry.node,
-          locks: [...locksOf(controls), ...locksOf([...entry.ancestors, entry.node], removed)],
+          locks: removed
+            ? locksOf(line, true)
+            : [...locksOf(line.slice(0, -1)), contentControlPropertiesOf(entry.node).lock],
           removed,
           discarded: false,
         });
@@ -1652,10 +1650,9 @@ export function applySetContentControlProperties(
   // that lock. Retain every ancestor's protection when toggling the named control.
   const lockOnly = op.lock !== undefined && op.tag === undefined && op.alias === undefined;
   const effective = lockOnly
-    ? resolveContentControlLock(
-        enclosingContentControls(part, control.id)
-          .slice(0, -1)
-          .map((ancestor) => contentControlPropertiesOf(ancestor).lock)
+    ? lockInForce(
+        enclosingContentControls(part, control.id).slice(0, -1).map(contentControlPropertiesOf),
+        false
       )
     : lock;
   if (lockForbidsEdit(effective) || lockForbidsRemoval(effective))

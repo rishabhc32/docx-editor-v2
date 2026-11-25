@@ -49,7 +49,7 @@ export const CONTENT_CONTROL_ID_MAX = 0x7fffffff;
  * `w:lock` — what a control refuses.
  *
  * `sdtLocked` protects the wrapper, `contentLocked` the text inside it, and `sdtContentLocked`
- * both. A control inside a locked one is locked in effect regardless of its own value.
+ * both. What a lock binds in the controls nested in a control is {@link lockInForce}'s rule.
  */
 export type ContentControlLock = 'unlocked' | 'sdtLocked' | 'contentLocked' | 'sdtContentLocked';
 
@@ -171,6 +171,9 @@ export interface ContentControlProperties {
   readonly multiLine?: boolean;
   readonly checkbox?: ContentControlCheckbox;
 }
+
+/** What a lock rule reads of a control: its `w:lock`, and its type (a group locks its content). */
+export type ControlLockProperties = Pick<ContentControlProperties, 'type' | 'lock'>;
 
 /** Whether a node is a `w:sdt` wrapper. */
 export function isContentControlNode(node: OoxmlNode): node is OoxmlContentControlNode {
@@ -437,6 +440,38 @@ function dateOf(typeElement: OoxmlElement): ContentControlDateFormat {
   };
 }
 
+/** The lock a `w:sdtPr` declares: `unlocked` when it declares none or an unknown one. */
+function declaredLockIn(sdtPr: OoxmlElement | undefined): ContentControlLock {
+  const value = wmlAttribute(namedChild(sdtPr, WML_NAMESPACE_URI, 'lock') ?? EMPTY, 'val');
+  return value !== undefined && LOCK_VALUES.has(value) ? (value as ContentControlLock) : 'unlocked';
+}
+
+/** The type a `w:sdtPr` declares: its first child in `CT_SdtPr`'s type choice, and that child. */
+function typeChoiceIn(sdtPr: OoxmlElement | undefined): {
+  readonly type: ContentControlKind;
+  readonly element?: OoxmlElement;
+} {
+  for (const child of (sdtPr?.children ?? []) as readonly OoxmlNode[]) {
+    if (
+      child.kind !== 'textValue' &&
+      child.namespaceUri === WML_NAMESPACE_URI &&
+      Object.hasOwn(TYPE_ELEMENTS, child.localName)
+    ) {
+      return { type: TYPE_ELEMENTS[child.localName]!, element: child };
+    }
+  }
+
+  return { type: 'untyped' };
+}
+
+/**
+ * What the lock rule reads of a `w:sdtPr`, typed or demoted to generic: a demoted control's lock
+ * binds as a typed one's does.
+ */
+export function lockPropertiesIn(sdtPr: OoxmlElement | undefined): ControlLockProperties {
+  return { lock: declaredLockIn(sdtPr), type: typeChoiceIn(sdtPr).type };
+}
+
 /**
  * Read a control's properties.
  *
@@ -450,11 +485,7 @@ export function contentControlPropertiesOf(control: OoxmlNode): ContentControlPr
   const id = parseContentControlId(
     wmlAttribute(namedChild(sdtPr, WML_NAMESPACE_URI, 'id') ?? EMPTY, 'val')
   );
-  const lockValue = wmlAttribute(namedChild(sdtPr, WML_NAMESPACE_URI, 'lock') ?? EMPTY, 'val');
-  const lock: ContentControlLock =
-    lockValue !== undefined && LOCK_VALUES.has(lockValue)
-      ? (lockValue as ContentControlLock)
-      : 'unlocked';
+  const lock = declaredLockIn(sdtPr);
   const placeholder = namedChild(sdtPr, WML_NAMESPACE_URI, 'placeholder');
   const placeholderDocPart = placeholder
     ? wmlAttribute(namedChild(placeholder, WML_NAMESPACE_URI, 'docPart') ?? EMPTY, 'val')
@@ -473,18 +504,9 @@ export function contentControlPropertiesOf(control: OoxmlNode): ContentControlPr
   const tabIndex =
     tabIndexRaw !== undefined && /^\d{1,10}$/.test(tabIndexRaw) ? Number(tabIndexRaw) : undefined;
 
-  let type: ContentControlKind = 'untyped';
-  let typeElement: OoxmlElement | undefined;
-  if (sdtPr) {
-    for (const child of sdtPr.children as readonly OoxmlNode[]) {
-      if (child.kind === 'textValue' || child.namespaceUri !== WML_NAMESPACE_URI) continue;
-      const candidate = TYPE_ELEMENTS[child.localName];
-      if (candidate === undefined) continue;
-      type = candidate;
-      typeElement = child;
-      break;
-    }
-  }
+  const typeChoice = typeChoiceIn(sdtPr);
+  const typeElement = typeChoice.element;
+  let type = typeChoice.type;
   // The Microsoft extension is read BEFORE a control is called untyped: it lives outside
   // `CT_SdtPr`'s type choice, so "declares no ECMA-376 type" and "is a checkbox" are not
   // mutually exclusive — four controls in the comprehensive fixture are exactly that.
@@ -764,13 +786,8 @@ export function inlineTextOf(
 const MAX_TEXT_NODES = 100_000;
 
 /**
- * Resolve the lock a position inherits from the controls enclosing it.
- *
- * CONSERVATIVE, because a template that says a field cannot be edited and sits inside a
- * section that says it cannot be removed means both. Each half of `ST_Lock` is taken
- * independently and the strongest wins, so an unlocked control inside a `contentLocked`
- * one is still content-locked — a nested control cannot grant a permission its parent
- * withheld, which is the only reading under which a lock is a lock.
+ * One lock from the locks over one place (each control's, from {@link locksOverPlace}). Each half
+ * of `ST_Lock` is taken independently and the strongest wins.
  */
 export function resolveContentControlLock(
   chain: readonly ContentControlLock[]
@@ -802,12 +819,46 @@ export function lockForbidsRemoval(lock: ContentControlLock): boolean {
  * it. A group control (`w:group`) locks that content whatever its `w:lock` says: Word refuses
  * every edit and every decision there, but not in the controls nested in the group.
  */
-export function ownContentLockOf(properties: ContentControlProperties): ContentControlLock {
+export function ownContentLockOf(properties: ControlLockProperties): ContentControlLock {
   if (properties.type !== 'group') {
     return properties.lock;
   }
 
   return lockForbidsRemoval(properties.lock) ? 'sdtContentLocked' : 'contentLocked';
+}
+
+/**
+ * The lock a control holds over a control nested in it. Word lets a person edit a control nested
+ * in a `contentLocked` control or a group (Word for Mac, 2026-11-26), so a content lock does not
+ * pass down. The removal half does, and so does `sdtContentLocked` whole: Word was not checked for
+ * those, so they keep the earlier, stricter reading.
+ */
+function nestedLockOf(properties: ControlLockProperties): ContentControlLock {
+  return properties.lock === 'contentLocked' ? 'unlocked' : properties.lock;
+}
+
+/**
+ * Each control's lock over one place, for the controls around it (`chain`, outermost first).
+ * `own` says the place is in the last control's own content, outside the controls nested in it.
+ */
+export function locksOverPlace(
+  chain: readonly ControlLockProperties[],
+  own: boolean
+): ContentControlLock[] {
+  return chain.map((properties, index) =>
+    own && index === chain.length - 1 ? ownContentLockOf(properties) : nestedLockOf(properties)
+  );
+}
+
+/**
+ * The lock in force at one place, for the controls around it (`chain`, outermost first): the one
+ * rule every lock check asks. By default the place is in the last control's own content.
+ */
+export function lockInForce(
+  chain: readonly ControlLockProperties[],
+  own = true
+): ContentControlLock {
+  return resolveContentControlLock(locksOverPlace(chain, own));
 }
 
 /**

@@ -238,7 +238,7 @@ describe('contentControls enumeration cache', () => {
         {
           op: 'setContentControlProperties',
           controlId: outer.id,
-          lock: 'contentLocked',
+          lock: 'sdtContentLocked',
         },
       ]);
       surface.layout();

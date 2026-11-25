@@ -4,6 +4,11 @@
 // module without importing it back — the two would otherwise form a cycle, and this is the
 // half both of them need.
 
+import {
+  lockInForce,
+  lockPropertiesIn,
+  type ControlLockProperties,
+} from '../package/content-control-nodes.ts';
 import { findNode, parentNodeOf, type OoxmlEditResult } from '../package/ooxml-edit.ts';
 import {
   isInlineRunContainer,
@@ -217,17 +222,14 @@ export function lockFlagsFromValue(value: string | undefined): ContentControlLoc
   }
 }
 
-export function unionLockFlags(
-  a: ContentControlLockFlags,
-  b: ContentControlLockFlags
-): ContentControlLockFlags {
-  return { wrapper: a.wrapper || b.wrapper, content: a.content || b.content };
+/** What the lock rule reads of one control, typed or generic (`lockInForce`). */
+function lockPropertiesOf(control: OoxmlNode): ControlLockProperties {
+  return lockPropertiesIn(contentControlPropertiesOf(control));
 }
 
 /** Declared `w:lock/@w:val` on one control (absent → unlocked). */
 export function declaredLockOf(control: OoxmlNode): ContentControlLockFlags {
-  const lock = sdtPrChild(contentControlPropertiesOf(control), 'lock');
-  return lockFlagsFromValue(attributeValueOf(lock, 'val'));
+  return lockFlagsFromValue(lockPropertiesOf(control).lock);
 }
 
 /** Whether the control declares `w:dataBinding`. */
@@ -392,24 +394,23 @@ export function contentControlAncestorsOf(part: OoxmlPart, nodeId: string): Ooxm
   return chain.reverse();
 }
 
-/** Nested lock union for a control including its own declaration. */
+/** The lock in force over a control's own content (`lockInForce`). */
 export function effectiveLockOf(part: OoxmlPart, control: OoxmlNode): ContentControlLockFlags {
-  let flags = declaredLockOf(control);
-  for (const ancestor of contentControlAncestorsOf(part, control.id)) {
-    flags = unionLockFlags(flags, declaredLockOf(ancestor));
-  }
-  return flags;
+  return lockFlagsFromValue(
+    lockInForce([...contentControlAncestorsOf(part, control.id), control].map(lockPropertiesOf))
+  );
 }
 
-/** Effective content-edit lock at a node (union of every enclosing control, and itself). */
+/** The lock in force at a node: the controls around it, and itself when it is one. */
 export function effectiveContentLockAt(part: OoxmlPart, nodeId: string): ContentControlLockFlags {
-  let flags: ContentControlLockFlags = { wrapper: false, content: false };
   const self = findContentControl(part, nodeId);
-  if (self) flags = unionLockFlags(flags, declaredLockOf(self));
-  for (const ancestor of contentControlAncestorsOf(part, nodeId)) {
-    flags = unionLockFlags(flags, declaredLockOf(ancestor));
+  if (self) {
+    return effectiveLockOf(part, self);
   }
-  return flags;
+
+  return lockFlagsFromValue(
+    lockInForce(contentControlAncestorsOf(part, nodeId).map(lockPropertiesOf))
+  );
 }
 
 export function findContentControl(part: OoxmlPart, controlId: string): OoxmlElement | null {

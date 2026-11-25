@@ -121,9 +121,9 @@ describe('ST_Lock is resolved for every value the schema declares', () => {
 });
 
 describe('nesting resolves conservatively', () => {
-  test('an unlocked control inside a locked one is still locked', () => {
+  test('an unlocked control inside an sdtContentLocked one is still locked', () => {
     const part = parseDoc(
-      `<w:sdt><w:sdtPr><w:lock w:val="contentLocked"/></w:sdtPr><w:sdtContent>` +
+      `<w:sdt><w:sdtPr><w:lock w:val="sdtContentLocked"/></w:sdtPr><w:sdtContent>` +
         `<w:sdt><w:sdtPr><w:lock w:val="unlocked"/></w:sdtPr><w:sdtContent>` +
         `<w:p><w:r><w:t>inner</w:t></w:r></w:p></w:sdtContent></w:sdt>` +
         `</w:sdtContent></w:sdt>`

@@ -119,7 +119,13 @@ export function contentControlAtCaret(
   if (after) return afterControl ?? innermostContentControlAround(part, paragraph.id);
   if (beforeControl) {
     // Outer edge with nothing beyond: only controls ABOVE the one being left still own
-    // the caret (a run inside a control with no after segment always leaves it).
+    // the caret (a run inside an inline control with no after segment always leaves it). A
+    // block control around the paragraph is not left.
+    const around = innermostContentControlAround(part, paragraph.id);
+    if (beforeControl.id === around?.id) {
+      return beforeControl;
+    }
+
     const ancestors = contentControlAncestorsOf(part, beforeControl.id);
     return ancestors[ancestors.length - 1] ?? null;
   }
