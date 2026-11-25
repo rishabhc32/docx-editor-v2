@@ -43,6 +43,7 @@ import {
   withNewIds,
   type Ctx,
 } from './context.ts';
+import { moveRangeItems } from './marker.ts';
 import { strikeStruckNoteBodies, takeBackNotesOf } from './note-body.ts';
 
 /**
@@ -86,7 +87,7 @@ export interface InsertOptions {
   readonly quiet?: boolean;
   /** Never into this suggestion: the text goes on the base side, outside it. */
   readonly outsideOf?: string;
-  /** The destination of a move with this name. */
+  /** The destination of a move with this name: the copy goes between its range markers. */
   readonly move?: string;
   /** Several pieces, each with its own face or object (a move's copy, a note reference). */
   readonly pieces?: readonly Piece[];
@@ -182,7 +183,13 @@ export function insertText(
     at += length;
     return item;
   });
-  insertAtSite(ctx, site, items);
+  if (options.move === undefined) {
+    insertAtSite(ctx, site, items);
+  } else {
+    const [start, end] = moveRangeItems(ctx, p, 'To', options.move, suggestion.id);
+    insertAtSite(ctx, site, [start, ...items, end]);
+  }
+
   refuseFieldInField(ctx, items);
   noteOwnAddition(ctx, suggestion.id, [{ story: ctx.story.name, space, from: 0, to: at }]);
   return suggestion.id;

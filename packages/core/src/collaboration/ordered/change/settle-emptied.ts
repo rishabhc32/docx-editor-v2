@@ -358,7 +358,8 @@ function emptiedBlock(ctx: ComposeContext, story: OrderedStory, open: OrderedIte
  * The item a control's prompt goes right after, as the engine puts a value or a prompt in the
  * control (`withValueRun`): before the range ends and comment anchors that close its content, so
  * a range over the content covers it. `end` is an inline control's close item, or a block
- * control's first paragraph mark. Items that show nowhere do not count.
+ * control's first paragraph mark. Items that show nowhere do not count: a move's range marker
+ * reached here has no moved word shown after it, so compose draws none (`emptyMoveEdges`).
  */
 export function promptPlace(
   doc: OrderedDocument,
@@ -366,7 +367,7 @@ export function promptPlace(
   end: OrderedItem
 ): OrderedItem | null {
   let at = story.tree.prev(end);
-  while (at && (isHidden(doc, at) || closesContent(at))) {
+  while (at && (isHidden(doc, at) || closesContent(at) || at.moveRange === true)) {
     at = story.tree.prev(at);
   }
 

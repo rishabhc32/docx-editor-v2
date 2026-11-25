@@ -3,7 +3,6 @@
 
 import { inlineTextOf } from '../../../store/package/content-control-nodes.ts';
 import type { OoxmlAttribute, OoxmlElement, OoxmlNode } from '../../../store/package/ooxml-tree.ts';
-import { revisionAttributes } from '../../../store/store/tree-op-tracked.ts';
 import { cloneWithNewIds } from '../../../store/store/tree-op-nodes.ts';
 import {
   insertedPending,
@@ -16,7 +15,7 @@ import {
 import { checkpointAttribute } from '../model/checkpoint.ts';
 import type { OrderedPerson } from '../model/person.ts';
 import { textBoxHostOf } from '../model/text-boxes.ts';
-import { revisionIdFor, seededAttributes } from '../model/revision-ids.ts';
+import { revisionIdFor, revisionMarkOf } from '../model/revision-ids.ts';
 import { orderedUnitTyper } from '../model/typers.ts';
 import { withAttributes } from '../ooxml-nodes.ts';
 import type {
@@ -133,13 +132,10 @@ export interface HeldTakeovers {
 
 /** Bookkeeping of a revision wrapper compose wrote. */
 export interface WrapperInfo {
-  /** The whole chain of wrappers, outer first: a move's range covers one chain. */
+  /** The whole chain of wrappers, outer first: neighbours with one chain join inside too. */
   readonly key: string;
   /** The outer wrapper's kind, id and suggestion: neighbours with one outer wrapper share it. */
   readonly outer: string;
-  readonly suggestion: string;
-  /** A move's name, for its range markers. */
-  readonly move: string | null;
 }
 
 /**
@@ -516,12 +512,7 @@ export class ComposeContext {
    * for that role when it had one, else the author, date and the file's other attributes.
    */
   revisionMark(suggestion: string, role: string): OoxmlAttribute[] {
-    const id = this.revisionId(suggestion, role);
-    const [idAttribute] = revisionAttributes(id, { author: '' });
-    const seeded = seededAttributes(this.doc, suggestion, role);
-    if (idAttribute && seeded) return [idAttribute, ...seeded];
-    const attribution = this.attribution(suggestion);
-    return [...revisionAttributes(id, attribution), ...(attribution.attributes ?? [])];
+    return revisionMarkOf(this.doc, suggestion, role);
   }
 
   /** Change records the engine wrote (`w:rPrChange`, ...) with the suggestion's mark for `role`. */

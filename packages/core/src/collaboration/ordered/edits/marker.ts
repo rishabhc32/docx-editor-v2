@@ -1,11 +1,12 @@
-// Markers with no width that edits add: a comment's range and reference, a bookmark. A marker is
-// no unit: it stays where it was put.
+// Markers with no width that edits add: a comment's range and reference, a bookmark, a move's
+// range. A marker is no unit: it stays where it was put.
 
 import type { OoxmlElement, OoxmlNode } from '../../../store/package/ooxml-tree.ts';
 import { build } from '../../../store/store/tree-op-tracked.ts';
 import type { OrderedIdMinter } from '../change/ids.ts';
 import type { OrderedViewParagraph } from '../compose/context.ts';
 import { createOrderedItem, itemAt, type OrderedItemInit } from '../model/document.ts';
+import { moveRangeNodes, whilePending, type MoveHalf } from '../model/move-ranges.ts';
 import { splitItem } from '../model/mutations.ts';
 import { OrderedRefusal } from '../model/refusal.ts';
 import type { OrderedItem } from '../model/types.ts';
@@ -76,4 +77,18 @@ export function newMarkerItem(
     within: p.mark.within,
     ...extra,
   });
+}
+
+/** A move half's range start and end items in a paragraph, around the moved words. */
+export function moveRangeItems(
+  ctx: Ctx,
+  p: OrderedViewParagraph,
+  half: MoveHalf,
+  name: string,
+  suggestion: string
+): readonly [OrderedItem, OrderedItem] {
+  const ids = [ctx.ids.node(), ctx.ids.node()] as const;
+  const [start, end] = moveRangeNodes(ctx.doc, half, name, suggestion, ids);
+  const labels = { moveRange: true, ...whilePending(suggestion) };
+  return [newMarkerItem(ctx, p, start, labels), newMarkerItem(ctx, p, end, labels)];
 }

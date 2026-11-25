@@ -4,20 +4,13 @@
 // removes a decided move's markers.
 
 import type { OoxmlElement } from '../../../store/package/ooxml-tree.ts';
+import { whilePending } from '../model/move-ranges.ts';
 import { REVISION_ROLE } from '../model/revision-ids.ts';
 import { attributeOf } from '../ooxml-nodes.ts';
 import { moveName, pushZero, type Labels, type LoadState, type MoveRange } from './state.ts';
 
 /** A move range marker's local name: its half (`From`, `To`) and its edge (`Start`, `End`). */
 export const MOVE_RANGE = /^move(From|To)Range(Start|End)$/;
-
-/** Labels that keep an item while `suggestion` is pending, and hide it once it is decided. */
-const whilePending = (suggestion: string, outer: Labels): Labels => ({
-  by: suggestion,
-  dels: [suggestion],
-  move: null,
-  within: outer.within,
-});
 
 /**
  * Load a move range marker, inline or between blocks. Returns false when the node is not one.
@@ -48,7 +41,9 @@ export function loadMoveRangeMarker(
 
   // A range inside another ends before it: its end names its own start
   const suggestion = range.byId.get(attributeOf(node, 'id') ?? '') ?? range.last;
-  pushZero(state, node, suggestion === null ? labels : whilePending(suggestion, labels), {
+  const ended =
+    suggestion === null ? labels : { ...whilePending(suggestion), within: labels.within };
+  pushZero(state, node, ended, {
     moveRange: true,
     ...more,
   });

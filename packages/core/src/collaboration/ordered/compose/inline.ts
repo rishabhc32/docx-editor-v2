@@ -32,7 +32,6 @@ import {
   renamed,
   withChildren,
   withId,
-  wmlAttribute,
 } from '../ooxml-nodes.ts';
 import type { ComposeContext } from './context.ts';
 import { isNotesStory } from './note-references.ts';
@@ -177,7 +176,7 @@ function fieldPassengers(buffer: readonly OrderedItem[]): Map<string, OrderedIte
   return passengers;
 }
 
-/** A file's move range marker: its range (its half and `w:id`) and whether it starts it. */
+/** A move range marker: its range (its half and `w:id`) and whether it starts it. */
 function moveRangeEdge(
   item: OrderedItem
 ): { readonly range: string; readonly start: boolean } | null {
@@ -195,11 +194,10 @@ function moveRangeEdge(
 }
 
 /**
- * The markers of a file's move that are passed over: where two ranges of one move meet with
- * nothing drawn between them, as when a decision took out the words that split the move, and
- * around a range with no moved word drawn in it, as when its words all went (a prompt shown again
- * in their place is no moved word). The room draws a move it made the same way
- * (`withMoveRanges`): one range around its words, and none around no words.
+ * The markers of a move that are passed over: where two ranges of one move meet with nothing
+ * drawn between them, as when a decision took out the words that split the move, and around a
+ * range with no moved word drawn in it, as when its words all went (a prompt shown again in their
+ * place is no moved word). Every pending move has range marker items (`model/move-ranges.ts`).
  */
 function emptyMoveEdges(ctx: ComposeContext, buffer: readonly OrderedItem[]): Set<OrderedItem> {
   const empty = new Set<OrderedItem>();
@@ -403,7 +401,7 @@ export function composeInline(ctx: ComposeContext, buffer: readonly OrderedItem[
     if (done) closeBox(ctx, done, box());
   }
 
-  return withMoveRanges(ctx, box().children);
+  return box().children;
 }
 
 /** The `w:sdtPr` keys a change of a control's title, tag or lock sets: no value. */
@@ -679,7 +677,7 @@ function place(ctx: ComposeContext, into: OoxmlNode[], node: OoxmlNode, item: Or
   const del = ctx.struckBy(item);
   let wrapped = node;
   let key = '';
-  let outer: { readonly key: string; readonly suggestion: string } | null = null;
+  let outer: string | null = null;
   if (del) {
     // Moved-from text is a pending move's source; a deletion of moved-to text, or of a decided
     // move's words, is a plain deletion
@@ -691,8 +689,8 @@ function place(ctx: ComposeContext, into: OoxmlNode[], node: OoxmlNode, item: Or
     const id = ctx.revisionId(del, role);
     wrapped = wrapper(ctx, kind, del, role, [wrapped]);
     key = `${kind}:${id}:${del}`;
-    outer = { key, suggestion: del };
-    ctx.wrappers.set(wrapped, { key, outer: key, suggestion: del, move: moved ? item.move : null });
+    outer = key;
+    ctx.wrappers.set(wrapped, { key, outer: key });
   }
 
   if (by) {
@@ -701,7 +699,7 @@ function place(ctx: ComposeContext, into: OoxmlNode[], node: OoxmlNode, item: Or
     const id = ctx.revisionId(by, role);
     wrapped = wrapper(ctx, kind, by, role, [wrapped]);
     key = `${kind}:${id}:${by}|${key}`;
-    outer = { key: `${kind}:${id}:${by}`, suggestion: by };
+    outer = `${kind}:${id}:${by}`;
   }
 
   if (outer === null || wrapped.kind === 'textValue') {
@@ -709,9 +707,9 @@ function place(ctx: ComposeContext, into: OoxmlNode[], node: OoxmlNode, item: Or
     return;
   }
 
-  const info = { key, outer: outer.key, suggestion: outer.suggestion, move: item.move };
+  const info = { key, outer };
   const last = into[into.length - 1];
-  if (last && last.kind !== 'textValue' && ctx.wrappers.get(last)?.outer === outer.key) {
+  if (last && last.kind !== 'textValue' && ctx.wrappers.get(last)?.outer === outer) {
     const joined = joinWrappers(ctx, last, wrapped);
     ctx.wrappers.set(joined, info);
     into[into.length - 1] = joined;
@@ -773,57 +771,11 @@ function wrapper(
   return build(ctx.mint(), WRAPPER_KINDS[kind], kind, ctx.revisionMark(suggestion, role), children);
 }
 
-/** A move wrapper's half, as its range markers name it (`w:moveFromRangeStart`, ...). */
-const MOVE_HALVES: ReadonlyMap<string, 'From' | 'To'> = new Map([
-  ['moveFrom', 'From'],
-  ['moveTo', 'To'],
-]);
-
-/** A move's wrappers between its range markers, as Word writes a move. */
-function withMoveRanges(ctx: ComposeContext, children: OoxmlNode[]): OoxmlNode[] {
-  if (!children.some((c) => c.kind !== 'textValue' && ctx.wrappers.get(c)?.move)) return children;
-  const out: OoxmlNode[] = [];
-  for (let i = 0; i < children.length; ) {
-    const child = children[i];
-    if (child === undefined) break;
-    const info = child.kind === 'textValue' ? undefined : ctx.wrappers.get(child);
-    const half = child.kind === 'textValue' ? undefined : MOVE_HALVES.get(child.localName);
-    if (!info?.move || half === undefined || ctx.doc.movesWithRanges.has(info.move)) {
-      out.push(child);
-      i += 1;
-      continue;
-    }
-
-    let j = i;
-    while (j < children.length) {
-      const next = children[j];
-      if (!next || next.kind === 'textValue' || ctx.wrappers.get(next)?.key !== info.key) break;
-      j += 1;
-    }
-
-    const role = half === 'From' ? REVISION_ROLE.moveFromRange : REVISION_ROLE.moveToRange;
-    const range = ctx.revisionMark(info.suggestion, role);
-    const [idAttribute, ...rest] = range;
-    if (idAttribute === undefined) break;
-    const named = [idAttribute, wmlAttribute('name', info.move), ...rest];
-    out.push(build(ctx.mint(), `move${half}RangeStart`, `move${half}RangeStart`, named, []));
-    for (let k = i; k < j; k += 1) {
-      const moved = children[k];
-      if (moved !== undefined) out.push(moved);
-    }
-
-    out.push(build(ctx.mint(), `move${half}RangeEnd`, `move${half}RangeEnd`, [idAttribute], []));
-    i = j;
-  }
-
-  return out;
-}
-
-function inlineContainer(ctx: ComposeContext, open: OrderedItem, drawn: OoxmlNode[]): OoxmlElement {
-  // A move's half inside a link, a control or another inline container has its range markers
-  // there (each holds paragraph content, `EG_PContent`, which range markup is part of), or a
-  // reopened file cannot pair it with the other half
-  const children = withMoveRanges(ctx, drawn);
+function inlineContainer(
+  ctx: ComposeContext,
+  open: OrderedItem,
+  children: OoxmlNode[]
+): OoxmlElement {
   const shell = open.node;
   if (!shell || shell.kind === 'textValue')
     return build(ctx.mint(), 'generic', 'customXml', [], children);

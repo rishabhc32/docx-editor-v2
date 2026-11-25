@@ -155,6 +155,26 @@ export function seededAttributes(
 }
 
 /**
+ * A suggestion's revision mark attributes for a role, its `w:id` first: the file's own mark for
+ * that role when it had one, else the author, date and the file's other attributes.
+ */
+export function revisionMarkOf(
+  doc: OrderedDocument,
+  suggestion: string,
+  role: string
+): OoxmlAttribute[] {
+  const id = revisionIdFor(doc, suggestion, role);
+  const [idAttribute] = revisionAttributes(id, { author: '' });
+  const seeded = seededAttributes(doc, suggestion, role);
+  if (idAttribute && seeded) {
+    return [idAttribute, ...seeded];
+  }
+
+  const attribution = doc.suggestions.get(suggestion)?.attribution ?? { author: '', person: null };
+  return [...revisionAttributes(id, attribution), ...(attribution.attributes ?? [])];
+}
+
+/**
  * A mark the file wrote for a suggestion (a change record, a move range's start, a prompt's
  * record in the glossary): as the file had it while the suggestion keeps the attribution the
  * load read; else with its own `w:id` and `w:name`, and the suggestion's author, date and other

@@ -277,15 +277,23 @@ function loadStories(
 
   // No fixed suggestion: each file revision is its own, or the suggestion a checkpoint lists
   const revisions = new RevisionReader(doc, undefined, options.suggestions);
+
+  // Every part's revision ids first, so an id the load mints (a move's range markers that the
+  // file did not write) never repeats one a later part holds
   for (const [name, part] of parts) {
-    if (!isOrderedStoryPart(part))
+    if (!isOrderedStoryPart(part)) {
       throw new OrderedRefusal('malformed-story', `${name} is not a story`);
+    }
+
+    collectOriginals(doc, part.root);
+  }
+
+  for (const [name, part] of parts) {
     const notes = isWml(part.root, 'footnotes') || isWml(part.root, 'endnotes');
     const state = newLoadState(doc, name, revisions, budget, notes ? NOTE_MARK_ROLES : MARK_ROLES);
     loadBlocks(state, storyBlocksOf(part), 1);
     const items = withFileLabels(withLoadedSections(state, part, itemsWithPrompts(state)));
     checkEndsWithMark(name, items);
-    collectOriginals(doc, part.root);
 
     // The main document's text boxes are stories of their own (group 9.9)
     loadTextBoxStories(doc, addOrderedStory(doc, name, part, items), revisions, budget);

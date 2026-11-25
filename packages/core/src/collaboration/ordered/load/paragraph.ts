@@ -20,6 +20,7 @@ import {
   type ParagraphOffsetIndex,
 } from '../../../store/store/tree-op-segments.ts';
 import { formatRunsOf } from '../compose/inline.ts';
+import { moveRangeNodes, whilePending, type MoveHalf } from '../model/move-ranges.ts';
 import { REVISION_ROLE } from '../model/revision-ids.ts';
 import { equationAtom, type EquationAtom } from './equations.ts';
 import {
@@ -53,6 +54,7 @@ import {
   pushZero,
   type Labels,
   type LoadState,
+  type MoveRange,
 } from './state.ts';
 
 /** A whole complex field being gathered: its item, its pieces and its format records. */
@@ -365,24 +367,54 @@ function loadRevisionWrapper(
   depth: number
 ): boolean {
   let inner: Labels;
+  // A file's move wrapper that no range holds gets range markers
+  let unranged: UnrangedMove | null = null;
   if (node.kind === 'revisionInsert' || isWml(node, 'ins')) {
     inner = { ...labels, by: state.revisions.suggestionFor(node, state.markRoles.run) };
   } else if (node.kind === 'revisionDelete' || isWml(node, 'del')) {
     const deleter = state.revisions.suggestionFor(node, REVISION_ROLE.deleteIn(ctx.markKey));
     inner = { ...labels, dels: [...labels.dels, deleter] };
   } else if (node.kind === 'revisionMoveFrom' || isWml(node, 'moveFrom')) {
+    const ranged = isRanged(state.moveFrom);
     const deleter = movedBy(state, node, state.moveFrom, REVISION_ROLE.moveFromIn(ctx.markKey));
-    inner = { ...labels, dels: [...labels.dels, deleter], move: moveName(state.moveFrom, node) };
+    const move = moveName(state.moveFrom, node);
+    inner = { ...labels, dels: [...labels.dels, deleter], move };
+    unranged = ranged ? null : { half: 'From', move, suggestion: deleter };
   } else if (node.kind === 'revisionMoveTo' || isWml(node, 'moveTo')) {
+    const ranged = isRanged(state.moveTo);
     const by = movedBy(state, node, state.moveTo, REVISION_ROLE.moveTo);
-    inner = { ...labels, by, move: moveName(state.moveTo, node) };
+    const move = moveName(state.moveTo, node);
+    inner = { ...labels, by, move };
+    unranged = ranged ? null : { half: 'To', move, suggestion: by };
   } else {
     return false;
   }
 
+  if (unranged === null) {
+    loadInlineChildren(state, node, inner, ctx, depth);
+    return true;
+  }
+
+  // Between markers made as compose wrote them for such a move, so a fold reads back the same
+  const ids = [`${node.id}<`, `${node.id}>`] as const;
+  const { half, move, suggestion } = unranged;
+  const [start, end] = moveRangeNodes(state.doc, half, move, suggestion, ids);
+  const markers = { ...whilePending(suggestion), within: labels.within };
+  pushZero(state, start, markers, { moveRange: true, ...fieldSlotOf(ctx) });
   loadInlineChildren(state, node, inner, ctx, depth);
+  pushZero(state, end, markers, { moveRange: true, ...fieldSlotOf(ctx) });
   return true;
 }
+
+/** A move wrapper of a file that wrote no range markers around it. */
+interface UnrangedMove {
+  readonly half: MoveHalf;
+  readonly move: string;
+  readonly suggestion: string;
+}
+
+/** Whether a move wrapper comes inside a range of its own: after a range start, still open. */
+const isRanged = (range: MoveRange): boolean => range.name !== null || range.start !== null;
 
 /** A simple field or an equation that the engine counts as one unit, at `span`. */
 function loadOneUnitAtom(

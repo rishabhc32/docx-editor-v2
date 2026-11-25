@@ -2,9 +2,10 @@
 
 import type { OrderedViewChar, OrderedViewParagraph } from '../compose/context.ts';
 import { currentObjectNode } from '../compose/text-boxes.ts';
-import { isolateUnits, relabel } from '../model/mutations.ts';
+import { insertItems, isolateUnits, relabel } from '../model/mutations.ts';
 import { OrderedRefusal } from '../model/refusal.ts';
 import { currentFace, suggestionFor, withNewIds, type Ctx } from './context.ts';
+import { moveRangeItems } from './marker.ts';
 import { refuseLocked } from '../placement.ts';
 import { groupBySpace, insertText, type Piece } from './text.ts';
 
@@ -91,9 +92,22 @@ export function moveText(
     move: name,
     outsideOf: '',
   });
-  for (const group of groupBySpace(chars))
-    for (const item of isolateUnits(ctx.doc, ctx.story, group.space, group.start, group.end))
-      relabel(ctx.doc, ctx.story, item, { dels: [...item.dels, suggestion.id], move: name });
+  const struck = groupBySpace(chars).flatMap((group) =>
+    isolateUnits(ctx.doc, ctx.story, group.space, group.start, group.end)
+  );
+  for (const item of struck) {
+    relabel(ctx.doc, ctx.story, item, { dels: [...item.dels, suggestion.id], move: name });
+  }
+
+  // The struck source between its range markers, as the copy is
+  const first = struck[0];
+  const last = struck[struck.length - 1];
+  if (first && last) {
+    const [start, end] = moveRangeItems(ctx, from, 'From', name, suggestion.id);
+    insertItems(ctx.doc, ctx.story, ctx.story.tree.prev(first), [start]);
+    insertItems(ctx.doc, ctx.story, last, [end]);
+  }
+
   return suggestion.id;
 }
 
