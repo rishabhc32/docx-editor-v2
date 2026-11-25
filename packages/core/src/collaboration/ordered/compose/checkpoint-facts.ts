@@ -30,7 +30,6 @@ import {
   type CheckpointUntrackedRecord,
 } from '../model/checkpoint-untracked.ts';
 import type { OrderedPerson } from '../model/person.ts';
-import { referencedMediaType } from '../model/file-media.ts';
 import {
   orderedResourceShows,
   type OrderedListLevelResource,
@@ -261,11 +260,10 @@ function checkpointStyles(
 }
 
 /**
- * Each list level, chart or diagram part, media part a checkpoint names by reference, and
- * relationship to one of them or to an address outside, that a change added and the file holds:
- * all of them, whatever their suggestion's status (a rejected link's address stays while a link
- * names it), so an open gives each back to its suggestion. A level the loaded file declares is
- * the file's, and so is an ink part, which stays inside a checkpoint.
+ * Each list level, chart or diagram part, media part, and relationship to one of them or to an
+ * address outside, that a change added and the file holds: all of them, whatever their
+ * suggestion's status (a rejected link's address stays while a link names it), so an open gives
+ * each back to its suggestion. A level the loaded file declares is the file's.
  */
 function checkpointResources(
   doc: OrderedDocument,
@@ -276,10 +274,7 @@ function checkpointResources(
   const held = new Set([...pkg.partBytes.keys()].map(partNameKey));
   const targets = new Set<string>();
   for (const resource of doc.resources.added.values()) {
-    const media =
-      resource.kind === 'media' &&
-      referencedMediaType(resource.contentType) !== null &&
-      held.has(partNameKey(resource.part));
+    const media = resource.kind === 'media' && held.has(partNameKey(resource.part));
     if (media || (resource.kind === 'part' && pkg.parts.has(resource.part))) {
       targets.add(resource.key);
     }

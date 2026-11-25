@@ -20,16 +20,19 @@ import { RELATIONSHIP_TYPES } from '../compose/resources.ts';
 import { isSafeLinkAddress } from '../edits/resources.ts';
 import type { CheckpointResource } from '../model/checkpoint-lists.ts';
 import {
+  ORDERED_INK_TYPE,
   orderedMediaPart,
   orderedObjectPart,
   orderedRelationshipId,
   type OrderedFileMedia,
+  type OrderedMediaReference,
   type OrderedObjectPartResource,
   type OrderedRelationshipResource,
   type OrderedRelationshipType,
   type OrderedResource,
 } from '../model/resources.ts';
 import type { OrderedDocument } from '../model/types.ts';
+import { orderedBlobHash } from '../protocol/blobs.ts';
 import { attributeOf, isWml, withChildren } from '../ooxml-nodes.ts';
 
 /** A resource without its suggestion: what a checkpoint's file holds of it. */
@@ -82,15 +85,16 @@ export const withCheckpointResources = (
 export interface ListedMedia {
   readonly suggestion: number;
   readonly key: string;
-  readonly reference: OrderedFileMedia;
+  readonly reference: OrderedMediaReference;
 }
 
 /**
  * The media the manifest's `resources` lists, by part name key, each with the reference the
- * manifest's `media` gives its part (the name its key and content type give). Null when one has
- * no reference.
+ * manifest's `media` gives its part (the name its key and content type give), or for ink, which
+ * stays inside a checkpoint, the reference its bytes in the package give. Null when one has none.
  */
 export function listedMedia(
+  pkg: OoxmlPackage,
   media: readonly OrderedFileMedia[],
   resources: readonly CheckpointResource[]
 ): Map<string, ListedMedia> | null {
@@ -100,9 +104,10 @@ export function listedMedia(
       continue;
     }
 
-    const reference = media.find(
-      (item) => partNameKey(item.part) === partNameKey(orderedMediaPart(key, item.contentType))
-    );
+    const reference =
+      media.find(
+        (item) => partNameKey(item.part) === partNameKey(orderedMediaPart(key, item.contentType))
+      ) ?? inkReference(pkg, key);
     if (reference === undefined) {
       return null;
     }
@@ -111,6 +116,22 @@ export function listedMedia(
   }
 
   return out;
+}
+
+/** The ink part a key names, by the bytes the package holds of it, or undefined. */
+function inkReference(pkg: OoxmlPackage, key: string): OrderedMediaReference | undefined {
+  const part = orderedMediaPart(key, ORDERED_INK_TYPE);
+  const bytes = [...pkg.partBytes].find(([name]) => partNameKey(name) === partNameKey(part))?.[1];
+  if (bytes === undefined || resolveContentTypeOf(pkg, part) !== ORDERED_INK_TYPE) {
+    return undefined;
+  }
+
+  return {
+    part,
+    contentType: ORDERED_INK_TYPE,
+    sha256: orderedBlobHash(bytes),
+    size: bytes.length,
+  };
 }
 
 /**
@@ -344,7 +365,7 @@ export function withoutCheckpointObjects(
     taken.push({ suggestion: entry.suggestion, resource });
   }
 
-  // Media is a reference the package holds no bytes for: its content type goes all the same
+  // Most media is a reference the package holds no bytes for: its content type goes all the same
   for (const name of [...parts, ...[...listed.values()].map(({ reference }) => reference.part)]) {
     const owns = (next.relationships.get(name) ?? []).length > 0;
     const removed = owns || namesPart(next, name) ? null : withoutPart(next, name);

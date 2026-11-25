@@ -166,7 +166,7 @@ function openCheckpointRead(pkg: OoxmlPackage, options: OrderedWordFileOptions):
   // What changes added outside the story text out of the file, before the load reads it: a list
   // level before its list, whose definition holds it, and a bullet's images before their media
   const { facts, media } = checkpoint;
-  const listed = listedMedia(media, facts.resources);
+  const listed = listedMedia(checkpoint.base, media, facts.resources);
   const levels = listed && withoutCheckpointLevels(checkpoint.base, facts.resources);
   const lists = listed && levels && withoutCheckpointLists(levels.pkg, facts.lists, listed);
   const styles = lists && withoutCheckpointStyles(lists.pkg, facts.styles);

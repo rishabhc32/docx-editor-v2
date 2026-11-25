@@ -1,6 +1,6 @@
 // Rooms whose checkpoints hold what changes added outside the story text, in the manifest's
-// section `resources` (design D14): a list level, a link's address, an embedded object, a chart's
-// part, and a pasted list's picture bullet. Ana makes each one, pending.
+// section `resources` (design D14): a list level, a link's address, an embedded object, ink, a
+// chart's part, and a pasted list's picture bullet. Ana makes each one, pending.
 
 import type { OoxmlPackage } from '../../../store/package/ooxml-package.ts';
 import type { OrderedMediaType } from '../model/resources.ts';
@@ -21,8 +21,14 @@ const mediaOf = (bytes: Uint8Array, contentType: OrderedMediaType) => ({
   size: bytes.byteLength,
 });
 
+/** An ink part: InkML, which a checkpoint keeps inside. */
+const INK_BYTES = new TextEncoder().encode(
+  '<inkml:ink xmlns:inkml="http://www.w3.org/2003/InkML"/>'
+);
+
 const PNG = mediaOf(RED_PNG, 'image/png');
 const OLE = mediaOf(OLE_BYTES, 'application/vnd.openxmlformats-officedocument.oleObject');
+const INK = mediaOf(INK_BYTES, 'application/inkml+xml');
 
 /** A room's storage: the file's media and the bytes the rooms' changes name. */
 export function resourceBlobs(base: OoxmlPackage): (sha256: string) => Uint8Array | undefined {
@@ -30,6 +36,7 @@ export function resourceBlobs(base: OoxmlPackage): (sha256: string) => Uint8Arra
   const named = new Map([
     [PNG.sha256, RED_PNG],
     [OLE.sha256, OLE_BYTES],
+    [INK.sha256, INK_BYTES],
   ]);
   return (sha256) => named.get(sha256) ?? file(sha256);
 }
@@ -90,6 +97,16 @@ export const OBJECT_ROOM: CheckpointRoom = {
       c: [{ e: 'w:object', c: [{ e: 'o:OLEObject', a: { Type: 'Embed', 'r:id': '#0' } }] }],
     };
     apply(doc, 'ana:1', paste(doc, [object], { media: [OLE] }));
+  },
+};
+
+/** Pasted ink: its part stays inside a checkpoint, named by a relationship. */
+export const INK_ROOM: CheckpointRoom = {
+  name: 'ink',
+  source: docx(p(t('Fees.'))),
+  edit: (doc) => {
+    const ink = { e: 'w:r', c: [{ e: 'w14:contentPart', a: { 'r:id': '#0' } }] };
+    apply(doc, 'ana:1', paste(doc, [ink], { media: [INK] }));
   },
 };
 
@@ -158,6 +175,7 @@ export const RESOURCE_ROOMS: readonly CheckpointRoom[] = [
   LIST_LEVEL_ROOM,
   LINK_ROOM,
   OBJECT_ROOM,
+  INK_ROOM,
   CHART_ROOM,
   BULLET_ROOM,
 ];
