@@ -57,7 +57,7 @@ import { withoutRemoved, withParagraphOp } from './paragraph-ops.ts';
 
 type AnyRecord = OrderedFormatRecord | OrderedPropertyRecord;
 
-const bySeq = (a: AnyRecord, b: AnyRecord) => a.seq - b.seq;
+export const bySeq = (a: AnyRecord, b: AnyRecord) => a.seq - b.seq;
 
 /**
  * The accepted records (with those a decision wrote, `settled`) and the pending ones drawn, each

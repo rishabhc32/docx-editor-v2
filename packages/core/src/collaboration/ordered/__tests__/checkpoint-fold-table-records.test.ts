@@ -19,7 +19,7 @@ import {
   EDIT,
   opens,
 } from './change-apply-fixture.ts';
-import { checkFold, folded, mediaStore } from './fold-check.ts';
+import { checkFold, folded, foldPrint, mediaStore } from './fold-check.ts';
 import { docx, p, t } from './word-fixtures.ts';
 
 const ANA_1 = '2026-10-28T09:01:00Z';
@@ -282,6 +282,20 @@ describe('a column removed under a later one', () => {
       expect(widths(doc)).toEqual(['3000,3000', '3000,3000', '3000,3000']);
     }
   );
+
+  // The cell that takes a removed cell's space holds the widths that cell lent after a fold, in
+  // the order they were made: the organiser's direct widths, made later, still show on top
+  test("a party's column rejected, after its column made from its cell and direct widths", async () => {
+    const { document: doc, base } = openOrderedWordFile(TABLE_FILE, { file: 1 });
+    apply(doc, 'ben:1', column(doc, 0), 'Ben');
+    apply(doc, 'ben:2', column(doc, 1), 'Ben');
+    const op = { op: 'setTableColumnWidths', leftWidthTwips: 1200, rightWidthTwips: 1050 } as const;
+    apply(doc, 'olive:1', { kind: 'table-property', ...DIRECT, on: [cell(doc, 0)], op }, 'Olive');
+    decide(doc, 'olive:2', 'S:ben:1.1', 'rejected');
+    const blobs = mediaStore(base);
+    const once = await folded(doc, base, 2, blobs);
+    expect(foldPrint(once.document, once.base, blobs)).toEqual(foldPrint(doc, base, blobs));
+  });
 
   // A later column's grid holds both removed columns, so a reject of the column made from the
   // removed cell takes both out at once: that cell gives back only what is left of it, as the

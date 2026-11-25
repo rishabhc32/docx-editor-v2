@@ -60,7 +60,7 @@ import type {
 import { attributeOf, eachElement, isWml } from '../ooxml-nodes.ts';
 import { composeBlocks } from './blocks.ts';
 import { ComposeContext, type RoomNumber } from './context.ts';
-import { overOf } from './properties.ts';
+import { bySeq, overOf } from './properties.ts';
 import { lendingsOnRemoved, recordWithoutRemoved } from './table-columns.ts';
 import { styleResourceKeyOf } from './resources.ts';
 import type { OrderedPartTakeovers } from './package.ts';
@@ -587,8 +587,10 @@ function recordsOpens(
         rows.push(open);
       }
 
+      // A removed cell's lent widths join the cell's own records in the order they were made
       const shell = open.node;
-      const props = [...open.props, ...(moved.get(open) ?? [])];
+      const lent = moved.get(open);
+      const props = lent === undefined ? open.props : [...open.props, ...lent].sort(bySeq);
       if (
         open.kind !== 'open' ||
         props.length === 0 ||
