@@ -231,31 +231,29 @@ function copiesOthersRecords(
 
 /**
  * Another person's pending numbering record (a file's own `w:numPr/w:ins` or `w:numberingChange`,
- * `load/properties.ts`) on a paragraph that a list change reaches, or null. The change would drop
- * the record or copy it into the party's own record, so the other person's suggestion would go
- * without a decision: refused as `others_suggestions`, as a page setup over another person's
- * pending section record is.
+ * `load/properties.ts`) on a paragraph mark the change gave a record of its own, or null. Word
+ * decides a paragraph's numbering with its properties record: an accept or a reject of the
+ * party's record settles the other person's numbering too, so their suggestion would go without
+ * a decision. Refused as `others_suggestions`, as a page setup over another person's pending
+ * section record is. A change that leaves the paragraph as it is writes no record and passes.
  */
 function othersNumbering(
   doc: OrderedDocument,
   maker: OrderedMaker,
-  change: OrderedEditChange,
-  touched: OrderedTouched
+  touched: OrderedTouched,
+  outcome: OrderedChangeOutcome
 ): string | null {
-  const list =
-    change.kind === 'new-list' ||
-    change.kind === 'list-level' ||
-    (change.kind === 'paragraph-property' &&
-      change.properties.some((p) => p.localName === 'numPr'));
-  if (!list) {
-    return null;
-  }
-
+  const made = new Set(outcome.suggestions);
   for (const item of touched.items) {
-    for (const record of item.kind === 'mark' ? item.props : []) {
-      if (record.target === 'numPr' && pendingByOther(doc, record.suggestion, maker)) {
-        return record.suggestion;
-      }
+    if (item.kind !== 'mark' || !item.props.some((record) => made.has(record.suggestion))) {
+      continue;
+    }
+
+    const other = item.props.find(
+      (record) => record.target === 'numPr' && pendingByOther(doc, record.suggestion, maker)
+    );
+    if (other !== undefined) {
+      return other.suggestion;
     }
   }
 
@@ -684,10 +682,6 @@ function checkEdit(input: OrderedPolicyInput, change: OrderedEditChange): Ordere
     return party;
   }
 
-  const numbering = othersNumbering(doc, maker, change, touched);
-  if (numbering !== null)
-    return refuse('policy-not-own', 'others_suggestions', `${numbering} holds a numbering record`);
-
   // A kind that writes a header or a footer always changes one (a watermark)
   if (flags.spec?.policy.furniture?.(change, doc)) {
     return refuse('policy-furniture', 'furniture');
@@ -729,7 +723,8 @@ function checkEdit(input: OrderedPolicyInput, change: OrderedEditChange): Ordere
 
 /**
  * A party's edit judged by what it did: one that `appliedOnlyRefusal` names is allowed only when
- * it changed nothing, and a format or a property change may not take over another person's
+ * it changed nothing, a paragraph record may not sit on another person's pending numbering
+ * (`othersNumbering`), and a format or a property change may not take over another person's
  * pending record (policy 2 is the organiser's alone): the host's check finds their suggestion
  * gone or changed (`others_suggestions` or `package`).
  */
@@ -744,6 +739,11 @@ function checkApplied(
   const maker = makerOf(input.actor.person);
   if (appliedNested(doc, maker, input.touched, outcome)) {
     return refuse('policy-nested', 'nested');
+  }
+
+  const numbering = othersNumbering(doc, maker, input.touched, outcome);
+  if (numbering !== null) {
+    return refuse('policy-not-own', 'others_suggestions', `${numbering} holds a numbering record`);
   }
 
   const taken = outcome.replaced.find((r) => !madeBy(doc, r.suggestion, maker));

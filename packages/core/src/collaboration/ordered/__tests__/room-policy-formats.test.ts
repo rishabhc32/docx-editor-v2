@@ -11,7 +11,7 @@ import { loadOrderedPackage } from '../load/load.ts';
 import { OrderedRoom } from '../room/room.ts';
 import { suggestionsOnlyPolicy } from '../room/suggestions-only.ts';
 import { actor, BODY, realApply, snapshot } from './room-harness.ts';
-import { docx, p, packageOf, t } from './word-fixtures.ts';
+import { docx, p, packageOf, t, type PackageExtras } from './word-fixtures.ts';
 
 const OLGA = actor('Olga', 'olga-1', 'organiser');
 const ANA = actor('Ana', 'ana-1', 'party');
@@ -27,10 +27,10 @@ const TABLE =
   `</w:tblGrid><w:tr><w:tc>${p(t('Cell text.'))}</w:tc></w:tr></w:tbl>`;
 
 /** A room on a file with this body. */
-function setup(body = p(t(SENTENCE)) + p(t('Second paragraph.'))) {
+function setup(body = p(t(SENTENCE)) + p(t('Second paragraph.')), extras?: PackageExtras) {
   let tick = 0;
   const room = new OrderedRoom({
-    document: loadOrderedPackage(packageOf(docx(body))),
+    document: loadOrderedPackage(packageOf(docx(body, extras))),
     applyChange: realApply,
     policy: suggestionsOnlyPolicy(),
     now: () => Date.UTC(2026, 10, 24) + 1000 * tick++,
@@ -329,5 +329,59 @@ describe('a party’s format on another person’s tracked words', () => {
         op: centred,
       })
     ).toBe('accepted');
+  });
+});
+
+describe('a party’s paragraph change on another person’s pending numbering', () => {
+  // Word decides a paragraph's numbering with its properties record: an accept or a reject of
+  // Ana's `w:pPrChange` there settles Cara's pending `w:numPr/w:ins` too
+  const NUMBERING =
+    '<w:numbering xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">' +
+    '<w:abstractNum w:abstractNumId="0"><w:lvl w:ilvl="0"><w:start w:val="1"/>' +
+    '<w:numFmt w:val="decimal"/><w:lvlText w:val="%1."/></w:lvl></w:abstractNum>' +
+    '<w:num w:numId="1"><w:abstractNumId w:val="0"/></w:num></w:numbering>';
+  const CARA = 'w:id="8" w:author="Cara" w:date="2026-01-01T00:00:00Z"';
+  const LISTED = `<w:numPr><w:ilvl w:val="0"/><w:numId w:val="1"/><w:ins ${CARA}/></w:numPr>`;
+  const NUM = {
+    localName: 'numPr',
+    children: [
+      { localName: 'ilvl', attributes: { val: '0' } },
+      { localName: 'numId', attributes: { val: '1' } },
+    ],
+  };
+  const centre = { localName: 'jc', attributes: { val: 'center' } };
+  const listed = () =>
+    setup(p(t(SENTENCE), LISTED) + p(t('Second paragraph.')), {
+      parts: { 'word/numbering.xml': NUMBERING },
+      contentTypes:
+        '<Override PartName="/word/numbering.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.numbering+xml"/>',
+      relationships:
+        '<Relationship Id="rIdNumbering" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/numbering" Target="numbering.xml"/>',
+    });
+  const property = (room: Room, index: number, properties: readonly object[]) =>
+    room.send(ANA, {
+      kind: 'paragraph-property',
+      ...EDIT,
+      marks: [room.markOf(index)],
+      properties,
+    });
+
+  test('a change that writes a paragraph record there: refused, the document as it was', () => {
+    const room = listed();
+    const before = snapshot(room.doc);
+    expect(property(room, 0, [centre])).toBe('policy-not-own/others_suggestions');
+    expect(snapshot(room.doc)).toEqual(before);
+
+    // The paragraph with no numbering record takes Ana's own record
+    expect(property(room, 1, [centre])).toBe('accepted');
+    expect(room.xml()).toContain('w:author="Ana"');
+  });
+
+  test('the same numbering again changes nothing, as in Word: allowed, with no record', () => {
+    const room = listed();
+    const before = room.xml();
+    expect(property(room, 0, [NUM])).toBe('accepted');
+    expect(room.xml()).toBe(before);
+    expect(before).toMatch(/<w:numId w:val="1"\/><w:ins [^>]*w:author="Cara"/);
   });
 });

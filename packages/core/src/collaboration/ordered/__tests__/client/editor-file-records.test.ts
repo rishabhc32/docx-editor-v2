@@ -234,14 +234,16 @@ describe("a file's own records that Word shows and decides", () => {
     }
   });
 
-  test("a party's list change over another person's pending numbering record is refused", async () => {
+  test("a party's list or paragraph change over another person's pending numbering is refused", async () => {
     const commands: readonly EditorCommand[] = [
       { type: 'adjustIndent', direction: 'increase' },
       { type: 'toggleList', kind: 'ordered' },
+      { type: 'setAlignment', align: 'center' },
     ];
     for (const file of [NUMBERING_RECORD, LIST_INSERTED]) {
       const { room, ana, olive } = await roomOn(file);
-      // On item one it would drop Cara's record, or copy it under Ana's: her suggestion would go
+      // On item one it would drop Cara's record or copy it under Ana's, and Word decides Cara's
+      // numbering with Ana's paragraph record: her suggestion would go without a decision
       for (const command of commands) {
         caretAt(ana, 1, 0);
         ana.editor.exec(command);
