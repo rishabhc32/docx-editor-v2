@@ -511,6 +511,25 @@ describe("a suggestion's version after a fold", () => {
   });
 });
 
+/** The body as written once the organiser decided every pending card. */
+function decidedBody(
+  { document: doc, base }: OrderedWordFile,
+  blobs: ReturnType<typeof mediaStore>,
+  status: 'accepted' | 'rejected'
+): string {
+  let n = 0;
+  for (const { id, status: now } of [...doc.suggestions.values()]) {
+    const suggestions = now === 'pending' ? orderedCardSeen(doc, id) : null;
+    if (suggestions) {
+      n += 1;
+      apply(doc, `olive:${100 + n}`, { kind: 'decide', cards: [{ suggestions }], status }, 'Olive');
+    }
+  }
+
+  const xml = strFromU8(unzipSync(orderedPackageBytes(doc, base, { blobs }))['word/document.xml']!);
+  return xml.replace(/ (?:w14:paraId|w14:textId|w:id|w:date)="[^"]*"/g, '');
+}
+
 describe('a decision after a fold, on properties drawn for a change record', () => {
   // Compose draws a `w:pPr` or a `w:rPr` where the paragraph or the run has none, only to hold a
   // change record: a decision that takes the record away draws none again, after a fold too.
@@ -564,32 +583,6 @@ describe('a decision after a fold, on properties drawn for a change record', () 
     ],
   ];
 
-  /** The body as written once the organiser decided every pending card. */
-  const decidedBody = (
-    { document: doc, base }: OrderedWordFile,
-    blobs: ReturnType<typeof mediaStore>,
-    status: 'accepted' | 'rejected'
-  ): string => {
-    let n = 0;
-    for (const { id, status: now } of [...doc.suggestions.values()]) {
-      const suggestions = now === 'pending' ? orderedCardSeen(doc, id) : null;
-      if (suggestions) {
-        n += 1;
-        apply(
-          doc,
-          `olive:${100 + n}`,
-          { kind: 'decide', cards: [{ suggestions }], status },
-          'Olive'
-        );
-      }
-    }
-
-    const xml = strFromU8(
-      unzipSync(orderedPackageBytes(doc, base, { blobs }))['word/document.xml']!
-    );
-    return xml.replace(/ (?:w14:paraId|w14:textId|w:id|w:date)="[^"]*"/g, '');
-  };
-
   for (const [name, edit] of SHAPES) {
     for (const status of ['accepted', 'rejected'] as const) {
       test(`${name}, ${status}`, async () => {
@@ -604,5 +597,27 @@ describe('a decision after a fold, on properties drawn for a change record', () 
         expect(copies).toEqual([live, live]);
       });
     }
+  }
+});
+
+describe('a decision after a fold, on a section', () => {
+  // The organiser's direct break gives the body's section a type over the organiser's own pending
+  // page setup: Word keeps one record for both, so a reject of the page setup takes the type too
+  // and lays back what the record states, as the engine's reject of the saved file does
+  for (const status of ['accepted', 'rejected'] as const) {
+    test(`a page setup, then the organiser's direct break, ${status}`, async () => {
+      const first = openOrderedWordFile(APPLY_FILE, { file: 1 });
+      const { document: doc } = first;
+      const blobs = mediaStore(first.base);
+      const page = { marginLeftTwips: 1800 };
+      const pageAt = markOf(doc, 9);
+      const setup = { kind: 'section-property', ...EDIT, sections: [], page, pageAt } as const;
+      apply(doc, 'olive:1', setup, 'Olive');
+      const mark = markOf(doc, 0);
+      const brk = { kind: 'section-break', ...DIRECT, mark, type: 'continuous' } as const;
+      apply(doc, 'olive:2', brk, 'Olive');
+      const once = await folded(doc, first.base, 2, blobs);
+      expect(decidedBody(once, blobs, status)).toBe(decidedBody(first, blobs, status));
+    });
   }
 });

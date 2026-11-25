@@ -1,0 +1,12 @@
+{
+  "impact": "compatible",
+  "fields": [],
+  "before": "Live, a reject of a pending section write dropped the organiser's direct write made over it, so the section showed no type where the saved file's record states nextPage and a reject after a fold wrote it.",
+  "after": "The direct write goes as Word's reject of the one record takes it: what the record states is laid back over it, so the section states nextPage live as after a fold.",
+  "reason": "Change messages, the change log and its kinds keep their meaning, and the Yjs document format does not change. Only the form compose writes for a decided section changes, with the same meaning; every copy composes with the same code version, so the copies agree. Checkpoints keep their form. Ordered rooms are not deployed yet, so no room needs a migration.",
+  "tests": [
+    "packages/core/src/collaboration/ordered/__tests__/checkpoint-fold-decide.test.ts"
+  ],
+  "changeset": "ordered-section-direct-over-reject",
+  "migration": null
+}

@@ -180,18 +180,27 @@ function applyRecord(
 }
 
 /**
- * A tracked write of the room's whose suggestion is rejected, or drawn so. A direct edit's
- * suggestion turns rejected when its author takes it back (`revert`), as the editor's undo,
- * which takes the write away exactly.
+ * A tracked write of the room's whose suggestion is rejected, or drawn so, and a direct write
+ * made over one (`over`): Word keeps one record for both, so its reject takes them together. A
+ * direct edit's suggestion turns rejected when its author takes it back (`revert`), as the
+ * editor's undo, which takes the write away exactly.
  */
-function isRejectedWrite(ctx: ComposeContext, record: SectionRecord): boolean {
-  return (
-    record.kind === 'sectionOp' &&
-    record.untracked !== true &&
-    record.keptOnReject !== true &&
-    ctx.doc.suggestions.get(record.suggestion)?.direct !== true &&
-    ctx.rejectedOrDrawnSo(record.suggestion)
-  );
+function isRejectedWrite(
+  ctx: ComposeContext,
+  record: SectionRecord,
+  records: readonly SectionRecord[]
+): boolean {
+  if (record.kind !== 'sectionOp' || record.untracked === true || record.keptOnReject === true) {
+    return false;
+  }
+
+  if (ctx.doc.suggestions.get(record.suggestion)?.direct === true) {
+    return (
+      statusOf(ctx.doc, record.suggestion) === 'accepted' && madeOverRejected(ctx, record, records)
+    );
+  }
+
+  return ctx.rejectedOrDrawnSo(record.suggestion);
 }
 
 /**
@@ -203,10 +212,11 @@ function isRejectedWrite(ctx: ComposeContext, record: SectionRecord): boolean {
 function applyDecided(
   ctx: ComposeContext,
   section: OoxmlElement | null,
-  record: SectionRecord
+  record: SectionRecord,
+  records: readonly SectionRecord[]
 ): OoxmlElement | null {
   const written = applyRecord(ctx, section, record);
-  if (written === null || !isRejectedWrite(ctx, record)) {
+  if (written === null || !isRejectedWrite(ctx, record, records)) {
     return written;
   }
 
@@ -261,12 +271,12 @@ export function sectionAfter(
     ...acceptedNow,
   ].sort((a, b) => a.seq - b.seq);
   const pending = shown.pending.filter((r) => !untracked(r));
-  const rejected = records.filter((r) => isRejectedWrite(ctx, r));
+  const rejected = records.filter((r) => isRejectedWrite(ctx, r, records));
   const decided = [...accepted, ...rejected].sort((a, b) => a.seq - b.seq);
   const [earlier, later] = aroundPending(decided, pending);
   let section = withoutSectionRecord(base);
   for (const record of earlier) {
-    section = applyDecided(ctx, section, record);
+    section = applyDecided(ctx, section, record, records);
   }
 
   // A change record holds the section before the tracked writes; a file's record that stands
@@ -278,7 +288,7 @@ export function sectionAfter(
   )?.fileRecord;
   let held = (standing && firstElement(standing)) ?? section;
   for (const record of later.filter(untracked)) {
-    held = applyDecided(ctx, held, record);
+    held = applyDecided(ctx, held, record, records);
   }
 
   const prior = held?.children ?? [];
@@ -290,7 +300,7 @@ export function sectionAfter(
   }
 
   for (const record of later) {
-    section = applyDecided(ctx, section, record);
+    section = applyDecided(ctx, section, record, records);
   }
 
   if (section === null) return null;
@@ -339,15 +349,15 @@ export function sectionWithoutPendingWrites(
       return status === 'pending';
     }
 
-    if (status === 'accepted') {
-      return !madeOverRejected(ctx, r, records);
+    if (status === 'accepted' && !madeOverRejected(ctx, r, records)) {
+      return true;
     }
 
-    return isRejectedWrite(ctx, r);
+    return isRejectedWrite(ctx, r, records);
   };
   let section = withoutSectionRecord(base);
   for (const record of records.filter(shown).sort((a, b) => a.seq - b.seq)) {
-    section = applyDecided(ctx, section, record);
+    section = applyDecided(ctx, section, record, records);
   }
 
   return section;
