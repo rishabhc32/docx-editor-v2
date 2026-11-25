@@ -428,15 +428,21 @@ function commentPersons(doc: OrderedDocument): Map<string, OrderedPerson> {
 
 /**
  * Each container's open item that holds a pending record of some properties, untracked, or a
- * pending record with a change record, which does not say the children the record sets or the
- * cells it holds. A row's cells are one decision (`resetUnrecordedCells` reads the records of
- * each): where a decided record of a row or a cell is kept, the row and each of its cells keep
- * every record.
+ * record made over a pending one, or a pending record with a change record, which does not say
+ * the children the record sets or the cells it holds. A row's cells are one decision
+ * (`resetUnrecordedCells` reads the records of each): where a decided record of a row or a cell
+ * is kept, the row and each of its cells keep every record.
  */
 function recordsOpens(doc: OrderedDocument): RecordsOpen[] {
   const pending = (id: string) => doc.suggestions.get(id)?.status === 'pending';
+
+  // Word's one change record holds a pending record's properties and what was made over them
   const kept = (records: readonly OrderedElementRecord[]) =>
-    records.some((record) => record.untracked === true && pending(record.suggestion));
+    records.some(
+      (record) =>
+        (record.untracked === true && pending(record.suggestion)) ||
+        record.over?.some(pending) === true
+    );
   const out: RecordsOpen[] = [];
   for (const story of doc.stories.values()) {
     // The containers with records, each with the row it is or is a cell of: the innermost row
