@@ -798,6 +798,18 @@ export function lockForbidsRemoval(lock: ContentControlLock): boolean {
 }
 
 /**
+ * The lock a control holds over its OWN content: what it holds outside the controls nested in
+ * it. A group control (`w:group`) locks that content whatever its `w:lock` says: Word refuses
+ * every edit and every decision there, but not in the controls nested in the group.
+ */
+export function ownContentLockOf(properties: ContentControlProperties): ContentControlLock {
+  if (properties.type !== 'group') {
+    return properties.lock;
+  }
+  return lockForbidsRemoval(properties.lock) ? 'sdtContentLocked' : 'contentLocked';
+}
+
+/**
  * `CT_SdtPr`'s declared child order (§17.5.2.38), followed by the type choice.
  *
  * Serialization re-emits children in tree order, so the ONLY way a write keeps the

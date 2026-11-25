@@ -36,7 +36,9 @@ import {
   lockForbidsEdit,
   lockForbidsRemoval,
   orderedContentControlProperties,
+  ownContentLockOf,
   resolveContentControlLock,
+  type ContentControlEntry,
   type ContentControlKind,
   type ContentControlLock,
   type ContentControlProperties,
@@ -65,6 +67,7 @@ import {
   type OffsetSpan,
   type ParagraphOffsetIndex,
 } from './tree-op-segments.ts';
+import { clipped, encloses, intersects, reachesOutside } from './tree-op-reach-spans.ts';
 import { scopedRevisionRoot } from './tree-op-revision-scope.ts';
 import { holdsRevisionContainer, REVISION_LOCAL_NAMES } from './revision-container-presence.ts';
 import { attributionTargets } from './revision-author-change.ts';
@@ -614,8 +617,25 @@ interface ResolvedReach {
 
 const NOTHING: ResolvedReach = { touches: [], unprotected: [] };
 
-function locksOf(chain: readonly OoxmlNode[]): readonly ContentControlLock[] {
-  return chain.map((control) => contentControlPropertiesOf(control).lock);
+/**
+ * The locks along a chain of controls, outermost first. `own` says the op reaches the last
+ * control's own content, outside the controls nested in it (`ownContentLockOf`).
+ */
+function locksOf(chain: readonly OoxmlNode[], own = false): readonly ContentControlLock[] {
+  return chain.map((control, index) => {
+    const properties = contentControlPropertiesOf(control);
+    return own && index === chain.length - 1 ? ownContentLockOf(properties) : properties.lock;
+  });
+}
+
+/** Each control along `line` edited, outermost first; `own` as {@link locksOf} reads it. */
+function touchesAlong(line: readonly OoxmlNode[], own: boolean): ControlTouch[] {
+  return line.map((control, index) => ({
+    control,
+    locks: locksOf(line.slice(0, index + 1), own && index === line.length - 1),
+    removed: false,
+    discarded: false,
+  }));
 }
 
 /**
@@ -636,7 +656,7 @@ export function resolveReach(part: OoxmlPart, reach: TreeOpReach): ResolvedReach
     // Everything: each control, with its own chain, edited but not removed.
     const touches = contentControlsIn(part.root).map((entry) => ({
       control: entry.node,
-      locks: locksOf([...entry.ancestors, entry.node]),
+      locks: locksOf([...entry.ancestors, entry.node], true),
       removed: false,
       discarded: false,
     }));
@@ -657,15 +677,18 @@ export function resolveReach(part: OoxmlPart, reach: TreeOpReach): ResolvedReach
     // write that is the named control's ancestors, the control itself, AND any control nested
     // inside it that the content would go into. The ancestors matter for the same reason: a
     // binding on an enclosing control is desynced by a write to what it encloses.
-    const line =
+    const landing =
       reach.intent === 'value' && reach.at !== undefined
-        ? mergedLine(chain, landingControls(part, reach.at, own))
-        : chain;
+        ? landingControls(part, reach.at, own)
+        : [];
+    const line = mergedLine(chain, landing);
+    // The write lands in the innermost landing control, or else in the named one
+    const owner = landing[landing.length - 1] ?? own;
     return {
       touches: [
         ...line.map((control, index) => ({
           control,
-          locks: locksOf(line.slice(0, index + 1)),
+          locks: locksOf(line.slice(0, index + 1), control.id === owner.id),
           // Only the NAMED control goes away; the ones enclosing it and the ones it encloses are
           // edited, not removed.
           removed: reach.intent === 'removal' && control.id === own.id,
@@ -698,22 +721,21 @@ export function resolveReach(part: OoxmlPart, reach: TreeOpReach): ResolvedReach
       target.range !== undefined
     ) {
       const enclosing = enclosingContentControls(part, targetNode.id);
-      for (let index = 0; index < enclosing.length; index += 1) {
-        touches.push({
-          control: enclosing[index]!,
-          locks: locksOf(enclosing.slice(0, index + 1)),
-          removed: false,
-          discarded: false,
-        });
-      }
       const inherited = locksOf(enclosing);
       const offsets = paragraphOffsetIndex(targetNode);
-      for (const entry of contentControlsIn(targetNode)) {
+      const caret = target.range.start;
+      const split = contentControlsIn(targetNode).filter((entry) => {
         const span = offsets.spanOf(entry.node);
-        if (!span || target.range.start <= span.start || target.range.start >= span.end) continue;
+        return span !== null && caret > span.start && caret < span.end;
+      });
+      // The new control goes into the own content of the innermost control around the caret
+      touches.push(...touchesAlong(enclosing, split.length === 0));
+      for (const entry of split) {
         touches.push({
           control: entry.node,
-          locks: inherited.concat(locksOf(entry.ancestors.concat(entry.node))),
+          locks: inherited.concat(
+            locksOf(entry.ancestors.concat(entry.node), entry === split.at(-1))
+          ),
           removed: false,
           discarded: false,
         });
@@ -733,29 +755,15 @@ export function resolveReach(part: OoxmlPart, reach: TreeOpReach): ResolvedReach
           ? insertionLandingNodeId(targetNode, target.range.start, null, target.bias)
           : targetNode.id;
       const controls = enclosingContentControls(part, landing);
-      for (let index = 0; index < controls.length; index += 1) {
-        touches.push({
-          control: controls[index]!,
-          locks: locksOf(controls.slice(0, index + 1)),
-          removed: false,
-          discarded: false,
-        });
-      }
+      touches.push(...touchesAlong(controls, true));
       if (controls.length === 0) unprotected.push(target.nodeId);
       continue;
     }
     const chain = enclosingContentControls(part, target.nodeId);
     const enclosing = chain.filter((node) => node.id !== target.nodeId);
-    for (let index = 0; index < enclosing.length; index += 1) {
-      touches.push({
-        control: enclosing[index]!,
-        locks: locksOf(enclosing.slice(0, index + 1)),
-        removed: false,
-        discarded: false,
-      });
-    }
     const node = targetNode;
     if (!node || node.kind === 'textValue') {
+      touches.push(...touchesAlong(enclosing, true));
       if (enclosing.length === 0) unprotected.push(target.nodeId);
       continue;
     }
@@ -772,6 +780,28 @@ export function resolveReach(part: OoxmlPart, reach: TreeOpReach): ResolvedReach
       offsets ??= paragraphOffsetIndex(node);
       return offsets.spanOf(control);
     };
+    // Whether the op reaches a place in `within` outside the controls `nested`: always, for a
+    // whole node
+    const range = target.range;
+    const reachesBeside = (nested: readonly ContentControlEntry[], within: OffsetSpan | null) =>
+      range === undefined ||
+      target.removes === true ||
+      target.structural === true ||
+      node.kind !== 'paragraph' ||
+      reachesOutside(
+        nested.map((entry) => spanOf(entry.node)),
+        clipped(range, within),
+        target.writes === true
+      );
+    touches.push(
+      ...touchesAlong(
+        enclosing,
+        reachesBeside(
+          inside.filter((entry) => entry.ancestors.length === 0),
+          null
+        )
+      )
+    );
     let filling = false;
     for (const entry of inside) {
       const span = spanOf(entry.node);
@@ -786,9 +816,13 @@ export function resolveReach(part: OoxmlPart, reach: TreeOpReach): ResolvedReach
         target.structural === true ||
         (target.range !== undefined && intersects(span, target.range, target.writes === true));
       if (!affected) continue;
+      const nested = inside.filter((inner) => inner.ancestors.at(-1) === entry.node);
       touches.push({
         control: entry.node,
-        locks: [...inherited, ...locksOf([...entry.ancestors, entry.node])],
+        locks: [
+          ...inherited,
+          ...locksOf([...entry.ancestors, entry.node], reachesBeside(nested, span)),
+        ],
         removed: target.removes === true,
         discarded: false,
       });
@@ -814,7 +848,7 @@ function discardedContentControls(own: OoxmlNode, replacesContent: boolean): Con
   if (!replacesContent) return [];
   return contentControlsIn(own).map((entry) => ({
     control: entry.node,
-    locks: locksOf([...entry.ancestors, entry.node]),
+    locks: locksOf([...entry.ancestors, entry.node], true),
     removed: false,
     discarded: true,
   }));
@@ -854,34 +888,6 @@ function mergedLine(
   return merged;
 }
 
-/**
- * Whether a control's own characters overlap the offsets an op addresses.
- *
- * THE TWO EDGES ARE DIFFERENT PLACES. The applier gives a boundary offset to the run that starts
- * there, so a point op that writes content at a control's leading edge lands in the control's
- * first run, and the same op at its trailing edge lands in whatever follows. A point that writes
- * nothing — a comment marker, a paragraph split — is beside the control at either edge.
- *
- * A non-empty range that so much as touches the inside is refused WHOLE: a partial edit that
- * clipped itself to the unlocked side would silently do something other than what was asked.
- */
-function intersects(span: OffsetSpan | null, range: OffsetSpan, writes: boolean): boolean {
-  if (span === null) return false;
-  if (range.end <= range.start) {
-    return writes
-      ? range.start >= span.start && range.start < span.end
-      : range.start > span.start && range.start < span.end;
-  }
-  return range.start < span.end && range.end > span.start;
-}
-
-/** Whether an op addresses only characters this control holds — the "filling in a field" case. */
-function encloses(span: OffsetSpan | null, range: OffsetSpan, writes: boolean): boolean {
-  if (span === null) return false;
-  if (range.end <= range.start) return intersects(span, range, writes);
-  return range.start >= span.start && range.end <= span.end;
-}
-
 /** The nodes a revision decision would rewrite, and the controls holding them. */
 function resolveRevisionReach(
   part: OoxmlPart,
@@ -907,21 +913,15 @@ function resolveRevisionReach(
     if (isRevisionNode(node, revision, localName, siteNodeIdSet)) {
       seen += 1;
       if (controls.length === 0) unprotected.push(node.id);
-      for (let index = 0; index < controls.length; index += 1) {
-        touches.push({
-          control: controls[index]!,
-          locks: locksOf(controls.slice(0, index + 1)),
-          removed: false,
-          discarded: false,
-        });
-      }
+      // The revision sits in the innermost control's own content
+      touches.push(...touchesAlong(controls, true));
       // Only the direction that removes a revision wrapper's content removes nested controls.
       // The keep direction still reaches the marker and its enclosing controls above.
       if (revisionNodeRemovesContent(node, action)) {
         for (const entry of contentControlsIn(node)) {
           touches.push({
             control: entry.node,
-            locks: [...locksOf(controls), ...locksOf([...entry.ancestors, entry.node])],
+            locks: [...locksOf(controls), ...locksOf([...entry.ancestors, entry.node], true)],
             removed: true,
             discarded: false,
           });
@@ -950,18 +950,12 @@ function resolveRevisionReach(
     if (node.kind === 'textValue' || structural.size === 0) return;
     const removed = structural.get(node.id);
     if (removed !== undefined) {
-      for (let index = 0; index < controls.length; index += 1) {
-        touches.push({
-          control: controls[index]!,
-          locks: locksOf(controls.slice(0, index + 1)),
-          removed: false,
-          discarded: false,
-        });
-      }
+      touches.push(...touchesAlong(controls, true));
+      // A control the decision removes loses its own content; one it moves keeps it
       for (const entry of contentControlsIn(node)) {
         touches.push({
           control: entry.node,
-          locks: [...locksOf(controls), ...locksOf([...entry.ancestors, entry.node])],
+          locks: [...locksOf(controls), ...locksOf([...entry.ancestors, entry.node], removed)],
           removed,
           discarded: false,
         });
