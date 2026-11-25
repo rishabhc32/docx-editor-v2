@@ -335,8 +335,12 @@ export function deleteText(
     for (const marker of inRunMarkers(ctx, chars, (x) => x.dels.includes(id), false))
       relabel(ctx.doc, ctx.story, marker, { dels: [...marker.dels, id] });
 
-    // A note whose references are all struck now: its text too, as Word writes it
-    strikeStruckNoteBodies(ctx, struck, id);
+    // A note whose references are all struck now: its text too, as Word writes a tracked
+    // deletion. A direct one removes a note only with the last reference that names it, as the
+    // engine does, struck ones too: compose leaves such a note out (`leftOutNoteItems`)
+    if (!ctx.direct) {
+      strikeStruckNoteBodies(ctx, struck, id);
+    }
   }
 
   // A new note whose own reference the author took back goes with it

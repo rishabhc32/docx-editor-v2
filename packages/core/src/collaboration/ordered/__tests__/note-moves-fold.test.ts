@@ -9,10 +9,11 @@ import { orderedCardSeen } from '../change/apply-decide.ts';
 import { openOrderedWordFile, type OrderedWordFile } from '../client/open.ts';
 import { orderedPackageBytes } from '../compose/package.ts';
 import type { OrderedDocument } from '../model/types.ts';
-import { apply, at, EDIT } from './change-apply-fixture.ts';
+import { apply, at, DIRECT, EDIT, FOOTNOTES } from './change-apply-fixture.ts';
 import { checkFold, folded, mediaStore } from './fold-check.ts';
 import { docx, MATRIX_EXTRAS, p, t } from './word-fixtures.ts';
 
+const NOTE_EDIT = { part: FOOTNOTES, mode: 'suggest' } as const;
 const FOOTNOTE =
   '<w:r><w:rPr><w:vertAlign w:val="superscript"/></w:rPr><w:footnoteReference w:id="1"/></w:r>';
 const ENDNOTE = '<w:r><w:endnoteReference w:id="1"/></w:r>';
@@ -159,6 +160,24 @@ describe('a decision on a move of words that hold a note reference, live and aft
     ];
     await checkNotes(fileWith(FOOTNOTE), struck, {
       accepted: ['footnote reference 1', FEES, ANNEX],
+      rejected: ['footnote reference 1', FEES, ANNEX],
+    });
+  });
+});
+
+describe("the organiser's direct deletion of a moved copy of a note reference", () => {
+  // Ana's pending deletion in the note: the move's struck source still names the note, so it
+  // stays whole, as the editor alone keeps it, and goes with the source on an accept
+  test('the note stays whole while the struck source names it', async () => {
+    const edit = (doc: OrderedDocument) => {
+      const struck = { from: at(doc, 2, 14, FOOTNOTES), to: at(doc, 2, 18, FOOTNOTES) };
+      const anas = apply(doc, 'ana:1', { kind: 'delete', ...NOTE_EDIT, ...struck }, 'Ana');
+      const moved = moveTerms(doc);
+      apply(doc, 'olive:2', { kind: 'delete', ...DIRECT, from: at(doc, 1, 4), to: at(doc, 1, 5) });
+      return [...anas.suggestions, ...moved];
+    };
+    await checkNotes(fileWith(FOOTNOTE), edit, {
+      accepted: [ANNEX],
       rejected: ['footnote reference 1', FEES, ANNEX],
     });
   });
