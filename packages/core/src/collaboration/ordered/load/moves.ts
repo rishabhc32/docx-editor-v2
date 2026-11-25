@@ -7,7 +7,14 @@ import type { OoxmlElement } from '../../../store/package/ooxml-tree.ts';
 import { whilePending } from '../model/move-ranges.ts';
 import { REVISION_ROLE } from '../model/revision-ids.ts';
 import { attributeOf } from '../ooxml-nodes.ts';
-import { moveName, pushZero, type Labels, type LoadState, type MoveRange } from './state.ts';
+import {
+  moveName,
+  openMoveName,
+  pushZero,
+  type Labels,
+  type LoadState,
+  type MoveRange,
+} from './state.ts';
 
 /** A move range marker's local name: its half (`From`, `To`) and its edge (`Start`, `End`). */
 export const MOVE_RANGE = /^move(From|To)Range(Start|End)$/;
@@ -28,10 +35,11 @@ export function loadMoveRangeMarker(
   if (match[2] === 'Start') {
     const name = attributeOf(node, 'name');
     if (name !== undefined) {
-      range.name = name;
       state.doc.movesWithRanges.add(name);
     }
 
+    // A range with no name goes on with the move of the range it is in
+    range.open.push({ id: attributeOf(node, 'id'), name: name ?? openMoveName(range) });
     range.start = node;
 
     // Its suggestion is the first wrapper's, read after it
@@ -40,7 +48,8 @@ export function loadMoveRangeMarker(
   }
 
   // A range inside another ends before it: its end names its own start
-  const suggestion = range.byId.get(attributeOf(node, 'id') ?? '') ?? range.last;
+  const id = attributeOf(node, 'id');
+  const suggestion = range.byId.get(id ?? '') ?? range.last;
   const ended =
     suggestion === null ? labels : { ...whilePending(suggestion), within: labels.within };
   pushZero(state, node, ended, {
@@ -48,8 +57,13 @@ export function loadMoveRangeMarker(
     ...more,
   });
 
-  // The range ended: a later wrapper that no range holds is no part of this move
-  range.name = null;
+  // The range ended, with any range still open inside it (an end that names no open start ends
+  // them all): a later wrapper belongs to the range it is still in, if any
+  let closed = range.open.pop();
+  while (closed !== undefined && closed.id !== id) {
+    closed = range.open.pop();
+  }
+
   return true;
 }
 

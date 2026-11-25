@@ -140,6 +140,29 @@ describe('a decision on a move of words that hold a note reference, live and aft
     });
   });
 
+  // Olive moves " apply" into her moved copy, before its reference: her second range is inside
+  // the first, whose wrapper after it holds the reference (the fold shapes session, seed 36)
+  test('a move into the moved words, before the reference', async () => {
+    const nested = (doc: OrderedDocument) => [
+      ...apply(
+        doc,
+        'olive:1',
+        { kind: 'move', ...EDIT, from: at(doc, 0, 0), to: at(doc, 0, 8), place: at(doc, 1, 4) },
+        'Olive'
+      ).suggestions,
+      ...apply(
+        doc,
+        'olive:2',
+        { kind: 'move', ...EDIT, from: at(doc, 0, 14), to: at(doc, 0, 20), place: at(doc, 1, 11) },
+        'Olive'
+      ).suggestions,
+    ];
+    await checkNotes(fileWith(FOOTNOTE), nested, {
+      accepted: ['footnote reference 1', FEES, ANNEX],
+      rejected: ['footnote reference 1', FEES, ANNEX],
+    });
+  });
+
   test('a comment anchor around the moved words', async () => {
     await checkNotes(fileWith(FOOTNOTE, COMMENT_START, COMMENT_END), moveTerms, {
       accepted: ['footnote reference 1', FEES, ANNEX],

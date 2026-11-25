@@ -414,7 +414,7 @@ interface UnrangedMove {
 }
 
 /** Whether a move wrapper comes inside a range of its own: after a range start, still open. */
-const isRanged = (range: MoveRange): boolean => range.name !== null || range.start !== null;
+const isRanged = (range: MoveRange): boolean => range.open.length > 0 || range.start !== null;
 
 /** A simple field or an equation that the engine counts as one unit, at `span`. */
 function loadOneUnitAtom(

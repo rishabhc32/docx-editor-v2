@@ -254,9 +254,10 @@ function otherAttributes(revision: OoxmlElement): OoxmlAttribute[] {
   return revision.attributes.filter((a) => !isTripleAttribute(a)).slice(0, MAX_OTHER_ATTRIBUTES);
 }
 
-/** A move range a file opened and the wrappers after it belong to. */
+/** The move ranges a file opened, still open, and the wrappers after them belong to. */
 export interface MoveRange {
-  name: string | null;
+  /** Each open range's start `w:id` and move name, the innermost last. */
+  readonly open: { readonly id: string | undefined; readonly name: string | null }[];
   /**
    * The range start that waits for the move's first wrapper, its `w:id` and attributes kept for
    * that wrapper's suggestion.
@@ -270,9 +271,12 @@ export interface MoveRange {
   readonly byId: Map<string, string>;
 }
 
+/** The move name of the innermost open range: null when no range is open or it has no name. */
+export const openMoveName = (range: MoveRange): string | null => range.open.at(-1)?.name ?? null;
+
 /** The move's name: its range's, or one per author when the file names none. */
 export function moveName(range: MoveRange, node: OoxmlElement): string {
-  return range.name ?? `mv:${attributeOf(node, 'author') ?? ''}`;
+  return openMoveName(range) ?? `mv:${attributeOf(node, 'author') ?? ''}`;
 }
 
 /** One story's load. */
@@ -310,8 +314,8 @@ export function newLoadState(
     revisions,
     budget,
     prompts: new Set(),
-    moveFrom: { name: null, start: null, startIndex: null, last: null, byId: new Map() },
-    moveTo: { name: null, start: null, startIndex: null, last: null, byId: new Map() },
+    moveFrom: { open: [], start: null, startIndex: null, last: null, byId: new Map() },
+    moveTo: { open: [], start: null, startIndex: null, last: null, byId: new Map() },
     home: null,
   };
 }
