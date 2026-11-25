@@ -5,9 +5,13 @@
 // suggestion keeps its version, so a decision that names what the room showed applies.
 
 import { describe, expect, test } from 'bun:test';
-import { strFromU8, unzipSync } from 'fflate';
+import { strFromU8, strToU8, unzipSync, zipSync } from 'fflate';
 import { orderedCardSeen } from '../change/apply-decide.ts';
-import { openOrderedWordFile, type OrderedWordFile } from '../client/open.ts';
+import {
+  openOrderedCheckpoint,
+  openOrderedWordFile,
+  type OrderedWordFile,
+} from '../client/open.ts';
 import { orderedPackageBytes } from '../compose/package.ts';
 import type { OrderedDocument } from '../model/types.ts';
 import {
@@ -32,6 +36,8 @@ import {
   t,
   type PackageExtras,
 } from './word-fixtures.ts';
+
+const MANIFEST = 'ordered-checkpoint.json';
 
 /** A run as Word writes it, with its revision session and its own properties. */
 const run = (text: string, rPr = '') =>
@@ -529,6 +535,32 @@ describe("a fold of a table's records", () => {
       const decide = { kind: 'decide', cards: [{ suggestions }], status: 'rejected' } as const;
       apply(doc, 'olive:1', decide, 'Olive');
       await checkFold(doc, base, mediaStore(base), `${kind}, then a row height rejected`);
+    });
+  }
+
+  // A table width takes the row height's table record. Once the row height is decided, that
+  // record takes over nothing, but it stays apart: the file's one change record holds it, and a
+  // fold gives it back
+  for (const status of ['accepted', 'rejected'] as const) {
+    test(`a row height, a table width on its row, then the row height ${status}`, async () => {
+      const { document: doc, base } = openOrderedWordFile(APPLY_FILE, { file: 1 });
+      rowHeight(doc, 'bob:1', 0, '2026-10-28T09:06:00Z');
+      const on = [addressOf(opens(doc, 'tc')[1]!)];
+      const width = { columnWidthTwips: 2600, tableWidthTwips: 5600 };
+      const op = { op: 'setTableRightEdgeWidth', ...width } as const;
+      apply(doc, 'bob:2', { kind: 'table-property', ...EDIT, on, op }, 'Bob');
+      const suggestions = orderedCardSeen(doc, 'S:bob:1.1')!;
+      apply(doc, 'olive:1', { kind: 'decide', cards: [{ suggestions }], status }, 'Olive');
+      await checkFold(doc, base, mediaStore(base), `a table width over a ${status} row height`);
+
+      // The reader stays strict: without the takeover, the records do not fit the file
+      const entries = unzipSync(await checkpointBytes(doc, base, mediaStore(base)));
+      const manifest = JSON.parse(strFromU8(entries[MANIFEST]!)) as { takeovers: unknown[] };
+      expect(manifest.takeovers).not.toEqual([]);
+      entries[MANIFEST] = strToU8(JSON.stringify({ ...manifest, takeovers: [] }));
+      expect(() => openOrderedCheckpoint(zipSync(entries), { file: 2 })).toThrow(
+        'checkpoint-manifest'
+      );
     });
   }
 

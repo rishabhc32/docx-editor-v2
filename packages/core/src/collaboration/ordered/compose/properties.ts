@@ -111,8 +111,10 @@ export function withStyleWrite(
 }
 
 /**
- * Note a drawn record in `taken` when it is a takeover (policy 2): a pending record taken from a
- * suggestion still pending, with the properties before it and with it.
+ * Note a drawn record in `taken` when it is a takeover (policy 2): a pending record taken from
+ * another suggestion, with the properties before it and with it. Its change record holds it
+ * beside its suggestion's own record after that other suggestion's decision too: the record stays
+ * apart, though it takes over nothing then.
  */
 export function noteTakeover(
   ctx: ComposeContext,
@@ -122,7 +124,7 @@ export function noteTakeover(
   after: readonly OoxmlNode[]
 ): void {
   const { suggestion, replaced } = record;
-  if (replaced === undefined || !isPending(ctx.doc, suggestion) || !isPending(ctx.doc, replaced)) {
+  if (replaced === undefined || !isPending(ctx.doc, suggestion)) {
     return;
   }
 

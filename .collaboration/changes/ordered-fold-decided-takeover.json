@@ -1,0 +1,10 @@
+{
+  "impact": "compatible",
+  "fields": [],
+  "before": "Compose noted a takeover only while the suggestion the record was taken from was pending. After that suggestion's decision, the room kept the taken record apart, but the checkpoint named no takeover for it, so its change records named a record the file did not load and the checkpoint did not open.",
+  "after": "Compose notes a takeover for each pending record taken from another suggestion, decided or not, so the manifest keeps the taken record and the open gives it back. orderedReplacedSuggestions names only pending suggestions, as before.",
+  "reason": "Change messages, the change log and the Yjs document format do not change. The manifest and its version 5 stay: the checkpoint only lists more takeover entries of the form it had, which an older reader reads as before. Exported Word files do not change. Ordered rooms are not deployed yet, so no room needs a migration.",
+  "tests": ["packages/core/src/collaboration/ordered/__tests__/checkpoint-fold-decide.test.ts"],
+  "changeset": "ordered-fold-decided-takeover",
+  "migration": null
+}
