@@ -114,4 +114,21 @@ describe("a decision that empties a control with no prompt gives Word's blank pr
     expect(controlXml(decided.part)).toContain('Type the name.');
     expect(controlXml(decided.part)).not.toContain('sdtEndPr');
   });
+
+  test('a comment on the words keeps its range around the prompt, as around a value', () => {
+    const comment = (name: string) => `<w:${name} w:id="5"/>`;
+    const anchor = `<w:r>${comment('commentReference')}</w:r>`;
+    const body = inline(
+      '<w:text/>',
+      `${inserted}${comment('commentRangeStart')}${inserted}${comment('commentRangeEnd')}${anchor}`
+    );
+    const decided = applyTreeOp(parse(body), { op: 'rejectAllRevisions' });
+    if (!decided.ok) throw new Error(decided.reason);
+    expect(controlXml(decided.part)).toBe(
+      wordInline('601', '<w:text/>').replace(
+        BLANK,
+        `${comment('commentRangeStart')}${BLANK}${comment('commentRangeEnd')}${anchor}`
+      )
+    );
+  });
 });

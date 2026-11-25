@@ -78,7 +78,7 @@ function isOtherBlock(node: OoxmlNode): boolean {
 }
 
 /** A run that only anchors a comment. The range markers around it stay, so it stays too. */
-function isCommentAnchorRun(node: OoxmlNode): boolean {
+export function isCommentAnchorRun(node: OoxmlNode): boolean {
   if (node.kind !== 'run') return false;
   const content = runContentOf(node);
   return content.length === 1 && isWml(content[0]!, 'commentReference');

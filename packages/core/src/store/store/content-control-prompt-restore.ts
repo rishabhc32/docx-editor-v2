@@ -21,7 +21,7 @@ import type { OoxmlElement, OoxmlNode, OoxmlPart } from '../package/ooxml-tree.t
 import { usedParaIds, w14PrefixInScopeAt, withFreshParaIds } from '../package/para-id.ts';
 import { isInlineControl, isWml } from './content-control-checkbox.ts';
 import { showsPromptWhenEmpty } from './content-control-prompt-kinds.ts';
-import { valueContent } from './content-control-value-content.ts';
+import { isCommentAnchorRun, valueContent } from './content-control-value-content.ts';
 import { placeholderRunProperties } from './placeholder-materialize.ts';
 import { editedProperties, promptFor, textRun, wmlElement } from './tree-op-content-controls.ts';
 import {
@@ -35,7 +35,12 @@ import type { TreeOpResult } from './tree-op-types.ts';
 
 function holdsContent(node: OoxmlNode, depth: number): boolean {
   if (node.kind === 'textValue' || depth > MAX_INLINE_CONTAINER_DEPTH) return false;
-  if (node.kind === 'run') return node.children.some((child) => !isRunPropertiesNode(child));
+
+  // A comment's anchor is no content: it stays beside the prompt, as beside a value
+  if (node.kind === 'run') {
+    return !isCommentAnchorRun(node) && node.children.some((child) => !isRunPropertiesNode(child));
+  }
+
   if (node.localName === 'sdtPr' || node.localName === 'pPr') return false;
   return node.children.some((child) => holdsContent(child, depth + 1));
 }
