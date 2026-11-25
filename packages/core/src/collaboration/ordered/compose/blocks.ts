@@ -11,7 +11,7 @@ import { REVISION_ROLE } from '../model/revision-ids.ts';
 import { BLOCK_TOKENS, type OrderedDocument, type OrderedItem } from '../model/types.ts';
 import { isWml, withChildren } from '../ooxml-nodes.ts';
 import type { ComposeContext, OrderedViewParagraph } from './context.ts';
-import { controlContent, noteValueRecord } from './inline.ts';
+import { controlContent, mergeSigns, noSigns, noteValueRecord, type ValueSigns } from './inline.ts';
 import { isNotesStory, noteKeyOf, notesWithHiddenReferences } from './note-references.ts';
 import {
   composeParagraph,
@@ -45,16 +45,8 @@ interface Builder {
   drawn: boolean;
   /** A decision on a suggestion took a unit in it away (`ComposeContext.decidedAway`). */
   decided: boolean;
-  /** A decision changed whether a unit in it reads as text (`ComposeContext.decided`). */
-  reached: boolean;
-  /** A unit in it shows struck by a pending suggestion. */
-  struck: boolean;
-  /** A unit in it shows, neither struck nor a suggestion's insertion. */
-  own: boolean;
-  /** A unit in it shows as a suggestion's insertion an accept decided. */
-  accepted: boolean;
-  /** The words of insertions a reject took away in it. */
-  rejected: string;
+  /** What its units tell its value record, when it is a block control. */
+  readonly signs: ValueSigns;
   /** A table's cells a column decision removed (`table-columns.ts`). */
   removed?: RemovedCell[];
   /** The decision this drawing makes on the table, a row or a cell (`decisionOn`). */
@@ -278,11 +270,7 @@ function newBuilder(open: OrderedItem | null): Builder {
     hadUnits: false,
     drawn: false,
     decided: false,
-    reached: false,
-    struck: false,
-    own: false,
-    accepted: false,
-    rejected: '',
+    signs: noSigns(),
   };
 }
 
@@ -326,21 +314,11 @@ function closeBlock(ctx: ComposeContext, builder: Builder, open: OrderedItem, in
  * its units tell a control's value record (`ValueSigns`).
  */
 function noteParagraph(builder: Builder, drawn: DrawnParagraph): void {
-  if (drawn.touched) builder.touched = true;
-  if (drawn.hadUnits) builder.hadUnits = true;
-  if (drawn.drawn) builder.drawn = true;
-  if (drawn.decided) builder.decided = true;
-  if (drawn.reached) {
-    builder.reached = true;
-  }
-
-  if (drawn.struck) {
-    builder.struck = true;
-  }
-
-  builder.own ||= drawn.own;
-  builder.accepted ||= drawn.accepted;
-  builder.rejected += drawn.rejected;
+  builder.touched ||= drawn.touched;
+  builder.hadUnits ||= drawn.hadUnits;
+  builder.drawn ||= drawn.drawn;
+  builder.decided ||= drawn.decided;
+  mergeSigns(builder.signs, drawn.signs);
 }
 
 /** A cell a column decision removed: drawn for its table to remove by the engine's rule. */
@@ -392,7 +370,7 @@ function blockElement(ctx: ComposeContext, builder: Builder): OoxmlNode {
     ]);
 
     // Its value record follows what it shows, as an inline control's (`closeBox`)
-    noteValueRecord(ctx, open, control, builder, emptied);
+    noteValueRecord(ctx, open, control, builder.signs, emptied);
     return control;
   }
 

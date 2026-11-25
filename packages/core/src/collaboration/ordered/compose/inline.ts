@@ -48,18 +48,10 @@ interface Box {
   hadUnits: boolean;
   /** A unit shows in it (struck or not): markers alone are no content. */
   drawn: boolean;
-  /** A decision changed whether a unit in it reads as text. */
-  reached: boolean;
   /** A decision on a suggestion took a unit in it away (`ComposeContext.decidedAway`). */
   decided: boolean;
-  /** A unit in it shows struck by a pending suggestion. */
-  struck: boolean;
-  /** A unit in it shows, neither struck nor a suggestion's insertion. */
-  own: boolean;
-  /** A unit in it shows as a suggestion's insertion an accept decided. */
-  accepted: boolean;
-  /** The words of insertions a reject took away in it. */
-  rejected: string;
+  /** What its units tell its value record, when it is a control or inside one. */
+  readonly signs: ValueSigns;
   /** The pending insertion of a new control, drawn as one `w:ins` around the control. */
   cover?: string;
 }
@@ -152,12 +144,8 @@ function newBox(open: OrderedItem | null, cover: string | null = null): Box {
     children: [],
     hadUnits: false,
     drawn: false,
-    reached: false,
     decided: false,
-    struck: false,
-    own: false,
-    accepted: false,
-    rejected: '',
+    signs: noSigns(),
     ...(cover === null ? {} : { cover }),
   };
 }
@@ -245,7 +233,10 @@ function emptyMoveEdges(ctx: ComposeContext, buffer: readonly OrderedItem[]): Se
   return empty;
 }
 
-/** A unit in the boxes: the innermost held it; each one it shows in, reached or struck. */
+/**
+ * A unit in the boxes: the innermost held it, and what it tells a value record (a box tells the
+ * box around it when it closes); each one it shows in, or a decision took it away from.
+ */
 function noteUnit(ctx: ComposeContext, boxes: readonly Box[], item: OrderedItem): void {
   const innermost = boxes[boxes.length - 1];
   if (!innermost) {
@@ -253,24 +244,14 @@ function noteUnit(ctx: ComposeContext, boxes: readonly Box[], item: OrderedItem)
   }
 
   innermost.hadUnits = true;
-
-  // A decided insertion or deletion reaches every control around it
-  if (ctx.decided(item)) for (const b of boxes) b.reached = true;
-  if (ctx.decidedAway(item)) for (const b of boxes) b.decided = true;
-  const rejected = ctx.rejectedWords(item);
-  for (const b of boxes) {
-    b.rejected += rejected;
+  if (boxes.some((b) => b.open?.token === 'sdt')) {
+    noteValueSigns(ctx, innermost.signs, item);
   }
 
+  if (ctx.decidedAway(item)) for (const b of boxes) b.decided = true;
   if (ctx.gone(item)) return;
-  const struck = ctx.struckBy(item) !== null;
-  const accepted = ctx.acceptedInsertion(item);
-  const own = ctx.ownWord(item);
   for (const b of boxes) {
     b.drawn = true;
-    if (struck) b.struck = true;
-    b.accepted ||= accepted;
-    b.own ||= own;
   }
 }
 
@@ -435,18 +416,54 @@ export function coverOf(ctx: ComposeContext, open: OrderedItem): string | null {
   return ctx.insertedBy(open);
 }
 
-/** What the units of a control told its value record: an inline control's box, a block's builder. */
+/**
+ * What the units of a control tell its value record (`noteValueRecord`): an inline control's
+ * box, a block's builder, a paragraph's drawing.
+ */
 export interface ValueSigns {
-  /** A decision changed whether a unit in it reads as text. */
-  readonly reached: boolean;
+  /** A decision changed whether a unit in it reads as text (`ComposeContext.decided`). */
+  reached: boolean;
   /** A unit in it shows struck by a pending suggestion. */
-  readonly struck: boolean;
+  struck: boolean;
   /** A unit in it shows, neither struck nor a suggestion's insertion. */
-  readonly own: boolean;
+  own: boolean;
   /** A unit in it shows as a suggestion's insertion an accept decided. */
-  readonly accepted: boolean;
+  accepted: boolean;
   /** The words of insertions a reject took away in it. */
-  readonly rejected: string;
+  rejected: string;
+}
+
+/** Signs of no unit. */
+export const noSigns = (): ValueSigns => ({
+  reached: false,
+  struck: false,
+  own: false,
+  accepted: false,
+  rejected: '',
+});
+
+/** Note what one unit tells a value record. */
+export function noteValueSigns(ctx: ComposeContext, signs: ValueSigns, item: OrderedItem): void {
+  signs.reached ||= ctx.decided(item);
+  signs.rejected += ctx.rejectedWords(item);
+  if (ctx.gone(item)) {
+    return;
+  }
+
+  const struck = ctx.struckBy(item) !== null;
+  const accepted = ctx.acceptedInsertion(item);
+  signs.struck ||= struck;
+  signs.accepted ||= accepted;
+  signs.own ||= !struck && !accepted && ctx.insertedBy(item) === null;
+}
+
+/** Note what the units of a part (a box, a paragraph) told its value record, in `into`. */
+export function mergeSigns(into: ValueSigns, from: ValueSigns): void {
+  into.reached ||= from.reached;
+  into.struck ||= from.struck;
+  into.own ||= from.own;
+  into.accepted ||= from.accepted;
+  into.rejected += from.rejected;
 }
 
 /**
@@ -481,6 +498,7 @@ export function noteValueRecord(
 
 function closeBox(ctx: ComposeContext, done: Box, into: Box): void {
   const open = done.open;
+  mergeSigns(into.signs, done.signs);
   if (done.cover !== undefined) ctx.covered.delete(done.cover);
   if (!open) return;
 
@@ -493,7 +511,7 @@ function closeBox(ctx: ComposeContext, done: Box, into: Box): void {
     if (emptied) ctx.emptied.push(container.id);
     if (emptied && done.decided) ctx.decisionEmptied.add(container.id);
 
-    noteValueRecord(ctx, open, container, done, emptied);
+    noteValueRecord(ctx, open, container, done.signs, emptied);
   }
 
   if (done.cover !== undefined) place(ctx, into.children, container, open);

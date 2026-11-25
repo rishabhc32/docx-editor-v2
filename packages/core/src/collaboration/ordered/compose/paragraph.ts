@@ -14,7 +14,7 @@ import {
 } from '../model/types.ts';
 import { childWhere, isParagraphProperties, withChildren, withMarkFace } from '../ooxml-nodes.ts';
 import { ComposeContext, type OrderedViewChar, type OrderedViewParagraph } from './context.ts';
-import { composeInline } from './inline.ts';
+import { composeInline, noSigns, noteValueSigns, type ValueSigns } from './inline.ts';
 import { keptLinkEdges } from './kept-links.ts';
 import { isNotesStory } from './note-references.ts';
 import { faceAfter, paragraphPropertiesAfter, withNumberingRecords } from './properties.ts';
@@ -34,16 +34,8 @@ export interface DrawnParagraph {
   readonly drawn: boolean;
   /** A decision on a suggestion took a unit in it away (`ComposeContext.decidedAway`). */
   readonly decided: boolean;
-  /** A decision changed whether a unit in it reads as text (`ComposeContext.decided`). */
-  readonly reached: boolean;
-  /** A unit in it shows struck by a pending suggestion. */
-  readonly struck: boolean;
-  /** A unit in it shows, neither struck nor a suggestion's insertion. */
-  readonly own: boolean;
-  /** A unit in it shows as a suggestion's insertion an accept decided. */
-  readonly accepted: boolean;
-  /** The words of insertions a reject took away in it. */
-  readonly rejected: string;
+  /** What its units tell the value record of a block control around it. */
+  readonly signs: ValueSigns;
 }
 
 /** Draw one paragraph: the items since the last shown mark, and its mark. */
@@ -98,11 +90,7 @@ export function viewOfParagraph(
   let hadUnits = false;
   let drawn = false;
   let decided = false;
-  let reached = false;
-  let struck = false;
-  let own = false;
-  let accepted = false;
-  let rejected = '';
+  const signs = noSigns();
 
   // Only a block control reads what its paragraphs' units tell its value record
   const valued = blocks.some((block) => block.token === 'sdtBlock');
@@ -123,22 +111,13 @@ export function viewOfParagraph(
     if (!isUnit(item)) continue;
     hadUnits = true;
     if (ctx.decidedAway(item)) decided = true;
-    if (ctx.decided(item)) {
-      reached = true;
-    }
-
     if (valued) {
-      rejected += ctx.rejectedWords(item);
+      noteValueSigns(ctx, signs, item);
     }
 
     if (ctx.gone(item)) continue;
     drawn = true;
     const deleted = ctx.struckBy(item) !== null;
-    struck ||= deleted;
-    if (valued) {
-      own ||= ctx.ownWord(item);
-      accepted ||= ctx.acceptedInsertion(item);
-    }
 
     const within = containers.join('>');
     for (let k = 0; k < item.length; k += 1) {
@@ -161,11 +140,7 @@ export function viewOfParagraph(
     hadUnits,
     drawn,
     decided,
-    reached,
-    struck,
-    own,
-    accepted,
-    rejected,
+    signs,
   };
 }
 
