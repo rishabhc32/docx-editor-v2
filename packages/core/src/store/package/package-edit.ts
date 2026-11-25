@@ -826,7 +826,9 @@ export function withRelationshipRecord(
   // gain a relationship here. Reporting it is the point: writing the comment body and the
   // story markers with nothing pointing at the part leaves a reference Word repairs away, and
   // a silent identity return is indistinguishable from "no work needed".
-  if (!relsPart) return { pkg, ok: false };
+  if (!relsPart) {
+    return { pkg, ok: false };
+  }
 
   const external = targetMode === 'External';
   const node = element(mintedId(relsPart, id), RELATIONSHIPS_NAMESPACE, 'Relationship', {
@@ -840,7 +842,9 @@ export function withRelationshipRecord(
       deferValidation: true,
     })
   );
-  if (!appended.ok) return { pkg, ok: false };
+  if (!appended.ok) {
+    return { pkg, ok: false };
+  }
 
   const existing = relationshipsOf(pkg, ownerPart);
   const added = { ownerPart, id, type, rawTarget, targetMode, order: existing.length };
