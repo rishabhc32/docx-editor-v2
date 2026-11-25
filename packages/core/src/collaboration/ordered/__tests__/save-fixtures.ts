@@ -10,6 +10,8 @@ import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { readOoxmlPackage, writeOoxmlPackage } from '../../../store/package/ooxml-package.ts';
 import { canonicalOoxmlFingerprint } from '../../../store/package/ooxml-tree.ts';
+import { orderedIdMinter } from '../change/ids.ts';
+import { settleDecidedTables } from '../change/settle-columns.ts';
 import { composeOrderedPart } from '../compose/compose.ts';
 import { orderedPackageBytes } from '../compose/package.ts';
 import { orderedCards } from '../decide.ts';
@@ -36,7 +38,10 @@ const FILES = readdirSync(FIXTURES)
 
 function view(doc: OrderedDocument, ids: readonly string[], status?: 'accepted' | 'rejected') {
   const { record } = withUndoRecord(doc, () => {
-    if (status) for (const id of ids) setStatus(doc, id, status);
+    if (status) {
+      for (const id of ids) setStatus(doc, id, status);
+      settleDecidedTables(doc, ids, orderedIdMinter('check:1'));
+    }
   });
   const parts = [...doc.stories.keys()].map((name) => {
     const part = composeOrderedPart(doc, name).part;

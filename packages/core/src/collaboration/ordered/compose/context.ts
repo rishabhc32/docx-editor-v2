@@ -28,7 +28,7 @@ import type {
   OrderedStory,
   OrderedSuggestionStatus,
 } from '../model/types.ts';
-import type { RemovedColumns } from './table-columns.ts';
+import type { JoinedGrid, RemovedColumns } from './table-columns.ts';
 
 /** How to draw. @public */
 export interface OrderedComposeOptions {
@@ -59,6 +59,11 @@ export interface ComposeOptions extends OrderedComposeOptions {
    * items or a move, and the block after each (`compose/region.ts`).
    */
   readonly region?: ReadonlySet<OrderedItem>;
+  /**
+   * Set when a decision writes its tables into the items (`change/settle-columns.ts`): the
+   * suggestions decided now, whose decision joins a table's grid (`decisionOn`).
+   */
+  readonly settling?: ReadonlySet<string>;
 }
 
 /** The number of a room run or text element in a checkpoint's drawing, and its elements. */
@@ -201,6 +206,8 @@ export class ComposeContext {
   readonly prompts: OrderedRetainedPrompt[] = [];
   /** Tables whose removed cells this drawing took out, before and after (`table-columns.ts`). */
   readonly removedColumns: RemovedColumns[] = [];
+  /** Tables whose grid a decision in this drawing joined, before and after (`decisionOn`). */
+  readonly joinedGrids: JoinedGrid[] = [];
   /** The takeovers each change record this drawing wrote holds, by the record's node id. */
   readonly takeovers = new Map<string, HeldTakeovers>();
   readonly wrappers = new WeakMap<OoxmlNode, WrapperInfo>();

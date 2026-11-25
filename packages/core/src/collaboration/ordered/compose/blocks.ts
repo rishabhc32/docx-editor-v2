@@ -26,7 +26,7 @@ import { resetUnrecordedCells } from './row-cells.ts';
 import { bodySectionNode, isSectionItem } from './sections.ts';
 import { hidePrompt } from './prompts.ts';
 import {
-  holdsDecision,
+  decisionOn,
   isRow,
   removedCellStub,
   removedColumnCell,
@@ -57,8 +57,8 @@ interface Builder {
   rejected: string;
   /** A table's cells a column decision removed (`table-columns.ts`). */
   removed?: RemovedCell[];
-  /** A decision reached the records or labels of the table, a row or a cell (`holdsDecision`). */
-  tableDecided?: boolean;
+  /** The decision this drawing makes on the table, a row or a cell (`decisionOn`). */
+  tableDecided?: string;
   /** A row's drawn cells and their open items (`row-cells.ts`). */
   cells?: Map<OoxmlNode, OrderedItem>;
   /** A table's rows that show a pending height with no row record, to its suggestion. */
@@ -169,6 +169,13 @@ export function composeBlocks(ctx: ComposeContext): {
       if (isLeftOut(ctx, item, () => orphans)) {
         skip = item.pair ?? null;
         for (const b of stack) b.touched = true;
+        // A row or a cell this drawing's decision takes away is a decision on its table
+        const takenAway = (item.token === 'tr' || item.token === 'tc') && ctx.decidedAway(item);
+        const decided = takenAway ? decisionOn(ctx, item) : undefined;
+        if (decided !== undefined) {
+          top().tableDecided ??= decided;
+        }
+
         removedCell(ctx, item, stack);
         continue;
       }
@@ -292,16 +299,21 @@ function closeBlock(ctx: ComposeContext, builder: Builder, open: OrderedItem, in
   if (open.token === 'tc') (into.cells ??= new Map()).set(element, open);
   const height = open.token === 'tr' ? pendingHeightOf(ctx, open) : undefined;
   if (height !== undefined) (into.heights ??= new Map()).set(element.id, height);
-  const decided = builder.tableDecided === true || holdsDecision(ctx, open);
-  if (decided && (open.token === 'tr' || open.token === 'tc')) {
-    into.tableDecided = true;
+  const decided = builder.tableDecided ?? decisionOn(ctx, open);
+  if (decided !== undefined && (open.token === 'tr' || open.token === 'tc')) {
+    into.tableDecided ??= decided;
   }
 
   // A decision on the table, a row or a cell fits the grid to the cells, as the engine's does
   if (builder.removed && element.kind !== 'textValue') {
     element = withoutRemovedCells(ctx, element, builder.removed);
-  } else if (decided && open.token === 'tbl' && element.kind !== 'textValue') {
-    element = withJoinedGrid(ctx, element);
+  } else if (decided !== undefined && open.token === 'tbl' && element.kind !== 'textValue') {
+    const joined = withJoinedGrid(ctx, element);
+    if (joined !== element) {
+      ctx.joinedGrids.push({ before: element, after: joined, suggestion: decided });
+    }
+
+    element = joined;
   }
 
   // A height's anchor reads the cells the table keeps: a removed cell holds no record of it

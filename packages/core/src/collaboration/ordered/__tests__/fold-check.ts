@@ -30,6 +30,7 @@ import { CardRead, isCardUnit, isOrderedItemHidden } from '../card-of.ts';
 import { applyOrderedChange } from '../change/apply.ts';
 import { orderedCardSeen } from '../change/apply-decide.ts';
 import { orderedChangeId, orderedIdMinter } from '../change/ids.ts';
+import { settleDecidedTables } from '../change/settle-columns.ts';
 import { settleEmptiedControls } from '../change/settle-emptied.ts';
 import { settleNamedPrompts } from '../change/settle-named-prompts.ts';
 import { settlePromptMarks } from '../change/settle-prompts.ts';
@@ -456,6 +457,7 @@ function decidedFile(
       setStatus(doc, id, status);
     }
 
+    settleDecidedTables(doc, ids, apply.ids);
     settleEmptiedControls(doc, apply);
     settleNamedPrompts(doc, apply);
     settlePromptMarks(doc);

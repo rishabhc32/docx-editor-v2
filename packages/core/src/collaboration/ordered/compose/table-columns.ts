@@ -42,6 +42,13 @@ export interface RemovedColumns {
   readonly cells: readonly RemovedCell[];
 }
 
+/** A table whose grid a decision joined (`decisionOn`), before and after, and that decision. */
+export interface JoinedGrid {
+  readonly before: OoxmlElement;
+  readonly after: OoxmlElement;
+  readonly suggestion: string;
+}
+
 export const isRow = (n: OoxmlNode): boolean => n.kind === 'tableRow' || isWml(n, 'tr');
 export const isCell = (n: OoxmlNode): boolean => n.kind === 'tableCell' || isWml(n, 'tc');
 
@@ -454,9 +461,10 @@ const gridWidths = (grid: OoxmlElement): string =>
 
 /**
  * The grid's record when it holds the grid as it is (a row height's anchor, Word's form): it
- * holds no old grid, so the join goes on and the record follows it.
+ * holds no old grid, so the join goes on and the record follows it. A file's loads as the live
+ * one is made: a record that sets nothing (`load/properties.ts`).
  */
-function unchangedGridRecord(grid: OoxmlElement): OoxmlElement | undefined {
+export function unchangedGridRecord(grid: OoxmlElement): OoxmlElement | undefined {
   const record = grid.children.find((c) => isWml(c, 'tblGridChange'));
   const old =
     record && record.kind !== 'textValue' && record.children.find((c) => isWml(c, 'tblGrid'));
@@ -464,15 +472,27 @@ function unchangedGridRecord(grid: OoxmlElement): OoxmlElement | undefined {
   return gridWidths(old) === gridWidths(grid) ? record : undefined;
 }
 
+/** Whether a grid's pending record holds another grid (`w:tblGridChange`): no join goes on. */
+export const holdsOtherGrid = (grid: OoxmlElement): boolean =>
+  grid.children.some((c) => isWml(c, 'tblGridChange')) && !unchangedGridRecord(grid);
+
 /**
- * Whether a decision (not a direct edit) reached a table's, a row's or a cell's own labels or
- * records: the engine fits the table's grid to its cells after it (`withJoinedGrid`).
+ * The decision (not a direct edit) this drawing makes on a table's, a row's or a cell's own labels
+ * or records, if any: the engine fits the table's grid to its cells after it (`withJoinedGrid`).
+ * Only the decision being written into the items (`settling`) and a drawing as if every pending
+ * suggestion were rejected make one: a decision made earlier is in the items already, and joins
+ * nothing a later edit leaves unused, as in the editor alone and after a fold.
  */
-export function holdsDecision(ctx: ComposeContext, open: OrderedItem): boolean {
+export function decisionOn(ctx: ComposeContext, open: OrderedItem): string | undefined {
   const labels = [open.by, ...open.dels, ...open.props.map((record) => record.suggestion)];
-  return labels.some((id) => {
+  return labels.find((id): id is string => {
     const found = id === null ? undefined : ctx.doc.suggestions.get(id);
-    return found !== undefined && found.status !== 'pending' && found.direct !== true;
+    if (found === undefined || found.direct === true) {
+      return false;
+    }
+
+    const preview = ctx.options.pending === 'reject' && found.status === 'pending';
+    return preview || ctx.options.settling?.has(found.id) === true;
   });
 }
 
@@ -486,8 +506,8 @@ export function holdsDecision(ctx: ComposeContext, open: OrderedItem): boolean {
 export function withJoinedGrid(ctx: ComposeContext, resolved: OoxmlElement): OoxmlElement {
   const grid = resolved.children.find((c) => isWml(c, 'tblGrid'));
   if (!grid || grid.kind === 'textValue') return resolved;
+  if (holdsOtherGrid(grid)) return resolved;
   const unchanged = unchangedGridRecord(grid);
-  if (!unchanged && grid.children.some((c) => isWml(c, 'tblGridChange'))) return resolved;
   const bare = withoutHistory(resolved);
   const compacted = compactRevisionGrid(bare, ctx.mint);
   if (compacted === bare) return resolved;

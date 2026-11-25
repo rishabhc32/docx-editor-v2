@@ -1,5 +1,6 @@
-// Decisions and review cards. A decision only changes statuses, so any set of decisions gives
-// one document in every order. A card is what one decision applies to (`joinsAt` in card-of.ts).
+// Decisions and review cards. A decision changes statuses, and writes the tables it changed into
+// their items as the room's does (`change/settle-columns.ts`). A card is what one decision applies
+// to (`joinsAt` in card-of.ts).
 
 import {
   authorOf,
@@ -15,6 +16,8 @@ import {
   startsRow,
   type OrderedCard,
 } from './card-of.ts';
+import { orderedChangeId, orderedIdMinter } from './change/ids.ts';
+import { settleDecidedTables } from './change/settle-columns.ts';
 import { inserter, isHidden, isPending, oneMaker } from './model/document.ts';
 import { setStatus } from './model/mutations.ts';
 import { OrderedRefusal } from './model/refusal.ts';
@@ -229,8 +232,9 @@ function cardsOfGroups(doc: OrderedDocument, groups: Groups): OrderedCard[] {
 }
 
 /**
- * Decide the card that holds `suggestion`: every pending suggestion in it takes the status.
- * Returns the suggestions decided. A pending suggestion that shows nowhere is its own card, but
+ * Decide the card that holds `suggestion`: every pending suggestion in it takes the status, and
+ * each table the decision changed is written into its items, as the room's decision writes it
+ * (`settleDecidedTables`). Returns the suggestions decided. A pending suggestion that shows nowhere is its own card, but
  * one only in a note whose references show nowhere or in a text box whose object went is on no
  * card and is refused (`hidden-target`). The card is found from the suggestion's own items
  * (`orderedCardOf`), so a decision costs what its card holds. Inside an open undo record, the
@@ -250,11 +254,16 @@ export function decideOrdered(
   if (card === null) throw noCardRefusal(suggestion);
   const members = card.suggestions;
   const status = decision === 'accept' ? 'accepted' : 'rejected';
-  for (const id of members) {
-    if (isPending(doc, id)) {
-      setStatus(doc, id, status);
-    }
+  const decided = members.filter((id) => isPending(doc, id));
+  for (const id of decided) {
+    setStatus(doc, id, status);
   }
 
+  // As the room's decision does: one change id per decision, from the creation counter it moves
+  settleDecidedTables(
+    doc,
+    decided,
+    orderedIdMinter(orderedChangeId('decide', doc.counters.seq + 1))
+  );
   return members;
 }

@@ -202,6 +202,7 @@ const ELEMENT_RECORD: Rules<OrderedElementRecord> = {
   untracked: manifest('untracked', 'records.untracked', 'by the container label'),
   change: UNDO_ONLY,
   acceptedOnly: dropped('no write sets it'),
+  settled: file("change/settle-columns.ts: written as the table's own grid and placement"),
   tableCells: manifest('changeRecords', 'records.tableCells', 'the cells by their labels'),
   replaced: TAKEN,
   replacedEarlier: manifest('takeovers', 'taken.earlier', 'or untracked records.replacedEarlier'),

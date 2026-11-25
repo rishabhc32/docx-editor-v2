@@ -31,6 +31,7 @@ import type {
 import type { OrderedChangePlace, OrderedEditChange } from '../change/types.ts';
 import { composeOrderedPart } from '../compose/compose.ts';
 import { applyOrderedChange } from '../change/apply.ts';
+import { settleDecidedTables } from '../change/settle-columns.ts';
 import type { OrderedApplyChange, OrderedApplyContext } from '../room/room.ts';
 import type { OrderedActor } from '../room/policy.ts';
 import { testPerson } from './test-persons.ts';
@@ -135,10 +136,12 @@ function retract(doc: OrderedDocument, id: string): void {
 /** Apply a change with the model's mutations only: insert, delete, format, split, decide, retract. */
 export const testApply: OrderedApplyChange = (doc, change, ctx) => {
   switch (change.kind) {
-    case 'decide':
-      for (const card of change.cards)
-        for (const seen of card.suggestions) setStatus(doc, seen.suggestion, change.status);
+    case 'decide': {
+      const decided = change.cards.flatMap((card) => card.suggestions.map((s) => s.suggestion));
+      for (const id of decided) setStatus(doc, id, change.status);
+      settleDecidedTables(doc, decided, ctx.ids);
       return;
+    }
     case 'retract':
       for (const id of change.suggestions) retract(doc, id);
       return;

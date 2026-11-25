@@ -306,14 +306,6 @@ export const KNOWN: readonly KnownDifference[] = [
     kinds: ['vmerge', 'mergeboth'],
     edits: ['delete row', 'Ana types in the row, Ben deletes the row'],
   },
-  {
-    cause: 'The engine: a decision in a table with cells merged down rows rewrites the table grid',
-    owner: 'engine',
-    codes: 'DW',
-    sets: ['structures'],
-    kinds: ['mergeboth'],
-    edits: ['insert row above', 'insert row below'],
-  },
   // ---- the oracle ----
   {
     cause:

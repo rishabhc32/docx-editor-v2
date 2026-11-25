@@ -59,13 +59,19 @@ type AnyRecord = OrderedFormatRecord | OrderedPropertyRecord;
 
 const bySeq = (a: AnyRecord, b: AnyRecord) => a.seq - b.seq;
 
-/** The accepted records and the pending ones drawn, each in the order they were made. */
+/**
+ * The accepted records (with those a decision wrote, `settled`) and the pending ones drawn, each
+ * in the order they were made.
+ */
 export function acceptedAndPending<T extends AnyRecord>(
   ctx: ComposeContext,
   records: readonly T[]
 ): { accepted: T[]; pending: T[] } {
   const accepted = records
-    .filter((r) => statusOf(ctx.doc, r.suggestion) === 'accepted')
+    .filter(
+      (r) =>
+        ('settled' in r && r.settled === true) || statusOf(ctx.doc, r.suggestion) === 'accepted'
+    )
     .sort(bySeq);
   const pending =
     ctx.options.pending === 'reject'
@@ -810,8 +816,14 @@ function containerAfter(ctx: ComposeContext, open: OrderedItem, child: OoxmlNode
 
     return withLentWidth(current, lentFrom, given);
   };
-  const [earlier, drawn] = fromFirstPending([...decided, ...kept].sort(bySeq), pending);
-  const under = [...earlier, ...unrecorded].sort(bySeq);
+  // A grid a decision wrote (`settled`) is the table's own, under every pending record: one that
+  // holds the grid unchanged (a row height's anchor) holds the joined grid too
+  const ownGrid = (record: OrderedElementRecord) => target === 'tblGrid' && record.settled === true;
+  const [earlier, drawn] = fromFirstPending(
+    [...decided, ...kept].filter((record) => !ownGrid(record)).sort(bySeq),
+    pending
+  );
+  const under = [...earlier, ...unrecorded, ...decided.filter(ownGrid)].sort(bySeq);
   let inner: readonly OoxmlNode[] = child.children;
   for (const record of under) {
     inner = draw(record, inner);

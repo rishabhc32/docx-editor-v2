@@ -18,6 +18,8 @@ import {
 } from '../../../../store/package/ooxml-tree.ts';
 import { orderedCardOf } from '../../card-of.ts';
 import { applyOrderedChange } from '../../change/apply.ts';
+import { orderedIdMinter } from '../../change/ids.ts';
+import { settleDecidedTables } from '../../change/settle-columns.ts';
 import { composeOrderedPart } from '../../compose/compose.ts';
 import { orderedPackageBytes } from '../../compose/package.ts';
 import type { OrderedResourceOptions } from '../../compose/resources.ts';
@@ -52,11 +54,19 @@ export function printOf(doc: OrderedDocument): string {
 
 type Status = 'accepted' | 'rejected';
 
-/** Every story after decisions, in an order; the document is restored. */
+/**
+ * Every story after decisions, in an order, with what the room writes after a decision (its
+ * tables); the document is restored.
+ */
 function decided(doc: OrderedDocument, order: readonly (readonly [string, Status])[]): string[] {
   const { record } = withUndoRecord(doc, () => {
-    for (const [id, status] of order)
-      if (doc.suggestions.get(id)?.status === 'pending') setStatus(doc, id, status);
+    const made = order.filter(([id]) => doc.suggestions.get(id)?.status === 'pending');
+    for (const [id, status] of made) setStatus(doc, id, status);
+    settleDecidedTables(
+      doc,
+      made.map(([id]) => id),
+      orderedIdMinter('decided:1')
+    );
   });
   const parts = [...doc.stories.keys()].map((name) =>
     semanticBody(normalizedBody(composeOrderedPart(doc, name).part, (id) => id))

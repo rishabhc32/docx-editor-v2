@@ -4,6 +4,7 @@
 
 import type { OoxmlElement, OoxmlNode } from '../../../store/package/ooxml-tree.ts';
 import { validNumberingRevision } from '../../../store/store/revision-property-records.ts';
+import { unchangedGridRecord } from '../compose/table-columns.ts';
 import { REVISION_ROLE } from '../model/revision-ids.ts';
 import type {
   OrderedFormatRecord,
@@ -105,6 +106,9 @@ export function containerShell(
         child.children.filter((c) => c !== record)
       )
     );
+    // A grid record that holds the grid as it is sets nothing, as the live one (`merge: []`):
+    // it holds a grid a later decision writes under it too
+    const unchanged = name === 'tblGrid' && unchangedGridRecord(child) !== undefined;
     props.push({
       kind: 'element',
       suggestion,
@@ -113,6 +117,7 @@ export function containerShell(
       element: current,
       fileRecord: record,
       recordUnchanged: true,
+      ...(unchanged ? { merge: [] } : {}),
     });
 
     // The container keeps the old properties as its own

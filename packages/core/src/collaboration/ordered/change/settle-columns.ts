@@ -1,4 +1,4 @@
-// A decided column, written into its table (task 9.7).
+// A decided table, written into its items: its removed columns and its joined grid (task 9.7).
 
 import {
   WML_NAMESPACE_URI,
@@ -8,7 +8,7 @@ import {
 import { cloneWithNewIds } from '../../../store/store/tree-op-nodes.ts';
 import { composeBlocks } from '../compose/blocks.ts';
 import { ComposeContext } from '../compose/context.ts';
-import type { RemovedColumns } from '../compose/table-columns.ts';
+import { holdsOtherGrid, type RemovedColumns } from '../compose/table-columns.ts';
 import { cellsOf, rowsOf } from '../edits/table-nodes.ts';
 import { itemAt, statusOf, storyOfItem } from '../model/document.ts';
 import { nextSeq, relabel } from '../model/mutations.ts';
@@ -32,15 +32,16 @@ const PLACEMENT = {
 const TABLE_TOKENS = new Set(['tbl', 'tr', 'tc']);
 
 /**
- * Write each column the decided suggestions removed into its table's items. Compose takes out
- * the cells a decision removed, gives their width to a neighbour and joins the grid, by the
- * engine's rules (`compose/table-columns.ts`). Rows and cells made after the decision are made
- * on that table, so the items must hold it too, as the engine's own table does once it decides:
- * else a new row's spans are read against the old grid, and the live list and its saved file
- * draw the table differently. Only stories with a table, row or cell the suggestions label are
- * drawn.
+ * Write each table the decided suggestions changed into its items: the columns they removed, and
+ * the grid lines they left unused. Compose takes out the cells a decision removed, gives their
+ * width to a neighbour and joins the grid, by the engine's rules (`compose/table-columns.ts`),
+ * but only while it draws the decision (`settling`). Rows and cells made after the decision are
+ * made on that table, so the items must hold it, as the engine's own table does once it decides:
+ * else a new row's spans are read against the old grid, a direct edit later is joined too, and
+ * the live list, its saved file and the editor alone draw the table differently. Only stories
+ * with a table, row or cell the suggestions label are drawn.
  */
-export function settleRemovedColumns(
+export function settleDecidedTables(
   doc: OrderedDocument,
   decided: readonly string[],
   ids: OrderedIdMinter
@@ -53,10 +54,14 @@ export function settleRemovedColumns(
       if (story) stories.add(story);
     }
 
+  const settling = new Set(decided);
   for (const story of stories) {
-    const ctx = new ComposeContext(doc, story, {});
+    const ctx = new ComposeContext(doc, story, { settling });
     composeBlocks(ctx);
     for (const table of ctx.removedColumns) settleTable(doc, story, table, ids);
+    for (const { before, after, suggestion } of ctx.joinedGrids) {
+      writeTable({ doc, story, suggestion, ids }, before, after);
+    }
   }
 }
 
@@ -89,15 +94,15 @@ function openOf(
   return itemAt(where.story, { space: tokenSpace(where.doc.file, id), offset: 0 });
 }
 
-/** A record of the accepted deletion on a container's open item. */
+/** A record of the decision on a container's open item, applied whatever its status. */
 function addRecord(
   write: TableWrite,
   open: OrderedItem,
-  record: Omit<OrderedElementRecord, 'kind' | 'seq' | 'suggestion'>
+  record: Omit<OrderedElementRecord, 'kind' | 'seq' | 'suggestion' | 'settled'>
 ): void {
   const { suggestion, seq } = write;
   relabel(write.doc, write.story, open, {
-    props: [...open.props, { kind: 'element', suggestion, seq, ...record }],
+    props: [...open.props, { kind: 'element', suggestion, seq, settled: true, ...record }],
   });
 }
 
@@ -108,35 +113,46 @@ function copied(write: TableWrite, node: OoxmlElement): OoxmlElement {
 }
 
 /**
- * Write the widths, spans and grid compose drew into a table's items, as records of the
- * accepted deletion, and mark the removed cells gone: compose then draws the same table from the
- * items alone.
+ * Write the columns accepted deletions removed into a table's items, and mark the removed cells
+ * gone: compose then draws the same table from the items alone. A rejected insertion stays drawn
+ * from the items at every compose: its cells give their widths back through the lent width
+ * records that compose reads by its reject (`lendingsOf`). So do cells a take-back removed (their
+ * suggestion stays pending).
  */
 function settleTable(
   doc: OrderedDocument,
   story: OrderedStory,
-  { before, after, cells }: RemovedColumns,
+  removed: RemovedColumns,
   ids: OrderedIdMinter
 ): void {
-  // Only an accepted deletion is written: its decision is final. A rejected insertion, and a
-  // table whose grid holds a pending change record (its join waits for that decision), stay
-  // drawn from the items at every compose.
+  const { before, after, cells } = removed;
   if (cells.some((c) => statusOf(doc, c.suggestion) !== 'accepted')) {
     return;
   }
 
+  if (writeTable({ doc, story, suggestion: cells[0]!.suggestion, ids }, before, after)) {
+    dropRemoved({ doc, story }, removed);
+  }
+}
+
+/**
+ * Write the widths, spans and grid compose drew after a decision (`after`) into a table's items,
+ * as records of the decision; false when not written. A table whose grid holds a pending record
+ * of another grid stays as the items draw it: its join waits for that record's decision. One that
+ * holds the grid unchanged (a row height's anchor) holds the written grid too.
+ */
+function writeTable(
+  decision: Omit<TableWrite, 'seq'>,
+  before: OoxmlElement,
+  after: OoxmlElement
+): boolean {
   const grid = childNamed(after, 'tblGrid');
-  if (!grid || grid.children.some((c) => isWml(c, 'tblGridChange'))) {
-    return;
+  const table = openOf(decision, before.id);
+  if (!grid || holdsOtherGrid(grid) || !table) {
+    return false;
   }
 
-  const table = openOf({ doc, story }, before.id);
-  if (!table) {
-    return;
-  }
-
-  const suggestion = cells[0]!.suggestion;
-  const write: TableWrite = { doc, story, suggestion, seq: nextSeq(doc), ids };
+  const write: TableWrite = { ...decision, seq: nextSeq(decision.doc) };
   recordGrid(write, table, before, after, grid);
   const oldRows = new Map(rowsOf(before).map((row) => [row.id, row]));
   for (const row of rowsOf(after)) {
@@ -148,7 +164,7 @@ function settleTable(
     recordPlacement(write, openOf(write, id), oldCells.get(id), cell, 'tcPr');
   }
 
-  dropRemovedCells(write, cells);
+  return true;
 }
 
 /**
@@ -211,12 +227,20 @@ function recordPlacement(
   });
 }
 
-/** The removed cells show nowhere now, and compose takes nothing out again. */
-function dropRemovedCells(write: TableWrite, cells: RemovedColumns['cells']): void {
-  for (const removed of cells) {
-    const open = openOf(write, removed.id);
+/**
+ * The removed cells, and the rows compose took out with them (a row they emptied, which the
+ * engine removes), show nowhere now, and compose takes nothing out again.
+ */
+function dropRemoved(
+  where: { readonly doc: OrderedDocument; readonly story: OrderedStory },
+  { before, after, cells }: RemovedColumns
+): void {
+  const kept = new Set(rowsOf(after).map((row) => row.id));
+  const emptied = rowsOf(before).filter((row) => !kept.has(row.id));
+  for (const removed of [...cells, ...emptied]) {
+    const open = openOf(where, removed.id);
     if (open && !open.gone) {
-      relabel(write.doc, write.story, open, { gone: true });
+      relabel(where.doc, where.story, open, { gone: true });
     }
   }
 }

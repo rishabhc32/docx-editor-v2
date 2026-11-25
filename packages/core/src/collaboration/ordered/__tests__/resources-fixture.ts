@@ -5,6 +5,7 @@ import { buildInlinePictureDrawing } from '../../../store/package/drawing-packag
 import type { OoxmlPackage } from '../../../store/package/ooxml-package.ts';
 import type { OoxmlDrawingNode } from '../../../store/package/ooxml-tree.ts';
 import { orderedIdMinter } from '../change/ids.ts';
+import { settleDecidedTables } from '../change/settle-columns.ts';
 import { openOrderedWordFile } from '../client/open.ts';
 import { orderedViewParagraph } from '../compose/compose.ts';
 import { runOrderedEdit, type OrderedEdit } from '../edits/apply.ts';
@@ -62,7 +63,10 @@ export function decide(
   suggestion: string,
   status: 'accepted' | 'rejected'
 ): void {
-  withUndoRecord(doc, () => setStatus(doc, suggestion, status));
+  withUndoRecord(doc, () => {
+    setStatus(doc, suggestion, status);
+    settleDecidedTables(doc, [suggestion], orderedIdMinter('check:1'));
+  });
 }
 
 /** Bytes that read as a PNG: its signature and some data. */

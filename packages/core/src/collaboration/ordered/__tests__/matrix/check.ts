@@ -30,6 +30,7 @@ import {
   type OrderedDocument,
   type OrderedEdit,
 } from '../../index.ts';
+import { settleDecidedTables } from '../../change/settle-columns.ts';
 import { isTextBoxStoryName } from '../../model/text-boxes.ts';
 import { docx } from '../word-fixtures.ts';
 import type { Scenario } from './actions.ts';
@@ -107,9 +108,15 @@ function decided(
   resolve: RelationshipResolver
 ): string {
   const { record } = withOrderedUndoRecord(doc, () => {
+    const made: string[] = [];
     for (const [suggestions, status] of order)
       for (const id of suggestions)
-        if (doc.suggestions.get(id)?.status === 'pending') setOrderedStatus(doc, id, status);
+        if (doc.suggestions.get(id)?.status === 'pending') {
+          setOrderedStatus(doc, id, status);
+          made.push(id);
+        }
+
+    settleDecidedTables(doc, made, orderedIdMinter('check:1'));
   });
   const xml = normalizedBody(composeOrderedPart(doc, name).part, resolve);
   takeBackOrdered(doc, record);

@@ -23,7 +23,7 @@ import type { OrderedApplyContext } from '../room/room.ts';
 import { applyDecision } from './apply-decide.ts';
 import { parseOrderedChangeId } from './ids.ts';
 import { placeOfChange } from './change-place.ts';
-import { settleRemovedColumns } from './settle-columns.ts';
+import { settleDecidedTables } from './settle-columns.ts';
 import { settleHiddenNotes } from './settle-notes.ts';
 import { leavesLooseWords, settleLooseWords } from './settle-paragraphs.ts';
 import { settleEmptiedControls } from './settle-emptied.ts';
@@ -347,7 +347,7 @@ function applyChange(
   switch (change.kind) {
     case 'decide': {
       const decided = applyDecision(doc, change);
-      settleRemovedColumns(doc, decided, ctx.ids);
+      settleDecidedTables(doc, decided, ctx.ids);
       settleHiddenNotes(doc, decided);
       settleLooseWords(doc, decided);
       return { suggestions: decided, replaced: [] };

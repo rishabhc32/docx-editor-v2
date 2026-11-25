@@ -10,7 +10,10 @@ import type { ComposeContext } from './context.ts';
 const ROW_TARGETS: ReadonlySet<OrderedPropertyTarget> = new Set(['trPr', 'tblPrEx']);
 const CELL_TARGETS: ReadonlySet<OrderedPropertyTarget> = new Set(['tcPr']);
 
-/** The item's tracked records of these properties: a change record shows while one is pending. */
+/**
+ * The item's tracked records of these properties: a change record shows while one is pending. A
+ * record a decision wrote into its table (`settled`) is the container's own, as a direct one.
+ */
 function trackedRecords(
   ctx: ComposeContext,
   item: OrderedItem,
@@ -21,6 +24,7 @@ function trackedRecords(
     targets.has(p.target) &&
     p.untracked !== true &&
     p.acceptedOnly !== true &&
+    p.settled !== true &&
     ctx.doc.suggestions.get(p.suggestion)?.direct !== true
       ? [p.suggestion]
       : []

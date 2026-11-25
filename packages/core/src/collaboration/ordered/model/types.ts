@@ -241,6 +241,11 @@ export interface OrderedElementRecord {
   readonly change?: string;
   /** Applied only once accepted. */
   readonly acceptedOnly?: boolean;
+  /**
+   * Written by a decision into its table (`change/settle-columns.ts`): applied whatever its
+   * suggestion's status, as the engine's table holds the decision once it is made.
+   */
+  readonly settled?: boolean;
   /** A table record: the spaces of the table's cells that showed when it was taken. */
   readonly tableCells?: readonly string[];
   /** The suggestion a later change of the same properties took this record from (policy 2). */
