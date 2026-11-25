@@ -1,0 +1,13 @@
+{
+  "impact": "compatible",
+  "fields": [],
+  "before": "The organiser's direct deletion over a whole content-locked inline control or a group, in one paragraph, was refused in a room as an edit of the locked content (locked), while the editor alone removes the control whole with the text around it.",
+  "after": "In one paragraph such a deletion takes the control whole (controlsTakenWhole, strikeControl): the engine's own removeContentControl op on the view refuses a lock that keeps the control or a control in it (sdtContentLocked, sdtLocked), as the editor alone refuses it. A party's tracked deletion stays refused, as the editor alone refuses a tracked removal of a control. A deletion over two paragraphs is unchanged.",
+  "reason": "Change messages, the change log and its kinds keep their meaning, and the Yjs document format and the checkpoint format do not change. The room now accepts a direct deletion the editor alone makes, through the existing struck control items that delete-control writes. An ordered room admits only clients of its own code version, and ordered rooms are not deployed yet, so no room needs a migration.",
+  "tests": [
+    "packages/core/src/collaboration/ordered/__tests__/room-locked-places.test.ts",
+    "packages/core/src/collaboration/ordered/__tests__/client/editor-controls-locked-group.test.ts"
+  ],
+  "changeset": "ordered-locked-control-direct-deletion",
+  "migration": null
+}
