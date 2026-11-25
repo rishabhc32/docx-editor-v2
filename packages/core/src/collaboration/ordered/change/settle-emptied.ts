@@ -46,7 +46,13 @@ import {
   type OrderedStory,
 } from '../model/types.ts';
 import { recordUndo } from '../model/undo-record.ts';
-import { isControlContent, isWml, withChildren, withId } from '../ooxml-nodes.ts';
+import {
+  isControlContent,
+  isParagraphProperties,
+  isWml,
+  withChildren,
+  withId,
+} from '../ooxml-nodes.ts';
 import { closeOf } from '../placement.ts';
 import type { OrderedApplyContext } from '../room/room.ts';
 
@@ -81,6 +87,8 @@ interface PromptedByEdit {
   readonly went: readonly OrderedItem[];
   /** Another person's pending insertion the edit took off the control. */
   readonly untracked: Untracked | null;
+  /** The mark that shows the prompt: one of its marks when it has two or more paragraphs. */
+  readonly mark: OrderedItem;
 }
 
 /** Per document, the open items of controls a direct edit emptied, by what they were before. */
@@ -483,11 +491,11 @@ export function readsRecordBack(
   return struck || recordStatesText(shell, words.map((unit) => unit.text).join(''));
 }
 
-/** The runs of a block control's paragraphs, without their paragraph properties. */
-function paragraphRuns(blocks: readonly OoxmlNode[]): OoxmlNode[] {
+/** The children of a block control's paragraphs, each paragraph's apart. */
+function paragraphChildren(blocks: readonly OoxmlNode[]): (readonly OoxmlNode[])[] {
   return blocks.flatMap((child) =>
     child.kind !== 'textValue' && (child.kind === 'paragraph' || isWml(child, 'p'))
-      ? child.children.filter((run) => !isWml(run, 'pPr'))
+      ? [child.children]
       : []
   );
 }
@@ -495,35 +503,46 @@ function paragraphRuns(blocks: readonly OoxmlNode[]): OoxmlNode[] {
 /**
  * The units of the prompt in a prompted control's content, loaded as a paragraph would be, with
  * the edges of the containers that hold them (a link on its words) and each control in it whole,
- * as a load marks a prompt. A
- * record a room checkpoint listed (a prompt the glossary kept with its records) is its
- * suggestion's again.
+ * as a load marks a prompt. A record a room checkpoint listed (a prompt the glossary kept with its
+ * records) is its suggestion's again. A block prompt of two or more paragraphs holds each
+ * paragraph's mark but the last, marked as the prompt's as a load marks them: the control's shown
+ * mark ends its last paragraph (`givePrompt`).
  */
 export function promptUnits(ctx: Ctx, control: OoxmlElement, open: OrderedItem): OrderedItem[] {
   const content = control.children.find(isControlContent);
-  if (!content || content.kind === 'textValue') return [];
-  const runs = open.token === 'sdt' ? content.children : paragraphRuns(content.children);
-  if (runs.length === 0) return [];
-  const paragraph = build(ctx.ids.node(), 'paragraph', 'p', [], runs);
-  const items = templateItems(ctx, paragraph, RevisionReader.forPrompt(ctx.doc, open.by ?? ''));
+  if (!content || content.kind === 'textValue') {
+    return [];
+  }
 
-  // Its units, the edges of the containers that hold them, and each control in it whole, marked
-  // as a load marks a prompt (`markPrompt`): a control keeps its own items, and only its open item
-  // is the prompt's
+  const paragraphs =
+    open.token === 'sdt' ? [content.children] : paragraphChildren(content.children);
+  if (paragraphs.every((children) => children.every(isParagraphProperties))) {
+    return [];
+  }
+
+  // Its units, the edges of the containers that hold them, each control in it whole and each
+  // paragraph's mark but the last, marked as a load marks a prompt (`markPrompt`): a control
+  // keeps its own items, and only its open item is the prompt's
+  const reader = RevisionReader.forPrompt(ctx.doc, open.by ?? '');
   const out: OrderedItem[] = [];
-  let nested: string | undefined;
-  for (const item of items) {
-    const own = nested === undefined;
-    if (own && isControl(item)) {
-      nested = item.pair;
-    } else if (item.kind === 'close' && item.pair === nested) {
-      nested = undefined;
-    } else if (own && !isUnit(item) && item.kind !== 'open' && item.kind !== 'close') {
-      continue;
-    }
+  for (const [k, children] of paragraphs.entries()) {
+    const paragraph = build(ctx.ids.node(), 'paragraph', 'p', [], children);
+    const last = k === paragraphs.length - 1;
+    let nested: string | undefined;
+    for (const item of templateItems(ctx, paragraph, reader)) {
+      const own = nested === undefined;
+      const edge = item.kind === 'open' || item.kind === 'close';
+      if (own && isControl(item)) {
+        nested = item.pair;
+      } else if (item.kind === 'close' && item.pair === nested) {
+        nested = undefined;
+      } else if (own && !isUnit(item) && !edge && (item.kind !== 'mark' || last)) {
+        continue;
+      }
 
-    const labels = { ...item, by: null, dels: [], within: open.within };
-    out.push(own ? { ...labels, prompt: true } : labels);
+      const labels = { ...item, by: null, dels: [], within: open.within };
+      out.push(own ? { ...labels, prompt: true } : labels);
+    }
   }
 
   return out;
@@ -563,6 +582,7 @@ function givePrompt(
     original.children.filter((child) => !isControlContent(child))
   );
   insertItems(doc, story, emptied.after, units);
+  const mark = promptParagraphEnd(doc, story, emptied.mark, units);
   dropParagraphs(doc, story, emptied.dropped, true);
   if (emptied.edges.length > 0) {
     noteSplitPart(doc, story, emptied.edges, units);
@@ -584,12 +604,33 @@ function givePrompt(
       dropped: emptied.dropped,
       went: emptied.went,
       untracked,
+      mark,
     });
   }
 
   // The paragraph is drawn again with its prompt
-  recordPromptMarkChange(doc, emptied.mark);
+  recordPromptMarkChange(doc, mark);
   return true;
+}
+
+/**
+ * The mark that ends the last paragraph of a prompt whose units go before `mark`: `mark`, or
+ * when the prompt has two or more paragraphs, `mark` as one of the prompt's marks, as a load
+ * marks them (`loadBlockControl`), so its paragraph goes too while content replaces the prompt.
+ */
+function promptParagraphEnd(
+  doc: OrderedDocument,
+  story: OrderedStory,
+  mark: OrderedItem,
+  units: readonly OrderedItem[]
+): OrderedItem {
+  if (!units.some((unit) => unit.kind === 'mark')) {
+    return mark;
+  }
+
+  const marked: OrderedItem = { ...mark, prompt: true, leaf: undefined };
+  replaceItems(doc, story, [mark], [marked]);
+  return marked;
 }
 
 /**
@@ -744,6 +785,14 @@ function restoreControl(
   open: OrderedItem,
   before: PromptedByEdit
 ): void {
+  // The prompt's last paragraph is the control's own again
+  if (before.mark.prompt === true) {
+    const { prompt: _prompt, ...labels } = before.mark;
+    const plain: OrderedItem = { ...labels, leaf: undefined };
+    replaceItems(doc, story, [before.mark], [plain]);
+    recordPromptMarkChange(doc, plain);
+  }
+
   const units: OrderedItem[] = [];
   let mark: OrderedItem | null = null;
   for (const item of ownItems(story.tree.items(story.tree.next(open)), open)) {

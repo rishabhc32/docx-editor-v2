@@ -1,0 +1,13 @@
+{
+  "impact": "compatible",
+  "fields": [],
+  "before": "A block control whose words a direct deletion, or a reject after a fold, took away showed its prompt of two or more paragraphs as one paragraph (promptUnits joined the paragraphs' runs), live and after a fold; the editor alone shows each paragraph.",
+  "after": "The prompt given back as items holds each paragraph's mark but the last, marked as the prompt's as a load marks them, and the control's shown mark becomes the prompt's last mark (taken back with a direct edit's prompt): typing in one paragraph replaces the whole prompt, as live.",
+  "reason": "Change messages, the change log and its kinds keep their meaning, and the Yjs document format and the checkpoint format do not change. Only the composed Word file of such a prompt changes, and it now equals the editor alone, live and after a fold. An ordered room admits only clients of its own code version.",
+  "tests": [
+    "packages/core/src/collaboration/ordered/__tests__/checkpoint-fold-prompts.test.ts",
+    "packages/core/src/collaboration/ordered/__tests__/client/editor-controls-prompt-named.test.ts"
+  ],
+  "changeset": "block-prompt-paragraphs",
+  "migration": null
+}

@@ -10,7 +10,10 @@ import type { OrderedDocument, OrderedItem, OrderedStory } from '../model/types.
 import { itemsInside } from '../placement.ts';
 import { replacedPromptUnit } from './settle-named-prompts.ts';
 
-/** A prompt mark's control: items never move, so the answer holds while the mark is in a story. */
+/**
+ * A prompt mark's control: items never move, so the answer holds while the mark and the control's
+ * open item are in a story. A settle can put another open item in its place (`settle-emptied.ts`).
+ */
 const controlOfMark = new WeakMap<OrderedItem, OrderedItem | null>();
 
 /**
@@ -41,7 +44,10 @@ export function settlePromptMarks(doc: OrderedDocument): void {
 /** The block control a prompt mark sits in right inside: the first open block item back. */
 function controlOf(story: OrderedStory, mark: OrderedItem): OrderedItem | null {
   const known = controlOfMark.get(mark);
-  if (known !== undefined) return known;
+  if (known === null || (known !== undefined && known.leaf?.tree === story.tree)) {
+    return known;
+  }
+
   let found: OrderedItem | null = null;
   let depth = 0;
   for (let item = story.tree.prev(mark); item; item = story.tree.prev(item)) {

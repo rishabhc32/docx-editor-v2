@@ -1,9 +1,11 @@
 // A control's prompt that shows again after a fold, card by card as live (design D14): its value
 // record read back from the prompt, its format records, and its place among a comment's markers.
 
-import { describe, test } from 'bun:test';
+import { describe, expect, test } from 'bun:test';
+import { orderedCardSeen } from '../change/apply-decide.ts';
 import { openOrderedWordFile } from '../client/open.ts';
-import { addressOf, apply, at, BODY, EDIT, opens } from './change-apply-fixture.ts';
+import type { OrderedDocument } from '../model/types.ts';
+import { addressOf, apply, at, BODY, EDIT, opens, partsOf } from './change-apply-fixture.ts';
 import { checkEveryCard, folded, mediaStore } from './fold-check.ts';
 import { docx, p, t } from './word-fixtures.ts';
 
@@ -89,20 +91,43 @@ describe("a control's prompt shown again, decided card by card after a fold", ()
   });
 
   // The prompt a party typed over holds a combo box: after a fold the glossary gives it back, and a
-  // reject of the typing shows the combo box in it again, not its words alone
-  test('a block prompt that holds a control, typed over and rejected', async () => {
-    const face = '<w:rStyle w:val="PlaceholderText"/>';
-    const city =
-      '<w:sdt><w:sdtPr><w:id w:val="9204"/><w:showingPlcHdr/><w:comboBox>' +
-      '<w:listItem w:displayText="Mumbai" w:value="Mumbai"/></w:comboBox></w:sdtPr>' +
-      `<w:sdtContent>${t('Choose a city.', face)}</w:sdtContent></w:sdt>`;
-    const prompt = p(t('Courts at ', face) + city + t(' have jurisdiction.', face));
-    const venue =
-      '<w:sdt><w:sdtPr><w:id w:val="9203"/><w:showingPlcHdr/></w:sdtPr>' +
-      `<w:sdtContent>${prompt}</w:sdtContent></w:sdt>`;
-    const file = docx(p(t('Venue:')) + venue + p(t('Signed.')));
-    const { document: doc, base } = openOrderedWordFile(file, { file: 1 });
-    apply(doc, 'ben:1', { kind: 'insert', ...EDIT, place: at(doc, 1, 0), text: 'QR' }, 'Ben');
-    await checkEveryCard(doc, base, mediaStore(base), 'a prompt that holds a control');
-  });
+  // reject of the typing shows the combo box in it again, not its words alone, and each of its
+  // paragraphs. They are the prompt's own: typing in its first drops the second, as live
+  const face = '<w:rStyle w:val="PlaceholderText"/>';
+  const city =
+    '<w:sdt><w:sdtPr><w:id w:val="9204"/><w:showingPlcHdr/><w:comboBox>' +
+    '<w:listItem w:displayText="Mumbai" w:value="Mumbai"/></w:comboBox></w:sdtPr>' +
+    `<w:sdtContent>${t('Choose a city.', face)}</w:sdtContent></w:sdt>`;
+  const courts = p(t('Courts at ', face) + city + t(' have jurisdiction.', face));
+  for (const [name, prompt] of [
+    ['of one paragraph', courts],
+    ['of two paragraphs', p(t('Terms apply.', face)) + courts],
+  ] as const) {
+    test(`a block prompt ${name} that holds a control, typed over and rejected`, async () => {
+      const venue =
+        '<w:sdt><w:sdtPr><w:id w:val="9203"/><w:showingPlcHdr/></w:sdtPr>' +
+        `<w:sdtContent>${prompt}</w:sdtContent></w:sdt>`;
+      const file = docx(p(t('Venue:')) + venue + p(t('Signed.')));
+      const { document: doc, base } = openOrderedWordFile(file, { file: 1 });
+      const blobs = mediaStore(base);
+      apply(doc, 'ben:1', { kind: 'insert', ...EDIT, place: at(doc, 1, 0), text: 'QR' }, 'Ben');
+      await checkEveryCard(doc, base, blobs, 'a prompt that holds a control');
+      const copy = await folded(doc, base, 2, blobs);
+      for (const room of [doc, copy.document]) {
+        const seen = orderedCardSeen(room, 'S:ben:1.1') ?? [];
+        const reject = {
+          kind: 'decide',
+          cards: [{ suggestions: seen }],
+          status: 'rejected',
+        } as const;
+        apply(room, 'olive:1', reject, 'Olive');
+        apply(room, 'ana:1', { kind: 'insert', ...EDIT, place: at(room, 1, 0), text: 'S' });
+      }
+
+      // A paragraph the prompt gives back after a fold is a new one: its ids are new
+      const shown = (room: OrderedDocument) =>
+        partsOf(room).map((xml) => xml.replace(/ w14:(?:paraId|textId)="[^"]*"/g, ''));
+      expect(shown(copy.document)).toEqual(shown(doc));
+    });
+  }
 });

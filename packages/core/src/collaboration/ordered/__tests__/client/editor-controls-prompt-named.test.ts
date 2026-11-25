@@ -14,6 +14,7 @@ import { createDocxEditor } from '../../../../editor/docx-editor.ts';
 import { openOrderedWordFile } from '../../client/open.ts';
 import { orderedCards } from '../../decide.ts';
 import { suggestionsOnlyPolicy } from '../../room/suggestions-only.ts';
+import { checkEveryCard, mediaStore } from '../fold-check.ts';
 import { docx, p, t, W } from '../word-fixtures.ts';
 import {
   caretAt,
@@ -42,7 +43,10 @@ const sdt = (props: string, content: string) =>
   `<w:sdt><w:sdtPr>${props}</w:sdtPr><w:sdtContent>${content}</w:sdtContent></w:sdt>`;
 const promptRuns = (bob: boolean) =>
   t('Click or tap', FACE) + t(' here to ', bob ? BOBS : FACE) + t('enter text.', FACE);
-/** The glossary's prompt differs from the runs the body shows, as after an edit of either. */
+/**
+ * The glossary's prompt differs from the runs the body shows, as after an edit of either. It also
+ * holds a prompt of two paragraphs.
+ */
 const GLOSSARY = {
   parts: {
     'word/glossary/document.xml':
@@ -50,6 +54,9 @@ const GLOSSARY = {
       '<w:name w:val="PartyName"/><w:category><w:name w:val="General"/>' +
       '<w:gallery w:val="placeholder"/></w:category></w:docPartPr>' +
       `<w:docPartBody><w:p>${t('Enter the party.', FACE)}</w:p></w:docPartBody></w:docPart>` +
+      '<w:docPart><w:docPartPr><w:name w:val="Terms"/><w:category><w:name w:val="General"/>' +
+      '<w:gallery w:val="placeholder"/></w:category></w:docPartPr><w:docPartBody>' +
+      `${p(t('Terms apply.', FACE))}${p(t('Courts decide.', FACE))}</w:docPartBody></w:docPart>` +
       '</w:docParts></w:glossaryDocument>',
   },
   contentTypes:
@@ -236,4 +243,81 @@ describe("after a reject, the glossary's prompt is the prompt", () => {
       expect(editorTexts(olga)[shape.line]).toBe(shape.filled);
       expect(editorXml(olga)).toMatch(/<w:ins [^>]*w:author="Cy"/);
     });
+});
+
+// A direct deletion of a block control's words shows the glossary's prompt of two paragraphs, as
+// the editor alone does: the room once joined them into one. Its paragraphs are the prompt's
+// own: a party's typing in one of them replaces the whole prompt, and an undo gives the words back
+describe("a block control's words deleted directly, its glossary prompt of two paragraphs", () => {
+  const file = docx(
+    p(t('Venue:')) +
+      sdt(
+        '<w:id w:val="5"/><w:placeholder><w:docPart w:val="Terms"/></w:placeholder>',
+        p(t('Acme'))
+      ) +
+      p(t('Signed.')),
+    GLOSSARY
+  );
+  const typeAt = (cy: Person, line: number) => {
+    caretAt(cy, line, 0);
+    surface(cy).insertPlainText('S');
+  };
+  const empty = (olga: Person) => {
+    caretAt(olga, 1, 0, 4);
+    surface(olga).deleteBackward();
+  };
+  const NEXT = [
+    ['the deletion undone', (olga: Person) => surface(olga).undo()],
+    ["a party's typing in its first paragraph", (_: Person, cy: Person) => typeAt(cy, 1)],
+    ["a party's typing in its second paragraph", (_: Person, cy: Person) => typeAt(cy, 2)],
+  ] as const;
+
+  for (const [name, next] of NEXT) {
+    test(`${name}, as the editor alone`, async () => {
+      const container = document.createElement('div');
+      document.body.append(container);
+      const editor = createDocxEditor({
+        container,
+        document: file,
+        author: 'Olga',
+        mode: 'edit',
+        modules: [reviewTestModule()],
+      });
+      const alone = { name: 'alone', editor, container, refusals: [] } as unknown as Person;
+      const expected: string[] = [];
+      try {
+        empty(alone);
+        expected.push(stable(editorXml(alone)));
+        editor.setAuthor('Cy');
+        editor.setMode('suggesting');
+        next(alone, alone);
+        expected.push(stable(editorXml(alone)));
+      } finally {
+        editor.destroy();
+        container.remove();
+      }
+
+      const review = reviewTestModule();
+      const room = localRoom(file, { policy: suggestionsOnlyPolicy() });
+      const olga = await join(room, 'Olga', {
+        mode: 'edit',
+        login: ORGANISER,
+        wordFile: file,
+        review,
+      });
+      const cy = await join(room, 'Cy', { wordFile: file, review });
+      const shown: string[] = [];
+      for (const act of [empty, next]) {
+        act(olga, cy);
+        await settle();
+        converged(room, olga, cy);
+        expect(stable(editorXml(olga))).toBe(stable(editorXml(cy)));
+        shown.push(stable(editorXml(cy)));
+      }
+
+      expect(shown).toEqual(expected);
+      const { base } = openOrderedWordFile(file, { file: 1 });
+      await checkEveryCard(room.room.document, base, mediaStore(base), name);
+    });
+  }
 });
