@@ -269,9 +269,16 @@ export function drawnFormats(
   }
 
   const { accepted, pending } = acceptedAndPending(ctx, fmts);
-  const shown = new Set([...accepted, ...pending]);
-  return fmts.filter((record) => shown.has(record) && !madeOverRejected(ctx, record, fmts));
+  const decided = new Set([...accepted, ...pending]);
+  return fmts.filter((record) => decided.has(record) && formatShows(ctx, record, fmts));
 }
+
+/** Whether an accepted or pending format record of a run shows: no reject took it away. */
+const formatShows = (
+  ctx: ComposeContext,
+  record: OrderedFormatRecord,
+  fmts: readonly OrderedFormatRecord[]
+): boolean => !madeOverRejected(ctx, record, fmts);
 
 /** The decided records drawn: the accepted ones, less those a reject took away. */
 const shownAccepted = <T extends AnyRecord>(
@@ -288,14 +295,13 @@ export function faceAfter(
 ): OoxmlElement | null {
   if (fmts.length === 0) return base;
   const shown = acceptedAndPending(ctx, fmts);
-  const accepted = shownAccepted(ctx, shown.accepted, fmts);
+  const showing = (record: OrderedFormatRecord) => formatShows(ctx, record, fmts);
+  const accepted = shown.accepted.filter(showing);
 
   // A format on its author's own pending words is part of their insertion: no change record. As a
   // direct one, it goes with the reject of a format it was made over
-  const inserted = shown.pending.filter(
-    (record) => isUntracked(record) && !madeOverRejected(ctx, record, fmts)
-  );
-  const pending = shown.pending.filter((record) => !isUntracked(record));
+  const inserted = shown.pending.filter((record) => isUntracked(record) && showing(record));
+  const pending = shown.pending.filter((record) => !isUntracked(record) && showing(record));
   const [earlier, drawn] = fromFirstPending([...accepted, ...inserted].sort(bySeq), pending);
   let children: readonly OoxmlNode[] = (base?.children ?? []).filter((c) => !isWml(c, 'rPrChange'));
   for (const record of earlier) children = applyFormat(record, children, ctx.mint);
