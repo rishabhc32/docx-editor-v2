@@ -111,8 +111,9 @@ export function addRelationship(
   } else {
     // Only a link's address points outside: never a picture's, which Word loads when it opens
     // the file (design D18)
-    if (type !== 'hyperlink' || !isSafeLinkAddress(target.external))
+    if (type !== 'hyperlink' || !isSafeLinkAddress(target.external)) {
       throw new OrderedRefusal('invalid-edit', 'only a safe link address points outside');
+    }
   }
 
   return addRelationshipResource(ctx, ctx.ids.resource(), suggestion, owner, type, target);
