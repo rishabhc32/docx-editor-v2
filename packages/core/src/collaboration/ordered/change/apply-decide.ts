@@ -51,10 +51,9 @@ const markKey = (id: string, author: string, date: string | undefined): string =
  * The cards the engine's own plan leaves, each with the engine's reason: the editor alone
  * refuses to decide them (a column deletion whose struck cells hold another record of its
  * author), so the room refuses them too, and no copy decides what another cannot. One plan for
- * each part the cards are in, of what the editor plans: every item of a decision of several
- * suggestions (many cards, or one card that holds several), as its Accept All plans them
- * together; an item of a card of one suggestion that it plans with its dependencies
- * (`decidedAsBatch`).
+ * each part the cards are in selects every item of the cards, as the decision takes them all. A
+ * card stays when the plan leaves an item the editor decides with its dependencies
+ * (`decidedAsBatch`); an item the editor resolves on its own sites is decided as it decides it.
  */
 function engineLeft(
   doc: OrderedDocument,
@@ -62,7 +61,6 @@ function engineLeft(
   status: OrderedDecideChange['status']
 ): Map<OrderedCard, OrderedRefusal> {
   const action = status === 'accepted' ? 'accept' : 'reject';
-  const together = cards.length > 1 || cards.some((card) => card.suggestions.length > 1);
   const cardOfMark = new Map<string, OrderedCard>();
   const parts = new Set<string>();
   for (const card of cards) {
@@ -85,18 +83,29 @@ function engineLeft(
   for (const name of parts) {
     const part = composeOrderedPart(doc, name).part;
     const cardOfKey = new Map<string, OrderedCard>();
+    const batched = new Set<string>();
     for (const item of revisionItemsOf(part)) {
       const marks = item.addresses.map(({ id, author, date }) => markKey(id, author, date));
       const card = marks.map((mark) => cardOfMark.get(mark)).find((c) => c !== undefined);
-      if (card !== undefined && (together || decidedAsBatch(item, part))) {
-        cardOfKey.set(reviewItemKey(item), card);
+      if (card === undefined) {
+        continue;
       }
+
+      const key = reviewItemKey(item);
+      cardOfKey.set(key, card);
+      if (decidedAsBatch(item, part)) {
+        batched.add(key);
+      }
+    }
+
+    if (batched.size === 0) {
+      continue;
     }
 
     for (const { key, reason } of planRevisionBatch(part, action, [...cardOfKey.keys()]).result
       .skipped) {
       const card = cardOfKey.get(key);
-      if (card !== undefined && !left.has(card)) {
+      if (batched.has(key) && card !== undefined && !left.has(card)) {
         left.set(card, new OrderedRefusal('engine-refused', `${action}: ${reason}`));
       }
     }

@@ -1,0 +1,13 @@
+{
+  "impact": "compatible",
+  "fields": [],
+  "before": "A decision of several suggestions planned all their items as one batch and refused the card when the batch left any of them, so a card the editor alone decides item by item (a deletion over a paragraph mark whose paragraph holds the author's paragraph record) was refused as engine-refused (incomplete-group).",
+  "after": "The plan still selects every item of the cards, but a card stays only when it leaves an item the editor decides with its dependencies (decidedAsBatch); an item the editor resolves on its own sites is decided as the editor decides it.",
+  "reason": "Change messages, the change log and its kinds keep their meaning, and the Yjs document format and the checkpoint format do not change. Only the verdict of such a decision changes, from refused to decided, as the editor alone decides it. An ordered room admits only clients of its own code version.",
+  "tests": [
+    "packages/core/src/collaboration/ordered/__tests__/decide-engine-refused.test.ts",
+    "packages/core/src/collaboration/ordered/__tests__/client/editor-decide-apart.test.ts"
+  ],
+  "changeset": "card-items-decided-as-editor",
+  "migration": null
+}

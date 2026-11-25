@@ -11,6 +11,10 @@
 // A card of several suggestions is decided together, as the engine plans a batch of them: Ben's
 // paragraph record in a cell of Ana's new column joins her card, and its reject takes both.
 //
+// The plan takes every item of a card, but only an item the editor decides with its dependencies
+// can hold the card: Ana's deletion over a paragraph mark, with her new word in it, is decided as
+// the editor alone decides each, though the batch would not drop her paragraph record there.
+//
 // A format record whose runs reach into another person's suggested deletion is a card of its own,
 // and each of the two is decided alone, as Word decides them (r5-s10 of the pre-send check).
 
@@ -91,6 +95,24 @@ describe('a card of several suggestions', () => {
       ]);
       apply(doc, 'olive:1', decide(doc, 'S:bob:1.1', status), 'Olive');
       expect([...doc.suggestions.values()].map((s) => s.status)).toEqual([status, status]);
+    });
+  }
+
+  for (const status of ['accepted', 'rejected'] as const) {
+    test(`a deletion over a paragraph mark that holds the author's paragraph record, ${status}`, () => {
+      const { document: doc } = openOrderedWordFile(APPLY_FILE, { file: 1 });
+      const align = [{ localName: 'jc', attributes: { val: 'right' } }];
+      const marks = [markOf(doc, 0), markOf(doc, 1)];
+      apply(doc, 'ana:1', { kind: 'paragraph-property', ...EDIT, marks, properties: align });
+      apply(doc, 'ana:2', { kind: 'delete', ...EDIT, from: at(doc, 0, 3), to: at(doc, 1, 2) });
+      apply(doc, 'ana:3', { kind: 'insert', ...EDIT, place: at(doc, 0, 3), text: 'New' });
+      expect(orderedCardSeen(doc, 'S:ana:3.1')?.map((s) => s.suggestion)).toEqual([
+        'S:ana:2.1',
+        'S:ana:3.1',
+      ]);
+      apply(doc, 'olive:1', decide(doc, 'S:ana:3.1', status), 'Olive');
+      expect(doc.suggestions.get('S:ana:2.1')?.status).toBe(status);
+      expect(doc.suggestions.get('S:ana:1.1')?.status).toBe('pending');
     });
   }
 });
