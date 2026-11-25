@@ -4,9 +4,7 @@
   "before": "A checkpoint kept every record of a table's grid, a row's or a cell's properties that an untracked record changes, but not which pending records a direct record was made over. After a fold, a direct column beside a new cell stayed when a suggested row height was rejected: four grid columns where the live room and the editor alone write three. A row the reject left with no properties wrote an empty w:trPr.",
   "after": "Each untracked record in the checkpoint manifest keeps over: the pending suggestions a direct record was made over, by their places in the manifest's list, renumbered as the other indexes. The open puts it back, so the reject takes the direct record away after a fold as live. A container with no properties of its own whose file properties held only what the records give opens with none.",
   "reason": "The field is optional and new; a checkpoint without it reads as before. Change messages, the change log and the Yjs format do not change. An ordered room admits only clients of its own code version, and the reader refuses a checkpoint it cannot read as checkpoint-manifest.",
-  "tests": [
-    "packages/core/src/collaboration/ordered/__tests__/checkpoint-fold-decide.test.ts"
-  ],
+  "tests": ["packages/core/src/collaboration/ordered/__tests__/checkpoint-fold-decide.test.ts"],
   "changeset": "ordered-checkpoint-direct-over",
   "migration": null
 }
