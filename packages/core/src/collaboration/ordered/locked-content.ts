@@ -49,9 +49,14 @@ export function isTableOfContents(open: OrderedItem): boolean {
  */
 function lockOf(ctx: Ctx, open: OrderedItem): ContentControlLockFlags {
   const node = open.node;
-  if ((open.token !== 'sdt' && open.token !== 'sdtBlock') || !node || node.kind === 'textValue')
+  if ((open.token !== 'sdt' && open.token !== 'sdtBlock') || !node || node.kind === 'textValue') {
     return lockFlagsFromValue(undefined);
-  if (open.props.length === 0) return declaredLockOf(node);
+  }
+
+  if (open.props.length === 0) {
+    return declaredLockOf(node);
+  }
+
   const compose = new ComposeContext(ctx.doc, ctx.story, {});
   return declaredLockOf(withChildren(node, containerPropertiesAfter(compose, open, node.children)));
 }
@@ -94,8 +99,10 @@ function reachesInside(
 
     return answer;
   };
-  if (end > start)
+  if (end > start) {
     return p.chars.slice(start, end).some((char) => keptControls(char, isKept).length > 0);
+  }
+
   const before = keptControls(p.chars[start - 1], isKept);
   return before.length > 0 && keptControls(p.chars[start], isKept).some((c) => before.includes(c));
 }
@@ -107,7 +114,9 @@ const LOCKED = 'the content of a content-locked control';
  * of them is a control whose lock keeps its content (`locked`).
  */
 export function refuseLockedBlocks(ctx: Ctx, blocks: readonly OrderedItem[]): void {
-  if (blocks.some(contentLocked(ctx))) throw new OrderedRefusal('locked', LOCKED);
+  if (blocks.some(contentLocked(ctx))) {
+    throw new OrderedRefusal('locked', LOCKED);
+  }
 }
 
 /**
@@ -121,11 +130,18 @@ export function refuseLockedWithin(
   removes: boolean
 ): void {
   for (const item of items) {
-    if (item.kind !== 'open' || isHidden(ctx.doc, item)) continue;
+    if (item.kind !== 'open' || isHidden(ctx.doc, item)) {
+      continue;
+    }
+
     const lock = lockOf(ctx, item);
-    if (lock.content) throw new OrderedRefusal('locked', LOCKED);
-    if (removes && lock.wrapper)
+    if (lock.content) {
+      throw new OrderedRefusal('locked', LOCKED);
+    }
+
+    if (removes && lock.wrapper) {
       throw new OrderedRefusal('locked', 'a control that may not be removed');
+    }
   }
 }
 
@@ -143,9 +159,15 @@ export function paragraphOfItem(ctx: Ctx, item: OrderedItem): OrderedViewParagra
  */
 export function refuseLockedAt(ctx: Ctx, item: OrderedItem): void {
   const p = paragraphOfItem(ctx, item);
-  if (!p) return;
+  if (!p) {
+    return;
+  }
+
   refuseLockedBlocks(ctx, p.blocks);
-  if (item.kind === 'mark') return;
+  if (item.kind === 'mark') {
+    return;
+  }
+
   const own = `${item.token === 'hyperlink' ? 'h' : 'c'}:${item.space}`;
   const char = p.chars.find((c) =>
     item.kind === 'open' ? segmentsOf(c.containers).includes(own) : c.item === item
@@ -189,8 +211,9 @@ export function refuseContentLock(
   end: number
 ): void {
   refuseLockedBlocks(ctx, p.blocks);
-  if (reachesInside(ctx, p, start, end, contentLocked(ctx)))
+  if (reachesInside(ctx, p, start, end, contentLocked(ctx))) {
     throw new OrderedRefusal('locked', LOCKED);
+  }
 }
 
 /**
@@ -221,10 +244,15 @@ export function refuseLocked(
   properties?: readonly OoxmlProperty[]
 ): void {
   const toc = p.blocks.find(isTableOfContents);
-  if (toc && reachesTocField(ctx, toc, p, start, end))
+  if (toc && reachesTocField(ctx, toc, p, start, end)) {
     throw new OrderedRefusal('not-covered', 'a table of contents result is generated');
-  if (reachesInside(ctx, p, start, end, isBound))
+  }
+
+  if (reachesInside(ctx, p, start, end, isBound)) {
     throw new OrderedRefusal('not-covered', 'a control bound to custom XML');
-  if (properties === undefined || !formatPassesContentLock(ctx, properties))
+  }
+
+  if (properties === undefined || !formatPassesContentLock(ctx, properties)) {
     refuseContentLock(ctx, p, start, end);
+  }
 }
