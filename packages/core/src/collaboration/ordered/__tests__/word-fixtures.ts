@@ -162,7 +162,7 @@ export const pictureRun = (id: number): string =>
   '<a:prstGeom prst="rect"><a:avLst/></a:prstGeom></pic:spPr></pic:pic>' +
   '</a:graphicData></a:graphic></wp:inline></w:drawing></w:r>';
 
-const separators = (kind: 'footnote' | 'endnote') =>
+export const separators = (kind: 'footnote' | 'endnote') =>
   `<w:${kind} w:type="separator" w:id="-1"><w:p><w:r><w:separator/></w:r></w:p></w:${kind}>` +
   `<w:${kind} w:type="continuationSeparator" w:id="0"><w:p><w:r><w:continuationSeparator/></w:r></w:p></w:${kind}>`;
 
@@ -241,7 +241,7 @@ export interface MatrixItem {
   readonly blocks?: string;
 }
 
-const sdt = (props: string, content: string) =>
+export const sdt = (props: string, content: string) =>
   `<w:sdt><w:sdtPr>${props}</w:sdtPr><w:sdtContent>${content}</w:sdtContent></w:sdt>`;
 const field = (instr: string, result: string) =>
   '<w:r><w:fldChar w:fldCharType="begin"/></w:r>' +

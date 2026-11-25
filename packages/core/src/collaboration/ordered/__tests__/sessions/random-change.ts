@@ -48,7 +48,7 @@ const address = (item: OrderedItem, offset = item.offset): OrderedChangeAddress 
 });
 
 /** The shown paragraphs of a story, their units, and the shown containers by token. */
-function viewOf(doc: OrderedDocument, name: string): View {
+export function viewOf(doc: OrderedDocument, name: string): View {
   const paragraphs: Paragraph[] = [];
   const opens = new Map<string, OrderedItem[]>();
   let units: OrderedChangeAddress[] = [];
