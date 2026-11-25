@@ -796,6 +796,28 @@ describe('a take-back of a takeover of a takeover', () => {
     };
     await checkFold(doc, base, mediaStore(base), 'a takeover of a takeover', takeBacks);
   });
+
+  test('keeps the chain in a run whose other piece took the record from the second alone', async () => {
+    // Olive's italic, her italic over part of it and before it, and her bold over that one: the
+    // unit under all three holds a record taken from both, its run's first piece one taken from
+    // the second alone
+    const file = docx(p(run('Cloud and serverless.')));
+    const { document: doc, base } = openOrderedWordFile(file, { file: 1 });
+    const format = (from: number, to: number, localName: string) =>
+      ({
+        kind: 'format',
+        ...EDIT,
+        from: at(doc, 0, from),
+        to: at(doc, 0, to),
+        properties: [{ localName }],
+      }) as const;
+    apply(doc, 'olive:1', format(5, 12, 'i'), 'Olive');
+    apply(doc, 'olive:2', format(0, 6, 'i'), 'Olive');
+    apply(doc, 'olive:3', format(0, 6, 'b'), 'Olive');
+    const space = [...doc.stories.get(BODY)!.tree.items()].find((item) => item.text === ' ');
+    expect(space?.fmts.map((f) => f.replacedEarlier)).toContainEqual(['S:olive:1.1']);
+    await checkFold(doc, base, mediaStore(base), 'a chain beside a record taken from one');
+  });
 });
 
 describe('a decision after a fold, on properties drawn for a change record', () => {

@@ -12,6 +12,13 @@ export function takenFrom(record: TakenLinks): string[] {
   return record.replaced === undefined ? [] : [...(record.replacedEarlier ?? []), record.replaced];
 }
 
+/** Whether two records were taken from the same suggestions, in the same order. */
+export function sameTakenFrom(a: TakenLinks, b: TakenLinks): boolean {
+  const chain = takenFrom(a);
+  const other = takenFrom(b);
+  return chain.length === other.length && chain.every((id, k) => id === other[k]);
+}
+
 /** The links of a record taken from the suggestions `chain` names, oldest first. */
 export function takenLinks(chain: readonly string[]): TakenLinks {
   const replaced = chain.at(-1);

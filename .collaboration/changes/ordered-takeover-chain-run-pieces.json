@@ -1,0 +1,10 @@
+{
+  "impact": "compatible",
+  "fields": [],
+  "before": "A load that joined the pieces of one room run again took a piece's format record for its first piece's when both had the same suggestion, seq, face and last taken suggestion, so a record taken from two suggestions lost its earlier link after a fold when the first piece held one taken from the second alone.",
+  "after": "Two records are one only when they were taken from the same suggestions in the same order (sameTakenFrom in model/takeovers.ts, used by client/room-runs.ts), so the chain is the same live and after a fold.",
+  "reason": "Change messages, the change log and its kinds keep their meaning, and the Yjs document format and the checkpoint format (version 5) do not change. Only how a load reads a checkpoint it already holds changes, and it now gives back what the room had. An ordered room admits only clients of its own code version, and ordered rooms are not deployed yet, so no room needs a migration.",
+  "tests": ["packages/core/src/collaboration/ordered/__tests__/checkpoint-fold-decide.test.ts"],
+  "changeset": "ordered-takeover-chain-run-pieces",
+  "migration": null
+}

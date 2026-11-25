@@ -4,6 +4,7 @@ import { ooxmlTreesEqual } from '../../../store/package/ooxml-serialize.ts';
 import type { OoxmlElement } from '../../../store/package/ooxml-tree.ts';
 import { createOrderedItem } from '../model/document.ts';
 import { replaceItems } from '../model/mutations.ts';
+import { sameTakenFrom } from '../model/takeovers.ts';
 import type { OrderedDocument, OrderedFormatRecord, OrderedItem } from '../model/types.ts';
 
 /** What the first piece of a room run gave its units. */
@@ -20,7 +21,7 @@ const sameRecord = (a: OrderedFormatRecord, b: OrderedFormatRecord): boolean =>
   b.kind === 'face' &&
   a.suggestion === b.suggestion &&
   a.seq === b.seq &&
-  a.replaced === b.replaced &&
+  sameTakenFrom(a, b) &&
   same(a.face, b.face) &&
   same(a.fileRecord, b.fileRecord);
 
