@@ -2593,6 +2593,7 @@ export function createBatchPlanner(host: BatchPlannerHost): BatchPlanner {
         if (!('control' in found)) return found;
         const value = contentControlValueOf(operation.value);
         if (!value.ok) return refuse(value.code, value.message, value.detail);
+
         // Named here, as `NotSupported`: the store refuses the write too (`dateControlValue`)
         const date = contentControlPropertiesOf(found.node).date;
         if (value.value.kind === 'date' && !isGregorianDateForm(date)) {
@@ -2602,6 +2603,7 @@ export function createBatchPlanner(host: BatchPlannerHost): BatchPlanner {
             'date-calendar'
           );
         }
+
         const plan = planFor(found.reads);
         const pin = pinWrite(plan);
         if (pin) return pin;

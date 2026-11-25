@@ -64,7 +64,9 @@ export function textFormFieldsOf(paragraph: OoxmlParagraphNode): readonly TextFo
     if (node.kind === 'textValue' || !offsets.spanOf(node)) continue;
     if (node.kind === 'bookmarkStart' || node.kind === 'bookmarkEnd') bookmarks.push(node);
     else for (const nested of node.children) pending.push(nested);
-    if (node.kind === 'run') runs.set(node.id, node);
+    if (node.kind === 'run') {
+      runs.set(node.id, node);
+    }
   }
   const runOf = new Map(entries.map((entry) => [entry.node.id, entry.runId]));
   return fields.flatMap((field) => {

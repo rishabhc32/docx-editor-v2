@@ -102,6 +102,7 @@ export function formatTextFormValue(
   const date = parseDate(text.trim(), locale, options.language);
   if (!date) return null;
   if (!options.format) return text;
+
   // The picture as a date control's, with the names of the field's language
   const form = { dateFormat: options.format, lid: options.language };
   return formatContentControlDate({ ...date, hour: 0, minute: 0, second: 0 }, form);
