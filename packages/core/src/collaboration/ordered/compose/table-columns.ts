@@ -42,15 +42,8 @@ export interface RemovedColumns {
 export const isRow = (n: OoxmlNode): boolean => n.kind === 'tableRow' || isWml(n, 'tr');
 export const isCell = (n: OoxmlNode): boolean => n.kind === 'tableCell' || isWml(n, 'tc');
 
-/**
- * The change that made an item (its node id is minted from it, `n:<change>.<k>`), or `file`: the
- * file's, and an organiser's direct change's, which the table holds as its own, as a fold does.
- */
-function creation(ctx: ComposeContext, item: OrderedItem): string {
-  if (item.by !== null && ctx.doc.suggestions.get(item.by)?.direct === true) {
-    return 'file';
-  }
-
+/** The change that made an item (its node id is minted from it, `n:<change>.<k>`), or `file`. */
+function creation(item: OrderedItem): string {
   return mintedChange(loadedSpace(item.space)?.node ?? '', 'n') ?? 'file';
 }
 
@@ -95,7 +88,11 @@ export function holdsCell(
   cell: OrderedItem
 ): boolean {
   if (record?.tableCells !== undefined) return record.tableCells.includes(cell.space);
-  return creation(ctx, owner) === creation(ctx, cell);
+
+  // A direct change's cells are the table's own, as a fold reads them
+  const direct = (item: OrderedItem) =>
+    item.by !== null && ctx.doc.suggestions.get(item.by)?.direct === true;
+  return direct(owner) || direct(cell) || creation(owner) === creation(cell);
 }
 
 /**

@@ -6,7 +6,7 @@ import { describe, test } from 'bun:test';
 import { orderedCardSeen } from '../change/apply-decide.ts';
 import { openOrderedWordFile } from '../client/open.ts';
 import type { OrderedDocument } from '../model/types.ts';
-import { addressOf, apply, APPLY_FILE, DIRECT, EDIT, opens } from './change-apply-fixture.ts';
+import { addressOf, apply, APPLY_FILE, at, DIRECT, EDIT, opens } from './change-apply-fixture.ts';
 import { checkFold, mediaStore } from './fold-check.ts';
 
 const ANA_1 = '2026-10-28T09:01:00Z';
@@ -131,6 +131,18 @@ describe("the organiser's direct columns at a decision", () => {
     const cell = addressOf(opens(doc, 'tc')[1]!);
     apply(doc, 'ana:1', { kind: 'delete-column', ...EDIT, cell }, 'Ana');
     await checkFold(doc, base, mediaStore(base), "a party's deletion of a direct column");
+  });
+
+  // The same in a party's pending new table: its cells and the direct column's are the table's
+  test("a party's new table, the organiser's direct column, then the party's deletion of it", async () => {
+    const { document: doc, base } = openOrderedWordFile(APPLY_FILE, { file: 1 });
+    const table = { place: at(doc, 0, 0), rows: 2, columns: 2, columnWidth: 2400 };
+    apply(doc, 'ben:1', { kind: 'insert-table', ...EDIT, ...table }, 'Ben');
+    const right = { cell: addressOf(opens(doc, 'tc')[0]!), where: 'right' } as const;
+    apply(doc, 'olive:1', { kind: 'insert-column', ...DIRECT, ...right }, 'Olive');
+    const cell = addressOf(opens(doc, 'tc')[1]!);
+    apply(doc, 'ben:2', { kind: 'delete-column', ...EDIT, cell }, 'Ben');
+    await checkFold(doc, base, mediaStore(base), 'a deletion of a direct column in a new table');
   });
 
   // The organiser's direct widths over a pending cell fill in the same row: a reject of the fill
