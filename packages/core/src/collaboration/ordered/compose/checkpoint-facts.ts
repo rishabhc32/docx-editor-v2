@@ -23,6 +23,7 @@ import {
   type CheckpointTakeover,
 } from '../model/checkpoint-takeovers.ts';
 import {
+  oneChangeRecord,
   UNTRACKED_CONTAINERS,
   type CheckpointChangeRecord,
   type CheckpointChangeRecords,
@@ -506,12 +507,7 @@ function recordsOpens(doc: OrderedDocument): RecordsOpen[] {
       // takeover (a take-back gives back records another took from it), and a load reads it as
       // one record: the last, which the target shows, setting every child they set
       const recorded = others.flatMap((record) => {
-        const same = others.filter(
-          (r) =>
-            r.target === record.target &&
-            r.suggestion === record.suggestion &&
-            r.replaced === undefined
-        );
+        const same = others.filter((r) => oneChangeRecord(r, record));
         if (record.replaced === undefined && same[same.length - 1] !== record) {
           return [];
         }

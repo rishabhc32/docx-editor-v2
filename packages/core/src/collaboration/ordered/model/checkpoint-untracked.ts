@@ -5,7 +5,7 @@ import type { OoxmlElement } from '../../../store/package/ooxml-tree.ts';
 import { at, bool, int, oneOf, plainFields, required, type Fields } from '../change/read.ts';
 import { manifestList, manifestString, readNamedOnce } from './checkpoint-suggestions.ts';
 import { propertiesXml, readPropertiesXml } from './checkpoint-takeovers.ts';
-import type { OrderedPropertyTarget } from './types.ts';
+import type { OrderedPropertyRecord, OrderedPropertyTarget } from './types.ts';
 
 /**
  * The properties a container's records with no change record give, and the container whose
@@ -18,6 +18,25 @@ export const UNTRACKED_CONTAINERS: ReadonlyMap<OrderedPropertyTarget, string> = 
   ['tcPr', 'tc'],
   ['sdtPr', 'sdt'],
 ]);
+
+/**
+ * Whether Word writes two records as one change record, which a load reads as one record:
+ * records of one suggestion for one properties element of a container, each with a change record
+ * and neither taken from another suggestion (a take-back gives back records another took).
+ */
+export function oneChangeRecord(a: OrderedPropertyRecord, b: OrderedPropertyRecord): boolean {
+  return (
+    a.kind === 'element' &&
+    b.kind === 'element' &&
+    a.target === b.target &&
+    a.suggestion === b.suggestion &&
+    UNTRACKED_CONTAINERS.has(a.target) &&
+    a.untracked !== true &&
+    b.untracked !== true &&
+    a.replaced === undefined &&
+    b.replaced === undefined
+  );
+}
 
 /**
  * A record of a container's properties as the room holds it and Word's change record does not

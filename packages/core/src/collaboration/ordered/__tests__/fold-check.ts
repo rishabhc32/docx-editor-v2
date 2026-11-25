@@ -43,6 +43,7 @@ import { orderedPackageBytes } from '../compose/package.ts';
 import { orderedReplacedSuggestions } from '../compose/replaced.ts';
 import { orderedCards } from '../decide.ts';
 import { MOVE_RANGE } from '../load/moves.ts';
+import { oneChangeRecord } from '../model/checkpoint-untracked.ts';
 import { movedAwayBy } from '../model/document.ts';
 import { setStatus } from '../model/mutations.ts';
 import { OrderedRefusal } from '../model/refusal.ts';
@@ -219,7 +220,13 @@ export function foldPrint(doc: OrderedDocument, base: OoxmlPackage, blobs: FoldB
       del: item.dels,
       // A run holds one change record: a format names its suggestion once on a unit
       fmt: [...new Set(recorded(item.fmts))],
-      prop: recorded(item.props),
+      // A suggestion's records of one container's properties are one change record in the file,
+      // as the checkpoint writes them (`oneChangeRecord`)
+      prop: recorded(
+        item.props.filter(
+          (r, k) => !item.props.slice(k + 1).some((later) => oneChangeRecord(r, later))
+        )
+      ),
       within: [...item.within.by, ...item.within.dels],
     };
     const labels = {
