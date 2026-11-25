@@ -232,7 +232,11 @@ function emptyMoveEdges(ctx: ComposeContext, buffer: readonly OrderedItem[]): Se
 /** A unit in the boxes: the innermost held it; each one it shows in, reached or struck. */
 function noteUnit(ctx: ComposeContext, boxes: readonly Box[], item: OrderedItem): void {
   const innermost = boxes[boxes.length - 1];
-  if (innermost) innermost.hadUnits = true;
+  if (!innermost) {
+    return;
+  }
+
+  innermost.hadUnits = true;
 
   // A decided insertion or deletion reaches every control around it
   if (ctx.decided(item)) for (const b of boxes) b.reached = true;
@@ -448,7 +452,7 @@ export function noteValueRecord(
       (record) => isValueRecord(record) && statusOf(ctx.doc, record.suggestion) !== 'rejected'
     );
   const filled = signs.accepted && !signs.own && storesValueRecord(control);
-  if (recordStatesText(control, signs.rejected)) {
+  if (signs.rejected !== '' && recordStatesText(control, signs.rejected)) {
     ctx.stale.add(control.id);
   }
 

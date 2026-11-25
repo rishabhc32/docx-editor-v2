@@ -102,6 +102,9 @@ export function viewOfParagraph(
   let own = false;
   let accepted = false;
   let rejected = '';
+
+  // Only a block control reads what its paragraphs' units tell its value record
+  const valued = blocks.some((block) => block.token === 'sdtBlock');
   const kept = keptLinkEdges(ctx, buffer);
   for (const item of buffer) {
     if (isLabelled(item) || item.home !== home) touched = true;
@@ -123,13 +126,19 @@ export function viewOfParagraph(
       reached = true;
     }
 
-    rejected += ctx.rejectedWords(item);
+    if (valued) {
+      rejected += ctx.rejectedWords(item);
+    }
+
     if (ctx.gone(item)) continue;
     drawn = true;
     const deleted = ctx.struckBy(item) !== null;
     struck ||= deleted;
-    own ||= ctx.ownWord(item);
-    accepted ||= ctx.acceptedInsertion(item);
+    if (valued) {
+      own ||= ctx.ownWord(item);
+      accepted ||= ctx.acceptedInsertion(item);
+    }
+
     const within = containers.join('>');
     for (let k = 0; k < item.length; k += 1) {
       chars.push({
