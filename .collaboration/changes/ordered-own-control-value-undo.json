@@ -1,0 +1,13 @@
+{
+  "impact": "compatible",
+  "fields": [],
+  "before": "In an ordered room, a party's value in a content control that its own pending suggestion put in is part of that suggestion. One undo took back the control and the value together, where the editor alone undoes the value first and the control next.",
+  "after": "The value's record names the change that made it, as a format on one's own pending words does, and the client undoes a control-value change as an edit of its own pending words. One undo takes back the value alone (its words, the words it took back show again, its record off) and keeps the control; the next undo takes back the control; redo makes them again.",
+  "reason": "Change messages, the change log and its kinds keep their meaning: the undo is the existing retract with its undo list, and the Yjs document format does not change. The record's change id is model state that every copy makes the same from the same change id, and a checkpoint writes the value as part of the control, as before. An ordered room admits only clients of its own code version, so old and new clients never apply one log together.",
+  "tests": [
+    "packages/core/src/collaboration/ordered/__tests__/checkpoint-fold-decide.test.ts",
+    "packages/core/src/collaboration/ordered/__tests__/client/editor-controls-direct-value.test.ts"
+  ],
+  "changeset": "ordered-own-control-value-undo",
+  "migration": null
+}
