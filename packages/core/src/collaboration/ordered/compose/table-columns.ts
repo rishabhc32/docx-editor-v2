@@ -490,13 +490,25 @@ function unchangedGridRecord(grid: OoxmlElement): OoxmlElement | undefined {
 }
 
 /**
+ * Whether a decision (not a direct edit) reached a table's, a row's or a cell's own labels or
+ * records: the engine fits the table's grid to its cells after it (`withJoinedGrid`).
+ */
+export function holdsDecision(ctx: ComposeContext, open: OrderedItem): boolean {
+  const labels = [open.by, ...open.dels, ...open.props.map((record) => record.suggestion)];
+  return labels.some((id) => {
+    const found = id === null ? undefined : ctx.doc.suggestions.get(id);
+    return found !== undefined && found.status !== 'pending' && found.direct !== true;
+  });
+}
+
+/**
  * The resolved table with its grid joined as the engine joins it (`compactRevisionGrid`: a
  * grid boundary no remaining cell uses goes, with its width given to the column before it).
  * The engine keeps the grid as it was while the table holds any pending change record; the
  * list joins it unless a pending grid record (`w:tblGridChange`) holds the old grid, so a
  * decision on a column gives the same table live and after a reopen.
  */
-function withJoinedGrid(ctx: ComposeContext, resolved: OoxmlElement): OoxmlElement {
+export function withJoinedGrid(ctx: ComposeContext, resolved: OoxmlElement): OoxmlElement {
   const grid = resolved.children.find((c) => isWml(c, 'tblGrid'));
   if (!grid || grid.kind === 'textValue') return resolved;
   const unchanged = unchangedGridRecord(grid);

@@ -430,6 +430,29 @@ describe("a fold of a table's records", () => {
     await checkFold(doc, base, mediaStore(base), 'a direct column over a row height');
   });
 
+  // The organiser's direct column deletion after a fold, over a row height made before it: a
+  // decision on the height fits the grid to the cells, as the engine's does, after another fold
+  // as live (the fold holds the deleted cells no more)
+  test("a row height, a fold, then the organiser's direct column deletion", async () => {
+    const first = openOrderedWordFile(APPLY_FILE, { file: 1 });
+    const blobs = mediaStore(first.base);
+    const height = (doc: OrderedDocument, row: number) =>
+      ({
+        kind: 'table-property',
+        ...EDIT,
+        on: [addressOf(opens(doc, 'tr')[row]!)],
+        op: { op: 'setTableRowHeight', heightTwips: 400 },
+      }) as const;
+    apply(first.document, 'ana:1', height(first.document, 1), 'Ana', ANA_1);
+    const row = addressOf(opens(first.document, 'tr')[0]!);
+    apply(first.document, 'olive:1', { kind: 'insert-row', ...EDIT, row, where: 'below' }, 'Olive');
+    const { document: doc, base } = await folded(first.document, first.base, 2, blobs);
+    apply(doc, 'ana:2', height(doc, 2), 'Ana', ANA_1);
+    const cell = addressOf(opens(doc, 'tc')[5]!);
+    apply(doc, 'olive:2', { kind: 'delete-column', ...DIRECT, cell }, 'Olive');
+    await checkFold(doc, base, blobs, 'a direct column deletion over a row height');
+  });
+
   // The same for the organiser's table alignment: it goes in the schema's place, before borders
   test("a row height, then the organiser's table alignment", async () => {
     const cell = (text: string) =>

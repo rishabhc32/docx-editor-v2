@@ -25,9 +25,11 @@ import { resetUnrecordedCells } from './row-cells.ts';
 import { bodySectionNode, isSectionItem } from './sections.ts';
 import { hidePrompt } from './prompts.ts';
 import {
+  holdsDecision,
   isRow,
   removedCellStub,
   removedColumnCell,
+  withJoinedGrid,
   withoutRemovedCells,
   type RemovedCell,
 } from './table-columns.ts';
@@ -54,6 +56,8 @@ interface Builder {
   rejected: string;
   /** A table's cells a column decision removed (`table-columns.ts`). */
   removed?: RemovedCell[];
+  /** A decision reached the records or labels of the table, a row or a cell (`holdsDecision`). */
+  tableDecided?: boolean;
   /** A row's drawn cells and their open items (`row-cells.ts`). */
   cells?: Map<OoxmlNode, OrderedItem>;
   /** A table's rows that show a pending height with no row record, to its suggestion. */
@@ -231,12 +235,21 @@ function closeBlock(ctx: ComposeContext, builder: Builder, open: OrderedItem, in
   if (open.token === 'tc') (into.cells ??= new Map()).set(element, open);
   const height = open.token === 'tr' ? pendingHeightOf(ctx, open) : undefined;
   if (height !== undefined) (into.heights ??= new Map()).set(element.id, height);
-  if (open.token === 'tbl') element = withRowHeightAnchors(ctx, element, builder.heights);
-  into.children.push(
-    builder.removed && element.kind !== 'textValue'
-      ? withoutRemovedCells(ctx, element, builder.removed)
-      : element
-  );
+  const decided = builder.tableDecided === true || holdsDecision(ctx, open);
+  if (open.token === 'tbl') {
+    element = withRowHeightAnchors(ctx, element, builder.heights);
+  } else if (decided && (open.token === 'tr' || open.token === 'tc')) {
+    into.tableDecided = true;
+  }
+
+  // A decision on the table, a row or a cell fits the grid to the cells, as the engine's does
+  if (builder.removed && element.kind !== 'textValue') {
+    element = withoutRemovedCells(ctx, element, builder.removed);
+  } else if (decided && open.token === 'tbl' && element.kind !== 'textValue') {
+    element = withJoinedGrid(ctx, element);
+  }
+
+  into.children.push(element);
   if (builder.touched) into.touched = true;
 }
 
