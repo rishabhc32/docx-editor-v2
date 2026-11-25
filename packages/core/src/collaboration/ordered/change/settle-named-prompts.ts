@@ -193,7 +193,10 @@ function settleNamedControl(
     blocks && !(open.token === 'sdtBlock' && blocks.length > 1)
       ? glossaryControl(doc, story, open, shell, scan.mark)
       : null;
-  const control = glossary ?? misplacedPrompt(doc, story, open, shell, scan);
+  const control =
+    glossary ??
+    (blocks ? null : keptPrompt(doc, story, open, shell, scan)) ??
+    misplacedPrompt(doc, story, open, shell, scan);
   if (control) {
     swapPrompt(doc, story, open, scan, control, apply, decided.length > 0);
   }
@@ -352,6 +355,34 @@ function drawnPrompt(
 }
 
 /**
+ * The control with the prompt it kept when content first filled it (its original, `keepPrompt`),
+ * when no glossary block the room holds names it yet and the prompt's units show otherwise now (a
+ * format made after that fill): the engine shows the block it kept, which a fold writes. Null
+ * when the room kept no prompt, the units show it, or the prompt holds a control (`holdsControl`).
+ */
+function keptPrompt(
+  doc: OrderedDocument,
+  story: OrderedStory,
+  open: OrderedItem,
+  shell: OoxmlElement,
+  scan: Scan
+): OoxmlElement | null {
+  const original = doc.originals.get(shell.id);
+  if (
+    !stateOf(doc).kept.has(open.space) ||
+    !original ||
+    original.kind === 'textValue' ||
+    holdsControl(story, open)
+  ) {
+    return null;
+  }
+
+  const kept = original.children.find(isControlContent);
+  const shown = drawnPrompt(doc, story, open, shell, scan)?.children.find(isControlContent);
+  return kept && shown && !ooxmlTreesEqual(kept, shown) ? original : null;
+}
+
+/**
  * The control with its own prompt, when the prompt that shows again is not where the engine
  * shows it (`promptPlace`): a comment made on the content that filled it keeps its range around
  * the prompt.
@@ -366,7 +397,7 @@ function misplacedPrompt(
   // In place when the prompt's own items come last, but for the markers that close the content.
   // A prompt that holds a control stays too: a swap gives back the prompt's units only.
   const after = promptPlace(doc, story, promptEnd(story, open, scan));
-  if (!after || after.prompt === true || itemsInside(story, open).some(isPromptControl)) {
+  if (!after || after.prompt === true || holdsControl(story, open)) {
     return null;
   }
 
@@ -483,8 +514,9 @@ function glossaryControl(
   return control;
 }
 
-const isPromptControl = (item: OrderedItem): boolean =>
-  item.kind === 'open' && item.prompt === true;
+/** Whether a control's prompt holds a control: it stays, as a swap gives back units only. */
+const holdsControl = (story: OrderedStory, open: OrderedItem): boolean =>
+  itemsInside(story, open).some((item) => item.kind === 'open' && item.prompt === true);
 const isRun = (node: OoxmlNode): boolean => node.kind === 'run' || isWml(node, 'r');
 const isParagraph = (node: OoxmlNode): boolean => node.kind === 'paragraph' || isWml(node, 'p');
 

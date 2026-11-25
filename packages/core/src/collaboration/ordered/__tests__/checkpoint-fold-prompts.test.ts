@@ -246,6 +246,36 @@ describe("a control's prompt shown again, decided card by card after a fold", ()
     });
   }
 
+  // Olive's words filled the prompt first and were rejected; Ben then makes the prompt italic and
+  // types in it. The control kept its prompt at the first fill, as the engine keeps it in the
+  // glossary: a reject of Ben's typing shows that prompt, not his italic, live and folded, as the
+  // editor alone does
+  test('a format on a prompt shown again, then its maker typing in it', async () => {
+    const items = '<w:listItem w:displayText="Net 30" w:value="30"/>';
+    const prompt = t('Choose an item.', '<w:rStyle w:val="PlaceholderText"/>');
+    const list =
+      '<w:sdt><w:sdtPr><w:id w:val="3"/><w:showingPlcHdr/><w:dropDownList>' +
+      `${items}</w:dropDownList></w:sdtPr><w:sdtContent>${prompt}</w:sdtContent></w:sdt>`;
+    const file = docx(p(t('Terms are ') + list + t(' from today.')));
+    const { document: doc, base } = openOrderedWordFile(file, { file: 1 });
+    const blobs = mediaStore(base);
+    const typing = (id: string, text: string, who: string) =>
+      apply(doc, id, { kind: 'insert', ...EDIT, place: at(doc, 0, 24), text }, who);
+    const reject = (id: string) => {
+      const suggestions = orderedCardSeen(doc, id) ?? [];
+      const decide = { kind: 'decide', cards: [{ suggestions }], status: 'rejected' } as const;
+      apply(doc, 'olive:3', decide, 'Olive');
+    };
+    typing('olive:1', 'x', 'Olive');
+    reject('S:olive:1.1');
+    const italic = { kind: 'format', ...EDIT, properties: [{ localName: 'i' }] } as const;
+    apply(doc, 'ben:1', { ...italic, from: at(doc, 0, 10), to: at(doc, 0, 24) }, 'Ben');
+    typing('ben:2', 'a', 'Ben');
+    await checkFold(doc, base, blobs, 'typing in a prompt formatted after a fill');
+    reject('S:ben:2.1');
+    expect(partsOf(doc)[0]).not.toContain('<w:i/>');
+  });
+
   // The prompt a party typed over holds a combo box: after a fold the glossary gives it back, and a
   // reject of the typing shows the combo box in it again, not its words alone, and each of its
   // paragraphs. They are the prompt's own: typing in its first drops the second, as live

@@ -26,7 +26,9 @@
 // over a plain prompt with the organiser's comment on part of the words once showed the prompt
 // before the comment's range live, after it once folded: it goes inside the range, as the editor
 // alone puts it. A party's format over his own on a prompt kept naming the change it replaced
-// once his typing filled the prompt: no copy names it, as a fold reads the file.
+// once his typing filled the prompt: no copy names it, as a fold reads the file. A reject of typing
+// over a prompt formatted after its first fill showed that format live: the prompt the control
+// kept at the first fill shows, as the editor alone and a fold show it.
 
 import { afterEach, describe, expect, test } from 'bun:test';
 import { createDocxEditor } from '../../../../editor/docx-editor.ts';
@@ -567,6 +569,40 @@ describe("the organiser's comment on part of a party's typing over a plain promp
       expect(decided).toEqual([expected, ...copies.map(() => expected)]);
     });
   }
+});
+
+describe('a prompt formatted after its first fill, then typed over again', () => {
+  // Olive's typing filled the prompt and was rejected; Ben then makes the prompt italic and types
+  // over it. The control kept its prompt at the first fill: a reject of Ben's typing shows that
+  // prompt, as the editor alone leaves the room's own file, live and folded
+  test('the reject shows the prompt the control kept', async () => {
+    const file = line(
+      `<w:showingPlcHdr/><w:dropDownList>${ITEMS}</w:dropDownList>`,
+      t('Choose an item.', FACE)
+    );
+    const seated = await seats(file, 1);
+    caretAt(seated.olive, 0, 20);
+    typing('x')(seated.olive);
+    await settle();
+    const olives = seated.olive.editor
+      .getReviewItems()
+      .find((item) => item.kind === 'revision' && item.author === 'Olive');
+    expect(seated.olive.editor.rejectReviewItem(olives?.key ?? '').ok).toBe(true);
+    await settle();
+    caretAt(seated.ben, 0, 6, 20);
+    seated.ben.editor.exec({ type: 'toggleMark', mark: 'italic' });
+    caretAt(seated.ben, 0, 20);
+    typing('a')(seated.ben);
+    await settle();
+    const saved = new Uint8Array(await seated.olive.editor.save());
+    const expected = alone(saved, [0, 0], () => {}, 'reject').decided;
+    const copy = await foldedBytes(seated.room.room.document, file, 1);
+    await decide(seated.olive, 'reject');
+    const reopened = await seats(copy, 2);
+    await decide(reopened.olive, 'reject');
+    expect([roomControl(seated), roomControl(reopened)]).toEqual([expected, expected]);
+    expect(editorXml(seated.olive)).not.toContain('<w:i/>');
+  });
 });
 
 describe("a party's format over his own on a prompt, then his typing over it", () => {

@@ -1,0 +1,13 @@
+{
+  "impact": "compatible",
+  "fields": [],
+  "before": "A control's prompt filled once and shown again, then formatted and filled by another suggestion: a decision that took the later fill away showed the prompt's units with the later format live, where the editor alone and a fold show the prompt the control kept at its first fill.",
+  "after": "With no glossary block the room holds for it, the control shows the prompt it kept (its original) when the units show otherwise (settle-named-prompts.ts keptPrompt), as compose names that prompt's block and a fold writes it. A prompt that holds a control stays as before (holdsControl).",
+  "reason": "Change messages, the change log and its kinds keep their meaning, and the Yjs document format and the checkpoint format do not change. Only the room's list and file after such a decision change, and they now equal the editor alone and a fold. An ordered room admits only clients of its own code version.",
+  "tests": [
+    "packages/core/src/collaboration/ordered/__tests__/checkpoint-fold-prompts.test.ts",
+    "packages/core/src/collaboration/ordered/__tests__/client/editor-controls-value-fold.test.ts"
+  ],
+  "changeset": "ordered-kept-prompt-shown",
+  "migration": null
+}
