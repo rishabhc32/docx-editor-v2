@@ -691,6 +691,28 @@ describe('a fold of a move with words inside it', () => {
     apply(copy.document, 'olive:2', { kind: 'retract', suggestions: ['S:olive:1.1'] }, 'Olive');
     await checkEveryCard(copy.document, copy.base, blobs, 'a value taken back after a fold');
   });
+
+  // Ben's pick taken back never filled the prompt: Ana's typing over the prompt she formatted is
+  // its first fill, so a reject of the typing shows her format again, after a fold too
+  test('a format on a prompt whose first fill was taken back, then typing over it', async () => {
+    const items =
+      '<w:listItem w:displayText="Net 30" w:value="30"/>' +
+      '<w:listItem w:displayText="Net 60" w:value="60"/>';
+    const prompt = t('Choose an item.', '<w:rStyle w:val="PlaceholderText"/>');
+    const list =
+      '<w:sdt><w:sdtPr><w:id w:val="3"/><w:showingPlcHdr/><w:dropDownList w:lastValue="30">' +
+      `${items}</w:dropDownList></w:sdtPr><w:sdtContent>${prompt}</w:sdtContent></w:sdt>`;
+    const file = docx(p(t('Terms are ') + list + t(' from today.')));
+    const { document: doc, base } = openOrderedWordFile(file, { file: 1 });
+    const control = addressOf(opens(doc, 'sdt')[0]!);
+    const pick = { kind: 'control-value', ...EDIT, control } as const;
+    apply(doc, 'ben:1', { ...pick, value: { kind: 'listItem', value: '30' } }, 'Ben');
+    apply(doc, 'ben:2', { kind: 'retract', suggestions: ['S:ben:1.1'] }, 'Ben');
+    const bold = { kind: 'format', ...EDIT, properties: [{ localName: 'b' }] } as const;
+    apply(doc, 'ana:1', { ...bold, from: at(doc, 0, 10), to: at(doc, 0, 24) });
+    apply(doc, 'ana:2', { kind: 'insert', ...EDIT, place: at(doc, 0, 10), text: 'net ' });
+    await checkEveryCard(doc, base, mediaStore(base), 'a fill taken back');
+  });
 });
 
 describe('who typed inside a new row, cell, note, control or words', () => {

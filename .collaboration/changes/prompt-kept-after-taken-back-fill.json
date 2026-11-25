@@ -1,0 +1,10 @@
+{
+  "impact": "compatible",
+  "fields": [],
+  "before": "A value over a prompt taken back still counted as the prompt's first fill, so a later fill did not keep the prompt with a format suggested on it: after a fold, a reject of that later fill showed the prompt without the format, where the room and the editor alone show it.",
+  "after": "A fill taken back is no first fill: the next fill keeps the prompt as it shows then, so a fold writes the prompt with its format record, as the editor alone does.",
+  "reason": "Change messages, the change log and its kinds keep their meaning, and the Yjs document format and the checkpoint format do not change. Only the checkpoint's glossary prompt of such a control changes, and a decision after a fold now equals live. An ordered room admits only clients of its own code version.",
+  "tests": ["packages/core/src/collaboration/ordered/__tests__/checkpoint-fold.test.ts"],
+  "changeset": "prompt-kept-after-taken-back-fill",
+  "migration": null
+}

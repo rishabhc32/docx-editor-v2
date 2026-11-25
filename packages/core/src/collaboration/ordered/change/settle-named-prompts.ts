@@ -51,6 +51,8 @@ interface Scan {
   readonly went: readonly OrderedItem[];
   /** Whether content shows in the control, so its prompt does not. */
   readonly present: boolean;
+  /** Whether units that filled the prompt were taken back: that fill never was. */
+  readonly takenBack: boolean;
   /** The paragraph mark that shows the control; units go before it in a block control. */
   readonly mark: OrderedItem;
 }
@@ -157,6 +159,12 @@ function settleNamedControl(
   const scan = scanControl(doc, story, open);
   if (!scan) {
     return;
+  }
+
+  // A fill taken back never was: the next fill keeps the prompt as it shows then
+  const { kept } = stateOf(doc);
+  if (!scan.present && scan.takenBack && kept.delete(open.space)) {
+    recordUndo(doc, () => kept.add(open.space));
   }
 
   if (scan.present) {
@@ -341,6 +349,7 @@ function scanControl(doc: OrderedDocument, story: OrderedStory, open: OrderedIte
   const prompt: OrderedItem[] = [];
   const went: OrderedItem[] = [];
   let present = false;
+  let takenBack = false;
   let mark: OrderedItem | null = null;
   for (const item of ownItems(story.tree.items(story.tree.next(open)), open)) {
     if (isBlockToken(item) || (item.kind === 'zero' && item.block === true)) {
@@ -363,15 +372,20 @@ function scanControl(doc: OrderedDocument, story: OrderedStory, open: OrderedIte
       continue;
     }
 
-    if (!isHidden(doc, item)) present = true;
-    else if (!item.gone && !insertionTakenBack(doc, item)) went.push(item);
+    if (!isHidden(doc, item)) {
+      present = true;
+    } else if (insertionTakenBack(doc, item)) {
+      takenBack = true;
+    } else if (!item.gone) {
+      went.push(item);
+    }
   }
 
   if (open.token === 'sdt') {
     mark = shownMarkOf(doc, story, open);
   }
 
-  return mark && prompt.length > 0 ? { prompt, went, present, mark } : null;
+  return mark && prompt.length > 0 ? { prompt, went, present, takenBack, mark } : null;
 }
 
 /**
