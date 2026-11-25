@@ -208,7 +208,7 @@ export function withDecidedPrompts(pkg: OoxmlPackage, doc: OrderedDocument): Oox
 }
 
 /** The change records under a node that a prompt can hold (`PROMPT_RECORD_ROLES`). */
-function promptRecords(node: OoxmlNode): OoxmlElement[] {
+export function promptRecords(node: OoxmlNode): OoxmlElement[] {
   if (node.kind === 'textValue') {
     return [];
   }

@@ -13,7 +13,7 @@ import { isBlockToken } from '../compose/blocks.ts';
 import { ComposeContext } from '../compose/context.ts';
 import { composeInline } from '../compose/inline.ts';
 import { ownItems } from '../compose/paragraph.ts';
-import { placeholderNameOf, propertiesReadBack } from '../compose/prompts.ts';
+import { placeholderNameOf, promptRecords, propertiesReadBack } from '../compose/prompts.ts';
 import {
   insertionTakenBack,
   isHidden,
@@ -27,6 +27,7 @@ import {
   recordPromptMarkChange,
   promptedControlsOf,
 } from '../model/prompt-marks.ts';
+import { suggestionOfRevision } from '../model/revision-ids.ts';
 import type { OrderedDocument, OrderedItem, OrderedStory } from '../model/types.ts';
 import { recordUndo } from '../model/undo-record.ts';
 import { isControlContent, isParagraphProperties, isWml, withChildren } from '../ooxml-nodes.ts';
@@ -235,7 +236,8 @@ function readValueBack(
  * Keep a control's prompt as content first fills it, as the engine keeps it in the glossary
  * (`promptToRetain`). Compose keeps the prompt of the control's original: once records are on the
  * prompt (a suggested format), the original shows it as drawn with them. A later fill keeps the
- * first one, as the engine's control names the block it kept.
+ * first one, as the engine's control names the block it kept. A format on the prompt taken back
+ * after that is taken off the kept prompt too: it never was.
  */
 function keepPrompt(
   doc: OrderedDocument,
@@ -245,16 +247,34 @@ function keepPrompt(
   scan: Scan
 ): void {
   const { kept } = stateOf(doc);
-  if (kept.has(open.space)) {
-    return;
+  const first = !kept.has(open.space);
+  if (first) {
+    kept.add(open.space);
+    recordUndo(doc, () => kept.delete(open.space));
   }
 
-  kept.add(open.space);
-  recordUndo(doc, () => kept.delete(open.space));
-  const control = scan.prompt.some(isLabelled) ? drawnPrompt(doc, story, open, shell, scan) : null;
+  const redraw = first ? scan.prompt.some(isLabelled) : formatTakenOff(doc, shell, scan);
+  const control = redraw ? drawnPrompt(doc, story, open, shell, scan) : null;
   if (control) {
     setOriginal(doc, shell.id, control);
   }
+}
+
+/**
+ * Whether the kept prompt holds a format record that none of the prompt's units holds now: its
+ * suggestion took it back.
+ */
+function formatTakenOff(doc: OrderedDocument, shell: OoxmlElement, scan: Scan): boolean {
+  const original = doc.originals.get(shell.id);
+  if (!original) {
+    return false;
+  }
+
+  const held = new Set(scan.prompt.flatMap((unit) => unit.fmts.map((f) => f.suggestion)));
+  return promptRecords(original).some((record) => {
+    const suggestion = isWml(record, 'rPrChange') ? suggestionOfRevision(doc, record) : undefined;
+    return suggestion !== undefined && !held.has(suggestion);
+  });
 }
 
 /** The control's original, its content drawn from the prompt's items as compose draws them. */

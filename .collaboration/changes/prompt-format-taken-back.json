@@ -1,0 +1,10 @@
+{
+  "impact": "compatible",
+  "fields": [],
+  "before": "A format suggested on a control's prompt, taken back while a value filled the control, stayed in the prompt the room kept: a fold wrote it in the glossary, so a reject of the value after the fold showed the format, where the room showed none.",
+  "after": "The kept prompt is drawn again when a format record on it is taken back (formatTakenOff), so a fold writes the prompt as the room shows it.",
+  "reason": "Change messages, the change log and its kinds keep their meaning, and the Yjs document format and the checkpoint format do not change. Only the checkpoint's glossary prompt of such a control changes, and a decision after a fold now equals live. An ordered room admits only clients of its own code version.",
+  "tests": ["packages/core/src/collaboration/ordered/__tests__/checkpoint-fold-prompts.test.ts"],
+  "changeset": "prompt-format-taken-back",
+  "migration": null
+}

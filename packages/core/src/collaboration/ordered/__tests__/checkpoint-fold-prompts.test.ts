@@ -69,4 +69,22 @@ describe("a control's prompt shown again, decided card by card after a fold", ()
     apply(doc, 'ben:1', { kind: 'comment', part: BODY, from, to, text: 'Why?' }, 'Ben');
     await checkEveryCard(doc, base, mediaStore(base), "a prompt inside a comment's range");
   });
+
+  // Ben's italic on the prompt, taken back while his value fills the control, never was: a reject
+  // of the value shows the prompt plain, after a fold too
+  test('a format on a prompt taken back while a value fills the control', async () => {
+    const prompt = t('Click here to enter text.', '<w:rStyle w:val="PlaceholderText"/>');
+    const control =
+      '<w:sdt><w:sdtPr><w:id w:val="4"/><w:showingPlcHdr/><w:text/></w:sdtPr>' +
+      `<w:sdtContent>${prompt}</w:sdtContent></w:sdt>`;
+    const file = docx(p(t('Signed by ') + control + t(' for the buyer.')));
+    const { document: doc, base } = openOrderedWordFile(file, { file: 1 });
+    const italic = { kind: 'format', ...EDIT, properties: [{ localName: 'i' }] } as const;
+    apply(doc, 'ben:1', { ...italic, from: at(doc, 0, 10), to: at(doc, 0, 34) }, 'Ben');
+    const value = { kind: 'text', text: 'Acme' } as const;
+    const box = addressOf(opens(doc, 'sdt')[0]!);
+    apply(doc, 'ben:2', { kind: 'control-value', ...EDIT, control: box, value }, 'Ben');
+    apply(doc, 'ben:3', { kind: 'retract', suggestions: ['S:ben:1.1'] }, 'Ben');
+    await checkEveryCard(doc, base, mediaStore(base), 'a format taken back');
+  });
 });
