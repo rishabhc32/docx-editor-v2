@@ -10,17 +10,14 @@ import {
   type EditOptions,
   type RetainedPrompt,
 } from '../package/ooxml-edit.ts';
-import {
-  recordPutRelationship,
-  runWithoutJournalCapture,
-} from '../package/canonical-primitive-capture.ts';
 import { withPart, type OoxmlPackage } from '../package/ooxml-package.ts';
-import { resolveInternalTarget, validateExternalTarget } from '../package/opc-names.ts';
+import { resolveInternalTarget } from '../package/opc-names.ts';
 import {
   relationshipsOf,
   relsPartNameFor,
   withNewPart,
   withRelationship,
+  withRelationshipRecord,
   withRelationshipsPartFor,
 } from '../package/package-edit.ts';
 import type { RelationshipRecord } from '../package/relationships.ts';
@@ -48,7 +45,6 @@ const GLOSSARY_CONTENT_TYPE =
   'application/vnd.openxmlformats-officedocument.wordprocessingml.document.glossary+xml';
 const GLOSSARY_RELATIONSHIP_TYPE =
   'http://schemas.openxmlformats.org/officeDocument/2006/relationships/glossaryDocument';
-const REL = 'http://schemas.openxmlformats.org/package/2006/relationships';
 
 /** Bounds on the walk that names a prompt: its content comes from the file. */
 const MAX_DEPTH = 64;
@@ -351,9 +347,10 @@ function bindingsFor(
 
 /**
  * `pkg` with each prompt as a glossary block, creating the glossary when the package has none,
- * and each part that changed named in `touched`. A block of the same name is not written twice.
- * Returns `pkg` itself when the glossary cannot be written, so a decision falls back to the
- * type's own prompt rather than refusing the edit.
+ * and each part that changed named in `touched`. A block of the same name is not written twice,
+ * nor one whose relationship ids the glossary cannot keep (`keepsRelationships`). Returns `pkg`
+ * itself when the glossary cannot be written, so a decision falls back to the type's own prompt
+ * rather than refusing the edit.
  *
  * The op that replaces a prompt only reports the block (`EditOptions.retainPrompt`); the store
  * transaction that ran the op writes it here, in the same package edit, so one undo step and one
@@ -364,15 +361,16 @@ export function withRetainedPrompts(
   prompts: readonly RetainedPrompt[],
   touched: Set<string>
 ): OoxmlPackage {
+  const glossary = glossaryPartOf(pkg)?.name;
+  const claimed = new Map<string, string>();
   const pending = prompts.filter(
     (prompt, index) =>
       prompts.findIndex((other) => other.name === prompt.name) === index &&
-      placeholderBlocksIn(pkg, prompt.name) === undefined
+      placeholderBlocksIn(pkg, prompt.name) === undefined &&
+      keepsRelationships(pkg, glossary, prompt, claimed)
   );
   if (pending.length === 0) return pkg;
-  const written = glossaryPartOf(pkg)
-    ? withBlocksAdded(pkg, pending)
-    : withNewGlossary(pkg, pending);
+  const written = glossary ? withBlocksAdded(pkg, pending) : withNewGlossary(pkg, pending);
   const next = withPromptRelationships(written, pending);
   for (const [name, part] of next.parts) {
     if (pkg.parts.get(name) !== part) touched.add(name);
@@ -382,11 +380,62 @@ export function withRetainedPrompts(
 }
 
 /**
+ * Whether the glossary can keep each relationship id `prompt` names under that id, and if so
+ * the ids claimed for it. Ids are per part (OPC), and a restore puts the block back where its ids
+ * already resolve, so an id must name the same relationship in the glossary as in the part that
+ * showed the prompt: one the glossary or an earlier prompt holds for another target fails.
+ */
+function keepsRelationships(
+  pkg: OoxmlPackage,
+  glossary: string | undefined,
+  prompt: RetainedPrompt,
+  claimed: Map<string, string>
+): boolean {
+  const named = [...relationshipIdsIn(prompt.nodes)].map(
+    (id) => [id, relationshipKey(pkg, prompt.owner, id)] as const
+  );
+  for (const [id, key] of named) {
+    const held =
+      claimed.get(id) ??
+      (glossary !== undefined && relationshipOf(pkg, glossary, id) !== undefined
+        ? relationshipKey(pkg, glossary, id)
+        : undefined);
+    if (held !== undefined && held !== key) {
+      return false;
+    }
+  }
+
+  for (const [id, key] of named) {
+    claimed.set(id, key);
+  }
+
+  return true;
+}
+
+/**
+ * What relationship `id` of `owner` names: its type, its mode and its target, an internal one as
+ * the part it resolves to. An id `owner` does not hold yet (the room writes its own later) is the
+ * same only in that part.
+ */
+function relationshipKey(pkg: OoxmlPackage, owner: string, id: string): string {
+  const record = relationshipOf(pkg, owner, id);
+  if (!record) {
+    return `unwritten ${owner} ${id}`;
+  }
+
+  const resolved =
+    record.targetMode === 'External' ? null : resolveInternalTarget(owner, record.rawTarget);
+  const target = resolved?.ok ? resolved.partName : record.rawTarget;
+  return JSON.stringify([record.type, record.targetMode, target]);
+}
+
+/**
  * `pkg` with each relationship the kept prompts name copied from the part that showed them to
  * the glossary, under the same id. Ids are per part (OPC), so a link or a picture in a block
  * resolves in the glossary's own relationships, and a restore puts the block back where the id
- * already resolves. An id the glossary already holds, or the part does not, stays as it is. The
- * room calls this again once it has written its own relationships.
+ * already resolves. An id the glossary already holds (the same relationship,
+ * `keepsRelationships`), or the part does not, stays as it is. The room calls this again once it
+ * has written its own relationships.
  */
 export function withPromptRelationships(
   pkg: OoxmlPackage,
@@ -415,7 +464,7 @@ function relationshipOf(
   pkg: OoxmlPackage,
   owner: string,
   id: string
-): RelationshipRecord | undefined {
+): Omit<RelationshipRecord, 'order'> | undefined {
   const record = relationshipsOf(pkg, owner).find((entry) => entry.id === id);
   if (record) {
     return record;
@@ -426,7 +475,13 @@ function relationshipOf(
   );
   return external === undefined
     ? undefined
-    : { ...external, targetMode: 'External', order: relationshipsOf(pkg, owner).length };
+    : {
+        ownerPart: owner,
+        id,
+        type: external.type,
+        rawTarget: external.rawTarget,
+        targetMode: 'External',
+      };
 }
 
 /**
@@ -436,58 +491,18 @@ function relationshipOf(
 function withCopiedRelationship(
   pkg: OoxmlPackage,
   owner: string,
-  record: RelationshipRecord
+  record: Omit<RelationshipRecord, 'order'>
 ): OoxmlPackage {
-  const external = record.targetMode === 'External';
-  const resolved = external ? null : resolveInternalTarget(record.ownerPart, record.rawTarget);
+  const resolved =
+    record.targetMode === 'External'
+      ? null
+      : resolveInternalTarget(record.ownerPart, record.rawTarget);
   if (resolved !== null && !resolved.ok) {
     return pkg;
   }
 
   const rawTarget = resolved === null ? record.rawTarget : relativeTarget(owner, resolved.partName);
   const prepared = withRelationshipsPartFor(pkg, owner);
-  const relsName = relsPartNameFor(owner);
-  const rels = prepared.parts.get(relsName);
-  if (!rels) {
-    return pkg;
-  }
-
-  const attribute = (localName: string, value: string) => ({
-    kind: 'genericExtension' as const,
-    namespaceUri: '',
-    localName,
-    value,
-  });
-  const node = {
-    id: createNodeIdAllocator(rels)(),
-    kind: 'generic',
-    namespaceUri: REL,
-    localName: 'Relationship',
-    namespaceBindings: [],
-    attributes: [
-      attribute('Id', record.id),
-      attribute('Type', record.type),
-      attribute('Target', rawTarget),
-      ...(external ? [attribute('TargetMode', 'External')] : []),
-    ],
-    children: [],
-  } as unknown as OoxmlElement;
-  const inserted = runWithoutJournalCapture(() =>
-    insertChildren(rels, rels.root.id, rels.root.children.length, [node])
-  );
-  if (!inserted.ok) {
-    return pkg;
-  }
-
-  const owned = relationshipsOf(prepared, owner);
-  const copy = { ...record, ownerPart: owner, rawTarget, order: owned.length };
-  recordPutRelationship(owner, copy);
-  const target = { ownerPart: owner, id: record.id, type: record.type, rawTarget };
-  return Object.freeze({
-    ...withPart(prepared, inserted.part),
-    relationships: new Map([...prepared.relationships, [owner, [...owned, copy]]]),
-    externalTargets: external
-      ? [...prepared.externalTargets, { ...target, sinkSafe: validateExternalTarget(rawTarget).ok }]
-      : prepared.externalTargets,
-  });
+  const copied = withRelationshipRecord(prepared, { ...record, ownerPart: owner, rawTarget });
+  return copied.ok ? copied.pkg : pkg;
 }

@@ -17,7 +17,12 @@ import {
   type ContentTypeIndex,
 } from './content-types.ts';
 import { insertChildren, replaceChildren } from './ooxml-edit.ts';
-import { normalizePartName, partNameKey, resolveInternalTarget } from './opc-names.ts';
+import {
+  normalizePartName,
+  partNameKey,
+  resolveInternalTarget,
+  validateExternalTarget,
+} from './opc-names.ts';
 import {
   readOoxmlPart,
   serializeOoxmlPart,
@@ -794,68 +799,61 @@ export function withRelationship(
   type: string,
   rawTarget: string
 ): { readonly pkg: OoxmlPackage; readonly relationshipId: string; readonly ok: boolean } {
-  const existing = relationshipsOf(pkg, ownerPart);
   const relationshipId = allocateOwnerRelationshipId(pkg, ownerPart);
+  const record = {
+    ownerPart,
+    id: relationshipId,
+    type,
+    rawTarget,
+    targetMode: 'Internal',
+  } as const;
+  return { ...withRelationshipRecord(pkg, record), relationshipId };
+}
 
-  const relsName = relsPartNameFor(ownerPart);
-  const relsPart = pkg.parts.get(relsName);
-  // A package whose `.rels` parts are not modelled as trees — one omitting the `rels` content
-  // default, which still loads because relationships are read from the zip entries — cannot
+/**
+ * Append `record` to its owner's relationships under its own id: in the owner's `.rels` tree, in
+ * `relationships`, in `externalTargets` when it is external, and in the journal. The caller
+ * chooses an id the owner does not hold.
+ */
+export function withRelationshipRecord(
+  pkg: OoxmlPackage,
+  record: Omit<RelationshipRecord, 'order'>
+): { readonly pkg: OoxmlPackage; readonly ok: boolean } {
+  const { ownerPart, id, type, rawTarget, targetMode } = record;
+  const relsPart = pkg.parts.get(relsPartNameFor(ownerPart));
+  // A package whose `.rels` parts are not modelled as trees (one omitting the `rels` content
+  // default, which still loads because relationships are read from the zip entries) cannot
   // gain a relationship here. Reporting it is the point: writing the comment body and the
   // story markers with nothing pointing at the part leaves a reference Word repairs away, and
   // a silent identity return is indistinguishable from "no work needed".
-  if (!relsPart) return { pkg, relationshipId, ok: false };
+  if (!relsPart) return { pkg, ok: false };
 
-  const result = runWithoutJournalCapture(() =>
-    appendRelationship(pkg, ownerPart, type, rawTarget, existing, relationshipId, relsPart)
+  const external = targetMode === 'External';
+  const node = element(mintedId(relsPart, id), RELATIONSHIPS_NAMESPACE, 'Relationship', {
+    Id: id,
+    Type: type,
+    Target: rawTarget,
+    ...(external ? { TargetMode: 'External' } : {}),
+  });
+  const appended = runWithoutJournalCapture(() =>
+    insertChildren(relsPart, relsPart.root.id, relsPart.root.children.length, [node], {
+      deferValidation: true,
+    })
   );
-  if (result.ok && result.pkg !== pkg) {
-    const records = result.pkg.relationships.get(ownerPart) ?? [];
-    const record = records.find((entry) => entry.id === result.relationshipId);
-    if (record) recordPutRelationship(ownerPart, record);
-  }
-  return result;
-}
+  if (!appended.ok) return { pkg, ok: false };
 
-function appendRelationship(
-  pkg: OoxmlPackage,
-  ownerPart: string,
-  type: string,
-  rawTarget: string,
-  existing: readonly RelationshipRecord[],
-  relationshipId: string,
-  relsPart: OoxmlPart
-): { readonly pkg: OoxmlPackage; readonly relationshipId: string; readonly ok: boolean } {
-  const record = element(
-    mintedId(relsPart, relationshipId),
-    RELATIONSHIPS_NAMESPACE,
-    'Relationship',
-    { Id: relationshipId, Type: type, Target: rawTarget }
-  );
-  const appended = insertChildren(
-    relsPart,
-    relsPart.root.id,
-    relsPart.root.children.length,
-    [record],
-    { deferValidation: true }
-  );
-  if (!appended.ok) return { pkg, relationshipId, ok: false };
-
-  const relationships = new Map(pkg.relationships);
-  relationships.set(ownerPart, [
-    ...existing,
-    {
-      ownerPart,
-      id: relationshipId,
-      type,
-      rawTarget,
-      targetMode: 'Internal',
-      order: existing.length,
-    },
-  ]);
+  const existing = relationshipsOf(pkg, ownerPart);
+  const added = { ownerPart, id, type, rawTarget, targetMode, order: existing.length };
+  recordPutRelationship(ownerPart, added);
+  const relationships = new Map(pkg.relationships).set(ownerPart, [...existing, added]);
+  const externalTargets = external
+    ? [
+        ...pkg.externalTargets,
+        { ownerPart, id, type, rawTarget, sinkSafe: validateExternalTarget(rawTarget).ok },
+      ]
+    : pkg.externalTargets;
   return {
-    pkg: Object.freeze({ ...withPart(pkg, appended.part), relationships }),
-    relationshipId,
+    pkg: Object.freeze({ ...withPart(pkg, appended.part), relationships, externalTargets }),
     ok: true,
   };
 }

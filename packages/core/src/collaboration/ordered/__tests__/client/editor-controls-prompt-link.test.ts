@@ -13,7 +13,7 @@ import {
 import { serializeOoxmlPart } from '../../../../store/package/ooxml-tree.ts';
 import { suggestionsOnlyPolicy } from '../../room/suggestions-only.ts';
 import { unresolvedRelationships } from '../oracle.ts';
-import { docx, p, R, t } from '../word-fixtures.ts';
+import { docx, p, R, t, W, WML_CT, type PackageExtras } from '../word-fixtures.ts';
 import {
   caretAt,
   closeAll,
@@ -37,13 +37,14 @@ const sdt = (props: string, content: string) =>
   `<w:sdt><w:sdtPr>${props}</w:sdtPr><w:sdtContent>${content}</w:sdtContent></w:sdt>`;
 
 /** "Name: Click here to enter. end." with an inline control showing its prompt. */
-const prompt = (here: string) =>
+const prompt = (here: string, extras?: PackageExtras) =>
   docx(
     p(
       t('Name: ') +
         sdt('<w:showingPlcHdr/><w:text/>', t('Click ', FACE) + here + t(' to enter.', FACE)) +
         t(' end.')
-    ) + p(t('Signed.'))
+    ) + p(t('Signed.')),
+    extras
   );
 
 /** The file's own link on "here", through the main part's `rIdLink`. */
@@ -141,6 +142,77 @@ describe("a link on a prompt's words, once a party's typing fills the control", 
         reread(new Uint8Array(await cy.editor.save())),
       ]) {
         expect(unresolvedRelationships(pkg)).toEqual([]);
+      }
+    });
+  }
+});
+
+/**
+ * A glossary with relationships of its own, as Word writes one: `rIdLink` names `held` there, the
+ * id the main part gives the prompt's link.
+ */
+const glossaryHolding = (held: string): PackageExtras => ({
+  parts: {
+    'word/glossary/document.xml': `<w:glossaryDocument xmlns:w="${W}"><w:docParts/></w:glossaryDocument>`,
+    'word/glossary/styles.xml': `<w:styles xmlns:w="${W}"/>`,
+    'word/glossary/_rels/document.xml.rels':
+      '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">' +
+      `<Relationship Id="rIdLink" ${held}/></Relationships>`,
+  },
+  contentTypes:
+    `<Override PartName="/word/glossary/document.xml" ContentType="${WML_CT}.document.glossary+xml"/>` +
+    `<Override PartName="/word/glossary/styles.xml" ContentType="${WML_CT}.styles+xml"/>`,
+  relationships: `<Relationship Id="rIdGlossary" Type="${R}/glossaryDocument" Target="glossary/document.xml"/>`,
+});
+const OTHER = glossaryHolding(`Type="${R}/styles" Target="styles.xml"`);
+const SAME = glossaryHolding(
+  `Type="${R}/hyperlink" Target="https://example.com/old" TargetMode="External"`
+);
+const linkedWith = (extras: PackageExtras) =>
+  prompt(`<w:hyperlink r:id="rIdLink">${t('here', FACE)}</w:hyperlink>`, extras);
+
+/**
+ * The glossary keeps the prompt with its link only where `rIdLink` names the same link there: a
+ * restore puts the block back where its ids resolve. Where the glossary's `rIdLink` names its
+ * styles, the block is not kept, and its `rIdLink` still names them.
+ */
+function keepsLinkOnlyWhereSame(pkg: OoxmlPackage, same: boolean): void {
+  expect(unresolvedRelationships(pkg)).toEqual([]);
+  const held = (pkg.relationships.get(GLOSSARY) ?? []).filter((r) => r.id === 'rIdLink');
+  expect(held.map((r) => r.type.split('/').at(-1))).toEqual([same ? 'hyperlink' : 'styles']);
+  expect(serializeOoxmlPart(pkg.parts.get(GLOSSARY)!).includes('r:id="rIdLink"')).toBe(same);
+}
+
+describe('a link whose id the glossary already holds', () => {
+  for (const [label, extras, same] of [
+    ['for its styles', OTHER, false],
+    ['for the same link', SAME, true],
+  ] as const) {
+    test(`${label}: the editor alone and the room keep the prompt only with the same link`, async () => {
+      const file = linkedWith(extras);
+      const pkg = await alone(file, 'Cy', 'suggesting', (editor) => {
+        select(editor, 0, 8);
+        editor.surface?.insertPlainText('Q');
+      });
+      keepsLinkOnlyWhereSame(reread(writeOoxmlPackage(pkg)), same);
+
+      const review = reviewTestModule();
+      const room = localRoom(file, { policy: suggestionsOnlyPolicy() });
+      const olga = await join(room, 'Olga', {
+        mode: 'edit',
+        login: ORGANISER,
+        wordFile: file,
+        review,
+      });
+      const cy = await join(room, 'Cy', { wordFile: file, review });
+      caretAt(cy, 0, 8);
+      surface(cy).insertPlainText('Q');
+      await settle();
+      converged(room, [olga, cy]);
+      expect(editorTexts(cy)).toEqual(FILLED);
+      keepsLinkOnlyWhereSame(roomFile(room.room.document, file), same);
+      for (const person of [olga, cy]) {
+        keepsLinkOnlyWhereSame(reread(new Uint8Array(await person.editor.save())), same);
       }
     });
   }

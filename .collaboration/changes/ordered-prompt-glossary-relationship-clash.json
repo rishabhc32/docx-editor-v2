@@ -1,0 +1,12 @@
+{
+  "impact": "compatible",
+  "fields": [],
+  "before": "A prompt a suggestion replaced was kept in the glossary with its relationship ids. An id the glossary already held for another target stayed, so the kept link or picture named that target (a styles part, for example).",
+  "after": "The glossary keeps such a prompt only when each id it names means the same relationship there (content-control-prompt-glossary.ts, keepsRelationships), in the editor alone and in the room's saved package. Otherwise the control falls back to its type's own prompt, as when the glossary cannot be written. One writer adds relationships (package-edit.ts, withRelationshipRecord), and a copied glossary relationship gets the node id that writer mints.",
+  "reason": "Change messages, the change log and its kinds keep their meaning, and the Yjs document format and the checkpoint format do not change. Only the glossary part of a saved or composed package changes, for a file whose glossary holds a prompt's relationship id for another target. An ordered room admits only clients of its own code version, and ordered rooms are not deployed yet, so no room needs a migration.",
+  "tests": [
+    "packages/core/src/collaboration/ordered/__tests__/client/editor-controls-prompt-link.test.ts"
+  ],
+  "changeset": "prompt-glossary-relationship-clash",
+  "migration": null
+}
