@@ -1,0 +1,14 @@
+{
+  "impact": "compatible",
+  "fields": [],
+  "before": "A move made in the room had no range marker items: compose drew its range round its wrappers, so a later move or typing at the end of its words went after the range live, and inside it after a fold and in the editor alone. A file's move without range markers read the same way.",
+  "after": "Every pending move has range marker items, made by the move's change or by the load for a file's move without markers, with the w:id, name and mark compose wrote before, so placement is the same live, after a fold and in the editor alone.",
+  "reason": "Change messages, the change log, checkpoints and the Yjs format do not change: the markers come from the same change on every copy, and a checkpoint writes the markers it wrote before. A room admits only clients of its own code version.",
+  "tests": [
+    "packages/core/src/collaboration/ordered/__tests__/checkpoint-fold-moves.test.ts",
+    "packages/core/src/collaboration/ordered/__tests__/client/editor-move-ranges.test.ts",
+    "packages/core/src/collaboration/ordered/__tests__/checkpoint-fold-shapes-1.test.ts"
+  ],
+  "changeset": "ordered-live-move-ranges",
+  "migration": null
+}
