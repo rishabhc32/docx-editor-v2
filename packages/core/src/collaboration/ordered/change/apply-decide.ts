@@ -5,13 +5,13 @@ import { reviewItemKey } from '../../../store/store/review-items.ts';
 import { revisionItemsOf } from '../../../store/store/review-reads.ts';
 import { decidedAsBatch, planRevisionBatch } from '../../../store/store/revision-batch.ts';
 import { noCardRefusal, orderedCardOf, type OrderedCard } from '../card-of.ts';
-import { composeOrderedPart } from '../compose/compose.ts';
-import { storyOfItem } from '../model/document.ts';
+import { composeStoryPart } from '../compose/compose.ts';
+import { itemAt, storyOfItem } from '../model/document.ts';
 import { setStatus } from '../model/mutations.ts';
 import { OrderedRefusal } from '../model/refusal.ts';
 import { revisionIdsOf } from '../model/revision-ids.ts';
 import { textBoxHostOf } from '../model/text-boxes.ts';
-import type { OrderedDocument } from '../model/types.ts';
+import type { OrderedDocument, OrderedItem } from '../model/types.ts';
 import type { OrderedDecideChange, OrderedSeenCard, OrderedSeenSuggestion } from './types.ts';
 
 /** The cards a decision decides, and why the first card it leaves stays. */
@@ -48,12 +48,37 @@ const markKey = (id: string, author: string, date: string | undefined): string =
   `${id}\u0000${author}\u0000${date ?? ''}`;
 
 /**
+ * The part an item draws in, with the item of that part's story it draws with: for an item of a
+ * text box, its object in the host part. Null for an item of no story, or of a box that went.
+ */
+function drawnAt(
+  doc: OrderedDocument,
+  item: OrderedItem
+): { readonly part: string; readonly item: OrderedItem } | null {
+  const story = storyOfItem(doc, item);
+  if (story === null) {
+    return null;
+  }
+
+  const box = textBoxHostOf(doc, story.name);
+  if (box === null) {
+    return { part: story.name, item };
+  }
+
+  const holder = doc.stories.get(box.host);
+  const object = holder ? itemAt(holder, box.atom) : null;
+  return object ? { part: box.host, item: object } : null;
+}
+
+/**
  * The cards the engine's own plan leaves, each with the engine's reason: the editor alone
  * refuses to decide them (a column deletion whose struck cells hold another record of its
  * author), so the room refuses them too, and no copy decides what another cannot. One plan for
  * each part the cards are in selects every item of the cards, as the decision takes them all. A
  * card stays when the plan leaves an item the editor decides with its dependencies
  * (`decidedAsBatch`); an item the editor resolves on its own sites is decided as it decides it.
+ * Each part is drawn only where the plan reads it (`compose/region.ts`): the blocks the cards'
+ * items are in, the block after each, and the blocks with a move.
  */
 function engineLeft(
   doc: OrderedDocument,
@@ -62,7 +87,7 @@ function engineLeft(
 ): Map<OrderedCard, OrderedRefusal> {
   const action = status === 'accepted' ? 'accept' : 'reject';
   const cardOfMark = new Map<string, OrderedCard>();
-  const parts = new Set<string>();
+  const regions = new Map<string, Set<OrderedItem>>();
   for (const card of cards) {
     for (const id of card.suggestions) {
       const { author, date } = doc.suggestions.get(id)?.attribution ?? { author: '' };
@@ -71,17 +96,20 @@ function engineLeft(
       }
 
       for (const item of doc.labelled.get(id) ?? []) {
-        const story = storyOfItem(doc, item)?.name;
-        if (story !== undefined) {
-          parts.add(textBoxHostOf(doc, story)?.host ?? story);
+        const at = drawnAt(doc, item);
+        if (at === null) {
+          continue;
         }
+
+        const region = regions.get(at.part) ?? new Set<OrderedItem>();
+        regions.set(at.part, region.add(at.item));
       }
     }
   }
 
   const left = new Map<OrderedCard, OrderedRefusal>();
-  for (const name of parts) {
-    const part = composeOrderedPart(doc, name).part;
+  for (const [name, region] of regions) {
+    const part = composeStoryPart(doc, name, { region }).part;
     const cardOfKey = new Map<string, OrderedCard>();
     const batched = new Set<string>();
     for (const item of revisionItemsOf(part)) {

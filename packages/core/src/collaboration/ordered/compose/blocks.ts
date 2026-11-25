@@ -20,6 +20,7 @@ import {
   type DrawnParagraph,
 } from './paragraph.ts';
 import { containerPropertiesAfter } from './properties.ts';
+import { RegionWalk } from './region.ts';
 import { pendingHeightOf, withRowHeightAnchors } from './row-heights.ts';
 import { resetUnrecordedCells } from './row-cells.ts';
 import { bodySectionNode, isSectionItem } from './sections.ts';
@@ -146,6 +147,12 @@ export function composeBlocks(ctx: ComposeContext): {
   // content draws in their place, each item showing as its own labels say
   const unwrapped = new Set<string>();
   let deferred: OoxmlNode[] = [];
+
+  // A region draws only the top-level blocks it needs (`compose/region.ts`): whether the open
+  // top-level block, and the sections waiting for the next paragraph, hold it
+  const region = ctx.options.region ? new RegionWalk(ctx.options.region) : null;
+  let blockOwn = false;
+  let deferredOwn = false;
   for (const item of ctx.story.tree.items()) {
     if (skip !== null) {
       if (item.kind === 'close' && item.pair === skip) skip = null;
@@ -166,6 +173,14 @@ export function composeBlocks(ctx: ComposeContext): {
         continue;
       }
 
+      if (region && stack.length === 1) {
+        blockOwn = region.holds(buffer) || region.holdsBlock(ctx.story, item);
+        if (buffer.length === 0 && item.pair !== undefined && !region.draws(blockOwn)) {
+          skip = item.pair;
+          continue;
+        }
+      }
+
       if (item.prompt) hideBlockPrompt(ctx, item);
       stack.push(newBuilder(item));
       continue;
@@ -176,12 +191,24 @@ export function composeBlocks(ctx: ComposeContext): {
       const builder = stack.pop();
       if (!builder?.open)
         throw new OrderedRefusal('malformed-story', 'a close item without its open item');
+      const written = root.children.length;
       closeBlock(ctx, builder, builder.open, top());
+      if (region && stack.length === 1 && root.children.length > written) {
+        region.wrote(blockOwn);
+      }
+
       continue;
     }
 
     if (item.kind === 'zero' && item.block) {
       if (ctx.gone(item)) continue;
+      if (region && stack.length === 1) {
+        if (!region.holds([item])) {
+          continue;
+        }
+
+        deferredOwn ||= buffer.length > 0;
+      }
 
       // A body section under its records
       const node = isSectionItem(item) ? bodySectionNode(ctx, item) : item.node;
@@ -203,13 +230,23 @@ export function composeBlocks(ctx: ComposeContext): {
     }
 
     if (item.kind === 'mark') {
-      const blocks = stack.flatMap((b) => (b.open ? [b.open] : []));
-      const drawn = composeParagraph(ctx, buffer, item, blocks);
-      top().children.push(drawn.node, ...deferred);
-      for (const b of stack) noteParagraph(b, drawn);
-      paragraphs.push(drawn.view);
+      const atTop = stack.length === 1 ? region : null;
+      const own = atTop !== null && (deferredOwn || atTop.holds(buffer) || atTop.holds([item]));
+      if (atTop === null || atTop.draws(own)) {
+        const blocks = stack.flatMap((b) => (b.open ? [b.open] : []));
+        const drawn = composeParagraph(ctx, buffer, item, blocks);
+        top().children.push(drawn.node, ...deferred);
+        for (const b of stack) {
+          noteParagraph(b, drawn);
+        }
+
+        paragraphs.push(drawn.view);
+        atTop?.wrote(own);
+      }
+
       buffer = [];
       deferred = [];
+      deferredOwn = false;
       continue;
     }
 

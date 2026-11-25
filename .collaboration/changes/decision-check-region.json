@@ -1,0 +1,10 @@
+{
+  "impact": "no-impact",
+  "fields": [],
+  "before": "A decision's engine check composed the whole of each part its cards are in.",
+  "after": "A decision's engine check composes only the top-level blocks its plan reads (the cards' blocks, the block after each, and every block with a move), with the same verdict.",
+  "reason": "Only the cost of the check changes: every copy gives the same verdict as before for every decision, so messages, the change log, the Yjs document format and the checkpoint format do not change.",
+  "tests": ["packages/core/src/collaboration/ordered/__tests__/decide-engine-refused.test.ts"],
+  "changeset": "decision-check-region",
+  "migration": null
+}

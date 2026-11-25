@@ -54,6 +54,11 @@ export interface ComposeOptions extends OrderedComposeOptions {
    * the checkpoint's label walk takes it off.
    */
   readonly runs?: Map<string, RoomNumber>;
+  /**
+   * Set for a decision's check: the story draws only the top-level blocks that hold one of these
+   * items or a move, and the block after each (`compose/region.ts`).
+   */
+  readonly region?: ReadonlySet<OrderedItem>;
 }
 
 /** The number of a room run or text element in a checkpoint's drawing, and its elements. */
