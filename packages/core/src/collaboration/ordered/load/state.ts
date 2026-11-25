@@ -17,6 +17,7 @@ import {
   type OrderedItemInit,
 } from '../model/document.ts';
 import { newSuggestion, setStatus } from '../model/mutations.ts';
+import { isControl } from '../model/prompt-marks.ts';
 import { OrderedRefusal } from '../model/refusal.ts';
 import { REVISION_ROLE, seedRevisionId, suggestionOfRevision } from '../model/revision-ids.ts';
 import { recordUndo } from '../model/undo-record.ts';
@@ -377,7 +378,7 @@ export function markPrompt(
       continue;
     }
 
-    if (item.kind === 'open' && (item.token === 'sdt' || item.token === 'sdtBlock')) {
+    if (isControl(item)) {
       state.prompts.add(k);
       inner = item.pair;
     } else if (item.kind !== 'open' && item.kind !== 'close' && inPrompt(item)) {

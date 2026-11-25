@@ -267,7 +267,7 @@ export function isPromptRecordOf(
 }
 
 /** Each `w:id` a load kept for a suggestion's role, or a room checkpoint listed for it. */
-export function* keptRevisionIds(doc: OrderedDocument): Generator<[string, string]> {
+function* keptRevisionIds(doc: OrderedDocument): Generator<[string, string]> {
   for (const [k, id] of doc.revisionIds.byRole) {
     // A role may name a story part, with its slashes; a suggestion id has none
     yield [k.slice(0, k.indexOf('/')), id];
