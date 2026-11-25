@@ -272,7 +272,7 @@ describe('converted notes (group 9.9)', () => {
       return 'applied';
     };
     expect(reason(() => convert(doc, 'olive-1:1', [1], 'suggest'))).toBe('invalid-edit');
-    expect(reason(() => convert(doc, 'olive-1:2', [-1]))).toBe('invalid-edit');
+    expect(reason(() => convert(doc, 'olive-1:2', [-1]))).toBe('hidden-target');
     const sid = convert(doc, 'olive-1:3', [1]);
     expect(sid).not.toBe('');
     expect(reason(() => convert(doc, 'olive-1:4', [1]))).toBe('hidden-target');

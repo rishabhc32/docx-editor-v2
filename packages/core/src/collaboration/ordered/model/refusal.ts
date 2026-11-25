@@ -45,7 +45,9 @@ import type { OrderedItemAddress } from './types.ts';
  * - `no-paragraph-after`: a join of the last paragraph of a story with the next one.
  * - `hidden-target`: a change names a paragraph mark, a table, a row, a cell, a control or a
  *   link that no longer shows (it was joined, rejected or taken back), or a place in a text box
- *   or a note that no longer shows; or a decision names a suggestion only in such a note.
+ *   or a note that no longer shows, or in one of Word's own notes (a separator or a continuation
+ *   notice), which the editor does not show to edit; or a decision names a suggestion only in
+ *   such a note.
  * - `not-paragraph-start`: a join at a place that is not the start of a paragraph.
  * - `not-in-table`, `not-in-link`, `unknown-control`: a place outside what the edit changes.
  * - `link-not-plain`: a link target change on a link that holds more than text of one format.

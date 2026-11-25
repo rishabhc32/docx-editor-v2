@@ -32,7 +32,7 @@ const W = WML_NAMESPACE_URI;
 export type OrderedNoteKind = 'footnote' | 'endnote';
 
 /** The notes part's root element of a kind. */
-export const notesRootOf = (kind: OrderedNoteKind): 'footnotes' | 'endnotes' =>
+const notesRootOf = (kind: OrderedNoteKind): 'footnotes' | 'endnotes' =>
   kind === 'footnote' ? 'footnotes' : 'endnotes';
 
 const CONTENT_TYPES = {

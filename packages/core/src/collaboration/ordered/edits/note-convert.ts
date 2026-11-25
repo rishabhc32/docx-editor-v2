@@ -12,13 +12,7 @@ import { closeOf, itemsInside, refuseLockedAt } from '../placement.ts';
 import { holdWithin, suggestionFor, withNewIds, type Ctx } from './context.ts';
 import { settle } from './direct.ts';
 import { copiedFmts, copiedProps, newMarkShell } from './marks.ts';
-import {
-  addNotesStory,
-  noteIdsFor,
-  notesRootOf,
-  notesStoryOf,
-  type OrderedNoteKind,
-} from './notes.ts';
+import { addNotesStory, noteIdsFor, notesStoryOf, type OrderedNoteKind } from './notes.ts';
 import { newParagraphIdentity } from './para-ids.ts';
 
 /** Word's built-in character style of each kind's marks (`w:footnoteRef`, a reference). */
@@ -26,9 +20,6 @@ const REFERENCE_STYLE: Readonly<Record<OrderedNoteKind, string>> = {
   footnote: 'FootnoteReference',
   endnote: 'EndnoteReference',
 };
-
-/** Notes Word keeps for its own use: never converted (the engine refuses them too). */
-const SEPARATORS = new Set(['separator', 'continuationSeparator', 'continuationNotice']);
 
 /** One conversion: the kinds, and the note id the copy takes. */
 interface Conversion {
@@ -312,8 +303,6 @@ export function convertNotes(ctx: Ctx, opens: readonly OrderedItem[]): string {
     const node = elementOf(open);
     if (!node || open.kind !== 'open' || open.token !== 'note')
       throw new OrderedRefusal('invalid-edit', 'not a note');
-    if (SEPARATORS.has(attributeOf(node, 'type') ?? ''))
-      throw new OrderedRefusal('invalid-edit', `a ${notesRootOf(from)} separator`);
     const cites = references.get(attributeOf(node, 'id') ?? '') ?? [];
 
     // A note shows while one of its references shows (or it has none, as the file had it)

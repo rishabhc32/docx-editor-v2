@@ -15,8 +15,10 @@ import { orderedCardOf } from '../../card-of.ts';
 import { orderedCardSeen } from '../../change/apply-decide.ts';
 import type { OrderedLocalRoom } from '../../client/local-room.ts';
 import { openOrderedWordFile } from '../../client/open.ts';
+import { orderedViewParagraph } from '../../compose/compose.ts';
 import { composeOrderedPackage } from '../../compose/package.ts';
 import { orderedCards } from '../../decide.ts';
+import { orderedPlaceAt } from '../../edits/places.ts';
 import { suggestionsOnlyPolicy } from '../../room/suggestions-only.ts';
 import { docx, MATRIX_EXTRAS, p, t } from '../word-fixtures.ts';
 import {
@@ -45,6 +47,7 @@ afterEach(closeAll);
 const review = reviewTestModule();
 
 const ENDNOTES = '/word/endnotes.xml';
+const FOOTNOTES = '/word/footnotes.xml';
 const REFERENCE =
   '<w:r><w:rPr><w:rStyle w:val="FootnoteReference"/></w:rPr><w:footnoteReference w:id="1"/></w:r>';
 
@@ -678,6 +681,33 @@ describe('notes in an ordered room (group 9.9)', () => {
       expect(statusOf(hidden)).toBe('pending');
       expect(orderedCards(room.room.document).map((card) => card.id)).toEqual([hidden]);
     });
+
+  // The editor alone shows nobody Word's own notes (its separators), so a change a page sends
+  // into one is refused by name, for the organiser and a party alike
+  test('a change into a separator note is refused for the organiser and a party', async () => {
+    const { room, ana, olive } = await people(NOTED);
+    const separator = orderedViewParagraph(room.room.document, FOOTNOTES, 0);
+    if (!separator) {
+      throw new Error('no separator note');
+    }
+
+    const place = orderedPlaceAt(separator, 0);
+    const senders = [
+      { person: ana, name: 'Ana', login: PARTY, mode: 'suggest' },
+      { person: olive, name: 'Olive', login: ORGANISER, mode: 'edit' },
+    ] as const;
+    for (const { person, name, login, mode } of senders) {
+      const namespace = person.handle.session.namespace;
+      const actor = { person: testPerson(name), ...login, namespace };
+      const change = { v: 1, id: `${namespace}:900`, kind: 'insert', part: FOOTNOTES, mode, place };
+      const sent = room.room.submit(actor, [{ ...change, text: 'X' }]);
+      expect(sent.refused.map((refusal) => refusal.reason)).toEqual(['hidden-target']);
+    }
+
+    await settle();
+    checked(room, ana, olive);
+    expect(notesXml(olive, 'footnotes')).not.toContain('>X<');
+  });
 
   // Found by the editor acceptance checks: the list kept the new notes part's story after its last
   // note went, and no copy wrote the part. Word keeps a notes part with its separators once its

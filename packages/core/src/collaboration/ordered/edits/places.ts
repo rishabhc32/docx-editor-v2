@@ -3,6 +3,7 @@
 // place means the same on every copy, whatever other edits came first; the resolver finds where
 // the place is in the view now.
 
+import { isNormalNote } from '../../../store/package/note-nodes.ts';
 import { findNode } from '../../../store/package/ooxml-edit.ts';
 import { isBlockToken } from '../compose/blocks.ts';
 import { orderedViewParagraph } from '../compose/compose.ts';
@@ -56,10 +57,11 @@ function shownMarkFrom(doc: OrderedDocument, story: OrderedStory, from: OrderedI
 }
 
 /**
- * Refuses an item of a story whose holder no longer shows: a text box whose object went (its
- * insertion rejected or taken back, its deletion accepted), or a note none of whose references
- * shows. Compose writes neither, so a change there would be a pending suggestion that nothing
- * shows. A struck text box or note still shows, as Word shows it, and takes changes.
+ * Refuses an item of a story whose holder does not show: a text box whose object went (its
+ * insertion rejected or taken back, its deletion accepted), a note none of whose references
+ * shows, or one of Word's own notes (a separator or a continuation notice), which the editor
+ * alone does not show to edit (`isNormalNote`). A change there would be a pending suggestion that
+ * nothing shows. A struck text box or note still shows, as Word shows it, and takes changes.
  */
 export function refuseHiddenHolder(
   doc: OrderedDocument,
@@ -74,6 +76,10 @@ export function refuseHiddenHolder(
   for (let back: OrderedItem | null = item; back; back = story.tree.prev(back)) {
     if (back.kind === 'close' && back.token === 'note' && back !== item) return;
     if (back.kind !== 'open' || back.token !== 'note') continue;
+    if (back.node && !isNormalNote(back.node)) {
+      throw new OrderedRefusal('hidden-target', 'the note does not show');
+    }
+
     const key = noteKeyOf(back);
     if (key !== undefined && notesWithHiddenReferences(doc).has(key))
       throw new OrderedRefusal('hidden-target', 'the note does not show');
