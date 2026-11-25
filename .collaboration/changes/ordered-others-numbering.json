@@ -1,0 +1,14 @@
+{
+  "impact": "compatible",
+  "fields": [],
+  "before": "The suggestions-only policy refused only a party's list change on a paragraph that holds another person's pending numbering record, also the same list and level again, and allowed any other paragraph property there. The engine's same list and level again dropped the record in the numbering reference.",
+  "after": "A party's change that writes a paragraph record there is refused once applied, as an accept or a reject of it in Word also decides the other person's numbering; one that leaves the paragraph as it is passes. The same list and level again keeps the reference and its record, in the engine and the room.",
+  "reason": "Change messages, the change log and its kinds keep their meaning, and the Yjs document format does not change. The room refuses some changes it allowed and allows a change it refused; every copy applies the change log with the same code version, so the copies agree. Checkpoints do not change. Ordered rooms are not deployed yet, so no room needs a migration.",
+  "tests": [
+    "packages/core/src/collaboration/ordered/__tests__/room-policy-formats.test.ts",
+    "packages/core/src/collaboration/ordered/__tests__/client/editor-file-records.test.ts",
+    "packages/core/src/store/__tests__/revision-numbering-change.test.ts"
+  ],
+  "changeset": "ordered-others-numbering",
+  "migration": null
+}
