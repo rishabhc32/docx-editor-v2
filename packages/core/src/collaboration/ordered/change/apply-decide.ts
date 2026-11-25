@@ -78,6 +78,7 @@ function drawnAt(
  * each part the cards are in selects every item of the cards, as the decision takes them all. A
  * card stays when the plan leaves an item the editor decides with its dependencies
  * (`decidedAsBatch`); an item the editor resolves on its own sites is decided as it decides it.
+ * A card a content control's lock keeps stays too (`locked`), as Word's Accept All leaves it.
  * Each part is drawn only where the plan reads it (`compose/region.ts`): the blocks the cards'
  * items are in, the block after each, and the blocks with a move.
  */
@@ -127,14 +128,21 @@ function engineLeft(
       }
     }
 
-    if (batched.size === 0) {
-      continue;
-    }
-
-    for (const { key, reason } of planRevisionBatch(part, action, [...cardOfKey.keys()]).result
-      .skipped) {
+    const plan = planRevisionBatch(part, action, [...cardOfKey.keys()], undefined, {
+      skipLocked: true,
+    });
+    for (const { key, reason } of plan.result.skipped) {
       const card = cardOfKey.get(key);
-      if (batched.has(key) && card !== undefined && !left.has(card)) {
+      if (card === undefined || left.has(card)) {
+        continue;
+      }
+
+      if (reason === 'locked') {
+        left.set(
+          card,
+          new OrderedRefusal('locked', `${action}: a content-locked control's content`)
+        );
+      } else if (batched.has(key)) {
         left.set(card, new OrderedRefusal('engine-refused', `${action}: ${reason}`));
       }
     }

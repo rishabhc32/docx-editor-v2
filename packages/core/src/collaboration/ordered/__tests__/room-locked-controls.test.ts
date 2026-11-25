@@ -601,7 +601,8 @@ const NO_REACH: Readonly<Record<string, string>> = {
   watermark: "a document setting: no control's content",
   setting: "a document setting: no control's content",
   attribution: "a suggestion's author: no words change",
-  decide: 'a decision, allowed in the room (the editor alone refuses one inside a content lock)',
+  decide:
+    'a card a lock keeps is left, as Word leaves it (`client/editor-decide-all-locked.test.ts`)',
   retract: 'a take-back of your own suggestion: it gives words back, adds none',
   revert: "the organiser's undo of a direct edit",
   comment: 'a comment adds no words (the host makes discussions on any text)',
