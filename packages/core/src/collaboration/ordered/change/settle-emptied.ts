@@ -22,7 +22,14 @@ import { containerPropertiesAfter } from '../compose/properties.ts';
 import { contextOf, withNewIds, type Ctx } from '../edits/context.ts';
 import { templateItems } from '../edits/templates.ts';
 import { RevisionReader } from '../load/state.ts';
-import { isHidden, isSplitEdge, itemAt, statusOf, storyOfItem } from '../model/document.ts';
+import {
+  insertionTakenBack,
+  isHidden,
+  isSplitEdge,
+  itemAt,
+  statusOf,
+  storyOfItem,
+} from '../model/document.ts';
 import { insertItems, relabel, replaceItems } from '../model/mutations.ts';
 import { personAttribution } from '../model/person.ts';
 import {
@@ -208,7 +215,7 @@ function untrack(
 /**
  * Take one item of a control into `went` when it is a unit that went. False when it is a unit
  * that shows: the control is not empty. Units of a prompt that went for good are not the
- * control's words.
+ * control's words, nor is a unit whose insertion was taken back: it never was.
  */
 function takeWent(ctx: ComposeContext, item: OrderedItem, went: Went): boolean {
   if ((item.kind !== 'text' && item.kind !== 'atom') || item.prompt === true) {
@@ -217,6 +224,10 @@ function takeWent(ctx: ComposeContext, item: OrderedItem, went: Went): boolean {
 
   if (!ctx.gone(item)) {
     return false;
+  }
+
+  if (insertionTakenBack(ctx.doc, item)) {
+    return true;
   }
 
   went.units.push(item);

@@ -37,7 +37,7 @@ import {
   partsOf,
   textOf,
 } from './change-apply-fixture.ts';
-import { checkFold, folded, mediaStore } from './fold-check.ts';
+import { checkEveryCard, checkFold, folded, mediaStore } from './fold-check.ts';
 import { anas, FOLD_SHAPES } from './fold-shapes.ts';
 import { seededRandom } from './random.ts';
 import { SESSION_FILE } from './sessions/fixture.ts';
@@ -669,6 +669,27 @@ describe('a fold of a move with words inside it', () => {
     const reject = { kind: 'decide', cards: [{ suggestions: seen }], status: 'rejected' } as const;
     apply(doc, 'olive:2', reject, 'Olive');
     await checkFold(doc, base, mediaStore(base), "a format that took over another's");
+  });
+
+  // After a fold, Olive takes back her value over Ana's pick of the value the prompt stores: a
+  // reject of the pick reads the record back from the prompt, as the engine does, and her words
+  // taken back are no words that went
+  test("a pick of a stored value, once another person's value over it is taken back", async () => {
+    const prompt = t('Choose an item.', '<w:rStyle w:val="PlaceholderText"/>');
+    const combo =
+      '<w:sdt><w:sdtPr><w:id w:val="2"/><w:showingPlcHdr/><w:comboBox w:lastValue="EUR">' +
+      `<w:listItem w:displayText="EUR" w:value="EUR"/></w:comboBox></w:sdtPr><w:sdtContent>${prompt}` +
+      '</w:sdtContent></w:sdt>';
+    const file = docx(p(t('Paid in ') + combo + t(' only.')));
+    const { document: doc, base } = openOrderedWordFile(file, { file: 1 });
+    const blobs = mediaStore(base);
+    const control = addressOf(opens(doc, 'sdt')[0]!);
+    const value = { kind: 'control-value', ...EDIT, control } as const;
+    apply(doc, 'ana:1', { ...value, value: { kind: 'listItem', value: 'EUR' } });
+    apply(doc, 'olive:1', { ...value, value: { kind: 'text', text: 'Acme' } }, 'Olive');
+    const copy = await folded(doc, base, 2, blobs);
+    apply(copy.document, 'olive:2', { kind: 'retract', suggestions: ['S:olive:1.1'] }, 'Olive');
+    await checkEveryCard(copy.document, copy.base, blobs, 'a value taken back after a fold');
   });
 });
 
