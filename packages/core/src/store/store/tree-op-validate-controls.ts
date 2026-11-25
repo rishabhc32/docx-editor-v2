@@ -31,6 +31,7 @@ import {
   isInlineControl,
 } from './content-control-checkbox.ts';
 import { valueContentWritable } from './content-control-value-content.ts';
+import { normalizeSdtFullDate } from './content-control-dates.ts';
 import {
   checkboxPayloadOf,
   contentControlAncestorsOf,
@@ -48,7 +49,6 @@ import {
   isShowingPlaceholder,
   isTemporaryControl,
   leavesInlineContainer,
-  normalizeSdtFullDate,
   listItemsOf,
   parseCheckboxValue,
 } from './tree-op-nodes.ts';

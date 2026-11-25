@@ -91,7 +91,7 @@ import {
   fnv1a32,
 } from '../package/para-id.ts';
 import { actorScopedSeed } from '../package/actor-scoped-ids.ts';
-import { formatContentControlDate, parseIsoDate } from './content-control-dates.ts';
+import { dateControlValue } from './content-control-dates.ts';
 import {
   TEXT_DEPS,
   attributeValueOf,
@@ -113,7 +113,6 @@ import {
   listItemsOf,
   leavesInlineContainer,
   namedChild,
-  normalizeSdtFullDate,
   ok,
   paragraphPropertiesNodeOf,
   parentOf,
@@ -2275,13 +2274,12 @@ function applySetContentControlValue(
       const properties = contentControlPropertiesOf(control);
       const date = sdtPrChild(properties, 'date');
       const format = attributeValueOf(sdtPrChild(date, 'dateFormat'), 'val');
-      const iso = normalizeSdtFullDate(value);
-      const picked = iso ? parseIsoDate(iso.slice(0, 10)) : null;
-      if (iso === null || picked === null) {
+      const picked = dateControlValue(value, format);
+      if (picked === null) {
         return { ok: false, reason: 'invalidArgs' };
       }
 
-      const display = formatContentControlDate(picked, format);
+      const { fullDate: iso, text: display } = picked;
       nextControl = withUpdatedProperties(nextControl, (props) => {
         const dateNode = sdtPrChild(props, 'date');
         if (!dateNode) return clearShowingPlaceholder(props);

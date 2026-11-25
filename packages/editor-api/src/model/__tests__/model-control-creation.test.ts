@@ -254,6 +254,26 @@ test('a date-picker control with no format shows a date as an en-US Word does', 
   }
 });
 
+test('a date value takes a full ISO-8601 instant with its offset', async () => {
+  const runtime = await serverRuntime(docx(p('Effective date: [Date]')));
+  try {
+    await runtime.run(async (context) => {
+      const range = context.document.body.search('[Date]').getFirst();
+      await context.sync();
+      const control = range.insertContentControl('DatePicker');
+      await context.sync();
+      control.setValue({ kind: 'date', iso: '2026-09-15T10:30:00+02:00' });
+      await context.sync();
+      control.load('text');
+      await context.sync();
+      expect(control.text).toBe('9/15/2026');
+    });
+    expect(await mainXmlOf(runtime)).toContain('w:fullDate="2026-09-15T10:30:00+02:00"');
+  } finally {
+    runtime.dispose();
+  }
+});
+
 test('controls created in one batch each answer their own control', async () => {
   const runtime = await serverRuntime(docx(p('First') + p('Second')));
   try {

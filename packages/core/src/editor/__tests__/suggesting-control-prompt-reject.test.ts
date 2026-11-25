@@ -369,3 +369,23 @@ describe('a value proposed over a prompt the control shows beside a stored value
     });
   }
 });
+
+describe('a date picked over a date in a format that shows no day', () => {
+  test('a reject gives back the date the file stores, live and after a save', async () => {
+    const props = `<w:date w:fullDate="2026-06-30T00:00:00Z"><w:dateFormat w:val="MMMM yyyy"/></w:date>`;
+    const editor = open(docx(line(control(props, run('', 'June 2026')))));
+    suggest(editor);
+    pickValue('2026-09-15')(editor);
+    const saved = new Uint8Array(await editor.save());
+    for (const copy of [editor, open(saved, 'Cy')]) {
+      rejectOne(copy);
+      expect(properties(copy)).toContain('w:fullDate="2026-06-30T00:00:00Z"');
+      expect(content(copy)).toContain('June 2026');
+    }
+
+    // An accept reads the date back from the words, at the day the format cannot show
+    const accepted = open(saved, 'Cy');
+    acceptOne(accepted);
+    expect(properties(accepted)).toContain('w:fullDate="2026-09-01T00:00:00Z"');
+  });
+});

@@ -1,0 +1,13 @@
+{
+  "impact": "compatible",
+  "fields": [],
+  "before": "A date format showed weekdays (ddd, dddd) as day numbers and left hours, minutes, seconds and AM/PM marks as letters.",
+  "after": "One formatter shows weekdays, 12- and 24-hour times, minutes, seconds, AM/PM marks and quoted text, as Word's date and time pictures do, in the editor alone, the room, the editing API and after a fold, and reads them back after a decision.",
+  "reason": "Change messages, the change log and its kinds keep their meaning, and the Yjs document format and the checkpoint format do not change. Only the composed Word file of such a control changes, and it now equals across the editor alone, the room and a fold. An ordered room admits only clients of its own code version.",
+  "tests": [
+    "packages/core/src/store/__tests__/content-control-dates.test.ts",
+    "packages/core/src/store/__tests__/content-control-ops.test.ts"
+  ],
+  "changeset": "control-date-weekday-time",
+  "migration": null
+}

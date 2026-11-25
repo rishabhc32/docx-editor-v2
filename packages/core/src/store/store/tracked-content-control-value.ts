@@ -14,7 +14,12 @@ import {
   inlineTextOf,
   type ContentControlProperties,
 } from '../package/content-control-nodes.ts';
-import { parseContentControlDate, parseIsoDate } from './content-control-dates.ts';
+import {
+  controlDateOf,
+  formatContentControlDate,
+  fullDateOf,
+  parseContentControlDate,
+} from './content-control-dates.ts';
 import {
   createNodeIdAllocator,
   findNode,
@@ -288,7 +293,7 @@ export function applyTrackedContentControlValue(
   const inserted = withInsertedValue(struck.part, before.container.id, runs, revision, options);
   if (!inserted) return { ok: false, reason: 'tree-invariant' };
   if (!inserted.ok) return fromEdit(inserted, contentControlEffect(control.id, 'text-local'));
-  return withWrittenProperties(inserted.part, control.id, after, before.paragraph.id, options);
+  return withWrittenProperties(inserted.part, control, after, before.paragraph.id, options);
 }
 
 /**
@@ -323,21 +328,25 @@ function withInsertedValue(
 }
 
 /**
- * `part` with the control's properties exactly as the untracked write left them in `after`.
- * Their ids are kept, not copied: the write edits `w:sdtPr` in place, and a collaboration
- * replica addresses its children by those ids. Ids the write minted come from the same lineage
- * as the strike's, so none collides.
+ * `part` with the properties a value proposed in `control` leaves (`proposedProperties`): as the
+ * untracked write left them in `after`. Their ids are kept, not copied: the write edits
+ * `w:sdtPr` in place, and a collaboration replica addresses its children by those ids. Ids the
+ * write minted come from the same lineage as the strike's, so none collides.
  */
 function withWrittenProperties(
   part: OoxmlPart,
-  controlId: string,
+  control: OoxmlElement,
   after: OoxmlElement,
   paragraphId: string,
   options: EditOptions | undefined
 ): TreeOpResult {
-  const target = findContentControl(part, controlId);
-  const properties = contentControlPropertiesOf(after);
-  if (!target || !properties) return { ok: false, reason: 'tree-invariant' };
+  const target = findContentControl(part, control.id);
+  const written = contentControlPropertiesOf(after);
+  const properties = written ? proposedProperties(control, written) : undefined;
+  if (!target || !properties) {
+    return { ok: false, reason: 'tree-invariant' };
+  }
+
   const prior = contentControlPropertiesOf(target);
   const moved = prior
     ? replaceNode(part, prior.id, properties, options)
@@ -399,13 +408,14 @@ const VALUE_RECORDS = [
 
 /**
  * The properties a value proposed in `control` leaves: `written`, those of the untracked write,
- * but over a prompt with a value record the control stores beside it (`w:lastValue`,
- * `w:fullDate`) as it was. A prompt states no value, so a reject could not read that record back
- * from it, and a file holds one record only: an accept reads the new one from the words.
+ * but with a value record the control stores (`w:lastValue`, `w:fullDate`) as it was where its
+ * words do not read back to it: a prompt, or a date in a format that does not show all of it. A
+ * reject could not read that record back from them, and a file holds one record only: an
+ * accept reads the new one from the words.
  */
 export function proposedProperties(control: OoxmlNode, written: OoxmlElement): OoxmlElement {
   const stored = contentControlPropertiesOf(control);
-  if (!stored || !isShowingPlaceholder(control)) {
+  if (!stored || control.kind === 'textValue' || readsBackRecord(control)) {
     return written;
   }
 
@@ -562,13 +572,14 @@ function recordEdits(before: OoxmlElement, after: OoxmlElement): RecordEdits {
     return checkboxPayloadOf(after)?.checked === shown ? {} : { checked: shown };
   }
 
-  // What the decision left as it was keeps its record, but for words that filled a prompt beside
-  // a stored record: the record stayed while they were pending, so an accept reads the new one
+  // What the decision left as it was keeps its record, but for new words beside a stored record:
+  // the record stayed while they were pending (`proposedProperties`), so an accept reads the new
+  // one from them
   const prompted = isShowingPlaceholder(after);
   const unchanged =
     contentControlTextOf(after) === contentControlTextOf(before) &&
     prompted === isShowingPlaceholder(before);
-  if (unchanged && (prompted || !fillsPromptBesideRecord(before))) {
+  if (unchanged && (prompted || !newWordsBesideRecord(before))) {
     return {};
   }
 
@@ -589,9 +600,9 @@ function recordEdits(before: OoxmlElement, after: OoxmlElement): RecordEdits {
 
 /**
  * Whether every word a control shows stands in a pending insertion, beside a value record it
- * stores: words over its prompt, which left that record (`proposedProperties`).
+ * stores: new words that may have left that record (`proposedProperties`).
  */
-function fillsPromptBesideRecord(control: OoxmlElement): boolean {
+function newWordsBesideRecord(control: OoxmlElement): boolean {
   return (
     storesValueRecord(control) &&
     contentControlTextOf(control) !== '' &&
@@ -655,28 +666,48 @@ export function valueRecordEdits(control: OoxmlElement, stale: boolean): RecordE
 }
 
 /**
- * The value `text` states in a list or date control: the value of the item it shows (a combo
- * box's own text), or the date it shows through the control's format; undefined when none.
+ * The value `text` states in a list or date control: the record when it shows as that text,
+ * else the value it reads back to (`readBack`); undefined when none.
  */
 function statedValue(summary: ContentControlProperties, text: string): string | undefined {
+  const current = summary.type === 'date' ? summary.date?.fullDate : undefined;
+  const previous = current === undefined ? null : controlDateOf(current);
+  if (previous && formatContentControlDate(previous, summary.date?.dateFormat) === text) {
+    return current;
+  }
+
+  return readBack(summary, text);
+}
+
+/**
+ * The value `text` reads back to in a list or date control: the value of the item it shows (a
+ * combo box's own text), or the date it shows through the control's format; undefined when
+ * none. A field the format does not show reads as its first value (`parseContentControlDate`).
+ */
+function readBack(summary: ContentControlProperties, text: string): string | undefined {
   if (summary.type !== 'date') {
     const item = summary.listItems.find((candidate) => candidate.displayText === text);
     return item?.value ?? (summary.type === 'comboBox' ? text : undefined);
   }
 
-  // A two-digit year stays in the century the record already names.
   const current = summary.date?.fullDate;
-  const previous = current === undefined ? null : parseIsoDate(current);
-  const century = previous ? Math.floor(previous.year / 100) * 100 : undefined;
-  const shown = parseContentControlDate(text, summary.date?.dateFormat, century);
-  if (!shown) {
-    return undefined;
+  const previous = current === undefined ? null : controlDateOf(current);
+  const shown = parseContentControlDate(text, summary.date?.dateFormat, previous);
+  return shown ? fullDateOf(shown) : undefined;
+}
+
+/** Whether the words a control shows read back to the value record it stores, exactly. */
+function readsBackRecord(control: OoxmlElement): boolean {
+  if (isShowingPlaceholder(control)) {
+    return false;
   }
 
-  const year = String(shown.year).padStart(4, '0');
-  const month = String(shown.month).padStart(2, '0');
-  const day = String(shown.day).padStart(2, '0');
-  return `${year}-${month}-${day}T00:00:00Z`;
+  const summary = contentControlSummaryOf(control);
+  const list = summary.type === 'dropDownList' || summary.type === 'comboBox';
+  const record = list ? summary.lastValue : summary.date?.fullDate;
+  const date = !list && record !== undefined ? controlDateOf(record) : null;
+  const value = readBack(summary, contentControlTextOf(control));
+  return value !== undefined && value === (date ? fullDateOf(date) : record);
 }
 
 /**

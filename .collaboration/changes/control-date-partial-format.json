@@ -1,0 +1,13 @@
+{
+  "impact": "compatible",
+  "fields": [],
+  "before": "A reject of a date picked over a date in a format that does not show all of it (MMMM yyyy) kept the picked date's record in the editor alone and after a save or a fold, where the live room gave back the file's date.",
+  "after": "A value proposed over words that do not read back to the stored record keeps that record while pending; a reject gives the file's date back and an accept reads the new date from the words, a field the format does not show at its first value, in the editor alone, the room and a fold.",
+  "reason": "Change messages, the change log and its kinds keep their meaning, and the Yjs document format and the checkpoint format do not change. Only the composed Word file of such a control changes, and it now equals across the editor alone, the room and a fold. An ordered room admits only clients of its own code version.",
+  "tests": [
+    "packages/core/src/collaboration/ordered/__tests__/client/editor-controls-value-fold.test.ts",
+    "packages/core/src/editor/__tests__/suggesting-control-prompt-reject.test.ts"
+  ],
+  "changeset": "control-date-partial-format",
+  "migration": null
+}

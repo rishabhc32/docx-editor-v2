@@ -5,7 +5,7 @@
 // lane that would otherwise catch an illegal character only on save.
 
 import { isValidXmlText } from '../package/sinks.ts';
-import { normalizeSdtFullDate } from './tree-op-nodes.ts';
+import { normalizeSdtFullDate } from './content-control-dates.ts';
 
 /** Longest `@w:author` a caller may write. Attribute-bound and conservative. */
 export const MAX_COMMENT_AUTHOR_UTF16 = 256;

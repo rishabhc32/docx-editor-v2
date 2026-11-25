@@ -1,4 +1,4 @@
-import { formatContentControlDate, parseIsoDate } from './content-control-dates.ts';
+import { dateControlValue } from './content-control-dates.ts';
 export { formsProtectionCommandRefusal } from './forms-protection-command.ts';
 import { withDisplayedHyphens } from '../package/hyphen-text.ts';
 import {
@@ -1354,14 +1354,15 @@ function planValue(
     }
     case 'date': {
       if (properties.type !== 'date') return 'typeMismatch';
-      const parsed = typeof value.iso === 'string' ? parseIsoDate(value.iso) : null;
-      if (!parsed) return 'invalidArgs';
-      const iso = `${String(parsed.year).padStart(4, '0')}-${String(parsed.month).padStart(2, '0')}-${String(parsed.day).padStart(2, '0')}`;
-      return {
-        text: formatContentControlDate(parsed, properties.date?.dateFormat),
-        showingPlaceholder: false,
-        fullDate: `${iso}T00:00:00Z`,
-      };
+      const picked =
+        typeof value.iso === 'string'
+          ? dateControlValue(value.iso, properties.date?.dateFormat)
+          : null;
+      if (!picked) {
+        return 'invalidArgs';
+      }
+
+      return { text: picked.text, showingPlaceholder: false, fullDate: picked.fullDate };
     }
     default:
       return 'invalidArgs';

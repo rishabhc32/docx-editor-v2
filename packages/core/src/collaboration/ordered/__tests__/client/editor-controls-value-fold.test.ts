@@ -19,6 +19,8 @@
 // value now stays while a pick is pending, and an accept reads the new one from the words. A date
 // picked over words that state no date, rejected, once kept the picked date's record in the
 // editor alone and after a fold, and a date control with no format showed 2026-09-15 in the room.
+// A date picked over a date in a format that shows no day, rejected, once kept the picked date in
+// the editor alone and after a fold, where the live room gave the file's date back.
 
 import { afterEach, describe, expect, test } from 'bun:test';
 import { createDocxEditor } from '../../../../editor/docx-editor.ts';
@@ -167,6 +169,15 @@ const CASES = [
   [
     'a date in a date picker with no format',
     line('<w:date><w:lid w:val="en-US"/></w:date>', t('Soon')),
+    [6, 6],
+    pick('2026-09-15'),
+  ],
+  [
+    'a date over a date in a format that shows no day',
+    line(
+      '<w:date w:fullDate="2026-06-30T00:00:00Z"><w:dateFormat w:val="MMMM yyyy"/></w:date>',
+      t('June 2026')
+    ),
     [6, 6],
     pick('2026-09-15'),
   ],

@@ -1,0 +1,13 @@
+{
+  "impact": "compatible",
+  "fields": [],
+  "before": "The editing API and the room refused a date value with a time zone offset (2026-09-15T10:30:00+02:00) and wrote midnight for a value with a time, where the editor's string value kept the instant.",
+  "after": "Every date value reads through one ISO-8601 rule: a date alone, or an instant with its time and offset, which w:fullDate keeps.",
+  "reason": "Change messages, the change log and its kinds keep their meaning, and the Yjs document format and the checkpoint format do not change. A date value change now carries what the editing API accepts; the room's value write and the editor alone read it with the same rule. An ordered room admits only clients of its own code version.",
+  "tests": [
+    "packages/core/src/store/__tests__/content-control-ops.test.ts",
+    "packages/editor-api/src/model/__tests__/model-control-creation.test.ts"
+  ],
+  "changeset": "control-date-iso-instant",
+  "migration": null
+}
