@@ -1136,6 +1136,7 @@ export interface OrderedEditOutcome {
 // @public
 export interface OrderedElementRecord {
     readonly acceptedOnly?: boolean;
+    readonly change?: string;
     // (undocumented)
     readonly element: OoxmlElement | null;
     readonly fileRecord?: OoxmlElement;
