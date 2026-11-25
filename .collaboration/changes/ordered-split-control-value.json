@@ -1,0 +1,10 @@
+{
+  "impact": "compatible",
+  "fields": [],
+  "before": "A value set in the second half of a control that a pending Enter split joined the Enter's suggestion when the Enter was the sender's own, with an untracked record, so a reject of the Enter took the value with it.",
+  "after": "The value is a suggestion of its own, as in any control the file holds: the half's edge carries the Enter's suggestion, which is no insertion of the control.",
+  "reason": "Change messages, the change log and its kinds keep their meaning, and the Yjs document format does not change. Every copy applies the change log with the same code version, so the copies agree. Checkpoints do not change. Ordered rooms are not deployed yet, so no room needs a migration.",
+  "tests": ["packages/core/src/collaboration/ordered/__tests__/control-value-split.test.ts"],
+  "changeset": "ordered-split-control-value",
+  "migration": null
+}
