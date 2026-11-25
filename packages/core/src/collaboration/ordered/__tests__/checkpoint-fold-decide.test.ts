@@ -597,6 +597,20 @@ describe("a fold of a table's records", () => {
       apply(doc, 'olive:1', { kind: 'insert-column', ...DIRECT, cell, where: 'right' }, 'Olive');
       await checkFold(doc, base, mediaStore(base), 'a height and a direct column');
     });
+
+    // An accepted height keeps the records it took from its author's table style after a fold, on
+    // a row whose cells keep every record (another party's column lent them width)
+    test("a party's table style and height, another's column, then the height accepted", async () => {
+      const { document: doc, base } = openOrderedWordFile(APPLY_FILE, { file: 1 });
+      apply(doc, 'ben:1', style(doc), 'Ben');
+      apply(doc, 'ben:2', { ...height(doc, 0, 500), ...EDIT }, 'Ben', ANA_1);
+      const cell = addressOf(opens(doc, 'tc')[0]!);
+      apply(doc, 'ana:1', { kind: 'insert-column', ...EDIT, cell, where: 'right' }, 'Ana', ANA_1);
+      const suggestions = orderedCardSeen(doc, 'S:ben:2.1')!;
+      const status = 'accepted';
+      apply(doc, 'olive:1', { kind: 'decide', cards: [{ suggestions }], status }, 'Olive');
+      await checkFold(doc, base, mediaStore(base), 'an accepted height that took a style');
+    });
   });
 
   // The same for the organiser's table alignment: it goes in the schema's place, before borders

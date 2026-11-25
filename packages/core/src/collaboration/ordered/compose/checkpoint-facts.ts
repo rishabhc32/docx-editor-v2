@@ -550,9 +550,13 @@ function recordsOpens(doc: OrderedDocument): RecordsOpen[] {
         continue;
       }
 
+      // A pending record taken from another is kept by its change record; a decided one by none
       const byTarget = new Map<OrderedPropertyTarget, OrderedElementRecord[]>();
       for (const record of open.props) {
-        if (record.kind === 'element' && (record.replaced === undefined || record.untracked)) {
+        if (
+          record.kind === 'element' &&
+          (record.replaced === undefined || record.untracked || !pending(record.suggestion))
+        ) {
           const records = byTarget.get(record.target) ?? [];
           records.push(record);
           byTarget.set(record.target, records);
