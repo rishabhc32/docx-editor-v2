@@ -611,6 +611,21 @@ describe("a fold of a table's records", () => {
       apply(doc, 'olive:1', { kind: 'decide', cards: [{ suggestions }], status }, 'Olive');
       await checkFold(doc, base, mediaStore(base), 'an accepted height that took a style');
     });
+
+    // A pending record taken from another keeps the place it was made in too, before the
+    // organiser's column and direct deletion that came after it
+    test("a party's height, a column, a direct deletion, then the party's cell alignment", async () => {
+      const { document: doc, base } = openOrderedWordFile(APPLY_FILE, { file: 1 });
+      apply(doc, 'ben:1', { ...height(doc, 0, 500), ...EDIT }, 'Ben');
+      const right = { cell: addressOf(opens(doc, 'tc')[0]!), where: 'right' } as const;
+      apply(doc, 'olive:1', { kind: 'insert-column', ...EDIT, ...right }, 'Olive');
+      const deleted = addressOf(opens(doc, 'tc')[2]!);
+      apply(doc, 'olive:2', { kind: 'delete-column', ...DIRECT, cell: deleted }, 'Olive');
+      const on = [addressOf(opens(doc, 'tc')[0]!)];
+      const op = { op: 'setTableCellVerticalAlignment', alignment: 'center' } as const;
+      apply(doc, 'ben:2', { kind: 'table-property', ...EDIT, on, op }, 'Ben', ANA_1);
+      await checkFold(doc, base, mediaStore(base), 'a taken record before a direct deletion');
+    });
   });
 
   // The same for the organiser's table alignment: it goes in the schema's place, before borders

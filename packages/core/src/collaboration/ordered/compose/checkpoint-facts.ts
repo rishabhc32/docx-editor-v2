@@ -550,13 +550,9 @@ function recordsOpens(doc: OrderedDocument): RecordsOpen[] {
         continue;
       }
 
-      // A pending record taken from another is kept by its change record; a decided one by none
       const byTarget = new Map<OrderedPropertyTarget, OrderedElementRecord[]>();
       for (const record of open.props) {
-        if (
-          record.kind === 'element' &&
-          (record.replaced === undefined || record.untracked || !pending(record.suggestion))
-        ) {
+        if (record.kind === 'element') {
           const records = byTarget.get(record.target) ?? [];
           records.push(record);
           byTarget.set(record.target, records);
@@ -618,8 +614,8 @@ function recordsOpens(doc: OrderedDocument): RecordsOpen[] {
 
 /**
  * For each properties element of a container the file writes that a pending record changes with
- * no change record: the container's own properties, and every record of them, decided or not,
- * that no change record holds by takeover (those records are kept by their change record).
+ * no change record: the container's own properties, and every record of them, decided or not, in
+ * the order they were made (a record taken from another too, which its change record also holds).
  */
 function checkpointUntracked(
   doc: OrderedDocument,

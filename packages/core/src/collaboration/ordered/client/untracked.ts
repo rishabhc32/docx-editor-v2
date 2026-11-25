@@ -14,7 +14,6 @@ import {
   type OrderedDocument,
   type OrderedElementRecord,
   type OrderedItem,
-  type OrderedPropertyRecord,
   type OrderedPropertyTarget,
   type OrderedStory,
 } from '../model/types.ts';
@@ -26,10 +25,10 @@ import { childWhere, isWml, withChildren } from '../ooxml-nodes.ts';
  * Put back in the document loaded from a checkpoint each container's properties that a record
  * changes with no change record: the container's own properties of the target are the manifest's
  * again, and the manifest's records, in the order they were made, take the place of those
- * loaded from the file (but the records a takeover put back), so compose draws them over those
- * properties as the room did. `labels` gives the elements that carry each label. False when a
- * label is on no container the load holds whose properties the target is (a cell for a table's
- * cells), or on two (a text box's other copy holds none).
+ * loaded from the file, so compose draws them over those properties as the room did. `labels`
+ * gives the elements that carry each label. False when a label is on no container the load holds
+ * whose properties the target is (a cell for a table's cells), or on two (a text box's other copy
+ * holds none).
  */
 export function withCheckpointUntracked(
   doc: OrderedDocument,
@@ -210,8 +209,9 @@ function restoredRecords(
 
 /**
  * A container's open item with its properties of the target as the manifest gives them, and the
- * restored records in the place of those loaded from the file (but the records a takeover put
- * back, which take the seq of the record that took them, so they draw first), in their order.
+ * restored records in the place of those loaded from the file, in their order. A record taken from
+ * another that the manifest does not list (one written before it listed them) stays as the file's
+ * takeover put it back, with the seq of the record that took it, so it draws first.
  */
 function restoredOpen(
   open: OrderedItem,
@@ -224,13 +224,22 @@ function restoredOpen(
     ? records.flatMap((r) => r.merge ?? [])
     : undefined;
   const node = withChildren(shell, withProperties(shell.children, target, properties, keys));
-  const taken = (r: OrderedPropertyRecord) => r.kind === 'element' && r.replaced !== undefined;
-  const withHolderSeq = (r: OrderedPropertyRecord): OrderedPropertyRecord => {
-    const holder = restored.find((h) => h.suggestion === r.suggestion && h.replaced === undefined);
-    return r.target === target && holder !== undefined ? { ...r, seq: holder.seq } : r;
-  };
-  const kept = open.props.filter((r) => r.target !== target || taken(r)).map(withHolderSeq);
-  const props = [...kept, ...restored].sort((a, b) => a.seq - b.seq);
+  const unlisted = open.props.flatMap((r) => {
+    const same = (h: OrderedElementRecord) => h.suggestion === r.suggestion;
+    if (
+      r.target !== target ||
+      r.kind !== 'element' ||
+      r.replaced === undefined ||
+      restored.some((h) => same(h) && h.replaced === r.replaced)
+    ) {
+      return [];
+    }
+
+    const holder = restored.find((h) => same(h) && h.replaced === undefined);
+    return [holder === undefined ? r : { ...r, seq: holder.seq }];
+  });
+  const kept = open.props.filter((r) => r.target !== target);
+  const props = [...kept, ...unlisted, ...restored].sort((a, b) => a.seq - b.seq);
   return createOrderedItem({ ...open, node, props });
 }
 
