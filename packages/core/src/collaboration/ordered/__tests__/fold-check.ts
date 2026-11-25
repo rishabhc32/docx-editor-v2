@@ -27,8 +27,11 @@ import { strFromU8, unzipSync } from 'fflate';
 import { readOoxmlPackage, type OoxmlPackage } from '../../../store/package/ooxml-package.ts';
 import { serializeOoxmlPart, type OoxmlElement } from '../../../store/package/ooxml-tree.ts';
 import { CardRead, isCardUnit, isOrderedItemHidden } from '../card-of.ts';
+import { applyOrderedChange } from '../change/apply.ts';
 import { orderedCardSeen } from '../change/apply-decide.ts';
+import { orderedChangeId, orderedIdMinter } from '../change/ids.ts';
 import { settlePromptMarks } from '../change/settle-prompts.ts';
+import type { OrderedSeenSuggestion } from '../change/types.ts';
 import { openOrderedCheckpoint, type OrderedWordFile } from '../client/open.ts';
 import { orderedSuggestionsOfRevision } from '../client/ops/review.ts';
 import { currentFace } from '../client/properties.ts';
@@ -42,6 +45,7 @@ import { orderedCards } from '../decide.ts';
 import { MOVE_RANGE } from '../load/moves.ts';
 import { movedAwayBy } from '../model/document.ts';
 import { setStatus } from '../model/mutations.ts';
+import { OrderedRefusal } from '../model/refusal.ts';
 import { isTextBoxStoryName } from '../model/text-boxes.ts';
 import { orderedUnitTyper } from '../model/typers.ts';
 import type {
@@ -53,6 +57,7 @@ import type {
 import { takeBack, withUndoRecord } from '../model/undo-record.ts';
 import { attributeOf, eachElement } from '../ooxml-nodes.ts';
 import { normalizedBody, semanticBody } from './matrix/compare.ts';
+import { testPerson } from './test-persons.ts';
 
 /** The media bytes of a room's Word file, by SHA-256: the room's storage. */
 export function mediaStore(base: OoxmlPackage): (sha256: string) => Uint8Array | undefined {
@@ -379,8 +384,14 @@ function decidedFile(
 
     settlePromptMarks(doc);
   });
-  const read = readOoxmlPackage(orderedPackageBytes(doc, base, { blobs }), {});
+  const bytes = orderedPackageBytes(doc, base, { blobs });
   takeBack(doc, record);
+  return semanticParts(bytes);
+}
+
+/** A decided Word file's XML parts, each by what it says (as a reopen compares decisions). */
+function semanticParts(bytes: Uint8Array): Record<string, string> {
+  const read = readOoxmlPackage(bytes, {});
   if (!read.ok) {
     throw new Error(`the decided file does not read: ${read.reason}`);
   }
@@ -467,4 +478,79 @@ export async function checkFold(
       });
     }
   }
+}
+
+/** Who decides each card in `checkEveryCard`, and when. */
+const DECIDER = { person: testPerson('Olive'), date: '2026-11-25T12:00:00Z' };
+
+/**
+ * One card decided as the organiser's decision change decides it, from the card as the organiser
+ * saw it: the suggestions decided, or the refusal's reason, and the Word file; the document is
+ * restored.
+ */
+function cardDecided(
+  doc: OrderedDocument,
+  base: OoxmlPackage,
+  blobs: FoldBlobs,
+  seen: readonly OrderedSeenSuggestion[],
+  status: 'accepted' | 'rejected'
+): { readonly decided: readonly string[] | string; readonly file: Record<string, string> } {
+  const id = orderedChangeId('check', 1);
+  const change = { v: 1, id, kind: 'decide', cards: [{ suggestions: seen }], status } as const;
+  try {
+    const { value, record } = withUndoRecord(doc, () =>
+      applyOrderedChange(doc, change, { ...DECIDER, ids: orderedIdMinter(id) })
+    );
+    const bytes = orderedPackageBytes(doc, base, { blobs });
+    takeBack(doc, record);
+    return { decided: value.suggestions, file: semanticParts(bytes) };
+  } catch (error) {
+    if (!(error instanceof OrderedRefusal)) {
+      throw error;
+    }
+
+    return {
+      decided: error.reason,
+      file: semanticParts(orderedPackageBytes(doc, base, { blobs })),
+    };
+  }
+}
+
+/**
+ * Fold `doc`, and fold the folded copy again: each card the room shows, decided on its own as the
+ * organiser saw it, accepted and rejected, decides the same suggestions and gives the same Word
+ * file on each copy as live. A suggestion keeps its id and its version across a fold, so the card
+ * the organiser saw names the same suggestions on every copy. Returns the number of cards.
+ */
+export async function checkEveryCard(
+  doc: OrderedDocument,
+  base: OoxmlPackage,
+  blobs: FoldBlobs,
+  label: string
+): Promise<number> {
+  const once = await folded(doc, base, doc.file + 1, blobs);
+  const twice = await folded(once.document, once.base, doc.file + 2, blobs);
+  const cards = orderedCards(doc);
+  for (const card of cards) {
+    const seen = orderedCardSeen(doc, card.id) ?? [];
+    for (const status of DECISIONS) {
+      const live = cardDecided(doc, base, blobs, seen, status);
+      for (const [fold, copy] of [
+        ['once', once],
+        ['twice', twice],
+      ] as const) {
+        const { decided, file } = cardDecided(copy.document, copy.base, blobs, seen, status);
+        const shown = { decided, file: withoutFoldedLinks(file, live.file) };
+        expect({ label, fold, card: card.suggestions, status, ...shown }).toEqual({
+          label,
+          fold,
+          card: card.suggestions,
+          status,
+          ...live,
+        });
+      }
+    }
+  }
+
+  return cards.length;
 }
