@@ -722,6 +722,45 @@ describe('new tables in an ordered room (task 9.7)', () => {
     expect(comparedBody(surface(olive).session.part())).toBe(afterRow);
   });
 
+  test("an undo of a direct table that holds another person's words is refused", async () => {
+    // Her table after the table, with the paragraph the engine adds between, and Ana's words in
+    // it: the undo would leave them in no paragraph, so it has no exact inverse until a decision
+    // takes them away. The decision is final (its own undo is refused); then the table's undo
+    // runs, and its redo shows the table again
+    const { room, ana, olive } = await seats();
+    caretIn(olive, 'Signed here.');
+    expect(surface(olive).insertTable(2, 2)).toBe(true);
+    await settle();
+    caretIn(ana, '');
+    surface(ana).insertPlainText('Ltd');
+    await settle();
+    const before = editorTexts(olive);
+    surface(olive).undo();
+    await settle();
+    expect(olive.refusals.splice(0).map(({ reason, detail }) => ({ reason, detail }))).toEqual([
+      { reason: 'no-inverse', detail: 'others-words' },
+    ]);
+    converged(room, ana, olive);
+    expect(editorTexts(olive)).toEqual(before);
+
+    const words = revisionsOf(olive.editor).find((item) => item.author === 'Ana')!;
+    expect(olive.editor.rejectReviewItem(words.key).ok).toBe(true);
+    await settle();
+    const decided = editorTexts(olive);
+    surface(olive).undo();
+    surface(olive).undo();
+    await settle();
+    expect(olive.refusals.splice(0).map(({ reason, detail }) => ({ reason, detail }))).toEqual([
+      { reason: 'no-inverse', detail: 'decided' },
+    ]);
+    converged(room, ana, olive);
+    expect(editorTexts(olive)).not.toEqual(decided);
+    surface(olive).redo();
+    await settle();
+    converged(room, ana, olive);
+    expect(editorTexts(olive)).toEqual(decided);
+  });
+
   test("a party's new table is Word's form: inserted rows and cell marks, no cell markers", async () => {
     // As Word writes a table it inserts with Track Changes on (a file Word saved:
     // `e2e/fixtures/list-pagination-break.docx`)

@@ -1,0 +1,13 @@
+{
+  "impact": "compatible",
+  "fields": [],
+  "before": "The organiser's undo (revert) of a direct table whose added paragraph held another person's words left those words before the next block in no paragraph in the room, while compose and a fold put them in the next paragraph; moving them would break the exact redo.",
+  "after": "A revert that would leave words before a block with no paragraph is refused by name (no-inverse, detail others-words, leavesLooseWords in change/settle-paragraphs.ts), in the room's apply, so the server and the client refuse it alike; once a decision or the person's take-back takes those words away, the undo runs and its redo is exact.",
+  "reason": "Change messages, the change log and its kinds keep their meaning, and the Yjs document format and the checkpoint format do not change. The room's refusal reasons gain no-inverse, which the client already reports. An ordered room admits only clients of its own code version.",
+  "tests": [
+    "packages/core/src/collaboration/ordered/__tests__/checkpoint-fold-paragraphs.test.ts",
+    "packages/core/src/collaboration/ordered/__tests__/client/editor-tables.test.ts"
+  ],
+  "changeset": "undo-leaves-loose-words",
+  "migration": null
+}

@@ -32,6 +32,8 @@ import type { OrderedItemAddress } from './types.ts';
  *   decision accepted or rejected).
  * - `stale-revert`: a revert of a direct edit that is already taken back (or already made
  *   again).
+ * - `no-inverse`: a revert that has no exact inverse: it would leave words before a block with no
+ *   paragraph (`others-words`), which another person put in a paragraph the direct edit made.
  * - `break-in-container`: Enter in an inline control's prompt, or where the characters on its two
  *   sides share no container (Enter inside a link or a control splits it).
  * - `single-line-control`: Enter in a control that holds one line (a plain text control without
@@ -100,6 +102,7 @@ export type OrderedRefusalReason =
   | 'fixed-author'
   | 'not-direct'
   | 'stale-revert'
+  | 'no-inverse'
   | 'break-in-container'
   | 'single-line-control'
   | 'paragraphs-in-link'

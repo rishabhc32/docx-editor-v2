@@ -1,4 +1,5 @@
-// Words a decision left with no paragraph, settled into the next paragraph after it.
+// Words a decision or a take-back left with no paragraph, settled into the next paragraph after
+// it; an undo that would leave such words is refused (`leavesLooseWords`).
 
 import { isBlockToken } from '../compose/blocks.ts';
 import { isHidden, storyOfItem } from '../model/document.ts';
@@ -8,13 +9,33 @@ import type { OrderedDocument, OrderedItem, OrderedStory } from '../model/types.
 /**
  * Move each run of items that `suggestions` (decided, or taken back by their author) left before
  * a block with no paragraph mark of its own into the next paragraph that shows, with that
- * paragraph's containers. A change that takes a paragraph mark away joins its words to the next paragraph;
- * when a table or a block control starts there, the next paragraph is inside it (its first
- * cell), as compose draws them, the editor alone's reject puts them, and a fold loads them. So a
- * later decision on that table or control takes the words with it, as in the editor alone, live
- * as after a fold.
+ * paragraph's containers. A change that takes a paragraph mark away joins its words to the next
+ * paragraph; when a table or a block control starts there, the next paragraph is inside it (its
+ * first cell), as compose draws them, the editor alone's reject puts them, and a fold loads them.
+ * So a later decision on that table or control takes the words with it, as in the editor alone,
+ * live as after a fold.
  */
 export function settleLooseWords(doc: OrderedDocument, suggestions: readonly string[]): void {
+  for (const { story, run } of looseRuns(doc, suggestions)) {
+    intoNextParagraph(doc, story, run);
+  }
+}
+
+/**
+ * Whether `suggestions`, as they stand now, leave words before a block with no paragraph mark of
+ * their own: an undo of a direct edit that would leave them has no exact inverse, as its redo
+ * must show every unit where it was, so it is refused (`no-inverse`).
+ */
+export function leavesLooseWords(doc: OrderedDocument, suggestions: readonly string[]): boolean {
+  return looseRuns(doc, suggestions).length > 0;
+}
+
+/** The runs of items `suggestions` left before a block with no paragraph mark, each once. */
+function looseRuns(
+  doc: OrderedDocument,
+  suggestions: readonly string[]
+): { readonly story: OrderedStory; readonly run: OrderedItem[] }[] {
+  const out: { story: OrderedStory; run: OrderedItem[] }[] = [];
   const walked = new Set<OrderedItem>();
   for (const id of suggestions) {
     for (const mark of doc.labelled.get(id) ?? []) {
@@ -25,10 +46,12 @@ export function settleLooseWords(doc: OrderedDocument, suggestions: readonly str
       const story = storyOfItem(doc, mark);
       const run = story ? looseRun(doc, story, mark, walked) : null;
       if (story && run) {
-        intoNextParagraph(doc, story, run);
+        out.push({ story, run });
       }
     }
   }
+
+  return out;
 }
 
 /** Whether an item ends a paragraph or a block: a mark that shows, or a block's edge. */

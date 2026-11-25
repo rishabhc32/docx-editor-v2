@@ -25,7 +25,7 @@ import { parseOrderedChangeId } from './ids.ts';
 import { placeOfChange } from './change-place.ts';
 import { settleRemovedColumns } from './settle-columns.ts';
 import { settleHiddenNotes } from './settle-notes.ts';
-import { settleLooseWords } from './settle-paragraphs.ts';
+import { leavesLooseWords, settleLooseWords } from './settle-paragraphs.ts';
 import { settleEmptiedControls } from './settle-emptied.ts';
 import { settleNamedPrompts } from './settle-named-prompts.ts';
 import { settlePromptMarks } from './settle-prompts.ts';
@@ -365,6 +365,12 @@ function applyChange(
     case 'revert':
       for (const id of change.suggestions) {
         revertDirect(doc, id, makerOf(ctx.person), change.status);
+      }
+
+      // Its redo must show every unit where it was, so words it would leave with no paragraph
+      // are not moved: it has no exact inverse until they are decided or taken back
+      if (leavesLooseWords(doc, change.suggestions)) {
+        throw new OrderedRefusal('no-inverse', 'others-words');
       }
 
       return { suggestions: change.suggestions, replaced: [] };
