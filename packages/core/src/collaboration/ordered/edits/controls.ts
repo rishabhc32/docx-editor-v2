@@ -10,7 +10,7 @@ import {
 import { applyTreeOp } from '../../../store/store/tree-op-apply.ts';
 import type { ContentControlValueInput } from '../../../store/store/tree-op-content-controls.ts';
 import { build } from '../../../store/store/tree-op-tracked.ts';
-import { insertedPending } from '../model/document.ts';
+import { controlInserter, insertedPending, isPending } from '../model/document.ts';
 import { insertItems, relabel } from '../model/mutations.ts';
 import { engineRefusal, OrderedRefusal } from '../model/refusal.ts';
 import { isUnit, type OrderedItem } from '../model/types.ts';
@@ -59,7 +59,8 @@ export function setControlValue(
 
   // A value in a control the author's own pending suggestion put in is part of that suggestion,
   // as the engine writes it inside the author's own insertion
-  const own = pendingOwn(ctx, open.by);
+  const inserter = controlInserter(open);
+  const own = pendingOwn(ctx, inserter);
   const suggestion = suggestionFor(ctx, own);
   strikeOldValue(ctx, open, suggestion.id);
   const close = closeOf(ctx.story, open, ctx.doc);
@@ -67,7 +68,7 @@ export function setControlValue(
   // A direct edit types the new words into the pending insertion that put the control in, as its
   // author's (`directInsert`), so a reject takes them with the control; else the edit's own
   const holder =
-    ctx.direct && open.by !== null && insertedPending(ctx.doc, open) ? open.by : suggestion.id;
+    ctx.direct && inserter !== null && isPending(ctx.doc, inserter) ? inserter : suggestion.id;
   const items = valueItems(ctx, control, open, holder);
 
   // At the control's end: in a block control, in its paragraph, before the mark

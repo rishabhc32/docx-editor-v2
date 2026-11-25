@@ -207,6 +207,14 @@ export function isSplitEdge(item: OrderedItem): boolean {
   return (item.kind === 'open' || item.kind === 'close') && item.space !== item.pair;
 }
 
+/**
+ * The suggestion that inserted a container, or null. The edge Enter put in to split a control
+ * carries the Enter's suggestion, which is no insertion of the control.
+ */
+export function controlInserter(open: OrderedItem): string | null {
+  return isSplitEdge(open) ? null : open.by;
+}
+
 /** Whether the unit's insertion was taken back: by its author, or a direct edit's revert. */
 export function insertionTakenBack(doc: OrderedDocument, item: OrderedItem): boolean {
   if (item.retracted) return true;

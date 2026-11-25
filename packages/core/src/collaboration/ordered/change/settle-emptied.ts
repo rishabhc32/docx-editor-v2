@@ -23,6 +23,7 @@ import { contextOf, withNewIds, type Ctx } from '../edits/context.ts';
 import { templateItems } from '../edits/templates.ts';
 import { RevisionReader } from '../load/state.ts';
 import {
+  controlInserter,
   insertionTakenBack,
   isHidden,
   isSplitEdge,
@@ -160,12 +161,6 @@ export function settleEmptiedControls(doc: OrderedDocument, apply: OrderedApplyC
     }
   }
 }
-
-/**
- * The suggestion that inserted a control, or null. The edge Enter put in to split a control
- * carries the Enter's suggestion, which is no insertion of the control.
- */
-const controlInserter = (open: OrderedItem): string | null => (isSplitEdge(open) ? null : open.by);
 
 /** Whether a pending suggestion inserted or struck the control, or a container around it. */
 export function pending(doc: OrderedDocument, open: OrderedItem): boolean {
