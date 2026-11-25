@@ -2,7 +2,16 @@
 // room holds of a record that its change record does not say (design D14).
 
 import type { OoxmlElement } from '../../../store/package/ooxml-tree.ts';
-import { at, bool, int, oneOf, plainFields, required, type Fields } from '../change/read.ts';
+import {
+  at,
+  bool,
+  int,
+  Invalid,
+  oneOf,
+  plainFields,
+  required,
+  type Fields,
+} from '../change/read.ts';
 import { manifestList, manifestString, readNamedOnce } from './checkpoint-suggestions.ts';
 import { propertiesXml, readPropertiesXml } from './checkpoint-takeovers.ts';
 import type { OrderedPropertyRecord, OrderedPropertyTarget } from './types.ts';
@@ -183,6 +192,12 @@ export function readPropertyRecord(
   const earlier = f.has('replacedEarlier')
     ? manifestList(f.get('replacedEarlier'), at(path, 'replacedEarlier'), 1)
     : undefined;
+
+  // A record taken earlier was taken after too: the room names the last one `replaced`
+  if (earlier !== undefined && !f.has('replaced')) {
+    throw new Invalid('invalid-value', at(path, 'replacedEarlier'), 'no record taken after');
+  }
+
   return {
     ...readChangeRecord(f, suggestions),
     replacedEarlier: earlier?.map((k, j) =>

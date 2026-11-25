@@ -468,6 +468,13 @@ describe("a checkpoint's made-over records are untrusted", () => {
         ),
       ],
       [
+        'taken earlier from a suggestion, and not after',
+        withMadeOver(
+          FORMAT,
+          withMade((r) => ({ ...r, replacedEarlier: [0] }))
+        ),
+      ],
+      [
         'a record on its own new words of a decided suggestion',
         withMadeOver(
           FORMAT,
