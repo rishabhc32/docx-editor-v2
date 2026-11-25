@@ -1,0 +1,12 @@
+{
+  "impact": "compatible",
+  "fields": [],
+  "before": "A reject of a column made from a cell an earlier decision removed drew that removed cell at its lent width again, over a width a record made after the lending gave it (the organiser's direct widths), so the cell before it got 2700 live where the fold and the editor alone give 3000.",
+  "after": "A removed cell's lent width gives way to a width a record made after it gives the cell (lentWidth in compose/table-columns.ts), as the engine holds the cell when the decision comes: live, after a fold and in the editor alone the cell gets its whole width back.",
+  "reason": "Change messages, the change log and its kinds keep their meaning, and the Yjs document format and the checkpoint format (version 5) do not change. Only how compose draws a decision on such a table changes, to the editor alone's result. An ordered room admits only clients of its own code version, and ordered rooms are not deployed yet, so no room needs a migration.",
+  "tests": [
+    "packages/core/src/collaboration/ordered/__tests__/checkpoint-fold-table-records.test.ts"
+  ],
+  "changeset": "ordered-lent-width-made-after",
+  "migration": null
+}
