@@ -31,6 +31,7 @@ export function moveRangeNodes(
   nodeIds: readonly [string, string]
 ): readonly [OoxmlElement, OoxmlElement] {
   const role = half === 'From' ? REVISION_ROLE.moveFromRange : REVISION_ROLE.moveToRange;
+
   // `revisionMarkOf` puts the `w:id` first: the check is for the type only
   const [id, ...mark] = revisionMarkOf(doc, suggestion, role);
   const ids = id === undefined ? [] : [id];

@@ -69,6 +69,7 @@ export function withRowHeightAnchors(
         ? withChildren(child, ctx.withRecordAttributes(child.children, suggestion, role))
         : child
     );
+
     // The row holds its own anchor now, so Word reads its height by the row alone
     const anchoredRow = withChildren(edits.row, marked);
     if (wordHeightRow(anchoredRow, undefined) === undefined) {
@@ -79,9 +80,11 @@ export function withRowHeightAnchors(
     current = withChildren(
       current,
       current.children.map((child) => {
-        if (child.id === rowId) return anchoredRow;
-        if (grid && child.kind !== 'textValue' && isWml(child, 'tblGrid')) return grid;
-        return child;
+        if (child.id === rowId) {
+          return anchoredRow;
+        }
+
+        return grid && child.kind !== 'textValue' && isWml(child, 'tblGrid') ? grid : child;
       })
     );
   }

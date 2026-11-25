@@ -424,7 +424,10 @@ export class ComposeContext {
       return true;
     }
 
-    if (this.statusOf(item.by, 'decision') === 'rejected') return true;
+    if (this.statusOf(item.by, 'decision') === 'rejected') {
+      return true;
+    }
+
     return item.dels.some((deleter) => this.statusOf(deleter, 'decision') === 'accepted');
   }
 

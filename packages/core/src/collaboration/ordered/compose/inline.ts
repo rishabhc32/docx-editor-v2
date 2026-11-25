@@ -248,10 +248,11 @@ function noteUnit(ctx: ComposeContext, boxes: readonly Box[], item: OrderedItem)
     noteValueSigns(ctx, innermost.signs, item);
   }
 
-  if (ctx.decidedAway(item)) for (const b of boxes) b.decided = true;
-  if (ctx.gone(item)) return;
+  const decided = ctx.decidedAway(item);
+  const drawn = !ctx.gone(item);
   for (const b of boxes) {
-    b.drawn = true;
+    b.decided ||= decided;
+    b.drawn ||= drawn;
   }
 }
 
