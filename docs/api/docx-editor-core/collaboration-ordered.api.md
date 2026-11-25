@@ -1657,6 +1657,7 @@ export interface OrderedItemLabels {
     quiet: boolean;
     retracted: boolean;
     taken?: string | null;
+    takenBackLendings: readonly OrderedElementRecord[];
     within: OrderedWithin;
 }
 

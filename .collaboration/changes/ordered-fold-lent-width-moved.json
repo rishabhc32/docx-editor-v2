@@ -1,0 +1,13 @@
+{
+  "impact": "compatible",
+  "fields": [],
+  "before": "A checkpoint wrote no cell of a column that a take-back or a reject removed, and so no width record that a later column made from that cell held there. After a reopen, a reject of the later column gave its width to no cell.",
+  "after": "A checkpoint writes such a record on the cell that takes the removed cell's space, by the engine's rule, with the width compose draws, so a reject of the later column gives the width back as it does live.",
+  "reason": "Change messages, the change log, the manifest fields and the Yjs format do not change: the manifest lists the record on another cell with the fields it already has, and every reader reads it as before. A room admits only clients of its own code version.",
+  "tests": [
+    "packages/core/src/collaboration/ordered/__tests__/checkpoint-fold-table-records.test.ts",
+    "packages/core/src/collaboration/ordered/__tests__/checkpoint-fold-shapes-6.test.ts"
+  ],
+  "changeset": "ordered-fold-lent-width-moved",
+  "migration": null
+}

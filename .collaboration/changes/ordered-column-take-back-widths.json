@@ -1,0 +1,14 @@
+{
+  "impact": "compatible",
+  "fields": [],
+  "before": "A take-back of a party's column removed the width records the column lent from other cells, so a cell that lent width to the column kept its width from before the column, also when a later column had taken part of the column's cell. The cells then held more than the grid.",
+  "after": "A take-back keeps those width records apart on the cell (takenBackLendings), where they draw nothing and hold no card, and compose gives the width back by them as for a rejected column, as the editor alone withdraws its own pending column by rejecting it.",
+  "reason": "Change messages, the change log, the manifest fields and the Yjs format do not change: the new item label is model state that every client rebuilds from the same take-back change, and a fold drops it, as it writes no cell of a taken-back column. A room admits only clients of its own code version.",
+  "tests": [
+    "packages/core/src/collaboration/ordered/__tests__/checkpoint-fold-table-records.test.ts",
+    "packages/core/src/collaboration/ordered/__tests__/client/editor-tables.test.ts",
+    "packages/core/src/collaboration/ordered/__tests__/fold-rules.test.ts"
+  ],
+  "changeset": "ordered-column-take-back-widths",
+  "migration": null
+}
