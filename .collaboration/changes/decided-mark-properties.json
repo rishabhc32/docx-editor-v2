@@ -1,0 +1,14 @@
+{
+  "impact": "compatible",
+  "fields": [],
+  "before": "A decision on a paragraph mark's own insertion or deletion removed the mark's empty properties only when the session that made the mark still held its ids. In an ordered room, on another Yjs replica, and after a save and reopen, an accepted pasted paragraph, a new table's or row's cells, and a rejected join kept <w:pPr><w:rPr/></w:pPr>.",
+  "after": "The decision removes a w:pPr or w:rPr that held nothing but the mark's revision markers, by its content, in every copy: the engine's resolution and the room's composed paragraph read the same rule. A file paragraph's empty w:pPr or mark w:rPr that took a stamp goes with it after the decision.",
+  "reason": "Change messages, the change log, the Yjs document format and checkpoints do not change: the rule decides only what a decision writes, and every copy writes it the same from the same document. Replicas that disagreed before now agree. An ordered room admits only clients of its own code version.",
+  "tests": [
+    "packages/core/src/collaboration/ordered/__tests__/client/editor-mark-decided.test.ts",
+    "packages/pro/src/collaboration/__tests__/document-tracked-paragraph-deletion.test.ts",
+    "packages/core/src/automation/__tests__/tracked-paragraph-deletion.test.ts"
+  ],
+  "changeset": "decided-mark-properties",
+  "migration": null
+}
