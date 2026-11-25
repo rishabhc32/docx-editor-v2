@@ -339,6 +339,41 @@ describe("a control's prompt shown again, decided card by card after a fold", ()
     await checkFold(doc, base, mediaStore(base), "a format on a new control's prompt");
   });
 
+  // Ana's words, typed or set directly by Olive, first hide the prompt her own deletion showed: the
+  // engine keeps no block then, nor for Olive's word that later goes inside them, live and after
+  // a fold, whatever is decided
+  for (const value of ['typed', 'set']) {
+    test(`a word inside the words a new control's own insertion ${value} over its prompt`, async () => {
+      const { document: doc, base } = openOrderedWordFile(docx(p(t('Name: Acme Corp'))), {
+        file: 1,
+      });
+      const wrap = {
+        from: at(doc, 0, 6),
+        to: at(doc, 0, 10),
+        control: { type: 'plainText' },
+      } as const;
+      apply(doc, 'ana:1', { kind: 'wrap-control', ...EDIT, ...wrap });
+      apply(doc, 'ana:2', { kind: 'delete', ...EDIT, from: at(doc, 0, 10), to: at(doc, 0, 14) });
+      const text = 'Party Ltd';
+      if (value === 'typed') {
+        apply(doc, 'ana:3', { kind: 'insert', ...EDIT, place: at(doc, 0, 10), text });
+      } else {
+        const control = addressOf(opens(doc, 'sdt')[0]!);
+        const set = {
+          kind: 'control-value',
+          ...DIRECT,
+          control,
+          value: { kind: 'text', text },
+        } as const;
+        apply(doc, 'olive:1', set, 'Olive');
+      }
+
+      apply(doc, 'olive:2', { kind: 'insert', ...EDIT, place: at(doc, 0, 18), text: '€' }, 'Olive');
+      expect(textOf(doc, 0)).toBe('Name: AcmeParty Lt€d Corp');
+      await checkFold(doc, base, mediaStore(base), `a word inside words ${value} over a prompt`);
+    });
+  }
+
   // Ana's pick hides the drop-down's prompt, so the glossary keeps it as a block: the block stays
   // once the row goes with the control, as the engine's glossary keeps it, live and after a fold
   for (const who of ['Ana', 'Ben']) {

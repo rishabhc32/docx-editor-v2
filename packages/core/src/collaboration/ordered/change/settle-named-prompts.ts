@@ -13,7 +13,7 @@ import {
 import { isBlockToken } from '../compose/blocks.ts';
 import { ComposeContext } from '../compose/context.ts';
 import { composeInline, coverOf } from '../compose/inline.ts';
-import { ownItems } from '../compose/paragraph.ts';
+import { ofOwnInsertion, ownItems } from '../compose/paragraph.ts';
 import { placeholderNameOf, promptRecords, propertiesReadBack } from '../compose/prompts.ts';
 import {
   insertionTakenBack,
@@ -24,6 +24,7 @@ import {
 } from '../model/document.ts';
 import { insertItems, relabel, replaceItems } from '../model/mutations.ts';
 import {
+  noteFirstFill,
   recordFilledPrompt,
   recordPromptMarkChange,
   promptedControlsOf,
@@ -58,6 +59,8 @@ interface Scan {
   readonly went: readonly OrderedItem[];
   /** Whether content shows in the control, so its prompt does not. */
   readonly present: boolean;
+  /** Whether all that content is the control's own insertion (`ofOwnInsertion`). */
+  readonly own: boolean;
   /** Whether units that filled the prompt were taken back: that fill never was. */
   readonly takenBack: boolean;
   /** The paragraph mark that shows the control; units go before it in a block control. */
@@ -170,6 +173,8 @@ function settleNamedControl(
   if (!scan) {
     return;
   }
+
+  noteFirstFill(doc, open.space, scan.present ? scan.own : null);
 
   // A fill taken back never was: the next fill keeps the prompt as it shows then
   const { kept } = stateOf(doc);
@@ -469,6 +474,7 @@ function scanControl(doc: OrderedDocument, story: OrderedStory, open: OrderedIte
   const prompt: OrderedItem[] = [];
   const went: OrderedItem[] = [];
   let present = false;
+  let own = true;
   let takenBack = false;
   let mark: OrderedItem | null = null;
   for (const item of ownItems(story.tree.items(story.tree.next(open)), open)) {
@@ -501,6 +507,7 @@ function scanControl(doc: OrderedDocument, story: OrderedStory, open: OrderedIte
 
     if (!isHidden(doc, item)) {
       present = true;
+      own &&= ofOwnInsertion(open, item);
     } else if (insertionTakenBack(doc, item)) {
       takenBack = true;
     } else if (!item.gone) {
@@ -512,7 +519,7 @@ function scanControl(doc: OrderedDocument, story: OrderedStory, open: OrderedIte
     mark = shownMarkOf(doc, story, open);
   }
 
-  return mark && prompt.some(isUnit) ? { prompt, went, present, takenBack, mark } : null;
+  return mark && prompt.some(isUnit) ? { prompt, went, present, own, takenBack, mark } : null;
 }
 
 /**

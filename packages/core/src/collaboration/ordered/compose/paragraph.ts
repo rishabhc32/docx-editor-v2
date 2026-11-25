@@ -4,7 +4,7 @@
 import type { OoxmlElement, OoxmlNode } from '../../../store/package/ooxml-tree.ts';
 import { build } from '../../../store/store/tree-op-tracked.ts';
 import { isLabelled, isSplitEdge, movedAwayBy, storyOfItem } from '../model/document.ts';
-import { isFilledPrompt, promptedControlsOf } from '../model/prompt-marks.ts';
+import { isFilledPrompt, isOwnFirstFill, promptedControlsOf } from '../model/prompt-marks.ts';
 import { REVISION_ROLE } from '../model/revision-ids.ts';
 import {
   isUnit,
@@ -254,10 +254,12 @@ function markProperties(
  * Enter at a prompt's edge leaves the prompt as it is, and one inside it removes it (policy 4).
  * Not a direct edit taken back (`revert`): the engine's undo gives the control back as it was.
  * Not a unit a decision took away before the control showed a prompt (`change/settle-emptied.ts`
- * marks it gone): it filled no prompt. Nor one of the control's own insertion (`ofOwnInsertion`).
+ * marks it gone): it filled no prompt. Nor one of the control's own insertion (`ofOwnInsertion`),
+ * nor any while that insertion first hid the prompt (`isOwnFirstFill`): it replaced no prompt.
  */
 const filledBy = (ctx: ComposeContext, open: OrderedItem, item: OrderedItem): boolean =>
   item.by !== null &&
+  !isOwnFirstFill(ctx.doc, open.space) &&
   !ofOwnInsertion(open, item) &&
   !item.retracted &&
   !item.gone &&
@@ -268,8 +270,16 @@ const filledBy = (ctx: ComposeContext, open: OrderedItem, item: OrderedItem): bo
  * Whether a unit is part of its control's own insertion: typed over the prompt inside it, the
  * engine writes it plain and keeps no glossary block for the prompt (`insideOwnInsertion`).
  */
-const ofOwnInsertion = (open: OrderedItem, item: OrderedItem): boolean =>
+export const ofOwnInsertion = (open: OrderedItem, item: OrderedItem): boolean =>
   item.by !== null && item.by === open.by && !isSplitEdge(open);
+
+/**
+ * Whether the control's own insertion hides its prompt (`present` shows): all that shows is its
+ * own, or its own insertion first hid the prompt as it showed (`isOwnFirstFill`), so later content
+ * replaced no prompt.
+ */
+const ownFilled = (ctx: ComposeContext, open: OrderedItem, present: readonly OrderedItem[]) =>
+  present.every((item) => ofOwnInsertion(open, item)) || isOwnFirstFill(ctx.doc, open.space);
 
 /**
  * The items after a control's open item up to its close item, each with the open item of the
@@ -365,7 +375,7 @@ function hideInlinePrompt(ctx: ComposeContext, open: OrderedItem, after: Iterabl
   }
 
   ctx.unprompted.add(open.space);
-  if (present.every((item) => ofOwnInsertion(open, item))) {
+  if (ownFilled(ctx, open, present)) {
     ctx.ownFilled.add(open.space);
   }
 
@@ -420,7 +430,7 @@ export function hideBlockPrompt(ctx: ComposeContext, open: OrderedItem): void {
   }
 
   ctx.unprompted.add(open.space);
-  if (present.length > 0 && present.every((item) => ofOwnInsertion(open, item))) {
+  if (present.length > 0 && ownFilled(ctx, open, present)) {
     ctx.ownFilled.add(open.space);
   }
 

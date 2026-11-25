@@ -142,6 +142,45 @@ export function isFilledPrompt(doc: OrderedDocument, space: string): boolean {
   return filledOf.get(doc)?.has(space) === true;
 }
 
+const firstFillOf = new WeakMap<OrderedDocument, Map<string, boolean>>();
+
+/**
+ * Note, by the control's open item's space, whether the content that first hid its shown prompt
+ * was the control's own insertion (`own`), or that the prompt shows again (`null`): the engine
+ * keeps a prompt in the glossary only when other content replaces it as it shows.
+ */
+export function noteFirstFill(doc: OrderedDocument, space: string, own: boolean | null): void {
+  let fills = firstFillOf.get(doc);
+  if (!fills) {
+    firstFillOf.set(doc, (fills = new Map()));
+  }
+
+  const before = fills.get(space);
+  if (own === null ? before === undefined : before !== undefined) {
+    return;
+  }
+
+  if (own === null) {
+    fills.delete(space);
+  } else {
+    fills.set(space, own);
+  }
+
+  const notes = fills;
+  recordUndo(doc, () => {
+    if (before === undefined) {
+      notes.delete(space);
+    } else {
+      notes.set(space, before);
+    }
+  });
+}
+
+/** Whether the control's own insertion first hid its prompt, which still does not show. */
+export function isOwnFirstFill(doc: OrderedDocument, space: string): boolean {
+  return firstFillOf.get(doc)?.get(space) === true;
+}
+
 /** Record a prompt mark (or a prompt unit) that a settle showed or hid. */
 export function recordPromptMarkChange(doc: OrderedDocument, mark: OrderedItem): void {
   addFor(changedOf, doc, mark);

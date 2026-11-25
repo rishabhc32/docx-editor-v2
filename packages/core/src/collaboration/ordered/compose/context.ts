@@ -193,7 +193,7 @@ export class ComposeContext {
    */
   readonly filledPrompts = new Set<string>();
   /**
-   * Open item spaces of the controls whose own insertion hides their prompt (`ofOwnInsertion` in
+   * Open item spaces of the controls whose own insertion hides their prompt (`ownFilled` in
    * `paragraph.ts`): the engine keeps no glossary block for it.
    */
   readonly ownFilled = new Set<string>();

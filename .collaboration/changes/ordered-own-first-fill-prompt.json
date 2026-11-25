@@ -1,0 +1,10 @@
+{
+  "impact": "compatible",
+  "fields": [],
+  "before": "Compose kept a control's prompt in the glossary whenever content that was not all the control's own insertion hid it. Once the control's own words first hid the prompt, a later suggestion inside them made the live room keep a block the engine does not keep, and a fold wrote it: after a reject of that suggestion the live room dropped the block while the folded copy kept it.",
+  "after": "settleNamedControl notes whether the content that first hid a shown prompt was the control's own insertion (noteFirstFill, cleared when the prompt shows again); compose treats such a control as filled by its own insertion (ownFilled) and counts no later word as a fill (filledBy).",
+  "reason": "Change messages, the change log and its kinds keep their meaning, and the Yjs document format and the checkpoint format do not change. Only the glossary block and placeholder name the room's Word file keeps for such a prompt change: they now equal the editor alone's, live and after a fold. An ordered room admits only clients of its own code version.",
+  "tests": ["packages/core/src/collaboration/ordered/__tests__/checkpoint-fold-prompts.test.ts"],
+  "changeset": "ordered-own-first-fill-prompt",
+  "migration": null
+}
