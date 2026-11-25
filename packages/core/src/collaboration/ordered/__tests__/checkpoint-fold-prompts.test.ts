@@ -5,7 +5,16 @@ import { describe, expect, test } from 'bun:test';
 import { orderedCardSeen } from '../change/apply-decide.ts';
 import { openOrderedWordFile } from '../client/open.ts';
 import type { OrderedDocument } from '../model/types.ts';
-import { addressOf, apply, at, BODY, EDIT, opens, partsOf } from './change-apply-fixture.ts';
+import {
+  addressOf,
+  apply,
+  at,
+  BODY,
+  DIRECT,
+  EDIT,
+  opens,
+  partsOf,
+} from './change-apply-fixture.ts';
 import { checkEveryCard, folded, mediaStore } from './fold-check.ts';
 import { docx, p, t } from './word-fixtures.ts';
 
@@ -88,6 +97,30 @@ describe("a control's prompt shown again, decided card by card after a fold", ()
     apply(doc, 'ben:2', { kind: 'control-value', ...EDIT, control: box, value }, 'Ben');
     apply(doc, 'ben:3', { kind: 'retract', suggestions: ['S:ben:1.1'] }, 'Ben');
     await checkEveryCard(doc, base, mediaStore(base), 'a format taken back');
+  });
+
+  // Olive's move into a combo box keeps the file's range markers after a fold. Her direct
+  // deletion takes the source and her value takes back the copy, so the move holds no words: a
+  // reject of the value shows the prompt with no move range around it, after a fold too
+  test("a prompt shown again where a move's words all went", async () => {
+    const prompt = t('Choose an item.', '<w:rStyle w:val="PlaceholderText"/>');
+    const combo =
+      '<w:sdt><w:sdtPr><w:id w:val="2"/><w:showingPlcHdr/><w:comboBox w:lastValue="EUR">' +
+      `<w:listItem w:displayText="EUR" w:value="EUR"/></w:comboBox></w:sdtPr><w:sdtContent>${prompt}` +
+      '</w:sdtContent></w:sdt>';
+    const file = docx(p(t('Paid in ') + combo + t(' only.')) + p(t('Fees net of tax.')));
+    const first = openOrderedWordFile(file, { file: 1 });
+    const blobs = mediaStore(first.base);
+    const moved = { from: at(first.document, 1, 5), to: at(first.document, 1, 8) };
+    const place = at(first.document, 0, 8);
+    apply(first.document, 'olive:1', { kind: 'move', ...EDIT, ...moved, place }, 'Olive');
+    const { document: doc, base } = await folded(first.document, first.base, 2, blobs);
+    const source = { from: at(doc, 1, 5), to: at(doc, 1, 8) };
+    apply(doc, 'olive:2', { kind: 'delete', ...DIRECT, ...source }, 'Olive');
+    const control = addressOf(opens(doc, 'sdt')[0]!);
+    const value = { kind: 'text', text: 'Acme' } as const;
+    apply(doc, 'olive:3', { kind: 'control-value', ...EDIT, control, value }, 'Olive');
+    await checkEveryCard(doc, base, blobs, "a move's words all went");
   });
 
   // The prompt a party typed over holds a combo box: after a fold the glossary gives it back, and a

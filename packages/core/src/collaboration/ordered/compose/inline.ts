@@ -195,10 +195,11 @@ function moveRangeEdge(
 }
 
 /**
- * The markers of a file's move with nothing drawn between them: where two ranges of one move
- * meet, as when a decision took out the words that split the move, and around a range whose words
- * all went. They are passed over, as the room draws a move it made (`withMoveRanges`): one range
- * around its words, and none around no words.
+ * The markers of a file's move that are passed over: where two ranges of one move meet with
+ * nothing drawn between them, as when a decision took out the words that split the move, and
+ * around a range with no moved word drawn in it, as when its words all went (a prompt shown again
+ * in their place is no moved word). The room draws a move it made the same way
+ * (`withMoveRanges`): one range around its words, and none around no words.
  */
 function emptyMoveEdges(ctx: ComposeContext, buffer: readonly OrderedItem[]): Set<OrderedItem> {
   const empty = new Set<OrderedItem>();
@@ -206,24 +207,39 @@ function emptyMoveEdges(ctx: ComposeContext, buffer: readonly OrderedItem[]): Se
     return empty;
   }
 
-  let before: OrderedItem | null = null;
-  for (const item of buffer) {
-    if (item.kind === 'mark' || ctx.gone(item)) {
-      continue;
-    }
+  const drawn = buffer.filter((item) => item.kind !== 'mark' && !ctx.gone(item));
 
+  // A range's end with its next start next to it: one range goes on
+  let before: OrderedItem | null = null;
+  for (const item of drawn) {
     const edge = moveRangeEdge(item);
     const previous = before === null ? null : moveRangeEdge(before);
-    if (
-      before !== null &&
-      edge !== null &&
-      previous?.range === edge.range &&
-      previous.start !== edge.start
-    ) {
+    const meets = edge?.start === true && previous?.range === edge.range && !previous.start;
+    if (before !== null && meets) {
       empty.add(before).add(item);
     }
 
     before = item;
+  }
+
+  // The start of each range open here, while no moved word is drawn after it
+  const wordless = new Map<string, OrderedItem>();
+  for (const item of drawn) {
+    const edge = empty.has(item) ? null : moveRangeEdge(item);
+    if (edge === null) {
+      if (item.move !== null) {
+        wordless.clear();
+      }
+    } else if (edge.start) {
+      wordless.set(edge.range, item);
+    } else {
+      const start = wordless.get(edge.range);
+      if (start !== undefined) {
+        empty.add(start).add(item);
+      }
+
+      wordless.delete(edge.range);
+    }
   }
 
   return empty;
