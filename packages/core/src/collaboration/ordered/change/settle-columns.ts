@@ -58,9 +58,18 @@ export function settleDecidedTables(
   for (const story of stories) {
     const ctx = new ComposeContext(doc, story, { settling });
     composeBlocks(ctx);
-    for (const table of ctx.removedColumns) settleTable(doc, story, table, ids);
+    const written = new Set<string>();
+    for (const removed of ctx.removedColumns) {
+      if (settleTable(doc, story, removed, ids)) {
+        written.add(removed.before.id);
+      }
+    }
+
+    // A join with no removal written: of a table with no removed cells, or a rejected insertion
     for (const { before, after, suggestion } of ctx.joinedGrids) {
-      writeTable({ doc, story, suggestion, ids }, before, after);
+      if (!written.has(before.id)) {
+        writeTable({ doc, story, suggestion, ids }, before, after);
+      }
     }
   }
 }
@@ -124,15 +133,18 @@ function settleTable(
   story: OrderedStory,
   removed: RemovedColumns,
   ids: OrderedIdMinter
-): void {
+): boolean {
   const { before, after, cells } = removed;
   if (cells.some((c) => statusOf(doc, c.suggestion) !== 'accepted')) {
-    return;
+    return false;
   }
 
-  if (writeTable({ doc, story, suggestion: cells[0]!.suggestion, ids }, before, after)) {
+  const written = writeTable({ doc, story, suggestion: cells[0]!.suggestion, ids }, before, after);
+  if (written) {
     dropRemoved({ doc, story }, removed);
   }
+
+  return written;
 }
 
 /**

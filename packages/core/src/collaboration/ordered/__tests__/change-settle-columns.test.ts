@@ -209,7 +209,17 @@ describe('a decided row', () => {
 describe('a direct row deletion after a decision on the table', () => {
   // The editor alone joins no grid line on a direct edit: the live list after the decision, and
   // its fold, delete the row the same way
-  for (const [name, decided] of [['an accepted fill', acceptedFill]] as const) {
+  for (const [name, decided] of [
+    ['an accepted fill', acceptedFill],
+    [
+      'a rejected column insertion',
+      (doc: OrderedDocument) => {
+        const cell = addressOf(opens(doc, 'tc')[2]!);
+        apply(doc, 'ana:1', { kind: 'insert-column', ...EDIT, cell, where: 'right' });
+        decide(doc, 'olive:1', 'S:ana:1.1', 'rejected');
+      },
+    ],
+  ] as const) {
     test(`${name}: no grid line goes, live as after a fold`, async () => {
       const first = openOrderedWordFile(SPANNED, { file: 1 });
       decided(first.document);

@@ -28,9 +28,9 @@ import { hidePrompt } from './prompts.ts';
 import {
   decisionOn,
   isRow,
+  joinedBy,
   removedCellStub,
   removedColumnCell,
-  withJoinedGrid,
   withoutRemovedCells,
   type RemovedCell,
 } from './table-columns.ts';
@@ -306,14 +306,9 @@ function closeBlock(ctx: ComposeContext, builder: Builder, open: OrderedItem, in
 
   // A decision on the table, a row or a cell fits the grid to the cells, as the engine's does
   if (builder.removed && element.kind !== 'textValue') {
-    element = withoutRemovedCells(ctx, element, builder.removed);
-  } else if (decided !== undefined && open.token === 'tbl' && element.kind !== 'textValue') {
-    const joined = withJoinedGrid(ctx, element);
-    if (joined !== element) {
-      ctx.joinedGrids.push({ before: element, after: joined, suggestion: decided });
-    }
-
-    element = joined;
+    element = withoutRemovedCells(ctx, element, builder.removed, decided);
+  } else if (open.token === 'tbl' && element.kind !== 'textValue') {
+    element = joinedBy(ctx, element, decided);
   }
 
   // A height's anchor reads the cells the table keeps: a removed cell holds no record of it

@@ -497,6 +497,27 @@ export function decisionOn(ctx: ComposeContext, open: OrderedItem): string | und
 }
 
 /**
+ * The table with its grid joined when this drawing makes a decision on it (`decisionOn`), kept
+ * for the settle step (`ctx.joinedGrids`); else as it is.
+ */
+export function joinedBy(
+  ctx: ComposeContext,
+  table: OoxmlElement,
+  decision: string | undefined
+): OoxmlElement {
+  if (decision === undefined) {
+    return table;
+  }
+
+  const joined = withJoinedGrid(ctx, table);
+  if (joined !== table) {
+    ctx.joinedGrids.push({ before: table, after: joined, suggestion: decision });
+  }
+
+  return joined;
+}
+
+/**
  * The resolved table with its grid joined as the engine joins it (`compactRevisionGrid`: a
  * grid boundary no remaining cell uses goes, with its width given to the column before it).
  * The engine keeps the grid as it was while the table holds any pending change record; the
@@ -599,10 +620,11 @@ function withRowPlacements(
 export function withoutRemovedCells(
   ctx: ComposeContext,
   table: OoxmlElement,
-  candidates: readonly RemovedCell[]
+  candidates: readonly RemovedCell[],
+  decision: string | undefined
 ): OoxmlElement {
   if (candidates.length === 0) return table;
-  const after = withoutCandidates(ctx, table, candidates);
+  const after = withoutCandidates(ctx, table, candidates, decision);
   ctx.removedColumns.push({ before: table, after, cells: candidates });
   return after;
 }
@@ -670,6 +692,7 @@ export function recordWithoutRemoved(
     return undefined;
   }
 
+  // Drawn as live, where no decision joins the grid
   const others = [...cellsById(table.before).keys()].filter((id) => !holds(id));
   const own = withoutCells(table.before, new Set(others));
   if (target === 'tblGrid') {
@@ -677,7 +700,7 @@ export function recordWithoutRemoved(
       own,
       own.children.map((child) => (isWml(child, 'tblGrid') ? element : child))
     );
-    return childNamed(withoutCandidates(ctx, shown, removed), 'tblGrid');
+    return childNamed(withoutCandidates(ctx, shown, removed, undefined), 'tblGrid');
   }
 
   // A removal changes only the grid and the cells' widths
@@ -690,7 +713,7 @@ export function recordWithoutRemoved(
       ? withChildren(cell, [element, ...cell.children.filter((c) => !isWml(c, 'tcPr'))])
       : cell
   );
-  const drawn = cellsById(withoutCandidates(ctx, shown, removed)).get(container);
+  const drawn = cellsById(withoutCandidates(ctx, shown, removed, undefined)).get(container);
   const tcPr = drawn && childNamed(drawn, 'tcPr');
   const width = tcPr && childNamed(tcPr, 'tcW');
   if (!width) {
@@ -706,7 +729,8 @@ export function recordWithoutRemoved(
 function withoutCandidates(
   ctx: ComposeContext,
   table: OoxmlElement,
-  candidates: readonly RemovedCell[]
+  candidates: readonly RemovedCell[],
+  decision: string | undefined
 ): OoxmlElement {
   const known = new Set<string>();
   nodeIdsIn(table, known);
@@ -720,10 +744,10 @@ function withoutCandidates(
       : table;
 
   // No width to give back, but the decision still joins the grid, as the engine does
-  if (removed.length === 0) return withJoinedGrid(ctx, drawn);
+  if (removed.length === 0) return joinedBy(ctx, drawn, decision);
   const { kept, lent } = survivorsOf(ctx, drawn, removed);
   const before = withLentWidths(drawn, lent);
-  const joined = withJoinedGrid(ctx, withCellsAccepted(ctx, before, removed));
+  const joined = joinedBy(ctx, withCellsAccepted(ctx, before, removed), decision);
   const out = withComposeIds(ctx, withKeptCellProperties(joined, drawn, kept), known);
   return out.kind === 'textValue' ? drawn : out;
 }
