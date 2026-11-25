@@ -5,10 +5,13 @@ import { itemsAddedBy, storyOfItem, statusOf, suggestionsOf } from '../model/doc
 import { forgetAdded, isolateUnits, relabel } from '../model/mutations.ts';
 import { sameMaker, type OrderedMaker } from '../model/person.ts';
 import { OrderedRefusal } from '../model/refusal.ts';
+import { takenFrom, withTakenFrom } from '../model/takeovers.ts';
 import type {
   OrderedDocument,
+  OrderedFormatRecord,
   OrderedItem,
   OrderedItemLabels,
+  OrderedPropertyRecord,
   OrderedStory,
 } from '../model/types.ts';
 
@@ -25,9 +28,10 @@ export function othersPending(doc: OrderedDocument, item: OrderedItem, own: stri
 
 /**
  * Format or property records without the suggestion `id`'s. A record it took from another
- * suggestion (policy 2) goes back to that suggestion while it is pending.
+ * suggestion (policy 2) goes back to the latest suggestion it was taken from that is still
+ * pending, with the links before that one.
  */
-function recordsWithout<T extends { readonly suggestion: string; readonly replaced?: string }>(
+function recordsWithout<T extends OrderedFormatRecord | OrderedPropertyRecord>(
   doc: OrderedDocument,
   records: readonly T[],
   id: string
@@ -39,11 +43,13 @@ function recordsWithout<T extends { readonly suggestion: string; readonly replac
       continue;
     }
 
-    if (record.replaced !== undefined && statusOf(doc, record.replaced) === 'pending') {
-      const { replaced, ...rest } = record;
-
-      // Still a T: `replaced` is optional on every record type
-      out.push({ ...rest, suggestion: replaced } as T);
+    const chain = takenFrom(record);
+    for (let back = chain.length - 1; back >= 0; back -= 1) {
+      const to = chain[back];
+      if (to !== undefined && statusOf(doc, to) === 'pending') {
+        out.push(withTakenFrom(record, to, chain.slice(0, back)));
+        break;
+      }
     }
   }
 

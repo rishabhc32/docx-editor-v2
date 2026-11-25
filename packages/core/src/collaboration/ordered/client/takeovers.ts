@@ -8,6 +8,7 @@ import {
   type CheckpointTakeover,
 } from '../model/checkpoint-takeovers.ts';
 import { relabel, replaceItems } from '../model/mutations.ts';
+import { takenLinks } from '../model/takeovers.ts';
 import type {
   OrderedDocument,
   OrderedElementRecord,
@@ -138,14 +139,14 @@ function noteTaken(
     return false;
   }
 
-  const replaced: { readonly id: string; readonly properties: OoxmlElement }[] = [];
-  for (const { suggestion, properties } of takeover.taken) {
-    const id = listedIds[suggestion];
-    if (id === undefined || id === record.suggestion) {
+  const replaced: { readonly chain: string[]; readonly properties: OoxmlElement }[] = [];
+  for (const { suggestion, properties, earlier = [] } of takeover.taken) {
+    const chain = [...earlier, suggestion].flatMap((k) => listedIds[k] ?? []);
+    if (chain.length !== earlier.length + 1 || chain.at(-1) === record.suggestion) {
       return false;
     }
 
-    replaced.push({ id, properties });
+    replaced.push({ chain, properties });
   }
 
   let entry = items.get(item);
@@ -156,11 +157,11 @@ function noteTaken(
 
   if (record.kind === 'element') {
     const taken = replaced.map(
-      ({ id, properties }): OrderedPropertyRecord => ({
+      ({ chain, properties }): OrderedPropertyRecord => ({
         kind: 'element',
         suggestion: record.suggestion,
         seq: record.seq,
-        replaced: id,
+        ...takenLinks(chain),
         target: record.target,
         element: properties,
         recordUnchanged: true,
@@ -171,12 +172,12 @@ function noteTaken(
   }
 
   const taken = replaced.map(
-    ({ id, properties }, k): FaceRecord => ({
+    ({ chain, properties }, k): FaceRecord => ({
       kind: 'face',
       id: `${record.id}<${k}`,
       suggestion: record.suggestion,
       seq: record.seq,
-      replaced: id,
+      ...takenLinks(chain),
       face: properties,
     })
   );

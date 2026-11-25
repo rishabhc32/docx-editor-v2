@@ -56,6 +56,7 @@ describe('a suggestion id across a fold', () => {
     expect(suggestionsOf(twice.document).map(({ id, status }) => `${id} ${status}`)).toEqual([
       'S:quin:1.1 pending',
       'S:pia:1.1 pending',
+      'S:rae:1.1 pending',
       'S:ana:1.1 pending',
       'S:ana:3.1 pending',
       'S:ben:1.1 accepted',

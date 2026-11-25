@@ -346,6 +346,14 @@ function writesRelationship(
   );
 }
 
+/** The places in the list of the suggestions `ids` names that the document holds, in order. */
+function listedOf(doc: OrderedDocument, list: SuggestionList, ids: readonly string[]): number[] {
+  return ids.flatMap((id) => {
+    const suggestion = doc.suggestions.get(id);
+    return suggestion === undefined ? [] : [list.indexOf(suggestion)];
+  });
+}
+
 /** Each change record of the file that holds records by takeover, by its label. */
 function checkpointTakeovers(
   doc: OrderedDocument,
@@ -362,11 +370,13 @@ function checkpointTakeovers(
       }
 
       const taken: CheckpointTaken[] = [];
-      for (const { replaced, after } of found.taken) {
+      for (const { replaced, earlier, after } of found.taken) {
         const suggestion = doc.suggestions.get(replaced);
         if (suggestion !== undefined) {
           const properties = takenProperties(found.record, after);
-          taken.push({ suggestion: list.indexOf(suggestion), properties });
+          const before = listedOf(doc, list, earlier);
+          const links = { earlier: before.length > 0 ? before : undefined };
+          taken.push({ suggestion: list.indexOf(suggestion), properties, ...links });
         }
       }
 
@@ -456,7 +466,11 @@ function inRoomOrder(
     commentPersons: facts.commentPersons,
     takeovers: facts.takeovers.map((t) => ({
       ...t,
-      taken: t.taken.map((taken) => ({ ...taken, suggestion: renumbered(taken.suggestion) })),
+      taken: t.taken.map((taken) => ({
+        ...taken,
+        suggestion: renumbered(taken.suggestion),
+        earlier: taken.earlier?.map(renumbered),
+      })),
     })),
     namespacePersons: facts.namespacePersons,
     untracked: facts.untracked.map((u) => ({
@@ -465,6 +479,7 @@ function inRoomOrder(
         ...r,
         suggestion: renumbered(r.suggestion),
         replaced: r.replaced === undefined ? undefined : renumbered(r.replaced),
+        replacedEarlier: r.replacedEarlier?.map(renumbered),
         over: r.over?.map(renumbered),
       })),
     })),
@@ -639,11 +654,10 @@ function checkpointUntracked(
 
           // A direct record goes with a reject of the pending records it was made over, after a
           // fold too
-          const over = record.over?.flatMap((id) => {
-            const made = doc.suggestions.get(id);
-            return made === undefined ? [] : [list.indexOf(made)];
-          });
-          listed.push({ ...kept, element, untracked, recordUnchanged, over });
+          const over = record.over && listedOf(doc, list, record.over);
+          const earlier = listedOf(doc, list, record.replacedEarlier ?? []);
+          const replacedEarlier = earlier.length > 0 ? earlier : undefined;
+          listed.push({ ...kept, replacedEarlier, element, untracked, recordUnchanged, over });
         }
       }
 

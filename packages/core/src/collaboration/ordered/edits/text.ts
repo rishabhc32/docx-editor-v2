@@ -8,6 +8,7 @@ import { faceWithProperties } from '../compose/properties.ts';
 import { refuseFieldInField } from '../field-depth.ts';
 import { createOrderedItem, insertedPending, itemAt, madeBy, statusOf } from '../model/document.ts';
 import { isolateUnits, nextSeq, recordAdded, relabel, replaceItems } from '../model/mutations.ts';
+import { takenFrom, withTakenFrom } from '../model/takeovers.ts';
 import {
   holdsRunFormat,
   type OrderedFieldPiece,
@@ -376,8 +377,8 @@ const writesRecord = (record: OrderedFormatRecord | OrderedPropertyRecord): bool
 
 /**
  * Policy 2 (design D5): `kept`, a pending record of another suggestion, taken over by `by`. It
- * keeps its id, so runs keyed by record keep their faces. The takeover is reported to the host
- * once.
+ * keeps its id, so runs keyed by record keep their faces, and every suggestion it was taken from.
+ * The takeover is reported to the host once.
  */
 export function takenOver<T extends OrderedFormatRecord | OrderedPropertyRecord>(
   ctx: Ctx,
@@ -388,7 +389,7 @@ export function takenOver<T extends OrderedFormatRecord | OrderedPropertyRecord>
     ctx.replaced.push({ suggestion: kept.suggestion, by });
   }
 
-  return { ...kept, suggestion: by, replaced: kept.suggestion };
+  return withTakenFrom(kept, by, [...takenFrom(kept), kept.suggestion]);
 }
 
 /**

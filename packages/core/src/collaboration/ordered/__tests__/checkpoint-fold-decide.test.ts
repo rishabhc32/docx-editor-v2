@@ -896,6 +896,29 @@ function decidedBody(
   return xml.replace(/ (?:w14:paraId|w14:textId|w:id|w:date)="[^"]*"/g, '');
 }
 
+// Ben's italic takes over Ana's bold, and Olive's underline takes over both (policy 2). Olive's
+// take-back gives Ben his records, and his take-back gives Ana her bold: each takeover keeps the
+// suggestion it took the record from, live and after a fold
+describe('a take-back of a takeover of a takeover', () => {
+  test('gives the first suggestion its record back', async () => {
+    const file = docx(p(run('Cloud and serverless.')));
+    const { document: doc, base } = openOrderedWordFile(file, { file: 1 });
+    const range = { from: at(doc, 0, 0), to: at(doc, 0, 5) };
+    const format = (localName: string) =>
+      ({ kind: 'format', ...EDIT, ...range, properties: [{ localName }] }) as const;
+    apply(doc, 'ana:1', format('b'));
+    apply(doc, 'ben:1', format('i'), 'Ben');
+    apply(doc, 'olive:1', format('u'), 'Olive');
+    const takeBacks = (copy: OrderedDocument) => {
+      apply(copy, 'olive:2', { kind: 'retract', suggestions: ['S:olive:1.1'] }, 'Olive');
+      apply(copy, 'ben:2', { kind: 'retract', suggestions: ['S:ben:1.1'] }, 'Ben');
+      const unit = [...copy.stories.get(BODY)!.tree.items()].find((item) => item.text === 'Cloud');
+      expect(unit?.fmts.map((f) => f.suggestion)).toEqual(['S:ana:1.1']);
+    };
+    await checkFold(doc, base, mediaStore(base), 'a takeover of a takeover', takeBacks);
+  });
+});
+
 describe('a decision after a fold, on properties drawn for a change record', () => {
   // Compose draws a `w:pPr` or a `w:rPr` where the paragraph or the run has none, only to hold a
   // change record: a decision that takes the record away draws none again, after a fold too.

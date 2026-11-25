@@ -178,11 +178,13 @@ function restoredRecords(
     const id = listedIds[record.suggestion];
     const replaced = record.replaced === undefined ? undefined : listedIds[record.replaced];
     const over = record.over?.flatMap((k) => listedIds[k] ?? []);
+    const earlier = record.replacedEarlier?.flatMap((k) => listedIds[k] ?? []);
     if (
       id === undefined ||
       !doc.suggestions.has(id) ||
       (record.replaced !== undefined && replaced === undefined) ||
-      over?.length !== record.over?.length
+      over?.length !== record.over?.length ||
+      earlier?.length !== record.replacedEarlier?.length
     ) {
       return null;
     }
@@ -200,6 +202,7 @@ function restoredRecords(
       target,
       tableCells: record.tableCells === undefined ? undefined : cells,
       replaced,
+      replacedEarlier: earlier,
       over,
     });
   }

@@ -77,6 +77,8 @@ export interface OrderedSectionRecord {
   readonly keptOnReject?: boolean;
   /** The suggestion a later change of the same section took this record from (policy 2). */
   readonly replaced?: string;
+  /** The suggestions it was taken from before `replaced`, oldest first. */
+  readonly replacedEarlier?: readonly string[];
   /**
    * A direct write made over pending records of the section: their suggestions. Word keeps one
    * record, the section before the first pending change, so a reject of one of them takes this

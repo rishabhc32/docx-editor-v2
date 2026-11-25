@@ -124,6 +124,8 @@ export type OrderedFormatRecord =
       readonly style?: OrderedStyleWrite;
       /** The suggestion a later format took this record from (policy 2), if any. */
       readonly replaced?: string;
+      /** The suggestions it was taken from before `replaced`, oldest first. */
+      readonly replacedEarlier?: readonly string[];
       /**
        * A format with no change record of its own (a direct one, or an `untracked` one) made
        * over pending format records: their suggestions. Word keeps one record, the face before
@@ -149,6 +151,8 @@ export type OrderedFormatRecord =
       readonly fileRecord?: OoxmlElement;
       /** The suggestion a later format took this record from (policy 2), if any. */
       readonly replaced?: string;
+      /** The suggestions it was taken from before `replaced`, oldest first. */
+      readonly replacedEarlier?: readonly string[];
     };
 
 /**
@@ -241,6 +245,8 @@ export interface OrderedElementRecord {
   readonly tableCells?: readonly string[];
   /** The suggestion a later change of the same properties took this record from (policy 2). */
   readonly replaced?: string;
+  /** The suggestions it was taken from before `replaced`, oldest first. */
+  readonly replacedEarlier?: readonly string[];
   /**
    * A direct change made over pending records of the same properties: their suggestions. Word
    * keeps one record, the properties before the first pending change, so a reject of one of
@@ -270,6 +276,8 @@ export interface OrderedParagraphOpRecord {
   readonly untracked?: boolean;
   /** The suggestion a later change of the same properties took this record from (policy 2). */
   readonly replaced?: string;
+  /** The suggestions it was taken from before `replaced`, oldest first. */
+  readonly replacedEarlier?: readonly string[];
   /** A direct press made over pending records of the paragraph's properties: as for an element. */
   readonly over?: readonly string[];
 }

@@ -103,6 +103,7 @@ type Rules<T> = Record<keyof T, FoldRule>;
 const SUGGESTION = manifest('suggestions', 'revisions', "the change record's `w:id` names it");
 const RECORD_SEQ = derived('the load numbers records as it reads them, taken ones first');
 const TAKEN = manifest('takeovers', 'taken', 'the change record that took it lists it');
+const TAKEN_EARLIER = manifest('takeovers', 'taken.earlier', 'the links before `replaced`');
 const UNDO_ONLY = dropped(
   'only the undo of the change that made it reads it; a fold keeps no undo'
 );
@@ -170,6 +171,7 @@ const PROPERTIES_FORMAT: Rules<PropertiesFormat> = {
   remove: file("load/runs.ts: the run's `w:rPr` without them"),
   style: file("load/runs.ts: the run's `w:rStyle`"),
   replaced: TAKEN,
+  replacedEarlier: TAKEN_EARLIER,
   over: manifest('madeOver', 'records.over', "by the label on Word's one `w:rPrChange`"),
   untracked: file("written as its author's new words' own `w:rPr`; a reject takes the words"),
   change: UNDO_ONLY,
@@ -183,6 +185,7 @@ const FACE_FORMAT: Rules<FaceFormat> = {
   face: file("load/runs.ts: the `w:rPr` of the run's `w:rPrChange`"),
   fileRecord: file("load/runs.ts: the run's `w:rPrChange`"),
   replaced: TAKEN,
+  replacedEarlier: TAKEN_EARLIER,
 };
 
 const ELEMENT_RECORD: Rules<OrderedElementRecord> = {
@@ -198,6 +201,7 @@ const ELEMENT_RECORD: Rules<OrderedElementRecord> = {
   acceptedOnly: dropped('no write sets it'),
   tableCells: manifest('changeRecords', 'records.tableCells', 'the cells by their labels'),
   replaced: TAKEN,
+  replacedEarlier: manifest('takeovers', 'taken.earlier', 'or untracked records.replacedEarlier'),
   over: manifest('untracked', 'records.over', "Word's one change record holds the others"),
   merge: manifest('changeRecords', 'records.merge', 'by the container label'),
 };
@@ -210,6 +214,7 @@ const PARAGRAPH_OP_RECORD: Rules<OrderedParagraphOpRecord> = {
   op: file("load/properties.ts: the paragraph's `w:pPr` and its `w:pPrChange`"),
   untracked: file("written as its author's new paragraph's own `w:pPr`; a reject takes it"),
   replaced: TAKEN,
+  replacedEarlier: TAKEN_EARLIER,
   over: manifest('madeOver', 'records.over', "by the label on Word's one `w:pPrChange`"),
 };
 
@@ -222,6 +227,7 @@ const SECTION_RECORD: Rules<OrderedSectionRecord> = {
   untracked: file("written as its author's new mark's own `w:sectPr`; a reject takes the mark"),
   keptOnReject: file("written as the section's own `w:type`, which every decision keeps"),
   replaced: TAKEN,
+  replacedEarlier: TAKEN_EARLIER,
   over: manifest('madeOver', 'records.over', "by the label on Word's one `w:sectPrChange`"),
 };
 

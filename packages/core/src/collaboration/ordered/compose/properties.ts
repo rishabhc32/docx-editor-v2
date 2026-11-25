@@ -26,6 +26,7 @@ import {
 } from '../../../store/store/tree-op-tracked-properties.ts';
 import { isPending, statusOf } from '../model/document.ts';
 import { fileMark, REVISION_ROLE } from '../model/revision-ids.ts';
+import { takenFrom } from '../model/takeovers.ts';
 import type {
   OrderedDocument,
   OrderedElementRecord,
@@ -134,7 +135,8 @@ export function noteTakeover(
   }
 
   const kept = (c: OoxmlNode) => !isChangeRecord(c);
-  taken.push({ replaced, before: before.filter(kept), after: after.filter(kept) });
+  const earlier = takenFrom(record).slice(0, -1);
+  taken.push({ replaced, earlier, before: before.filter(kept), after: after.filter(kept) });
 }
 
 /**

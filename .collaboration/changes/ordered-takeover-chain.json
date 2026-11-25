@@ -1,0 +1,14 @@
+{
+  "impact": "compatible",
+  "fields": [],
+  "before": "A record taken over twice kept only the suggestion it was last taken from (replaced). Once the last suggestion was taken back, the middle one held the record with no link, so its own take-back removed the record instead of giving it back to the first suggestion; a checkpoint kept the same single link.",
+  "after": "A record keeps every suggestion it was taken from: replaced and the new optional replacedEarlier, oldest first. A take-back gives it to the latest one still pending. The checkpoint manifest keeps the earlier links as the optional earlier of a taken record in takeovers and replacedEarlier of an untracked record, by their places in the manifest's list, renumbered as the other indexes.",
+  "reason": "The fields are optional and new; a checkpoint without them reads as before, and version 5 stays. Change messages, the change log and the Yjs format do not change. An ordered room admits only clients of its own code version, and the reader refuses a checkpoint it cannot read as checkpoint-manifest. Ordered rooms are not deployed yet, so no room needs a migration.",
+  "tests": [
+    "packages/core/src/collaboration/ordered/__tests__/checkpoint-fold-decide.test.ts",
+    "packages/core/src/collaboration/ordered/__tests__/fold-rules.test.ts",
+    "packages/core/src/collaboration/ordered/__tests__/checkpoint-ids.test.ts"
+  ],
+  "changeset": "ordered-takeover-chain",
+  "migration": null
+}

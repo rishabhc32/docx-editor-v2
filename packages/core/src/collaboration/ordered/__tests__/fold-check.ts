@@ -49,6 +49,7 @@ import { MOVE_RANGE } from '../load/moves.ts';
 import { oneChangeRecord } from '../model/checkpoint-untracked.ts';
 import { movedAwayBy } from '../model/document.ts';
 import { setStatus } from '../model/mutations.ts';
+import { takenFrom } from '../model/takeovers.ts';
 import { OrderedRefusal } from '../model/refusal.ts';
 import { isTextBoxStoryName } from '../model/text-boxes.ts';
 import { orderedUnitTyper } from '../model/typers.ts';
@@ -253,12 +254,12 @@ export function foldPrint(doc: OrderedDocument, base: OoxmlPackage, blobs: FoldB
       dels: keys(item.dels),
       fmts: keys(roles.fmt),
       // A decided record takes over nothing: a fold resolves it. Records apply in their order of
-      // creation, and a fold puts the records taken in front of their holder's
-      replaced: keys(
-        [...item.fmts, ...item.props].flatMap((r) =>
-          r.replaced === undefined || key(r.suggestion) === null ? [] : [r.replaced]
-        )
-      ).sort(),
+      // creation, and a fold puts the records taken in front of their holder's. Each pending
+      // suggestion a record was taken from counts, oldest first: a take-back gives it back
+      replaced: [...item.fmts, ...item.props]
+        .flatMap((r) => (key(r.suggestion) === null ? [] : [keys(takenFrom(r)).join('<')]))
+        .filter((chain) => chain !== '')
+        .sort(),
       // Records apply in their order of creation, whatever their place in the list
       props: keys(roles.prop).sort(),
       // A move's name stays on its words after its decision: they show as a pending move's

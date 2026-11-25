@@ -72,6 +72,8 @@ export interface CheckpointChangeRecords {
  * the manifest keeps each record of those properties as the room has it.
  */
 export interface CheckpointUntrackedRecord extends CheckpointChangeRecord {
+  /** The suggestions it was taken from before `replaced`, oldest first, by their places. */
+  readonly replacedEarlier?: readonly number[];
   readonly element: OoxmlElement | null;
   /** Shown with no change record. */
   readonly untracked?: boolean;
@@ -170,8 +172,14 @@ function readRecord(
 ): CheckpointUntrackedRecord {
   const f = plainFields(value, path);
   const over = f.has('over') ? manifestList(f.get('over'), at(path, 'over')) : undefined;
+  const earlier = f.has('replacedEarlier')
+    ? manifestList(f.get('replacedEarlier'), at(path, 'replacedEarlier'), 1)
+    : undefined;
   return {
     ...readChangeRecord(f, suggestions),
+    replacedEarlier: earlier?.map((k, j) =>
+      int(k, at(at(path, 'replacedEarlier'), j), 0, suggestions - 1)
+    ),
     element: f.has('element')
       ? readPropertiesXml(f.get('element'), at(path, 'element'), new Set([target]))
       : null,

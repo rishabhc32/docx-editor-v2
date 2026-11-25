@@ -39,6 +39,8 @@ export interface CheckpointTaken {
   readonly suggestion: number;
   /** The properties element with the record, without its own change record. */
   readonly properties: OoxmlElement;
+  /** The suggestions it was taken from before `suggestion`, oldest first, by place. */
+  readonly earlier?: readonly number[];
 }
 
 /** The properties elements a change record of {@link RECORDS} names. */
@@ -112,8 +114,8 @@ export function readPropertiesXml(
 export function takeoversJson(takeovers: readonly CheckpointTakeover[]): unknown[] {
   return takeovers.map(({ taken, ...takeover }) => ({
     ...takeover,
-    taken: taken.map(({ suggestion, properties }) => ({
-      suggestion,
+    taken: taken.map(({ properties, ...links }) => ({
+      ...links,
       properties: propertiesXml(properties),
     })),
   }));
@@ -145,9 +147,13 @@ function readTakeover(value: unknown, path: string, suggestions: number): Checkp
 
 function readTaken(value: unknown, path: string, suggestions: number): CheckpointTaken {
   const f = plainFields(value, path);
+  const earlier = f.has('earlier')
+    ? manifestList(f.get('earlier'), at(path, 'earlier'), 1)
+    : undefined;
   return {
     suggestion: int(required(f, 'suggestion'), at(path, 'suggestion'), 0, suggestions - 1),
     properties: readPropertiesXml(required(f, 'properties'), at(path, 'properties'), PROPERTIES),
+    earlier: earlier?.map((k, j) => int(k, at(at(path, 'earlier'), j), 0, suggestions - 1)),
   };
 }
 

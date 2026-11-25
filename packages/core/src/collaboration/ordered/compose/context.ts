@@ -112,6 +112,8 @@ export interface OrderedRetainedPrompt {
 export interface DrawnTakeover {
   /** The suggestion the record was taken from. */
   readonly replaced: string;
+  /** The suggestions it was taken from before `replaced`, oldest first. */
+  readonly earlier: readonly string[];
   readonly before: readonly OoxmlNode[];
   readonly after: readonly OoxmlNode[];
 }

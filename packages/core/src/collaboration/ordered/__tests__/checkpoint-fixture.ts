@@ -41,9 +41,11 @@ export function paragraph(doc: OrderedDocument, text: string): number {
  * Each is found by what it shows.
  */
 export function withRoomFacts(doc: OrderedDocument): OrderedDocument {
+  // Each takes over the records before it: Rae's holds Quin's by way of Pia's
   for (const [id, who, property] of [
     ['quin:1', 'Quin', { localName: 'jc', attributes: { val: 'center' } }],
     ['pia:1', 'Pia', { localName: 'spacing', attributes: { after: '240' } }],
+    ['rae:1', 'Rae', { localName: 'keepNext' }],
   ] as const) {
     const marks = [markOf(doc, paragraph(doc, 'Signed'))];
     apply(doc, id, { kind: 'paragraph-property', ...EDIT, marks, properties: [property] }, who);
