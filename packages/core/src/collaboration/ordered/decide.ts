@@ -1,6 +1,6 @@
-// Decisions and review cards. A decision changes statuses, and writes the tables it changed into
-// their items as the room's does (`change/settle-columns.ts`). A card is what one decision applies
-// to (`joinsAt` in card-of.ts).
+// Decisions and review cards. A decision changes statuses, and writes what it changed into the
+// items as the room's does (`change/apply-decide.ts`). A card is what one decision applies to
+// (`joinsAt` in card-of.ts).
 
 import {
   authorOf,
@@ -16,10 +16,9 @@ import {
   startsRow,
   type OrderedCard,
 } from './card-of.ts';
+import { decideCard } from './change/apply-decide.ts';
 import { orderedChangeId, orderedIdMinter } from './change/ids.ts';
-import { settleDecidedTables } from './change/settle-columns.ts';
 import { inserter, isHidden, isPending, oneMaker } from './model/document.ts';
-import { setStatus } from './model/mutations.ts';
 import { OrderedRefusal } from './model/refusal.ts';
 import type { OrderedDocument, OrderedItem, OrderedStory } from './model/types.ts';
 
@@ -232,9 +231,10 @@ function cardsOfGroups(doc: OrderedDocument, groups: Groups): OrderedCard[] {
 }
 
 /**
- * Decide the card that holds `suggestion`: every pending suggestion in it takes the status, and
- * each table the decision changed is written into its items, as the room's decision writes it
- * (`settleDecidedTables`). Returns the suggestions decided. A pending suggestion that shows nowhere is its own card, but
+ * Decide the card that holds `suggestion`, as the room's decision does (`decideCard`): every
+ * pending suggestion in it takes the status, and the items hold what the decision changed. A card
+ * the editor alone does not decide is refused with the engine's reason (`engine-refused`).
+ * Returns the suggestions decided. A pending suggestion that shows nowhere is its own card, but
  * one only in a note whose references show nowhere or in a text box whose object went is on no
  * card and is refused (`hidden-target`). The card is found from the suggestion's own items
  * (`orderedCardOf`), so a decision costs what its card holds. Inside an open undo record, the
@@ -252,18 +252,9 @@ export function decideOrdered(
   if (found.status !== 'pending') throw new OrderedRefusal('not-pending', suggestion);
   const card = orderedCardOf(doc, suggestion);
   if (card === null) throw noCardRefusal(suggestion);
-  const members = card.suggestions;
   const status = decision === 'accept' ? 'accepted' : 'rejected';
-  const decided = members.filter((id) => isPending(doc, id));
-  for (const id of decided) {
-    setStatus(doc, id, status);
-  }
 
-  // As the room's decision does: one change id per decision, from the creation counter it moves
-  settleDecidedTables(
-    doc,
-    decided,
-    orderedIdMinter(orderedChangeId('decide', doc.counters.seq + 1))
-  );
-  return members;
+  // As the room's decision: one change id per decision, from the creation counter it moves
+  const ids = orderedIdMinter(orderedChangeId('decide', doc.counters.seq + 1));
+  return decideCard(doc, card, status, ids);
 }

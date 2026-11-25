@@ -12,6 +12,10 @@ import { OrderedRefusal } from '../model/refusal.ts';
 import { revisionIdsOf } from '../model/revision-ids.ts';
 import { textBoxHostOf } from '../model/text-boxes.ts';
 import type { OrderedDocument, OrderedItem } from '../model/types.ts';
+import type { OrderedIdMinter } from './ids.ts';
+import { settleDecidedTables } from './settle-columns.ts';
+import { settleHiddenNotes } from './settle-notes.ts';
+import { settleLooseWords } from './settle-paragraphs.ts';
 import type { OrderedDecideChange, OrderedSeenCard, OrderedSeenSuggestion } from './types.ts';
 
 /** The cards a decision decides, and why the first card it leaves stays. */
@@ -190,17 +194,59 @@ export function orderedDecidedCards(
 }
 
 /**
+ * Turn every suggestion of the cards to the status, then write into the items what the decision
+ * changed: its tables (`settleDecidedTables`), the notes it hid (`settleHiddenNotes`) and the
+ * words it left in no paragraph (`settleLooseWords`). Returns the ids decided.
+ */
+function decideCards(
+  doc: OrderedDocument,
+  cards: readonly OrderedCard[],
+  status: OrderedDecideChange['status'],
+  ids: OrderedIdMinter
+): string[] {
+  const decided = cards.flatMap((card) => card.suggestions);
+  for (const id of decided) {
+    setStatus(doc, id, status);
+  }
+
+  settleDecidedTables(doc, decided, ids);
+  settleHiddenNotes(doc, decided);
+  settleLooseWords(doc, decided);
+  return decided;
+}
+
+/**
  * Decide each card the change names that is as the organiser saw it. Returns the ids decided.
  * When no card is as seen, the first card's reason refuses the change (`stale-decision`, or
  * `not-pending` for a card decided already), and the organiser sees the cards again.
  */
-export function applyDecision(doc: OrderedDocument, change: OrderedDecideChange): string[] {
+export function applyDecision(
+  doc: OrderedDocument,
+  change: OrderedDecideChange,
+  ids: OrderedIdMinter
+): string[] {
   const { cards, left } = judge(doc, change);
   if (cards.length === 0)
     throw left ?? new OrderedRefusal('stale-decision', 'the change names no card');
-  const decided = cards.flatMap((card) => card.suggestions);
-  for (const id of decided) setStatus(doc, id, change.status);
-  return decided;
+  return decideCards(doc, cards, change.status, ids);
+}
+
+/**
+ * Decide one card as it is now, as a decision change decides it: refused with the engine's reason
+ * when the editor alone does not decide it (`engineLeft`). Returns the ids decided.
+ */
+export function decideCard(
+  doc: OrderedDocument,
+  card: OrderedCard,
+  status: OrderedDecideChange['status'],
+  ids: OrderedIdMinter
+): string[] {
+  const left = engineLeft(doc, [card], status).get(card);
+  if (left !== undefined) {
+    throw left;
+  }
+
+  return decideCards(doc, [card], status, ids);
 }
 
 /**

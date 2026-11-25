@@ -10,6 +10,7 @@ import { describe, expect, test } from 'bun:test';
 import { orderedCardOf } from '../card-of.ts';
 import { orderedCardSeen } from '../change/apply-decide.ts';
 import { openOrderedWordFile } from '../client/open.ts';
+import { decideOrdered } from '../decide.ts';
 import type { OrderedDocument } from '../model/types.ts';
 import {
   addressOf,
@@ -64,6 +65,13 @@ describe('words whose paragraph mark a decision took away before a table', () =>
     reject(doc, 'olive:5', 'S:ana:3.1');
     expect(textOf(doc, 8)).toBe('Due in 30 days.');
     await checkFold(doc, base, blobs, 'after the reject of the row');
+  });
+
+  test('go into the first cell that shows by the public decision too, as in the room', () => {
+    const { doc } = wordsBeforeNewTable(true);
+    decideOrdered(doc, 'S:ben:1.1', 'reject');
+    expect(textOf(doc, 8)).toBe('Ltd');
+    expect(orderedCardOf(doc, 'S:ana:3.1')?.suggestions).toEqual(['S:ana:2.1', 'S:ana:3.1']);
   });
 
   test('go into the next paragraph when the whole table goes', async () => {
