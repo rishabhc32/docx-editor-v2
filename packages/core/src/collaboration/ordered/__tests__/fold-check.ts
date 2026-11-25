@@ -18,6 +18,9 @@
 //    them; only the undo of the change that made it reads it. So does the type a suggested section
 //    break gives the next section (`keptOnReject`): Word writes it untracked, a fold writes it as
 //    the section's own, and every decision keeps it.
+//  - how many records of one suggestion are on a unit: a format that took over another's keeps
+//    the record it took under its own suggestion, and once the one it took from is decided, a
+//    fold reads the one change record of the run as one record. The face shows what they give.
 
 import { expect } from 'bun:test';
 import { strFromU8, unzipSync } from 'fflate';
@@ -200,12 +203,15 @@ export function foldPrint(doc: OrderedDocument, base: OoxmlPackage, blobs: FoldB
     const by = item.quiet ? null : item.by;
     const recorded = (
       records: readonly { suggestion: string; untracked?: boolean; keptOnReject?: boolean }[]
-    ) =>
-      records
-        .filter(
-          (r) => r.untracked !== true || (r.suggestion !== item.by && r.keptOnReject !== true)
-        )
-        .map((r) => r.suggestion);
+    ) => [
+      ...new Set(
+        records
+          .filter(
+            (r) => r.untracked !== true || (r.suggestion !== item.by && r.keptOnReject !== true)
+          )
+          .map((r) => r.suggestion)
+      ),
+    ];
     const roles = {
       by: [by],
       del: item.dels,

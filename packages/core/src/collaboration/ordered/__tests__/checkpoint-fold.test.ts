@@ -656,6 +656,20 @@ describe('a fold of a move with words inside it', () => {
     apply(doc, 'ana:1', { kind: 'delete', ...EDIT, from: at(doc, 1, 6), to: at(doc, 1, 11) });
     await checkFold(doc, base, mediaStore(base), "a direct move's words struck");
   });
+
+  // Olive's bold inside Ben's takes over his records; once his card is rejected, a fold reads the
+  // run's one change record as one record of hers, the same face
+  test("a format that took over another's, once that other is rejected", async () => {
+    const file = docx(p(t('Rich text here.')) + p(t('Other words.')));
+    const { document: doc, base } = openOrderedWordFile(file, { file: 1 });
+    const bold = { kind: 'format', ...EDIT, properties: [{ localName: 'b' }] } as const;
+    apply(doc, 'ben:1', { ...bold, from: at(doc, 0, 0), to: at(doc, 0, 10) }, 'Ben');
+    apply(doc, 'olive:1', { ...bold, from: at(doc, 0, 2), to: at(doc, 0, 6) }, 'Olive');
+    const seen = [{ suggestion: 'S:ben:1.1', version: doc.suggestions.get('S:ben:1.1')!.version }];
+    const reject = { kind: 'decide', cards: [{ suggestions: seen }], status: 'rejected' } as const;
+    apply(doc, 'olive:2', reject, 'Olive');
+    await checkFold(doc, base, mediaStore(base), "a format that took over another's");
+  });
 });
 
 describe('who typed inside a new row, cell, note, control or words', () => {
