@@ -626,7 +626,8 @@ describe('a fold of a move with words inside it', () => {
 
   // A folded move keeps the file's range markers; once the moved words went by a direct
   // deletion, the range holds nothing and draws nowhere, as the room draws no range around no
-  // words, so a decision of the move gives one file before and after a fold
+  // words, so a decision of the move gives one file before and after a fold. Once Ana takes back
+  // the copy too, the move shows nothing, and its range markers alone keep it nowhere
   test('a range whose words went', async () => {
     const file = docx(p(t('Rich text here.')) + p(t('Other words.')));
     const first = openOrderedWordFile(file, { file: 1 });
@@ -646,6 +647,8 @@ describe('a fold of a move with words inside it', () => {
       'Olive'
     );
     await checkFold(doc, base, blobs, 'a range whose words went');
+    apply(doc, 'ana:2', { kind: 'delete', ...EDIT, from: at(doc, 1, 6), to: at(doc, 1, 11) });
+    await checkFold(doc, base, blobs, 'a move whose words all went');
   });
 
   // A rejected move's words are in their run again, which a fold reads with no move: the room

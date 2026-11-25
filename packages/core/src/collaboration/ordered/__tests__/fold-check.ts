@@ -179,11 +179,13 @@ function drawnNowhere(doc: OrderedDocument, story: OrderedStory): ReadonlySet<Or
 /**
  * Pending suggestions that show something: a fold keeps none whose every item shows nowhere
  * (`isOrderedItemHidden`: taken back, taken away by a decision or a direct deletion, a prompt that
- * content took the place of; or in a note or a text box compose leaves out).
+ * content took the place of; or in a note or a text box compose leaves out). A move's range
+ * markers alone show nothing: compose draws no range around no words.
  */
 function keptPending(read: CardRead): OrderedSuggestion[] {
   const { doc } = read;
-  const kept = (item: OrderedItem) => !isOrderedItemHidden(doc, item) && !read.isLeftOut(item);
+  const kept = (item: OrderedItem) =>
+    item.moveRange !== true && !isOrderedItemHidden(doc, item) && !read.isLeftOut(item);
   return [...doc.suggestions.values()].filter(
     (s) =>
       s.status === 'pending' &&
