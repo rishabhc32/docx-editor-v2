@@ -228,28 +228,38 @@ export function withControlRecords(
 ): OoxmlPart {
   for (const id of controls) {
     const control = findContentControl(part, id);
-    const properties = control ? contentControlPropertiesOf(control) : undefined;
-    if (!control || !properties) {
-      continue;
-    }
-
-    const summary = summaryOf(control);
-    const edits =
-      summary.type === 'checkbox'
-        ? checkboxEdits(summary, contentControlTextOf(control))
-        : valueRecordEdits(control, stale.has(id));
-    if (Object.keys(edits).length === 0) {
-      continue;
-    }
-
-    const edited = editedProperties(properties, edits, createNodeIdAllocator(part));
-    const written = replaceNode(part, properties.id, edited);
-    if (written.ok) {
+    const edited = control
+      ? propertiesReadBack(control, stale.has(id), createNodeIdAllocator(part))
+      : undefined;
+    const written = edited ? replaceNode(part, edited.id, edited) : undefined;
+    if (written?.ok) {
       part = written.part;
     }
   }
 
   return part;
+}
+
+/**
+ * A control's properties with its value record following its text, as `withControlRecords`
+ * writes them; undefined when the record follows already.
+ */
+export function propertiesReadBack(
+  control: OoxmlElement,
+  stale: boolean,
+  nextId: () => string
+): OoxmlElement | undefined {
+  const properties = contentControlPropertiesOf(control);
+  if (!properties) {
+    return undefined;
+  }
+
+  const summary = summaryOf(control);
+  const edits =
+    summary.type === 'checkbox'
+      ? checkboxEdits(summary, contentControlTextOf(control))
+      : valueRecordEdits(control, stale);
+  return Object.keys(edits).length === 0 ? undefined : editedProperties(properties, edits, nextId);
 }
 
 /** A check box's state: it follows the glyph the control shows. */

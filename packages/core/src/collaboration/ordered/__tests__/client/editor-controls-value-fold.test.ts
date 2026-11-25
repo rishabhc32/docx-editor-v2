@@ -169,6 +169,24 @@ const CASES = [
     pick('60'),
   ],
   [
+    "the item a combo box's prompt stores, over the prompt",
+    line(
+      `<w:showingPlcHdr/><w:comboBox w:lastValue="30">${ITEMS}</w:comboBox>`,
+      t('Choose an item.', FACE)
+    ),
+    [6, 6],
+    pick('30'),
+  ],
+  [
+    "the date a date picker's prompt stores, over the prompt",
+    line(
+      `<w:showingPlcHdr/><w:date w:fullDate="2026-06-30T00:00:00Z">${DATE_FORMAT}</w:date>`,
+      t('Click to enter a date.', FACE)
+    ),
+    [6, 6],
+    pick('2026-06-30'),
+  ],
+  [
     'a date in a date picker with no format',
     line('<w:date><w:lid w:val="en-US"/></w:date>', t('Soon')),
     [6, 6],

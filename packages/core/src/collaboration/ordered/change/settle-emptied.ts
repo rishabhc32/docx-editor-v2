@@ -413,15 +413,27 @@ function promptedControl(
     return null;
   }
 
-  // A reject of typing over the prompt: no word that went was struck, and they did not state the
-  // record. A field's code is no text of the control, as the engine reads it
-  const words = emptied.went.filter((unit) => unit.kind === 'text' && unit.instr !== true);
-  const struck = emptied.went.some((unit) =>
-    unit.dels.some((id) => statusOf(doc, id) !== 'rejected')
-  );
-  const typedOver = !struck && !recordStatesText(shell, words.map((unit) => unit.text).join(''));
-  const read = emptied.decided && !typedOver ? withControlRecords(prompted, [shell.id]) : prompted;
+  const read =
+    emptied.decided && readsRecordBack(doc, shell, emptied.went)
+      ? withControlRecords(prompted, [shell.id])
+      : prompted;
   return findContentControl(read, shell.id) ?? null;
+}
+
+/**
+ * Whether a decision that took `went` away and showed the control's prompt again reads its value
+ * record back from the prompt, as the engine does: not for a reject of typing over the prompt,
+ * where no word that went was struck and they did not state the record (the file's, beside its
+ * prompt). A field's code is no text of the control, as the engine reads it.
+ */
+export function readsRecordBack(
+  doc: OrderedDocument,
+  shell: OoxmlElement,
+  went: readonly OrderedItem[]
+): boolean {
+  const words = went.filter((unit) => unit.kind === 'text' && unit.instr !== true);
+  const struck = went.some((unit) => unit.dels.some((id) => statusOf(doc, id) !== 'rejected'));
+  return struck || recordStatesText(shell, words.map((unit) => unit.text).join(''));
 }
 
 /** The runs of a block control's paragraphs, without their paragraph properties. */

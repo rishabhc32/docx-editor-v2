@@ -1,16 +1,19 @@
 // A control that names a glossary prompt shows that prompt once its content went, settled after
 // each change (task 9.6). The writes go in the change's undo record.
 
-import { replaceNode } from '../../../store/package/ooxml-edit.ts';
+import { createNodeIdAllocator, replaceNode } from '../../../store/package/ooxml-edit.ts';
 import { ooxmlTreesEqual } from '../../../store/package/ooxml-serialize.ts';
 import type { OoxmlElement, OoxmlNode } from '../../../store/package/ooxml-tree.ts';
 import { withRestoredPrompt } from '../../../store/store/content-control-prompt-restore.ts';
-import { findContentControl } from '../../../store/store/tree-op-nodes.ts';
+import {
+  contentControlPropertiesOf,
+  findContentControl,
+} from '../../../store/store/tree-op-nodes.ts';
 import { isBlockToken } from '../compose/blocks.ts';
 import { ComposeContext } from '../compose/context.ts';
 import { composeInline } from '../compose/inline.ts';
 import { ownItems } from '../compose/paragraph.ts';
-import { placeholderNameOf } from '../compose/prompts.ts';
+import { placeholderNameOf, propertiesReadBack } from '../compose/prompts.ts';
 import {
   insertionTakenBack,
   isHidden,
@@ -18,7 +21,7 @@ import {
   isSplitEdge,
   storyOfItem,
 } from '../model/document.ts';
-import { insertItems, relabel } from '../model/mutations.ts';
+import { insertItems, relabel, replaceItems } from '../model/mutations.ts';
 import {
   recordFilledPrompt,
   recordPromptMarkChange,
@@ -33,6 +36,7 @@ import {
   controlScratch,
   pending,
   promptUnits,
+  readsRecordBack,
   setOriginal,
   settleContext,
   shownMarkOf,
@@ -178,12 +182,40 @@ function settleNamedControl(
   // control is no decision's (compose shows a decision's prompt only after one). The control
   // keeps naming the glossary block that its prompt went to when those words filled it.
   if (decided.length > 0) {
+    readValueBack(doc, story, open, shell, decided);
     for (const item of decided) {
       relabel(doc, story, item, { gone: true });
     }
 
     recordFilledPrompt(doc, open.space);
   }
+}
+
+/**
+ * The control's value record read back from the prompt it shows again, as the engine reads it
+ * after a decision (`readsRecordBack`): the words the decision took away go for good, so no
+ * later drawing can tell they stated it.
+ */
+function readValueBack(
+  doc: OrderedDocument,
+  story: OrderedStory,
+  open: OrderedItem,
+  shell: OoxmlElement,
+  went: readonly OrderedItem[]
+): void {
+  const properties = contentControlPropertiesOf(shell);
+  const edited = readsRecordBack(doc, shell, went)
+    ? propertiesReadBack(shell, false, createNodeIdAllocator(story.part))
+    : undefined;
+  if (!properties || !edited) {
+    return;
+  }
+
+  const node = withChildren(
+    shell,
+    shell.children.map((child) => (child === properties ? edited : child))
+  );
+  replaceItems(doc, story, [open], [{ ...open, node, leaf: undefined }]);
 }
 
 /**

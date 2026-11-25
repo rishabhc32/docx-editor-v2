@@ -1,0 +1,12 @@
+{
+  "impact": "compatible",
+  "fields": [],
+  "before": "In a room, a party's pick of the value a combo box, drop-down list or date picker stores beside its prompt, rejected, kept the stored value, where the editor alone and a fold cleared it: the room never read the value back when the prompt it kept showed again.",
+  "after": "A decision that shows a kept prompt again reads the control's value record back from it with the engine's rule (readsRecordBack, shared with an emptied control), so the record after the reject equals the editor alone's, live and after a fold.",
+  "reason": "Change messages, the change log and its kinds keep their meaning, and the Yjs document format and the checkpoint format do not change. Only the composed Word file of such a control after the reject changes, and it now equals across the editor alone, the room and a fold. An ordered room admits only clients of its own code version.",
+  "tests": [
+    "packages/core/src/collaboration/ordered/__tests__/client/editor-controls-value-fold.test.ts"
+  ],
+  "changeset": "stored-value-pick-reject",
+  "migration": null
+}
