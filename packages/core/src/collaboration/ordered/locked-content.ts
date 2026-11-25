@@ -254,9 +254,12 @@ export function formatPassesContentLock(ctx: Ctx, properties: readonly OoxmlProp
   return ctx.direct && formattingPassesContentLock(properties, ctx.contentLockPolicy);
 }
 
-/** Whether typing never enters a control (the engine's `refusesTypedContent`): bound or locked. */
+/**
+ * Whether typing never enters a control (the engine's `refusesTypedContent`): bound, or its own
+ * content locked.
+ */
 export function refusesTyping(ctx: Ctx, open: OrderedItem): boolean {
-  return isBound(open) || lockForbidsEdit(lockPropertiesOf(ctx, open).lock);
+  return isBound(open) || lockForbidsEdit(ownContentLockOf(lockPropertiesOf(ctx, open)));
 }
 
 /**

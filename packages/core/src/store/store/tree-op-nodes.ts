@@ -5,8 +5,10 @@
 // half both of them need.
 
 import {
+  lockForbidsEdit,
   lockInForce,
   lockPropertiesIn,
+  ownContentLockOf,
   type ControlLockProperties,
 } from '../package/content-control-nodes.ts';
 import { findNode, parentNodeOf, type OoxmlEditResult } from '../package/ooxml-edit.ts';
@@ -369,16 +371,22 @@ export function contentControlValueTypeOf(control: OoxmlNode): ContentControlVal
 }
 
 /**
- * Whether typing can never enter this control: its content is locked (`contentLocked`,
- * `sdtContentLocked`), bound to a data store (`w:dataBinding`), or a glyph or picture rather
- * than text (`w14:checkbox`, `w:picture`).
+ * Whether typing can never enter this control: its own content is locked (`contentLocked`,
+ * `sdtContentLocked`, a group: `ownContentLockOf`), bound to a data store (`w:dataBinding`), or a
+ * glyph or picture rather than text (`w14:checkbox`, `w:picture`).
  *
  * An unowned insertion at the outer edge of such a control lands beside it (`insertionSite`),
  * and the keyboard never names one as the owner of a keystroke (`insertOwnerOf`). Entering it
  * would be refused, or would write text into a checkbox glyph.
  */
 export function refusesTypedContent(control: OoxmlNode): boolean {
-  if (declaredLockOf(control).content || isBoundContentControl(control)) return true;
+  if (
+    lockForbidsEdit(ownContentLockOf(lockPropertiesOf(control))) ||
+    isBoundContentControl(control)
+  ) {
+    return true;
+  }
+
   const type = contentControlValueTypeOf(control);
   return type === 'checkbox' || type === 'picture';
 }
