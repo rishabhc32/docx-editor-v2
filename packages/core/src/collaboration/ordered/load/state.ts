@@ -18,7 +18,7 @@ import {
 } from '../model/document.ts';
 import { newSuggestion, setStatus } from '../model/mutations.ts';
 import { OrderedRefusal } from '../model/refusal.ts';
-import { keptRevisionIds, REVISION_ROLE, seedRevisionId } from '../model/revision-ids.ts';
+import { REVISION_ROLE, seedRevisionId, suggestionOfRevision } from '../model/revision-ids.ts';
 import { recordUndo } from '../model/undo-record.ts';
 import {
   tokenSpace,
@@ -94,15 +94,23 @@ export class RevisionReader {
   private readonly fixed: string | undefined;
   /** The suggestions a room checkpoint lists, by the triple of each of their marks. */
   private readonly listedByTriple = new Map<string, string>();
+  /** A prompt the glossary kept: its marks read as `suggestionOfRevision` reads them. */
+  private readonly prompt: boolean;
 
   /**
    * A reader of a document's revisions. The suggestions a room checkpoint lists are made first,
    * in its order and under their own ids, and `doc.revisionIds.listed` keeps their ids in that
    * order.
    */
-  constructor(doc: OrderedDocument, fixed?: string, listed: readonly CheckpointSuggestion[] = []) {
+  constructor(
+    doc: OrderedDocument,
+    fixed?: string,
+    listed: readonly CheckpointSuggestion[] = [],
+    prompt = false
+  ) {
     this.doc = doc;
     this.fixed = fixed;
+    this.prompt = prompt;
     for (const { id, attribution, revisions, record, status } of listed) {
       newSuggestion(doc, attribution, id);
       if (status !== undefined) {
@@ -118,25 +126,13 @@ export class RevisionReader {
   }
 
   /**
-   * A reader of a prompt the glossary kept: a mark a load read or a room checkpoint listed is its
-   * suggestion's, as a reopen reads it, also with the attribution the load read when a change
-   * gave the suggestion another (`suggestionOfRevision`), and every other one is `fixed`.
+   * A reader of a prompt the glossary kept: a mark a load read, a room checkpoint listed or the
+   * room wrote for a suggestion's role is that suggestion's, as a reopen reads it, also with the
+   * attribution the load read when a change gave the suggestion another (`suggestionOfRevision`),
+   * and every other one is `fixed`.
    */
   static forPrompt(doc: OrderedDocument, fixed: string): RevisionReader {
-    const reader = new RevisionReader(doc, fixed);
-    for (const [id, revision] of keptRevisionIds(doc)) {
-      const attributions = [
-        doc.suggestions.get(id)?.attribution,
-        doc.revisionIds.reattributed.get(id),
-      ];
-      for (const attribution of attributions) {
-        if (attribution) {
-          reader.addListed(id, attribution, [revision]);
-        }
-      }
-    }
-
-    return reader;
+    return new RevisionReader(doc, fixed, [], true);
   }
 
   /**
@@ -168,7 +164,10 @@ export class RevisionReader {
    */
   suggestionFor(revision: OoxmlElement, role: string, move?: string): string {
     const triple = tripleOf(revision);
-    if (this.fixed !== undefined && !this.listedByTriple.has(triple)) {
+    const listed =
+      this.listedByTriple.get(triple) ??
+      (this.prompt ? suggestionOfRevision(this.doc, revision) : undefined);
+    if (this.fixed !== undefined && listed === undefined) {
       return this.fixed;
     }
 
@@ -177,7 +176,7 @@ export class RevisionReader {
     const moveKey = move === undefined ? undefined : `${move}\u0000${author}`;
     let suggestion =
       this.byTriple.get(triple) ??
-      this.listedByTriple.get(triple) ??
+      listed ??
       (moveKey === undefined ? undefined : this.byMove.get(moveKey));
     if (suggestion === undefined) {
       const attributes = otherAttributes(revision);

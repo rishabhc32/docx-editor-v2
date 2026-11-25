@@ -713,6 +713,25 @@ describe('a fold of a move with words inside it', () => {
     apply(doc, 'ana:2', { kind: 'insert', ...EDIT, place: at(doc, 0, 10), text: 'net ' });
     await checkEveryCard(doc, base, mediaStore(base), 'a fill taken back');
   });
+
+  // Ana's format on the prompt stays hers when the prompt shows again inside Ben's comment on
+  // Olive's value over it: the room reads the record it wrote for her, as a fold does
+  test("a format on a prompt shown again inside a comment's range", async () => {
+    const prompt = t('Click here to enter text.', '<w:rStyle w:val="PlaceholderText"/>');
+    const control =
+      '<w:sdt><w:sdtPr><w:id w:val="4"/><w:showingPlcHdr/><w:text/></w:sdtPr>' +
+      `<w:sdtContent>${prompt}</w:sdtContent></w:sdt>`;
+    const file = docx(p(t('Signed by ') + control + t(' for the buyer.')));
+    const { document: doc, base } = openOrderedWordFile(file, { file: 1 });
+    const bold = { kind: 'format', ...EDIT, properties: [{ localName: 'b' }] } as const;
+    apply(doc, 'ana:1', { ...bold, from: at(doc, 0, 10), to: at(doc, 0, 34) });
+    const value = { kind: 'text', text: 'Acme due' } as const;
+    const box = addressOf(opens(doc, 'sdt')[0]!);
+    apply(doc, 'olive:1', { kind: 'control-value', ...EDIT, control: box, value }, 'Olive');
+    const [from, to] = [at(doc, 0, 12), at(doc, 0, 14)];
+    apply(doc, 'ben:1', { kind: 'comment', part: BODY, from, to, text: 'Why?' }, 'Ben');
+    await checkEveryCard(doc, base, mediaStore(base), "a prompt inside a comment's range");
+  });
 });
 
 describe('who typed inside a new row, cell, note, control or words', () => {
