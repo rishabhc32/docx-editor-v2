@@ -29,7 +29,7 @@ import {
   recordPromptMarkChange,
   promptedControlsOf,
 } from '../model/prompt-marks.ts';
-import { suggestionOfRevision } from '../model/revision-ids.ts';
+import { isPromptRecordOf, suggestionOfRevision } from '../model/revision-ids.ts';
 import {
   isUnit,
   type OrderedDocument,
@@ -286,7 +286,8 @@ function keepPrompt(
 
 /**
  * Whether the kept prompt holds a format record that none of the prompt's units holds now: its
- * suggestion took it back.
+ * suggestion took it back. A record a unit still holds is found among the units' suggestions
+ * first, so the scan of every suggestion runs only for a record none of them holds.
  */
 function formatTakenOff(doc: OrderedDocument, shell: OoxmlElement, scan: Scan): boolean {
   const original = doc.originals.get(shell.id);
@@ -296,7 +297,11 @@ function formatTakenOff(doc: OrderedDocument, shell: OoxmlElement, scan: Scan): 
 
   const held = new Set(scan.prompt.flatMap((unit) => unit.fmts.map((f) => f.suggestion)));
   return promptRecords(original).some((record) => {
-    const suggestion = isWml(record, 'rPrChange') ? suggestionOfRevision(doc, record) : undefined;
+    if (!isWml(record, 'rPrChange') || [...held].some((id) => isPromptRecordOf(doc, id, record))) {
+      return false;
+    }
+
+    const suggestion = suggestionOfRevision(doc, record);
     return suggestion !== undefined && !held.has(suggestion);
   });
 }

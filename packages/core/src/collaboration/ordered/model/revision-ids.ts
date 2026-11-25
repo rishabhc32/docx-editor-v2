@@ -210,13 +210,7 @@ export function suggestionOfRevision(
   revision: OoxmlElement
 ): string | undefined {
   const id = attributeOf(revision, 'id');
-  const author = attributeOf(revision, 'author') ?? '';
-  const date = attributeOf(revision, 'date');
-  const made = (suggestion: string) =>
-    [
-      doc.suggestions.get(suggestion)?.attribution,
-      doc.revisionIds.reattributed.get(suggestion),
-    ].some((a) => a?.author === author && a.date === date);
+  const made = (suggestion: string) => stampedAs(doc, suggestion, revision);
   for (const [suggestion, kept] of keptRevisionIds(doc)) {
     if (kept === id && made(suggestion)) {
       return suggestion;
@@ -235,6 +229,41 @@ export function suggestionOfRevision(
   }
 
   return undefined;
+}
+
+/**
+ * Whether a revision mark has the author and date of the suggestion: its own, or the ones the
+ * load read when a change gave the suggestion another.
+ */
+function stampedAs(doc: OrderedDocument, suggestion: string, revision: OoxmlElement): boolean {
+  const author = attributeOf(revision, 'author') ?? '';
+  const date = attributeOf(revision, 'date');
+  return [
+    doc.suggestions.get(suggestion)?.attribution,
+    doc.revisionIds.reattributed.get(suggestion),
+  ].some((a) => a?.author === author && a.date === date);
+}
+
+/**
+ * Whether a prompt's record is `suggestion`'s, as `suggestionOfRevision` reads it, for one known
+ * suggestion and without a scan: the `w:id` of its role, the file's or the room's, or one a room
+ * checkpoint listed for it. Each `w:id`, author and date names one suggestion.
+ */
+export function isPromptRecordOf(
+  doc: OrderedDocument,
+  suggestion: string,
+  revision: OoxmlElement
+): boolean {
+  const role = PROMPT_RECORD_ROLES.get(revision.localName);
+  const id = attributeOf(revision, 'id');
+  if (role === undefined || id === undefined || !stampedAs(doc, suggestion, revision)) {
+    return false;
+  }
+
+  return (
+    revisionIdFor(doc, suggestion, role) === id ||
+    doc.revisionIds.listed.get(suggestion)?.includes(id) === true
+  );
 }
 
 /** Each `w:id` a load kept for a suggestion's role, or a room checkpoint listed for it. */
