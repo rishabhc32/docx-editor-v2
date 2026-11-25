@@ -30,6 +30,8 @@ import { CardRead, isCardUnit, isOrderedItemHidden } from '../card-of.ts';
 import { applyOrderedChange } from '../change/apply.ts';
 import { orderedCardSeen } from '../change/apply-decide.ts';
 import { orderedChangeId, orderedIdMinter } from '../change/ids.ts';
+import { settleEmptiedControls } from '../change/settle-emptied.ts';
+import { settleNamedPrompts } from '../change/settle-named-prompts.ts';
 import { settlePromptMarks } from '../change/settle-prompts.ts';
 import type { OrderedSeenSuggestion } from '../change/types.ts';
 import { openOrderedCheckpoint, type OrderedWordFile } from '../client/open.ts';
@@ -370,8 +372,11 @@ function partsOf(bytes: Uint8Array): Record<string, string> {
   );
 }
 
+/** Who decides in `checkFold` and `checkEveryCard`, and when. */
+const DECIDER = { person: testPerson('Olive'), date: '2026-11-25T12:00:00Z' };
+
 /**
- * The Word file after `ids` are decided as `status`, with a block prompt's marks settled as a
+ * The Word file after `ids` are decided as `status`, with the controls' prompts settled as a
  * decision settles them (`applyOrderedChange`), each XML part by what it says (as a reopen
  * compares decisions: `semanticBody`); the document is restored. A decision on a folded copy may
  * split a run where the room keeps one, or keep an empty `w:rPr`: the same meaning.
@@ -383,11 +388,14 @@ function decidedFile(
   ids: readonly string[],
   status: 'accepted' | 'rejected'
 ): Record<string, string> {
+  const apply = { ...DECIDER, ids: orderedIdMinter(orderedChangeId('check', 1)) };
   const { record } = withUndoRecord(doc, () => {
     for (const id of ids) {
       setStatus(doc, id, status);
     }
 
+    settleEmptiedControls(doc, apply);
+    settleNamedPrompts(doc, apply);
     settlePromptMarks(doc);
   });
   const bytes = orderedPackageBytes(doc, base, { blobs });
@@ -465,9 +473,6 @@ export async function checkFold(
     }
   }
 }
-
-/** Who decides each card in `checkEveryCard`, and when. */
-const DECIDER = { person: testPerson('Olive'), date: '2026-11-25T12:00:00Z' };
 
 /**
  * One card decided as the organiser's decision change decides it, from the card as the organiser
