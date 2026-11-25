@@ -7,6 +7,9 @@
 // hold her style's cell records, and the engine plans no accept of her deletion and no reject of
 // Ben's column (`incomplete-group`). The room once decided both, and a fold of its file gave
 // other cell records than the live room (backlog row 103).
+//
+// A card of several suggestions is decided together, as the engine plans a batch of them: Ben's
+// paragraph record in a cell of Ana's new column joins her card, and its reject takes both.
 
 import { describe, expect, test } from 'bun:test';
 import { orderedCardSeen } from '../change/apply-decide.ts';
@@ -18,6 +21,7 @@ import {
   APPLY_FILE,
   DIRECT,
   EDIT,
+  markOf,
   opens,
   refusal,
 } from './change-apply-fixture.ts';
@@ -63,6 +67,26 @@ describe('a decision the engine plans no change for', () => {
       const doc = struck();
       apply(doc, 'olive:2', decide(doc, suggestion, status), 'Olive');
       expect(doc.suggestions.get(suggestion)?.status).toBe(status);
+    });
+  }
+});
+
+describe('a card of several suggestions', () => {
+  // Seed sp5-run-1/quick-short-1 of the pre-send check (mismatch 5)
+  for (const status of ['accepted', 'rejected'] as const) {
+    test(`a paragraph record in a cell of another person's new column, ${status} with it`, () => {
+      const { document: doc } = openOrderedWordFile(APPLY_FILE, { file: 1 });
+      const right = addressOf(opens(doc, 'tc')[1]!);
+      apply(doc, 'ana:1', { kind: 'insert-column', ...EDIT, cell: right, where: 'left' });
+      const align = [{ localName: 'jc', attributes: { val: 'right' } }];
+      const record = { kind: 'paragraph-property', ...EDIT, marks: [markOf(doc, 5)] } as const;
+      apply(doc, 'bob:1', { ...record, properties: align }, 'Bob');
+      expect(orderedCardSeen(doc, 'S:bob:1.1')?.map((s) => s.suggestion)).toEqual([
+        'S:ana:1.1',
+        'S:bob:1.1',
+      ]);
+      apply(doc, 'olive:1', decide(doc, 'S:bob:1.1', status), 'Olive');
+      expect([...doc.suggestions.values()].map((s) => s.status)).toEqual([status, status]);
     });
   }
 });

@@ -1,0 +1,10 @@
+{
+  "impact": "compatible",
+  "fields": [],
+  "before": "A decision of one card planned only the card's items the engine decides with their dependencies, so a card that held a party's paragraph record inside another person's new column or row was refused as engine-refused (incomplete-group), though the engine plans both together.",
+  "after": "A decision of several suggestions, many cards or one card that holds several, plans all their items together, as the engine's Accept All does (engineLeft); a card of one suggestion is planned as the editor decides its item, as before.",
+  "reason": "Change messages, the change log and its kinds keep their meaning, and the Yjs document format and the checkpoint format do not change. Only the verdict of such a decision changes, from refused to decided, as the engine plans it. An ordered room admits only clients of its own code version.",
+  "tests": ["packages/core/src/collaboration/ordered/__tests__/decide-engine-refused.test.ts"],
+  "changeset": "card-of-several-decided",
+  "migration": null
+}

@@ -51,8 +51,10 @@ const markKey = (id: string, author: string, date: string | undefined): string =
  * The cards the engine's own plan leaves, each with the engine's reason: the editor alone
  * refuses to decide them (a column deletion whose struck cells hold another record of its
  * author), so the room refuses them too, and no copy decides what another cannot. One plan for
- * each part the cards are in, of what the editor plans: every item of a decision of many cards,
- * as its Accept All; an item of one card that it plans with its dependencies (`decidedAsBatch`).
+ * each part the cards are in, of what the editor plans: every item of a decision of several
+ * suggestions (many cards, or one card that holds several), as its Accept All plans them
+ * together; an item of a card of one suggestion that it plans with its dependencies
+ * (`decidedAsBatch`).
  */
 function engineLeft(
   doc: OrderedDocument,
@@ -60,6 +62,7 @@ function engineLeft(
   status: OrderedDecideChange['status']
 ): Map<OrderedCard, OrderedRefusal> {
   const action = status === 'accepted' ? 'accept' : 'reject';
+  const together = cards.length > 1 || cards.some((card) => card.suggestions.length > 1);
   const cardOfMark = new Map<string, OrderedCard>();
   const parts = new Set<string>();
   for (const card of cards) {
@@ -85,7 +88,7 @@ function engineLeft(
     for (const item of revisionItemsOf(part)) {
       const marks = item.addresses.map(({ id, author, date }) => markKey(id, author, date));
       const card = marks.map((mark) => cardOfMark.get(mark)).find((c) => c !== undefined);
-      if (card !== undefined && (cards.length > 1 || decidedAsBatch(item, part))) {
+      if (card !== undefined && (together || decidedAsBatch(item, part))) {
         cardOfKey.set(reviewItemKey(item), card);
       }
     }
