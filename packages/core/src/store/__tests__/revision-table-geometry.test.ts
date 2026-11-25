@@ -364,3 +364,14 @@ test("a new column's reject beside its author's pending records joins the grid; 
 
   expect(serializeOoxmlPart(after.part)).not.toContain('gridSpan');
 });
+
+test('a join keeps a row’s `w:trPr` after its `w:tblPrEx`, as `CT_Row` orders them', () => {
+  const exceptions = '<w:tblPrEx><w:tblW w:type="auto" w:w="0"/></w:tblPrEx>';
+  const cells = cell('gone', 1000, marker('cellDel')) + cell('kept', 2000);
+  const body = table(
+    row(cells, '<w:jc w:val="center"/>').replace('<w:tr>', `<w:tr>${exceptions}`),
+    [1000, 2000]
+  );
+  const xml = resolve(body, 'accept');
+  expect(xml).toContain(`<w:tr>${exceptions}<w:trPr><w:jc w:val="center"/></w:trPr><w:tc>`);
+});

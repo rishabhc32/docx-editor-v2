@@ -11,6 +11,7 @@
 import { describe, expect, test } from 'bun:test';
 import { serializeOoxmlPart } from '../../../store/package/ooxml-tree.ts';
 import { orderedCardSeen } from '../change/apply-decide.ts';
+import { orderedCards } from '../decide.ts';
 import { composeOrderedPart } from '../compose/compose.ts';
 import { orderedPackageBytes } from '../compose/package.ts';
 import { loadOrderedPackage } from '../load/load.ts';
@@ -244,4 +245,30 @@ describe('a direct row deletion after a decision on the table', () => {
       });
     });
   }
+});
+
+describe('a decided column in a table with row exceptions', () => {
+  // Ada's file deletes the first row's middle cell; the second row, with its own table
+  // exceptions, spans the first two columns. The join gives it a `w:gridAfter`, in a new
+  // `w:trPr` after its `w:tblPrEx`, as `CT_Row` orders them and the engine writes it
+  test('puts a new `w:trPr` after the `w:tblPrEx`, live and after a reopen', () => {
+    const exceptions = '<w:tblPrEx><w:tblW w:type="auto" w:w="0"/></w:tblPrEx>';
+    const thin = (w: number) => `<w:tcW w:w="${w}" w:type="dxa"/>`;
+    const file = docx(
+      '<w:tbl><w:tblPr><w:tblW w:w="0" w:type="auto"/></w:tblPr><w:tblGrid>' +
+        '<w:gridCol w:w="1000"/><w:gridCol w:w="2000"/><w:gridCol w:w="3000"/></w:tblGrid>' +
+        `<w:tr>${cell(p(t('a')), thin(1000))}` +
+        cell(p(t('gone')), `${thin(2000)}<w:cellDel w:id="1" w:author="Ada"/>`) +
+        `${cell(p(t('c')), thin(3000))}</w:tr>` +
+        `<w:tr>${exceptions}${cell(p(t('x')), `${thin(3000)}<w:gridSpan w:val="2"/>`)}</w:tr>` +
+        '</w:tbl>' +
+        p(t('After.'))
+    );
+    const doc = loadOrderedPackage(packageOf(file));
+    const [card] = orderedCards(doc);
+    decide(doc, 'olive:1', card!.id, 'accepted');
+    const xml = serializeOoxmlPart(composeOrderedPart(doc, BODY).part);
+    expect(xml).toContain(`<w:tr>${exceptions}<w:trPr><w:gridAfter w:val="1"/></w:trPr>`);
+    checkSaveAndLoad(doc, 'a decided column beside row exceptions', packageOf(file));
+  });
 });

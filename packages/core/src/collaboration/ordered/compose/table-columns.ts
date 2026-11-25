@@ -405,9 +405,10 @@ function withPlacement(
   if (!own || own.kind === 'textValue') {
     if (next.length === 0) return owner;
 
-    // First: the engine's `compactRevisionGrid` puts a new `w:trPr` first; `w:tcPr` leads a cell
+    // First, as the engine's `compactRevisionGrid` puts it: after a row's `w:tblPrEx` (`CT_Row`)
     const made = build(mint(), 'generic', container, [], next);
-    return withChildren(owner, [made, ...owner.children]);
+    const at = owner.children.findIndex((c) => isWml(c, 'tblPrEx')) + 1;
+    return withChildren(owner, [...owner.children.slice(0, at), made, ...owner.children.slice(at)]);
   }
 
   const kept = own.children.filter((c) => !names.some((name) => isWml(c, name)));

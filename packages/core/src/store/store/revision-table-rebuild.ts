@@ -471,7 +471,7 @@ interface RowOffsets {
 
 /**
  * A row (or its record) whose `w:trPr` skips `offsets` (`w:gridBefore`, `w:gridAfter`), first
- * among its children, as `patch` puts a cell's `w:tcPr`.
+ * among its children but after a row's `w:tblPrEx`, as `CT_Row` orders them.
  */
 function withRowOffsets(
   owner: OoxmlElement,
@@ -496,9 +496,11 @@ function withRowOffsets(
   const insertion = properties.findIndex((property) => !isWmlNamed(property, 'cnfStyle'));
   properties.splice(insertion < 0 ? properties.length : insertion, 0, ...placed);
   const next = { ...(pr ?? element(owner, 'trPr', {}, mint)), children: properties };
+  const others = owner.children.filter((c) => !isWmlNamed(c, 'trPr'));
+  const at = others.findIndex((c) => isWmlNamed(c, 'tblPrEx')) + 1;
   return {
     ...owner,
-    children: [next, ...owner.children.filter((c) => !isWmlNamed(c, 'trPr'))],
+    children: [...others.slice(0, at), next, ...others.slice(at)],
   } as OoxmlElement;
 }
 
