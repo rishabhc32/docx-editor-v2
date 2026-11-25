@@ -85,16 +85,18 @@ describe('the fields of a date format Word writes', () => {
   // Tuesday, 15 September 2026, 2:05:09 in the afternoon
   const date = { year: 2026, month: 9, day: 15, hour: 14, minute: 5, second: 9 };
 
+  // As Word for Mac (en-US) shows its date pictures (DATE fields, 2026-11-25): `AM` or `PM` in
+  // capitals for every mark, and no field longer than four letters
   test('show weekdays, hours, minutes, seconds, AM or PM and quoted text', () => {
     const shown: [string, string][] = [
       ['dddd, MMMM d, yyyy', 'Tuesday, September 15, 2026'],
       ['ddd d MMM yy', 'Tue 15 Sep 26'],
-      ['M/d/yyyy h:mm am/pm', '9/15/2026 2:05 pm'],
+      ['M/d/yyyy h:mm am/pm', '9/15/2026 2:05 PM'],
       ['h:mm:ss AM/PM', '2:05:09 PM'],
-      ['hh:mm A/P', '02:05 P'],
+      ['hh:mm:ss a/p', '02:05:09 PM'],
       ['H:m:s', '14:5:9'],
-      ['HH:mm a/p', '14:05 p'],
       ["d 'of' MMMM", '15 of September'],
+      ['MMMMM', 'September9'],
     ];
     for (const [pattern, text] of shown) {
       expect({ pattern, text: formatContentControlDate(date, pattern) }).toEqual({ pattern, text });

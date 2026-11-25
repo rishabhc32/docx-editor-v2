@@ -178,24 +178,33 @@ const WEEKDAY_NAMES = [
  */
 const DEFAULT_DATE_FORMAT = 'M/d/yyyy';
 
-/** The letters of a date and time field (ECMA-376 Part 1, date and time formatting). */
+/**
+ * The letters of a date and time field (ECMA-376 Part 1, date and time formatting), each with
+ * the longest run one field takes: Word reads `MMMMM` as `MMMM` and `M` (`November11`).
+ */
+const FIELD_RUNS: ReadonlyMap<string, number> = new Map([
+  ['y', 4],
+  ['M', 4],
+  ['d', 4],
+  ['h', 2],
+  ['H', 2],
+  ['m', 2],
+  ['s', 2],
+]);
+
 type FieldLetter = 'y' | 'M' | 'd' | 'h' | 'H' | 'm' | 's';
 
-const FIELD_LETTERS: ReadonlySet<string> = new Set(['y', 'M', 'd', 'h', 'H', 'm', 's']);
-
-/** The four forms of the morning and afternoon mark, each with its two marks. */
-const DAY_HALVES: readonly (readonly [string, string, string])[] = [
-  ['AM/PM', 'AM', 'PM'],
-  ['am/pm', 'am', 'pm'],
-  ['A/P', 'A', 'P'],
-  ['a/p', 'a', 'p'],
-];
+/**
+ * The forms of the morning and afternoon mark. Word shows `AM` or `PM` for each, in capitals
+ * also for `am/pm` and `a/p` (Word for Mac, en-US, 2026-11-25); `A/P` is no mark in Word.
+ */
+const DAY_HALVES = ['AM/PM', 'am/pm', 'a/p'];
 
 /** One part of a date format: words shown as they are, a field, or a morning or afternoon mark. */
 type DateToken =
   | { readonly kind: 'literal'; readonly text: string }
   | { readonly kind: 'field'; readonly letter: FieldLetter; readonly run: number }
-  | { readonly kind: 'half'; readonly marks: readonly [string, string] };
+  | { readonly kind: 'half' };
 
 /**
  * The parts of a date format (the default form when it names none), or null for one too long to
@@ -212,19 +221,20 @@ function dateTokens(dateFormat: string | undefined): DateToken[] | null {
   let index = 0;
   while (index < pattern.length) {
     const char = pattern[index]!;
-    const half = DAY_HALVES.find(([form]) => pattern.startsWith(form, index));
+    const half = DAY_HALVES.find((form) => pattern.startsWith(form, index));
     if (half) {
-      tokens.push({ kind: 'half', marks: [half[1], half[2]] });
-      index += half[0].length;
+      tokens.push({ kind: 'half' });
+      index += half.length;
     } else if (char === "'") {
       // Quoted words show as they are, without their quotes
       const end = pattern.indexOf("'", index + 1);
       const close = end < 0 ? pattern.length : end;
       tokens.push({ kind: 'literal', text: pattern.slice(index + 1, close) });
       index = close + 1;
-    } else if (FIELD_LETTERS.has(char)) {
+    } else if (FIELD_RUNS.has(char)) {
+      const longest = FIELD_RUNS.get(char)!;
       let run = 0;
-      while (pattern[index + run] === char) {
+      while (run < longest && pattern[index + run] === char) {
         run += 1;
       }
 
@@ -289,7 +299,7 @@ export function formatContentControlDate(
       }
 
       if (token.kind === 'half') {
-        return token.marks[date.hour < 12 ? 0 : 1];
+        return date.hour < 12 ? 'AM' : 'PM';
       }
 
       return fieldText(date, token.letter, token.run);
@@ -379,13 +389,13 @@ function readToken(
   }
 
   if (token.kind === 'half') {
-    const index = token.marks.findIndex((mark) => text.startsWith(mark, at));
-    if (index < 0) {
+    const mark = text.slice(at, at + 2);
+    if (mark !== 'AM' && mark !== 'PM') {
       return null;
     }
 
-    fields.afternoon = index === 1;
-    return at + token.marks[index]!.length;
+    fields.afternoon = mark === 'PM';
+    return at + 2;
   }
 
   const { letter, run } = token;
