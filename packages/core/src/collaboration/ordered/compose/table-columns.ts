@@ -443,13 +443,13 @@ const plainOf = (node: OoxmlNode): unknown =>
 export function decisionOn(ctx: ComposeContext, open: OrderedItem): string | undefined {
   const labels = [open.by, ...open.dels, ...open.props.map((record) => record.suggestion)];
   return labels.find((id): id is string => {
-    const found = id === null ? undefined : ctx.doc.suggestions.get(id);
-    if (found === undefined || found.direct === true) {
+    const status = ctx.statusOf(id, 'decision');
+    if (id === null || status === undefined) {
       return false;
     }
 
-    const preview = ctx.options.pending === 'reject' && found.status === 'pending';
-    return preview || ctx.options.settling?.has(found.id) === true;
+    const preview = ctx.options.pending === 'reject' && status === 'pending';
+    return preview || ctx.options.settling?.has(id) === true;
   });
 }
 

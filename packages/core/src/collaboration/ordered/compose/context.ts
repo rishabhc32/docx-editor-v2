@@ -414,15 +414,7 @@ export class ComposeContext {
    */
   decidedAway(item: OrderedItem): boolean {
     if (item.gone || item.retracted || !this.gone(item)) return false;
-    const decision = (suggestion: string, status: OrderedSuggestionStatus): boolean => {
-      const found = this.doc.suggestions.get(suggestion);
-      return found?.status === status && found.direct !== true;
-    };
-    const direct = (deleter: string): boolean => {
-      const found = this.doc.suggestions.get(deleter);
-      return found?.status === 'accepted' && found.direct === true;
-    };
-    if (item.dels.some(direct)) {
+    if (item.dels.some((deleter) => this.statusOf(deleter, 'direct') === 'accepted')) {
       return false;
     }
 
@@ -430,8 +422,8 @@ export class ComposeContext {
       return true;
     }
 
-    if (item.by !== null && decision(item.by, 'rejected')) return true;
-    return item.dels.some((deleter) => decision(deleter, 'accepted'));
+    if (this.statusOf(item.by, 'decision') === 'rejected') return true;
+    return item.dels.some((deleter) => this.statusOf(deleter, 'decision') === 'accepted');
   }
 
   /**
@@ -465,8 +457,22 @@ export class ComposeContext {
 
   /** A direct edit's suggestion its author took back. */
   revertedDirect(suggestion: string): boolean {
-    const found = this.doc.suggestions.get(suggestion);
-    return found?.direct === true && found.status === 'rejected';
+    return this.statusOf(suggestion, 'direct') === 'rejected';
+  }
+
+  /**
+   * The status of a suggestion that is a decision's (`decision`: a suggestion's, decided by an
+   * accept or a reject) or a direct edit's (`direct`: accepted when made, rejected when taken
+   * back); undefined when it is not of that kind.
+   */
+  statusOf(
+    suggestion: string | null,
+    kind: 'decision' | 'direct'
+  ): OrderedSuggestionStatus | undefined {
+    const found = suggestion === null ? undefined : this.doc.suggestions.get(suggestion);
+    return found !== undefined && (found.direct === true) === (kind === 'direct')
+      ? found.status
+      : undefined;
   }
 
   /** The suggestion that shows as striking the item: the first pending one (policy 1). */
@@ -480,8 +486,7 @@ export class ComposeContext {
    * A unit taken back before never was: the reject took nothing of it away.
    */
   rejectedWords(item: OrderedItem): string {
-    const found = item.by === null ? undefined : this.doc.suggestions.get(item.by);
-    const rejected = found?.status === 'rejected' && found.direct !== true;
+    const rejected = this.statusOf(item.by, 'decision') === 'rejected';
     const words = item.kind === 'text' && item.instr !== true;
     return rejected && words && !item.gone && !item.retracted ? item.text : '';
   }
@@ -497,8 +502,7 @@ export class ComposeContext {
 
   /** Whether an accept decided the item's insertion: a suggestion's, not a direct edit's. */
   acceptedInsertion(item: OrderedItem): boolean {
-    const found = item.by === null ? undefined : this.doc.suggestions.get(item.by);
-    return found?.status === 'accepted' && found.direct !== true;
+    return this.statusOf(item.by, 'decision') === 'accepted';
   }
 
   /** The pending suggestion that shows as inserting the item, if its container does not. */
