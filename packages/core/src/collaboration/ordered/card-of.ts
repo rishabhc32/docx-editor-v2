@@ -225,6 +225,25 @@ export function joinsInsertion(read: CardRead, unit: OrderedItem, id: string, by
   return !propertyOnly || insideOne(read, id) === by;
 }
 
+/**
+ * The insertion that deletion `id` joins from a unit beside one it strikes (join 2): the same
+ * author's insertion of `side`. A unit `id` strikes too is part of the deletion, not an insertion
+ * beside it, so a card does not change with how the struck words split into units (a fold joins
+ * them), as the editor alone pairs a deletion only with an insertion that starts where it ends.
+ */
+export function insertionBeside(
+  doc: OrderedDocument,
+  id: string,
+  side: OrderedItem | null | undefined
+): string | null {
+  if (!side || side.dels.includes(id) || !isPending(doc, id)) {
+    return null;
+  }
+
+  const by = inserter(doc, side);
+  return by !== null && oneMaker(doc, id, by) ? by : null;
+}
+
 function unitBefore(read: CardRead, story: OrderedStory, item: OrderedItem) {
   for (let prev = story.tree.prev(item); prev; prev = story.tree.prev(prev))
     if (read.isUnit(prev, story)) return prev;
@@ -331,7 +350,7 @@ function joinsAsInserter(search: CardSearch, visit: UnitVisit): void {
   // 2. The same author's deletion right before or after x's insertion
   for (const side of [visit.before, after]) {
     for (const id of side?.dels ?? []) {
-      if (isPending(doc, id) && oneMaker(doc, id, x)) {
+      if (insertionBeside(doc, id, unit) !== null) {
         add(id);
       }
     }
@@ -381,8 +400,8 @@ function joinsAsChanger(search: CardSearch, visit: UnitVisit): void {
   }
 
   for (const side of [visit.before, visit.after]) {
-    const sideBy = side ? inserter(doc, side) : null;
-    if (sideBy !== null && oneMaker(doc, sideBy, x)) {
+    const sideBy = insertionBeside(doc, x, side);
+    if (sideBy !== null) {
       add(sideBy);
     }
   }

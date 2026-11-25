@@ -1,0 +1,10 @@
+{
+  "impact": "compatible",
+  "fields": [],
+  "before": "A deletion joined the card of the same author's insertion beside a unit it strikes even when it struck that unit too, so a person's deletion of their own pending new words that a later direct deletion split in two units joined their card live, and a fold, which joins the units again, made it a card of its own.",
+  "after": "A unit the deletion strikes too is part of the deletion, not an insertion beside it (insertionBeside in card-of.ts, used by orderedCards and orderedCardOf), so the cards are the same live and after a fold, as the editor alone pairs a deletion only with an insertion that starts where it ends.",
+  "reason": "Change messages, the change log and its kinds keep their meaning, and the Yjs document format and the checkpoint format (version 5) do not change. Only how the room groups suggestions into cards changes, and it now equals a fold and the editor alone. An ordered room admits only clients of its own code version, and ordered rooms are not deployed yet, so no room needs a migration.",
+  "tests": ["packages/core/src/collaboration/ordered/__tests__/cards.test.ts"],
+  "changeset": "ordered-struck-own-words-card",
+  "migration": null
+}

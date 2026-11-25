@@ -13,7 +13,20 @@ import { loadOrderedPackage } from '../load/load.ts';
 import { OrderedRefusal } from '../model/refusal.ts';
 import type { OrderedDocument } from '../model/types.ts';
 import { withUndoRecord } from '../model/undo-record.ts';
-import { addressOf, apply, at, BODY, EDIT, load, opens, textOf } from './change-apply-fixture.ts';
+import { openOrderedWordFile } from '../client/open.ts';
+import {
+  addressOf,
+  APPLY_FILE,
+  apply,
+  at,
+  BODY,
+  DIRECT,
+  EDIT,
+  load,
+  opens,
+  textOf,
+} from './change-apply-fixture.ts';
+import { checkFold, folded, mediaStore } from './fold-check.ts';
 import { seededRandom } from './random.ts';
 import { sessionDocument } from './sessions/fixture.ts';
 import { randomChange, type Who } from './sessions/random-change.ts';
@@ -185,5 +198,25 @@ describe('the card of one suggestion', () => {
     );
     expect(orderedCardOf(fresh, 'S:olga:2.1')?.suggestions).toEqual(['S:olga:2.1']);
     expectSameCards(fresh, 'new table');
+  });
+  test("a deletion of a person's own new words joins no card by how those words split", async () => {
+    // Olive's new address for the link, kept by a fold; her second one strikes her first copy
+    const opened = openOrderedWordFile(APPLY_FILE, { file: 1 });
+    const blobs = mediaStore(opened.base);
+    const href = 'https://example.com/new';
+    const linkAt = (doc: OrderedDocument, k: number) => addressOf(opens(doc, 'hyperlink')[k]!);
+    const first = { kind: 'link-target', ...EDIT, link: linkAt(opened.document, 0), href } as const;
+    apply(opened.document, 'olive:1', first, 'Olive');
+    const { document: doc, base } = await folded(opened.document, opened.base, 2, blobs);
+    apply(doc, 'olive:2', { kind: 'link-target', ...EDIT, link: linkAt(doc, 1), href }, 'Olive');
+    expect(textOf(doc, 1)).toBe('See the termsthe termsthe terms.');
+    // Her direct deletion of "term" in the struck copy leaves two units, which a fold joins:
+    // neither is an insertion beside the deletion that strikes both
+    const term = { kind: 'delete', ...DIRECT, from: at(doc, 1, 17), to: at(doc, 1, 21) } as const;
+    apply(doc, 'olive:3', term, 'Olive');
+    expect(textOf(doc, 1)).toBe('See the termsthe sthe terms.');
+    expect(orderedCardOf(doc, 'S:olive:2.1')?.suggestions).toEqual(['S:olive:2.1']);
+    expectSameCards(doc, 'a struck copy in two units');
+    await checkFold(doc, base, blobs, 'a struck copy in two units');
   });
 });

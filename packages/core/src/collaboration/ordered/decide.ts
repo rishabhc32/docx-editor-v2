@@ -6,6 +6,7 @@ import {
   CardRead,
   cardFrom,
   changers,
+  insertionBeside,
   isCardUnit,
   joinsInsertion,
   noCardRefusal,
@@ -157,16 +158,17 @@ function joinNeighbours(read: CardRead, units: readonly OrderedItem[], groups: G
     }
 
     // A deletion next to an insertion by the same author: one card
-    const nextBy = inserter(doc, next);
     for (const deleter of item.dels) {
-      if (isPending(doc, deleter) && nextBy !== null && oneMaker(doc, deleter, nextBy)) {
+      const nextBy = insertionBeside(doc, deleter, next);
+      if (nextBy !== null) {
         groups.join(deleter, nextBy);
       }
     }
 
     for (const deleter of next.dels) {
-      if (isPending(doc, deleter) && by !== null && oneMaker(doc, deleter, by)) {
-        groups.join(by, deleter);
+      const beside = insertionBeside(doc, deleter, item);
+      if (beside !== null) {
+        groups.join(beside, deleter);
       }
     }
   }
