@@ -5,6 +5,7 @@
 // room and each screen shows its list.
 
 import { afterEach, describe, expect, test } from 'bun:test';
+import { createDocxEditor } from '../../../../editor/docx-editor.ts';
 import { readOoxmlPackage } from '../../../../store/package/ooxml-package.ts';
 import { serializeOoxmlPart } from '../../../../store/package/ooxml-tree.ts';
 import { openOrderedWordFile } from '../../client/open.ts';
@@ -81,6 +82,15 @@ async function seats(file = TABLE_FILE, mode: 'edit' | 'suggesting' = 'edit') {
   });
   return { room, ana, olive };
 }
+
+/** The revision cards an editor shows, with their authors and kinds. */
+const revisionsOf = (editor: Person['editor']) =>
+  editor.getReviewItems().flatMap((item) => (item.kind === 'revision' ? [item] : []));
+
+/** The key of Ana's new row's card. */
+const rowOf = (editor: Person['editor']): string =>
+  revisionsOf(editor).find((item) => item.author === 'Ana' && item.revisionKind === 'structural')
+    ?.key ?? '';
 
 async function decideAll(person: Person, action: 'accept' | 'reject'): Promise<void> {
   expect(
@@ -661,6 +671,55 @@ describe('new tables in an ordered room (task 9.7)', () => {
         expect(s.insertTable(1, 2)).toBe(true);
       },
     ]);
+  });
+
+  test("a reject of a new table leaves another person's words in the next paragraph, in its cell", async () => {
+    // Ben's new table after the table, with the paragraph the engine adds between; Ana's words in
+    // that paragraph and her row in his table
+    const room = localRoom(TABLE_FILE, { policy: suggestionsOnlyPolicy() });
+    const ben = await join(room, 'Ben', { wordFile: TABLE_FILE, review });
+    const ana = await join(room, 'Ana', { wordFile: TABLE_FILE, review });
+    const olive = await join(room, 'Olive', { wordFile: TABLE_FILE, login: ORGANISER, review });
+    caretIn(ben, 'Signed here.');
+    expect(surface(ben).insertTable(2, 2)).toBe(true);
+    await settle();
+    caretIn(ana, '');
+    surface(ana).insertPlainText('Ltd');
+    await settle();
+    caretAt(ana, editorTexts(ana).indexOf('Ltd') + 1, 0);
+    expect(tableCommand(ana, { type: 'insertRow', where: 'below' }).ok).toBe(true);
+    await settle();
+    converged(room, ben, ana, olive);
+    const document = new Uint8Array(await olive.editor.save());
+
+    // The editor alone on the same file: Ben's card, then Ana's row, which holds the words now
+    const container = globalThis.document.createElement('div');
+    globalThis.document.body.append(container);
+    const editor = createDocxEditor({ container, document, author: 'Olive', modules: [review] });
+    const ben3 = revisionsOf(editor).filter((item) => item.author === 'Ben');
+    const keys = ben3.map((item) => item.key);
+    const rejectBen = { type: 'resolveAllReviewChanges', action: 'reject', keys } as const;
+    expect(editor.exec(rejectBen).ok).toBe(true);
+    const afterBen = comparedBody(editor.surface!.session.part());
+    expect(editor.rejectReviewItem(rowOf(editor)).ok).toBe(true);
+    const afterRow = comparedBody(editor.surface!.session.part());
+    editor.destroy();
+    container.remove();
+
+    // The room decides each card as the editor alone does
+    const benCard = revisionsOf(olive.editor).find((item) => item.author === 'Ben')!;
+    expect(olive.editor.rejectReviewItem(benCard.key).ok).toBe(true);
+    await settle();
+    converged(room, ben, ana, olive);
+    expect(comparedBody(surface(olive).session.part())).toBe(afterBen);
+    // One card, the row with the words in it, as the host decides it
+    expect(orderedCards(room.room.document).map((card) => card.suggestions.length)).toEqual([2]);
+    expect(cards(olive)).toHaveLength(1);
+    expect(olive.editor.rejectReviewItem(rowOf(olive.editor)).ok).toBe(true);
+    await settle();
+    converged(room, ben, ana, olive);
+    expect(editorTexts(olive)).not.toContain('Ltd');
+    expect(comparedBody(surface(olive).session.part())).toBe(afterRow);
   });
 
   test("a party's new table is Word's form: inserted rows and cell marks, no cell markers", async () => {

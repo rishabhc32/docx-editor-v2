@@ -37,6 +37,7 @@ import type { OrderedSeenSuggestion } from '../change/types.ts';
 import { openOrderedCheckpoint, type OrderedWordFile } from '../client/open.ts';
 import { orderedSuggestionsOfRevision } from '../client/ops/review.ts';
 import { currentFace } from '../client/properties.ts';
+import { isBlockToken } from '../compose/blocks.ts';
 import { orderedPackageMedia, writeOrderedCheckpoint } from '../compose/checkpoint.ts';
 import { orderedViewParagraph } from '../compose/compose.ts';
 import { ComposeContext } from '../compose/context.ts';
@@ -47,7 +48,7 @@ import { isSectionItem } from '../compose/sections.ts';
 import { orderedCards } from '../decide.ts';
 import { MOVE_RANGE } from '../load/moves.ts';
 import { oneChangeRecord } from '../model/checkpoint-untracked.ts';
-import { movedAwayBy } from '../model/document.ts';
+import { isHidden, movedAwayBy } from '../model/document.ts';
 import { setStatus } from '../model/mutations.ts';
 import { takenFrom } from '../model/takeovers.ts';
 import { OrderedRefusal } from '../model/refusal.ts';
@@ -172,6 +173,41 @@ function drawnNowhere(doc: OrderedDocument, story: OrderedStory): ReadonlySet<Or
 
   for (const item of ctx.hiddenPrompts) {
     out.add(item);
+  }
+
+  return out;
+}
+
+/**
+ * The units that show in no paragraph: words a mark that shows does not end before a block starts
+ * or ends, or before the story ends. Live and after a fold, every unit is in a paragraph.
+ */
+function unitsOutsideParagraphs(doc: OrderedDocument): string[] {
+  const out: string[] = [];
+  for (const story of doc.stories.values()) {
+    const nowhere = drawnNowhere(doc, story);
+    let loose: OrderedItem[] = [];
+    const flush = () => {
+      out.push(...loose.map((item) => `${story.name}: ${item.kind} ${JSON.stringify(item.text)}`));
+      loose = [];
+    };
+    for (const item of story.tree.items()) {
+      if (isBlockToken(item)) {
+        flush();
+      } else if (item.kind === 'mark') {
+        if (!isHidden(doc, item)) {
+          loose = [];
+        }
+      } else if (
+        !(item.kind === 'zero' && item.block) &&
+        !isOrderedItemHidden(doc, item) &&
+        !nowhere.has(item)
+      ) {
+        loose.push(item);
+      }
+    }
+
+    flush();
   }
 
   return out;
@@ -461,6 +497,7 @@ export async function checkFold(
   const once = await folded(doc, base, doc.file + 1, blobs);
   const twice = await folded(once.document, once.base, doc.file + 2, blobs);
   then?.(doc);
+  expect({ label, outside: unitsOutsideParagraphs(doc) }).toEqual({ label, outside: [] });
   const print = foldPrint(doc, base, blobs);
   const live = [...byMaker(doc)].flatMap(([maker, ids]) =>
     DECISIONS.map((status) => ({ maker, status, file: decidedFile(doc, base, blobs, ids, status) }))
@@ -470,6 +507,8 @@ export async function checkFold(
     ['twice', twice],
   ] as const) {
     then?.(copy.document);
+    const outside = unitsOutsideParagraphs(copy.document);
+    expect({ label, fold, outside }).toEqual({ label, fold, outside: [] });
     expect({ label, fold, print: foldPrint(copy.document, copy.base, blobs) }).toEqual({
       label,
       fold,
@@ -501,7 +540,11 @@ function cardDecided(
   blobs: FoldBlobs,
   seen: readonly OrderedSeenSuggestion[],
   status: 'accepted' | 'rejected'
-): { readonly decided: readonly string[] | string; readonly file: Record<string, string> } {
+): {
+  readonly decided: readonly string[] | string;
+  readonly file: Record<string, string>;
+  readonly outside: readonly string[];
+} {
   const id = orderedChangeId('check', 1);
   const change = { v: 1, id, kind: 'decide', cards: [{ suggestions: seen }], status } as const;
   try {
@@ -509,8 +552,9 @@ function cardDecided(
       applyOrderedChange(doc, change, { ...DECIDER, ids: orderedIdMinter(id) })
     );
     const bytes = orderedPackageBytes(doc, base, { blobs });
+    const outside = unitsOutsideParagraphs(doc);
     takeBack(doc, record);
-    return { decided: value.suggestions, file: semanticParts(bytes) };
+    return { decided: value.suggestions, file: semanticParts(bytes), outside };
   } catch (error) {
     if (!(error instanceof OrderedRefusal)) {
       throw error;
@@ -519,6 +563,7 @@ function cardDecided(
     return {
       decided: error.reason,
       file: semanticParts(orderedPackageBytes(doc, base, { blobs })),
+      outside: unitsOutsideParagraphs(doc),
     };
   }
 }
@@ -542,12 +587,17 @@ export async function checkEveryCard(
     const seen = orderedCardSeen(doc, card.id) ?? [];
     for (const status of DECISIONS) {
       const live = cardDecided(doc, base, blobs, seen, status);
+      expect({ label, card: card.suggestions, status, outside: live.outside }).toEqual({
+        label,
+        card: card.suggestions,
+        status,
+        outside: [],
+      });
       for (const [fold, copy] of [
         ['once', once],
         ['twice', twice],
       ] as const) {
-        const { decided, file } = cardDecided(copy.document, copy.base, blobs, seen, status);
-        const shown = { decided, file };
+        const shown = cardDecided(copy.document, copy.base, blobs, seen, status);
         expect({ label, fold, card: card.suggestions, status, ...shown }).toEqual({
           label,
           fold,

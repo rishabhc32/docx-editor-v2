@@ -25,6 +25,7 @@ import { parseOrderedChangeId } from './ids.ts';
 import { placeOfChange } from './change-place.ts';
 import { settleRemovedColumns } from './settle-columns.ts';
 import { settleHiddenNotes } from './settle-notes.ts';
+import { settleLooseWords } from './settle-paragraphs.ts';
 import { settleEmptiedControls } from './settle-emptied.ts';
 import { settleNamedPrompts } from './settle-named-prompts.ts';
 import { settlePromptMarks } from './settle-prompts.ts';
@@ -348,6 +349,7 @@ function applyChange(
       const decided = applyDecision(doc, change);
       settleRemovedColumns(doc, decided, ctx.ids);
       settleHiddenNotes(doc, decided);
+      settleLooseWords(doc, decided);
       return { suggestions: decided, replaced: [] };
     }
     case 'retract': {

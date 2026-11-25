@@ -199,6 +199,33 @@ export function insertItems(
 }
 
 /**
+ * Move consecutive items to right after `after`, as they are: no unit changes its address.
+ */
+export function moveItems(
+  doc: OrderedDocument,
+  story: OrderedStory,
+  items: readonly OrderedItem[],
+  after: OrderedItem
+): void {
+  const [first] = items;
+  if (first === undefined) {
+    return;
+  }
+
+  const before = story.tree.prev(first);
+  const put = (at: OrderedItem | null): void => {
+    for (const item of items) {
+      story.tree.remove(item);
+    }
+
+    story.tree.insertAfter(at, items);
+  };
+  put(after);
+  recordUndo(doc, () => put(before));
+  touch(doc, namedBy(items));
+}
+
+/**
  * Put `next` in the place of `old`: consecutive items of one space whose units `next` holds
  * again, cut another way (typing that grows an item).
  * No unit changes its address.

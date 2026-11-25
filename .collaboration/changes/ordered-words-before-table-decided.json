@@ -1,0 +1,13 @@
+{
+  "impact": "compatible",
+  "fields": [],
+  "before": "A decision that took away a paragraph mark right before a table left its words before the table in no paragraph. Compose drew them in the table's first paragraph that shows, as the editor alone puts them, and a fold loaded them there, but live a later decision on that row kept them and the row's card did not hold them.",
+  "after": "After a decision, the room moves such words into the next paragraph that shows, with its containers (settleLooseWords in change/settle-paragraphs.ts), so live, after a fold and in the editor alone the words, the cards and later decisions are the same.",
+  "reason": "Change messages, the change log and its kinds keep their meaning, and the Yjs document format and the checkpoint format (version 5) do not change. Only where the room keeps such words after a decision changes, and it now equals the file, a fold and the editor alone. An ordered room admits only clients of its own code version, and ordered rooms are not deployed yet, so no room needs a migration.",
+  "tests": [
+    "packages/core/src/collaboration/ordered/__tests__/checkpoint-fold-paragraphs.test.ts",
+    "packages/core/src/collaboration/ordered/__tests__/client/editor-tables.test.ts"
+  ],
+  "changeset": "ordered-words-before-table-decided",
+  "migration": null
+}
