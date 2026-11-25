@@ -1,0 +1,10 @@
+{
+  "impact": "compatible",
+  "fields": [],
+  "before": "A comment that ended inside a control's prompt, typed over after a fold, lost its end and reference when the typing was rejected after another fold: the fold keeps the prompt in the glossary with them, and the room's prompt units left markers out, while live and the engine's restore show them again.",
+  "after": "A prompt's units keep a comment's marker its range lacks (promptUnits, lackedMarker), only for a comment the document holds, so the comment's range is whole again, live as after a fold. A marker of a comment the file does not hold never comes back. A template's read notes a comment marker inside the change's undo record (noteCommentMarker).",
+  "reason": "Change messages, the change log and its kinds keep their meaning, and the Yjs document format and the checkpoint format do not change. Only the room's units and Word file of such a control after the decision change, and they now equal live and the engine. An ordered room admits only clients of its own code version.",
+  "tests": ["packages/core/src/collaboration/ordered/__tests__/checkpoint-fold-prompts.test.ts"],
+  "changeset": "kept-prompt-comment-markers",
+  "migration": null
+}

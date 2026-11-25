@@ -2,21 +2,29 @@
 // record read back from the prompt, its format records, and its place among a comment's markers.
 
 import { describe, expect, test } from 'bun:test';
+import { strFromU8, strToU8, unzipSync, zipSync } from 'fflate';
+import { readOoxmlPackage } from '../../../store/package/ooxml-package.ts';
 import { orderedCardSeen } from '../change/apply-decide.ts';
-import { openOrderedWordFile } from '../client/open.ts';
+import { applyOrderedChange } from '../change/apply.ts';
+import { orderedIdMinter } from '../change/ids.ts';
+import { openOrderedCheckpoint, openOrderedWordFile } from '../client/open.ts';
+import { orderedPackageBytes } from '../compose/package.ts';
 import type { OrderedDocument } from '../model/types.ts';
+import { takeBack, withUndoRecord } from '../model/undo-record.ts';
 import {
   addressOf,
   apply,
   at,
   BODY,
+  DATE,
   DIRECT,
   EDIT,
   opens,
   partsOf,
   textOf,
 } from './change-apply-fixture.ts';
-import { checkEveryCard, checkFold, folded, mediaStore } from './fold-check.ts';
+import { checkEveryCard, checkFold, checkpointBytes, folded, mediaStore } from './fold-check.ts';
+import { testPerson } from './test-persons.ts';
 import { docx, p, t } from './word-fixtures.ts';
 
 describe("a control's prompt shown again, decided card by card after a fold", () => {
@@ -340,5 +348,68 @@ describe("a control's prompt shown again, decided card by card after a fold", ()
     apply(doc, 'olive:3', { kind: 'control-value', ...EDIT, control: box, value }, 'Olive');
     expect(partsOf(doc).join('')).not.toContain('li</w:t>');
     await checkEveryCard(doc, base, blobs, 'a link round prompt words');
+  });
+
+  // Seed 83 of the fold shapes: Ben's comment ends inside the prompt, which a fold keeps in the
+  // glossary with the comment's end and reference. A reject of Ana's typing over the prompt shows
+  // the prompt with them again, as the engine's restore does, live as after a fold. A marker whose
+  // comment the file does not hold never comes back: the block is the file's content
+  describe("a comment's end inside a prompt kept in the glossary", () => {
+    const terms = () => {
+      const list =
+        '<w:sdt><w:sdtPr><w:id w:val="3"/><w:showingPlcHdr/><w:dropDownList w:lastValue="30">' +
+        '<w:listItem w:displayText="Net 30" w:value="30"/></w:dropDownList></w:sdtPr>' +
+        `<w:sdtContent>${t('Choose an item.', '<w:rStyle w:val="PlaceholderText"/>')}` +
+        '</w:sdtContent></w:sdt>';
+      return docx(p(t('Terms are ') + list + t(' from today.')));
+    };
+    const reject = (room: OrderedDocument) =>
+      ({
+        kind: 'decide',
+        cards: [{ suggestions: orderedCardSeen(room, 'S:ana:1.1') ?? [] }],
+        status: 'rejected',
+      }) as const;
+    const typed = async () => {
+      const { document: doc, base } = openOrderedWordFile(terms(), { file: 1 });
+      const blobs = mediaStore(base);
+      const comment = { kind: 'comment', part: BODY, text: 'Why?' } as const;
+      apply(doc, 'ben:1', { ...comment, from: at(doc, 0, 1), to: at(doc, 0, 11) }, 'Ben');
+      const copy = await folded(doc, base, 2, blobs);
+      apply(copy.document, 'ana:1', {
+        kind: 'insert',
+        ...EDIT,
+        place: at(copy.document, 0, 25),
+        text: 'a',
+      });
+      return { ...copy, blobs };
+    };
+
+    test('shows again with the prompt', async () => {
+      const { document: room, base, blobs } = await typed();
+      await checkFold(room, base, blobs, "a comment's end in a kept prompt");
+
+      // Folded again, the markers are in the glossary only. A reject taken back, as a refused
+      // batch is, and made again under another id shows them, as the first does
+      const { document: again } = await folded(room, base, 3, blobs);
+      const first = { v: 1, id: 'olive:1', ...reject(again) } as const;
+      const by = { person: testPerson('Olive'), date: DATE, ids: orderedIdMinter('olive:1') };
+      takeBack(again, withUndoRecord(again, () => applyOrderedChange(again, first, by)).record);
+      apply(again, 'olive:2', reject(again), 'Olive');
+      expect(partsOf(again)[0]).toMatch(/<w:t>C<\/w:t><\/w:r><w:commentRangeEnd /);
+    });
+
+    test('of a comment the file does not hold never comes back', async () => {
+      const { document: room, base, blobs } = await typed();
+      const files = unzipSync(await checkpointBytes(room, base, blobs));
+      const glossary = 'word/glossary/document.xml';
+      files[glossary] = strToU8(
+        strFromU8(files[glossary]!).replace(/(comment\w+ w:id=")\d+/g, '$1999')
+      );
+      const forged = openOrderedCheckpoint(zipSync(files), { file: 3 });
+      apply(forged.document, 'olive:1', reject(forged.document), 'Olive');
+      const bytes = orderedPackageBytes(forged.document, forged.base, { blobs });
+      expect(readOoxmlPackage(bytes, {}).ok).toBe(true);
+      expect(strFromU8(unzipSync(bytes)['word/document.xml']!)).not.toContain('w:id="999"');
+    });
   });
 });

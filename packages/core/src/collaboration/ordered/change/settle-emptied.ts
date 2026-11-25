@@ -45,6 +45,7 @@ import {
   type OrderedItemAddress,
   type OrderedStory,
 } from '../model/types.ts';
+import { commentMarkerOf } from '../model/comments.ts';
 import { recordUndo } from '../model/undo-record.ts';
 import {
   isControlContent,
@@ -509,6 +510,23 @@ function paragraphChildren(blocks: readonly OoxmlNode[]): (readonly OoxmlNode[])
 }
 
 /**
+ * Whether an item is a marker of a comment the document holds whose range had no marker of its
+ * kind, so the read noted this one (`noteCommentMarker`): a fold keeps it in the glossary only,
+ * with the prompt it ends in, and the engine restores the block whole. A marker of a comment the
+ * file does not hold is the file's content, and never comes back.
+ */
+function lackedMarker(doc: OrderedDocument, item: OrderedItem): boolean {
+  const found = commentMarkerOf(item.node);
+  const noted = found === null ? undefined : doc.commentRanges.get(found.id)?.[found.marker];
+  return (
+    found !== null &&
+    doc.comments.has(found.id) &&
+    noted?.space === item.space &&
+    noted.offset === item.offset
+  );
+}
+
+/**
  * The units of the prompt in a prompted control's content, loaded as a paragraph would be, with
  * the edges of the containers that hold them (a link on its words) and each control in it whole,
  * as a load marks a prompt. A record a room checkpoint listed (a prompt the glossary kept with its
@@ -528,9 +546,10 @@ export function promptUnits(ctx: Ctx, control: OoxmlElement, open: OrderedItem):
     return [];
   }
 
-  // Its units, the edges of the containers that hold them, each control in it whole and each
-  // paragraph's mark but the last, marked as a load marks a prompt (`markPrompt`): a control
-  // keeps its own items, and only its open item is the prompt's
+  // Its units, the edges of the containers that hold them, each control in it whole, each
+  // paragraph's mark but the last, and a comment's marker its range lacks (`lackedMarker`),
+  // marked as a load marks a prompt (`markPrompt`): a control keeps its own items, and only its
+  // open item is the prompt's
   const reader = RevisionReader.forPrompt(ctx.doc, open.by ?? '');
   const out: OrderedItem[] = [];
   for (const [k, children] of paragraphs.entries()) {
@@ -544,7 +563,13 @@ export function promptUnits(ctx: Ctx, control: OoxmlElement, open: OrderedItem):
         nested = item.pair;
       } else if (item.kind === 'close' && item.pair === nested) {
         nested = undefined;
-      } else if (own && !isUnit(item) && !edge && (item.kind !== 'mark' || last)) {
+      } else if (
+        own &&
+        !isUnit(item) &&
+        !edge &&
+        (item.kind !== 'mark' || last) &&
+        !lackedMarker(ctx.doc, item)
+      ) {
         continue;
       }
 

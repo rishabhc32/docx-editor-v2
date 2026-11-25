@@ -9,6 +9,7 @@ import {
 import { attributeOf } from '../ooxml-nodes.ts';
 import { itemAt } from './document.ts';
 import { OrderedRefusal } from './refusal.ts';
+import { recordUndo } from './undo-record.ts';
 import type { OrderedPerson } from './person.ts';
 import type { OrderedDocument, OrderedItem, OrderedItemAddress, OrderedStory } from './types.ts';
 
@@ -88,7 +89,8 @@ export function commentMarkerOf(
 
 /**
  * Note a loaded item in `doc.commentRanges` when it is a comment's marker: the first marker of
- * each kind, in the story of the comment's first marker.
+ * each kind, in the story of the comment's first marker. A read inside a change (a template's)
+ * notes it in the change's undo record.
  */
 export function noteCommentMarker(doc: OrderedDocument, story: string, item: OrderedItem): void {
   const found = commentMarkerOf(item.node);
@@ -103,8 +105,14 @@ export function noteCommentMarker(doc: OrderedDocument, story: string, item: Ord
     reference: null,
   };
   if (range.story === story && range[found.marker] === null) {
+    const before = doc.commentRanges.get(found.id);
     const address = { space: item.space, offset: item.offset };
     doc.commentRanges.set(found.id, { ...range, [found.marker]: address });
+    recordUndo(doc, () =>
+      before === undefined
+        ? doc.commentRanges.delete(found.id)
+        : doc.commentRanges.set(found.id, before)
+    );
   }
 }
 
