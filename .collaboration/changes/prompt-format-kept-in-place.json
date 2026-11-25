@@ -4,7 +4,7 @@
   "before": "A prompt shown again where the engine puts it, inside a comment on the words that filled it, lost a format another person suggested on it: the room read the format's change record as no suggestion's until a fold listed its id.",
   "after": "A prompt's change records are read as suggestionOfRevision reads them, by the id the room writes for each suggestion's role, so the format stays that suggestion's, live as after a fold.",
   "reason": "Change messages, the change log and its kinds keep their meaning, and the Yjs document format and the checkpoint format do not change. Only the composed Word file of such a prompt changes, and it now equals live and after a fold. An ordered room admits only clients of its own code version.",
-  "tests": ["packages/core/src/collaboration/ordered/__tests__/checkpoint-fold.test.ts"],
+  "tests": ["packages/core/src/collaboration/ordered/__tests__/checkpoint-fold-prompts.test.ts"],
   "changeset": "prompt-format-kept-in-place",
   "migration": null
 }
