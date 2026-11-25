@@ -465,6 +465,31 @@ describe("a fold of a table's records", () => {
       await checkFold(doc, base, mediaStore(base), `${kind}, then a row height rejected`);
     });
   }
+
+  // A decision on a column gives its width back as the engine's reject does, from the table
+  // before the decision: the cell the column took width from at the width it lent, the others as
+  // they show, live as after a fold
+  const right = (doc: OrderedDocument, k: number) =>
+    ({ cell: addressOf(opens(doc, 'tc')[k]!), where: 'right' }) as const;
+  for (const mode of [EDIT, DIRECT]) {
+    test(`a column, then the organiser's ${mode.mode} column beside its new cell`, async () => {
+      const { document: doc, base } = openOrderedWordFile(APPLY_FILE, { file: 1 });
+      apply(doc, 'ana:1', { kind: 'insert-column', ...EDIT, ...right(doc, 0) }, 'Ana', ANA_1);
+      apply(doc, 'olive:1', { kind: 'insert-column', ...mode, ...right(doc, 1) }, 'Olive');
+      await checkFold(doc, base, mediaStore(base), `a ${mode.mode} column beside a new cell`);
+    });
+  }
+
+  // The organiser deletes the column before the party's column, or the one it took width from
+  for (const k of [0, 1]) {
+    test(`a column, then the organiser's deletion of column ${k + 1}`, async () => {
+      const { document: doc, base } = openOrderedWordFile(APPLY_FILE, { file: 1 });
+      apply(doc, 'ben:1', { kind: 'insert-column', ...EDIT, ...right(doc, 1) }, 'Ben', ANA_1);
+      const cell = addressOf(opens(doc, 'tc')[k]!);
+      apply(doc, 'olive:1', { kind: 'delete-column', ...DIRECT, cell }, 'Olive');
+      await checkFold(doc, base, mediaStore(base), `a column, then column ${k + 1} deleted`);
+    });
+  }
 });
 
 describe("a suggestion's version after a fold", () => {

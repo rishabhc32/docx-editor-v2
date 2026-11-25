@@ -66,12 +66,12 @@ const cards = (person: Person): string[] =>
 const kinds = (room: OrderedLocalRoom): string[] =>
   room.room.joinSnapshot(0).map((change) => change.kind);
 
-async function seats(file = TABLE_FILE) {
+async function seats(file = TABLE_FILE, mode: 'edit' | 'suggesting' = 'edit') {
   const room = localRoom(file, { policy: suggestionsOnlyPolicy() });
   const ana = await join(room, 'Ana', { wordFile: file, review });
   const olive = await join(room, 'Olive', {
     wordFile: file,
-    mode: 'edit',
+    mode,
     login: ORGANISER,
     review,
   });
@@ -214,6 +214,52 @@ describe('columns in an ordered room (task 9.7)', () => {
     await decideAll(olive, 'reject');
     converged(room, ana, ben, olive);
     expect(gridOf(olive)).toEqual([3000, 3000, 3000]);
+  });
+
+  // A reject of a party's column gives its new cell's width to the cell before it, as the
+  // engine's reject does, from the table before the decision: the cell the column took width
+  // from at the width it lent. The organiser's suggested column took half of the party's cell;
+  // a direct one took its own width
+  const besideNewCell: ['suggesting' | 'edit', number[]][] = [
+    ['suggesting', [2250, 750, 3000, 3000]],
+    ['edit', [3000, 1500, 3000, 3000]],
+  ];
+  for (const [mode, widths] of besideNewCell) {
+    test(`a party's column, then the organiser's ${mode} column beside its new cell`, async () => {
+      const { room, ana, olive } = await seats(TABLE_FILE, mode);
+      caretIn(ana, 'Fee');
+      expect(tableCommand(ana, { type: 'insertColumn', where: 'right' }).ok).toBe(true);
+      await settle();
+      caretIn(olive, '');
+      expect(tableCommand(olive, { type: 'insertColumn', where: 'right' }).ok).toBe(true);
+      await settle();
+      const [anaCard] = cards(olive);
+      expect(olive.editor.rejectReviewItem(anaCard!).ok).toBe(true);
+      await settle();
+      converged(room, ana, olive);
+      expect({ grid: gridOf(olive), row: firstRowWidths(olive) }).toEqual({
+        grid: widths,
+        row: widths,
+      });
+    });
+  }
+
+  // The organiser deletes the column a party's new column took width from: the party's cell
+  // gives its width to the cell before it
+  test("a party's column, then the organiser deletes the column it took width from", async () => {
+    const { room, ana, olive } = await seats();
+    caretIn(ana, 'Rate');
+    expect(tableCommand(ana, { type: 'insertColumn', where: 'right' }).ok).toBe(true);
+    await settle();
+    caretIn(olive, 'Rate');
+    expect(tableCommand(olive, { type: 'deleteColumn' }).ok).toBe(true);
+    await settle();
+    await decideAll(olive, 'reject');
+    converged(room, ana, olive);
+    expect({ grid: gridOf(olive), row: firstRowWidths(olive) }).toEqual({
+      grid: [4500, 3000],
+      row: [4500, 3000],
+    });
   });
 
   test('a party deletes a column while another types in it', async () => {

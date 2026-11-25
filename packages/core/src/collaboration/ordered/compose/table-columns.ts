@@ -17,7 +17,7 @@ import {
   type OrderedItem,
   type OrderedPropertyTarget,
 } from '../model/types.ts';
-import { attributeOf, isWml, withChildren, withId } from '../ooxml-nodes.ts';
+import { attributeOf, childNamed, isWml, withChildren, withId } from '../ooxml-nodes.ts';
 import type { ComposeContext } from './context.ts';
 import { withStoryBlocks } from './paragraph-ops.ts';
 import { acceptedAndPending, containerPropertiesAfter } from './properties.ts';
@@ -251,38 +251,84 @@ function wholeDirectColumns(
   return out;
 }
 
+/** The survivors of the rows a decision removes cells from, as the engine holds them before it. */
+interface Survivors {
+  /** The cells whose shown `w:tcPr` the decision must not widen. */
+  readonly kept: ReadonlySet<string>;
+  /** The `w:tcW` a removed column lent each cell it took width from, by the cell's node id. */
+  readonly lent: ReadonlyMap<string, OoxmlElement>;
+}
+
 /**
- * A survivor's `w:tcPr` the decision must not widen: its shown properties were taken when a
- * removed cell of its row did not show (already removed, or not added yet), so they hold no
- * width that cell lent.
+ * The survivors of each row with a removed cell, by how the engine holds them before the
+ * decision. A cell a removed column took width from shows the width it lent (`lent`): Word
+ * writes no record of it, so the cell shows its width from before the column, where the engine
+ * holds it lent until the decision gives the removed cell's width back. A cell whose shown
+ * `w:tcPr` was taken when a removed cell of its row did not show (already removed, or not added
+ * yet) holds no width of it (`kept`). The record of what a column lent names the cell it took
+ * width from, so every other cell's own properties hold that column's cell.
  */
-function keptCellProperties(
+function survivorsOf(
   ctx: ComposeContext,
   drawn: OoxmlElement,
-  removed: ReadonlySet<string>
-): Set<string> {
-  const keep = new Set<string>();
+  removed: readonly RemovedCell[]
+): Survivors {
+  const columns = new Map(removed.map((r) => [r.id, r.suggestion]));
+  const suggestions = new Set(columns.values());
+  const kept = new Set<string>();
+  const lent = new Map<string, OoxmlElement>();
   for (const row of drawn.children) {
-    if (row.kind === 'textValue' || !isRow(row)) continue;
-    const cells = row.children.filter(
-      (c): c is OoxmlElement => c.kind !== 'textValue' && isCell(c)
-    );
-    const gone = cells.filter((c) => removed.has(c.id));
-    if (gone.length === 0) continue;
-    const goneItems = gone.flatMap((c) => {
-      const item = itemAt(ctx.story, { space: tokenSpace(ctx.doc.file, c.id), offset: 0 });
-      return item ? [item] : [];
+    if (row.kind === 'textValue' || !isRow(row)) {
+      continue;
+    }
+
+    const cells = row.children.flatMap((c) => {
+      const space = tokenSpace(ctx.doc.file, c.id);
+      const open =
+        c.kind !== 'textValue' && isCell(c) ? itemAt(ctx.story, { space, offset: 0 }) : null;
+      return open ? [{ id: c.id, open, lends: lendingOf(ctx, open, suggestions) }] : [];
     });
-    for (const cell of cells) {
-      if (removed.has(cell.id)) continue;
-      const open = itemAt(ctx.story, { space: tokenSpace(ctx.doc.file, cell.id), offset: 0 });
-      if (!open) continue;
+    const gone = cells.filter((c) => columns.has(c.id));
+    const lentInRow = new Set(cells.flatMap((c) => (c.lends ? [c.lends.suggestion] : [])));
+    for (const { id, open, lends } of gone.length === 0 ? [] : cells) {
+      const width = lends?.element ? childNamed(lends.element, 'tcW') : undefined;
+      if (columns.has(id)) {
+        continue;
+      }
+
+      if (width) {
+        lent.set(id, width);
+        continue;
+      }
+
       const shown = shownRecord(ctx, open, 'tcPr');
-      if (goneItems.some((item) => !holdsCell(shown, open, item))) keep.add(cell.id);
+      const holds = (cell: (typeof gone)[number]) =>
+        (shown === null && lentInRow.has(columns.get(cell.id) ?? '')) ||
+        holdsCell(shown, open, cell.open);
+      if (!gone.every(holds)) {
+        kept.add(id);
+      }
     }
   }
 
-  return keep;
+  return { kept, lent };
+}
+
+/** The last record of what a removed column (of `suggestions`) lent a cell, once it shows no more. */
+function lendingOf(
+  ctx: ComposeContext,
+  open: OrderedItem,
+  suggestions: ReadonlySet<string>
+): OrderedElementRecord | undefined {
+  const records = open.props.filter(
+    (r): r is OrderedElementRecord =>
+      r.kind === 'element' &&
+      r.target === 'tcPr' &&
+      r.untracked === true &&
+      suggestions.has(r.suggestion) &&
+      ctx.rejectedOrDrawnSo(r.suggestion)
+  );
+  return records.sort((a, b) => a.seq - b.seq).at(-1);
 }
 
 /** A cell's span over grid columns (`w:gridSpan`), 1 when absent. */
@@ -564,11 +610,11 @@ function withoutCandidates(
 
   // No width to give back, but the decision still joins the grid, as the engine does
   if (removed.length === 0) return withJoinedGrid(ctx, drawn);
-  const ids = new Set(removed.map((r) => r.id));
-  const kept = keptCellProperties(ctx, drawn, ids);
-  let part = withStoryBlocks(ctx.story.part, [drawn]);
+  const { kept, lent } = survivorsOf(ctx, drawn, removed);
+  const before = withLentWidths(drawn, lent);
+  let part = withStoryBlocks(ctx.story.part, [before]);
   const direct = new Set(removed.filter((r) => r.how === 'direct').map((r) => r.id));
-  for (const gridColumnId of wholeDirectColumns(drawn, part.root, direct)) {
+  for (const gridColumnId of wholeDirectColumns(before, part.root, direct)) {
     const result = applyTreeOp(part, { op: 'deleteTableColumn', tableId: drawn.id, gridColumnId });
     if (result.ok) part = result.part;
   }
@@ -613,6 +659,33 @@ function withCellsAccepted(
   // cell drawn that a decision removed
   if (found && found.kind !== 'textValue') return found;
   return withoutCells(current, new Set(byId.keys()));
+}
+
+/** The table with each cell of `lent` at the width it lent, as the engine holds it. */
+function withLentWidths(
+  table: OoxmlElement,
+  lent: ReadonlyMap<string, OoxmlElement>
+): OoxmlElement {
+  if (lent.size === 0) {
+    return table;
+  }
+
+  return withTableCells(table, (cell) => {
+    const width = lent.get(cell.id);
+    const tcPr = childNamed(cell, 'tcPr');
+    if (!width || !tcPr) {
+      return cell;
+    }
+
+    const props = withChildren(
+      tcPr,
+      tcPr.children.map((c) => (isWml(c, 'tcW') ? width : c))
+    );
+    return withChildren(
+      cell,
+      cell.children.map((c) => (c === tcPr ? props : c))
+    );
+  });
 }
 
 /** The table with the `w:tcPr` that `drawn` gave each cell of `kept` put back. */

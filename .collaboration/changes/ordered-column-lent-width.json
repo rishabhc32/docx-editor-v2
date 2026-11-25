@@ -1,0 +1,13 @@
+{
+  "impact": "compatible",
+  "fields": [],
+  "before": "A decision on a column restored the lending cell's width from before the column and kept it, or widened a cell by whether it and the removed cell were made by one change. Cells read from a reopened room counted as made by one change, so a decision after a fold gave other widths, and a column that lent onward or lost its lending column gave widths the engine does not give.",
+  "after": "Compose hands the engine the table as it was before the decision: the cell a removed column took width from at the width it lent, any other cell as it shows. A cell whose record was taken after the removed cell went keeps its width. The record of what a column lent names its lending cell, so the result is the same live and after a fold.",
+  "reason": "Change messages, the change log and its kinds keep their meaning, and the Yjs document format does not change. Only the widths compose draws after a column decision change; every copy composes with the same code version, so the copies agree. Checkpoints keep their form. Ordered rooms are not deployed yet, so no room needs a migration.",
+  "tests": [
+    "packages/core/src/collaboration/ordered/__tests__/checkpoint-fold-decide.test.ts",
+    "packages/core/src/collaboration/ordered/__tests__/client/editor-tables.test.ts"
+  ],
+  "changeset": "ordered-column-lent-width",
+  "migration": null
+}
