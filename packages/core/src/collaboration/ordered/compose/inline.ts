@@ -517,8 +517,10 @@ function runKey(ctx: ComposeContext, item: OrderedItem): string {
   const by = ctx.insertedBy(item) ?? '';
   const del = ctx.struckBy(item) ?? '';
 
-  // A move's name parts runs only inside its revision: a decided move's words join their run
-  const move = by || del ? (item.move ?? '') : '';
+  // A move's name parts runs only inside its revision (as `place` draws it): a decided move's
+  // words join their run, struck or not
+  const moved = by !== '' || (del !== '' && movedAwayBy(ctx.doc, item, del));
+  const move = moved ? (item.move ?? '') : '';
   return [
     item.run,
     item.face ? item.face.id : '',

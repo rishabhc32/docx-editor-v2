@@ -182,6 +182,24 @@ describe("a deletion of a rejected move's words", () => {
     checkSaveAndLoad(doc, "a rejected move's words deleted", opened.base);
   });
 
+  // Seed 114 of the fold shapes: a deletion over a rejected move's words and words beside them
+  // in their run is one run, as a fold writes it: the move's name parts runs only in its revision
+  test('is one run with the words beside it in their run', () => {
+    const opened = openOrderedWordFile(docx(p(t('Fees are due net of tax.'))), { file: 1 });
+    const doc = opened.document;
+    const move = { kind: 'move', ...EDIT, from: at(doc, 0, 9), to: at(doc, 0, 11) } as const;
+    apply(doc, 'ana-1:1', { ...move, place: at(doc, 0, 24) });
+    decideOrdered(doc, 'S:ana-1:1.1', 'reject');
+    apply(
+      doc,
+      'cy-1:1',
+      { kind: 'delete', ...EDIT, from: at(doc, 0, 5), to: at(doc, 0, 11) },
+      'Cy'
+    );
+    expect(savedBody(doc, opened.base)).toMatch(/<w:del [^>]*><w:r><w:delText>are du</);
+    checkSaveAndLoad(doc, "a rejected move's words deleted with words beside them", opened.base);
+  });
+
   test("is saved as a plain deletion of a moved paragraph's mark too", () => {
     const moved = (id: number) => `<w:rPr><w:moveFrom w:id="${id}" ${CARA}/></w:rPr>`;
     const into = (id: number) => `<w:rPr><w:moveTo w:id="${id}" ${CARA}/></w:rPr>`;

@@ -1,0 +1,10 @@
+{
+  "impact": "compatible",
+  "fields": [],
+  "before": "A plain deletion over a rejected move's words and the words beside them in their run wrote two runs, as the move's name parted the run whenever the words were struck; after a fold, the file wrote one run.",
+  "after": "The move's name parts a run only where the run is the move's own revision, by the rule that draws its wrapper (movedAwayBy), so the deletion writes one run, live as after a fold.",
+  "reason": "Change messages, the change log and its kinds keep their meaning, and the Yjs document format and the checkpoint format do not change. Only the runs of such a deletion in the composed Word file change, with the same text and the same revision, and they now equal a fold. An ordered room admits only clients of its own code version.",
+  "tests": ["packages/core/src/collaboration/ordered/__tests__/move-into-link.test.ts"],
+  "changeset": "rejected-move-deletion-run",
+  "migration": null
+}
