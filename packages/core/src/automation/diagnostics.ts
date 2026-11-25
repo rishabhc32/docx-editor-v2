@@ -234,6 +234,7 @@ const REVIEW_CODES: Readonly<Record<RevisionBatchSkipReason, ReviewDiagnosticCod
   'incomplete-group': 'review.incomplete-group',
   'retained-structure': 'review.retained-structure',
   'unknown-revision': 'review.stale-revision',
+  locked: 'review.protected-content',
 };
 
 /** The public code for a skipped tracked change, or null for a reason with no public code. */

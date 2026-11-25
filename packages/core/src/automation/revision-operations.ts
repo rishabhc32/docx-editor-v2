@@ -9,6 +9,8 @@ import {
 } from '../store/store/revision-author-change.ts';
 import { storyKey } from './stories.ts';
 import type { TreeDocOp } from '../store/store/tree-ops.ts';
+import { contentControlLockRefusal } from '../store/store/tree-op-content-controls.ts';
+import type { OoxmlNode } from '../store/package/ooxml-tree.ts';
 import type { AutomationHandleTable } from './handles.ts';
 import type { AutomationOperation } from './operations.ts';
 import type { AutomationErrorCode } from './protocol.ts';
@@ -145,13 +147,8 @@ function batchSelection(
       code: 'unsupported-content' as const,
       message: 'invalid revision batch',
     };
-  let keys: string[] | undefined = operation.revisions === undefined ? undefined : [];
-  if (
-    keys === undefined &&
-    !sharesItsPart(target.reads.story) &&
-    textboxSiteIndex(target.reads.part).story.size > 0
-  )
-    keys = revisionItemsInStory(target.reads).map(reviewItemKey);
+  const whole = wholeStoryDecision(target.reads);
+  const keys: string[] | undefined = operation.revisions === undefined ? whole.keys : [];
   for (const handle of operation.revisions ?? []) {
     const revision = handles.resolve(handle, 'revision');
     if (
@@ -166,8 +163,44 @@ function batchSelection(
       };
     keys!.push(`revision-${revision.revisionId}`);
   }
-  const scopeRoot = sharesItsPart(target.reads.story) ? target.reads.root : undefined;
-  return { ok: true as const, reads: target.reads, keys, scopeRoot };
+  return { ok: true as const, reads: target.reads, keys, scopeRoot: whole.scopeRoot };
+}
+
+/**
+ * The keys and scope that select a whole story's changes for `planRevisionBatch`: an owner story
+ * names its own changes, so the text boxes it anchors stay out; a story that shares its part is
+ * scoped to its root.
+ */
+function wholeStoryDecision(reads: AutomationStoryReads): {
+  readonly keys?: string[];
+  readonly scopeRoot?: OoxmlNode;
+} {
+  if (sharesItsPart(reads.story)) {
+    return { scopeRoot: reads.root };
+  }
+
+  return textboxSiteIndex(reads.part).story.size > 0
+    ? { keys: revisionItemsInStory(reads).map(reviewItemKey) }
+    : {};
+}
+
+/**
+ * A collection decision's ops. When a content control's lock keeps some of the changes, Word's
+ * Accept All and Reject All leave them and decide the others, so the decision is planned with
+ * them skipped.
+ */
+function collectionDecisionOps(
+  operation: CollectionDecision,
+  reads: AutomationStoryReads
+): readonly TreeDocOp[] {
+  const ops = revisionCollectionOps(operation, reads);
+  if (ops.every((op) => contentControlLockRefusal(reads.part, op) === null)) {
+    return ops;
+  }
+
+  const { keys, scopeRoot } = wholeStoryDecision(reads);
+  const action = operation.op === 'acceptAllRevisions' ? 'accept' : 'reject';
+  return planRevisionBatch(reads.part, action, keys, scopeRoot, { skipLocked: true }).ops;
 }
 
 /** Resolve handles once, then plan the selected sites together. Unknown host handles fail closed. */
@@ -321,7 +354,7 @@ export function planRevisionDecision(
     ok: true,
     kind: 'command',
     story: target.reads.story,
-    ops: revisionCollectionOps(operation, target.reads),
+    ops: collectionDecisionOps(operation, target.reads),
     answer: () => ({ kind: 'applied' }),
   };
 }

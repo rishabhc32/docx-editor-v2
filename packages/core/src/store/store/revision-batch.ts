@@ -23,6 +23,7 @@ import {
   orphanMoveDestinationSites,
 } from './tree-op-revisions.ts';
 import type { RevisionSiteRefusal } from './revision-site-refusal.ts';
+import { contentControlLockRefusal } from './tree-op-content-controls.ts';
 import type { TreeDocOp } from './tree-op-types.ts';
 
 /** A canonical review decision. Keys are valid only in the open document. @public */
@@ -35,12 +36,18 @@ export interface RevisionBatchEntry {
   readonly formattingKind?: string;
 }
 
-/** Why a requested decision remains pending. @public */
+/**
+ * Why a requested decision remains pending. `locked`: a content control's lock keeps the change,
+ * and Word's Accept All and Reject All leave it too.
+ *
+ * @public
+ */
 export type RevisionBatchSkipReason =
   | 'unsupported-revision'
   | 'incomplete-group'
   | 'retained-structure'
-  | 'unknown-revision';
+  | 'unknown-revision'
+  | 'locked';
 
 /**
  * Why an `unsupported-revision` skip happened: a refused site, a formatting change whose earlier
@@ -82,12 +89,55 @@ export function decidedAsBatch(item: ReviewRevisionItem, part: OoxmlPart): boole
   );
 }
 
-/** @internal Pure preflight; callers commit its operations through their normal write guards. */
+/**
+ * The groups of sites a content control's lock keeps from a decision (`contentControlLockRefusal`).
+ * Halves are asked first, so a part where a lock keeps few groups costs few walks.
+ */
+function lockHeldGroups(
+  part: OoxmlPart,
+  action: 'accept' | 'reject',
+  groups: readonly (readonly string[])[],
+  scopeRoot?: OoxmlNode
+): Set<number> {
+  const held = new Set<number>();
+  const ask = (indices: readonly number[]): void => {
+    const refusal = contentControlLockRefusal(part, {
+      op: action === 'accept' ? 'acceptAllRevisions' : 'rejectAllRevisions',
+      siteNodeIds: indices.flatMap((index) => groups[index]!),
+      ...(scopeRoot ? { scopeRootId: scopeRoot.id } : {}),
+    });
+    if (refusal === null) {
+      return;
+    }
+
+    if (indices.length === 1) {
+      held.add(indices[0]!);
+      return;
+    }
+
+    const half = Math.ceil(indices.length / 2);
+    ask(indices.slice(0, half));
+    ask(indices.slice(half));
+  };
+  if (groups.length > 0) {
+    ask(groups.map((_, index) => index));
+  }
+
+  return held;
+}
+
+/**
+ * @internal Pure preflight; callers commit its operations through their normal write guards.
+ * `skipLocked` leaves the changes a content control's lock keeps, as Word's Accept All and Reject
+ * All do (skip reason `locked`); without it the write guard refuses the whole decision, as Word
+ * refuses a single decision there.
+ */
 export function planRevisionBatch(
   part: OoxmlPart,
   action: 'accept' | 'reject',
   keys?: readonly string[],
-  scopeRoot?: OoxmlNode
+  scopeRoot?: OoxmlNode,
+  options: { readonly skipLocked?: boolean } = {}
 ): { ops: readonly TreeDocOp[]; result: RevisionBatchResult } {
   const root = scopeRoot ?? part.root;
   const scopedPart = root.kind === 'textValue' ? part : { ...part, root };
@@ -291,6 +341,20 @@ export function planRevisionBatch(
       reasons.set(find(index), 'unsupported-revision');
       // An item is read-only BECAUSE a site refused it: keep that site's specific reason.
       if (!details.has(find(index))) details.set(find(index), 'read-only');
+    }
+  }
+  if (options.skipLocked) {
+    const open = [...groups].filter(
+      ([id, group]) => !reasons.has(id) && group.some((site) => selectedSites.has(site.node.id))
+    );
+    const held = lockHeldGroups(
+      part,
+      action,
+      open.map(([, group]) => group.map((site) => site.node.id)),
+      scopeRoot
+    );
+    for (const index of held) {
+      reasons.set(open[index]![0], 'locked');
     }
   }
   // Cell removal may remove its row; row removal may remove the containing table.

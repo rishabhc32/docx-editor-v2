@@ -167,6 +167,8 @@ const HINTS: Readonly<Record<Exclude<DiagnosticCode, CollaborationDiagnosticCode
     'Resolving the tracked change would remove structure that other content still needs, so it was left in place.',
   'review.stale-revision':
     'The tracked change no longer exists, usually because it was resolved already. Read the review items again.',
+  'review.protected-content':
+    'The tracked change is in content that a locked content control keeps, so Accept All and Reject All left it, as Word does.',
 
   'font.shaper-unavailable':
     'The text shaper did not load, so text is measured with fallback metrics. Check that your bundler serves the HarfBuzz WebAssembly file.',

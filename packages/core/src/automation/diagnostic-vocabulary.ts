@@ -87,7 +87,8 @@ export type ReviewDiagnosticCode =
   | 'review.revision-unsupported'
   | 'review.incomplete-group'
   | 'review.retained-structure'
-  | 'review.stale-revision';
+  | 'review.stale-revision'
+  | 'review.protected-content';
 
 /** Why a font did not load. The family name is never reported. @public */
 export type FontDiagnosticCode =

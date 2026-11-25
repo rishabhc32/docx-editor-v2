@@ -598,6 +598,34 @@ describe('a control is written through the document’s own write path', () => {
     expect(read).toEqual({ group: true, field: false, text: 'Ana' });
   });
 
+  // Word's Accept All and Reject All leave a change a lock keeps and decide the others
+  const del = (id: number, text: string) =>
+    `<w:del w:id="${id}" w:author="Bea" w:date="2026-11-26T00:00:00Z"><w:r>` +
+    `<w:delText>${text}</w:delText></w:r></w:del>`;
+  const HELD = docx(
+    `<w:p><w:r><w:t xml:space="preserve">A: </w:t></w:r><w:sdt><w:sdtPr><w:tag w:val="group"/>` +
+      `<w:lock w:val="contentLocked"/><w:group/></w:sdtPr><w:sdtContent>${del(6, 'ab')}` +
+      `</w:sdtContent></w:sdt></w:p><w:p><w:r><w:t>Signed</w:t></w:r>${del(7, '.')}</w:p>`
+  );
+
+  for (const action of ['acceptAll', 'rejectAll'] as const) {
+    test(`${action} leaves the change in a Word-saved group and decides the other`, async () => {
+      const runtime = await serverRuntime(HELD);
+      const count = await runtime.run(async (context) => {
+        context.document.body.revisions[action]();
+        await context.sync();
+        const revisions = context.document.body.revisions;
+        revisions.load('items');
+        await context.sync();
+        return revisions.items.length;
+      });
+      expect(count).toBe(1);
+      const xml = await mainXmlOf(runtime);
+      expect(xml).toContain('w:id="6"');
+      expect(xml).not.toContain('w:id="7"');
+    });
+  }
+
   test("a write in a Word-saved group's own words is refused", async () => {
     const runtime = await serverRuntime(WORD_GROUP);
     const before = await mainXmlOf(runtime);

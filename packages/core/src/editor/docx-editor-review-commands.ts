@@ -211,7 +211,14 @@ export function createReviewCommands(deps: ReviewCommandDependencies) {
     const plans: { scope: StoryScope; part: OoxmlPart; ops: readonly TreeDocOp[] }[] = [];
     let remaining = 0;
     for (const { scope, part, keys } of scopes) {
-      const plan = planRevisionBatch(part, command.action, unfilteredDocument ? undefined : keys);
+      // A change a content control's lock keeps is left, as Word's Accept All leaves it
+      const plan = planRevisionBatch(
+        part,
+        command.action,
+        unfilteredDocument ? undefined : keys,
+        undefined,
+        { skipLocked: true }
+      );
       resolved.push(...plan.result.resolved);
       skipped.push(...plan.result.skipped);
       remaining += plan.result.remaining;

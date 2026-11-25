@@ -437,7 +437,8 @@ for (const action of ['accept', 'reject'] as const) {
       }
     });
   }
-  test(`${action} skips mixed unsupported changes, but a locked selected change aborts atomically`, async () => {
+  // A change a content control's lock keeps is skipped too, as Word's Accept All leaves it
+  test(`${action} skips mixed unsupported changes and a change a lock keeps`, async () => {
     for (const locked of [false, true]) {
       const supported = locked
         ? '<w:sdt><w:sdtPr><w:lock w:val="contentLocked"/></w:sdtPr><w:sdtContent>' +
@@ -452,15 +453,14 @@ for (const action of ['accept', 'reject'] as const) {
       try {
         const before = await editor.save();
         const result = editor.exec({ type: 'resolveAllReviewChanges', action });
-        expect(result.ok).toBe(!locked);
-        if (locked) expect(await editor.save()).toEqual(before);
-        else {
-          expect(result.revisions?.skipped).toHaveLength(1);
-          expect(result.revisions?.remaining).toBe(1);
-          expect(editor.can({ type: 'resolveAllReviewChanges', action }).ok).toBe(false);
-          editor.exec({ type: 'undo' });
-          expect(await editor.save()).toEqual(before);
-        }
+        expect(result.ok).toBe(true);
+        expect(result.revisions?.skipped.map((skip) => skip.reason).sort()).toEqual(
+          locked ? ['locked', 'unsupported-revision'] : ['unsupported-revision']
+        );
+        expect(result.revisions?.remaining).toBe(locked ? 2 : 1);
+        expect(editor.can({ type: 'resolveAllReviewChanges', action }).ok).toBe(false);
+        editor.exec({ type: 'undo' });
+        expect(await editor.save()).toEqual(before);
       } finally {
         editor.destroy();
       }
