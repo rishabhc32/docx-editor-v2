@@ -23,6 +23,8 @@ export interface TextFormFieldRange {
   readonly maxLength: number;
   readonly format: string;
   readonly chromeIds: readonly string[];
+  /** The language of the run that holds the field (`w:lang`): a date picture's month names. */
+  readonly language?: string;
 }
 
 function child(node: OoxmlNode, name: string): OoxmlNode | undefined {
@@ -40,6 +42,12 @@ function value(node: OoxmlNode | undefined, name = 'val'): string | undefined {
         ?.value;
 }
 
+/** The language a run names (`w:rPr/w:lang/@w:val`), or undefined. */
+function runLanguage(run: OoxmlNode | undefined): string | undefined {
+  const properties = run && child(run, 'rPr');
+  return properties && value(child(properties, 'lang'));
+}
+
 /** Uses the field parser and offset index; never introduces another inline walk. */
 export function textFormFieldsOf(paragraph: OoxmlParagraphNode): readonly TextFormFieldRange[] {
   const fields = parsedFieldSpansOf(paragraph).filter((f) => f.addressing === 'editable-result');
@@ -49,13 +57,16 @@ export function textFormFieldsOf(paragraph: OoxmlParagraphNode): readonly TextFo
   collectFieldRunChildren(paragraph, entries);
   const nodes = new Map(entries.map((entry) => [entry.node.id, entry.node]));
   const bookmarks: OoxmlNode[] = [];
+  const runs = new Map<string, OoxmlNode>();
   const pending: OoxmlNode[] = [...paragraph.children];
   while (pending.length) {
     const node = pending.pop()!;
     if (node.kind === 'textValue' || !offsets.spanOf(node)) continue;
     if (node.kind === 'bookmarkStart' || node.kind === 'bookmarkEnd') bookmarks.push(node);
     else for (const nested of node.children) pending.push(nested);
+    if (node.kind === 'run') runs.set(node.id, node);
   }
+  const runOf = new Map(entries.map((entry) => [entry.node.id, entry.runId]));
   return fields.flatMap((field) => {
     const begin = offsets.spanOf(field.node);
     const endId = field.removeNodeIds[field.removeNodeIds.length - 1];
@@ -84,6 +95,7 @@ export function textFormFieldsOf(paragraph: OoxmlParagraphNode): readonly TextFo
         )
       : undefined;
     const bookmarkIds = bookmarkStart && bookmarkEnd ? [bookmarkStart.id, bookmarkEnd.id] : [];
+    const language = runLanguage(runs.get(runOf.get(field.node.id) ?? ''));
     return [
       {
         fieldNodeId: field.node.id,
@@ -102,6 +114,7 @@ export function textFormFieldsOf(paragraph: OoxmlParagraphNode): readonly TextFo
             return n && isFieldChrome(n);
           }),
         ],
+        ...(language === undefined ? {} : { language }),
       },
     ];
   });

@@ -316,7 +316,9 @@ function fieldText(date: ControlDate, token: DateToken & { kind: 'field' }): str
   const digits = (value: number) => String(value).padStart(Math.min(token.run, 2), '0');
   switch (token.letter) {
     case 'y':
-      return token.run <= 2 ? String(date.year % 100).padStart(2, '0') : String(date.year);
+      return token.run <= 2
+        ? String(date.year % 100).padStart(2, '0')
+        : String(date.year).padStart(4, '0');
     case 'M':
       return digits(date.month);
     case 'd':

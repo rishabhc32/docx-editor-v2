@@ -1,7 +1,5 @@
-import {
-  parseTextFormDate as parseDate,
-  textFormMonths as months,
-} from './text-form-date-format.ts';
+import { formatContentControlDate } from './content-control-dates.ts';
+import { parseTextFormDate as parseDate } from './text-form-date-format.ts';
 import { normalizeTextFormNumber, truncateTextFormNumber } from './text-form-number-input.ts';
 import { textFormFixedDecimal } from './text-form-number-format.ts';
 import type { TextFormFieldRange } from './text-form-fields.ts';
@@ -50,7 +48,7 @@ export function validTextFormOptions(options: TextFormFieldOptions): boolean {
 /** Bounded, deterministic formatting. Null refuses unsupported options or invalid complete input. */
 export function formatTextFormValue(
   text: string,
-  options: Pick<TextFormFieldRange, 'type' | 'format'>,
+  options: Pick<TextFormFieldRange, 'type' | 'format' | 'language'>,
   intent: 'default' | 'fill' = 'default',
   locale = 'en-US'
 ): string | null {
@@ -101,40 +99,31 @@ export function formatTextFormValue(
     }
     return result + (percent ? '%' : '');
   }
-  const date = parseDate(text.trim(), locale);
+  const date = parseDate(text.trim(), locale, options.language);
   if (!date) return null;
   if (!options.format) return text;
-  return options.format.replace(
-    /yyyy|MMMM|MM|dd|M|d/g,
-    (token) =>
-      ({
-        yyyy: String(date.year).padStart(4, '0'),
-        MMMM: months[date.month - 1]!,
-        MM: String(date.month).padStart(2, '0'),
-        dd: String(date.day).padStart(2, '0'),
-        M: String(date.month),
-        d: String(date.day),
-      })[token]!
-  );
+  // The picture as a date control's, with the names of the field's language
+  const form = { dateFormat: options.format, lid: options.language };
+  return formatContentControlDate({ ...date, hour: 0, minute: 0, second: 0 }, form);
 }
 
 /** A saved date default already follows its authored picture, not the current input locale. */
 export function formatTextFormDefault(
   text: string,
   options: Pick<TextFormFieldRange, 'type' | 'format'>,
-  field: Pick<TextFormFieldRange, 'type' | 'format' | 'defaultText'>,
+  field: Pick<TextFormFieldRange, 'type' | 'format' | 'defaultText' | 'language'>,
   locale: string | undefined
 ): string | null {
   if (field.type === 'date' && options.type === 'date' && text === field.defaultText) {
     if (!options.format) return text;
     // Interpret the saved picture (or an unambiguous ISO default), never the user's new locale.
     const pictureLocale = field.format.startsWith('d') ? 'en-GB' : 'en-US';
-    const date = parseDate(text, pictureLocale);
+    const date = parseDate(text, pictureLocale, field.language);
     if (field.format && date)
       text = `${String(date.year).padStart(4, '0')}-${date.month}-${date.day}`;
     else if (options.format === field.format) return text;
   }
-  return formatTextFormValue(text, options, 'default', locale);
+  return formatTextFormValue(text, { ...options, language: field.language }, 'default', locale);
 }
 
 /** Preserved computed types and unimplemented format pictures are not filling targets. */
@@ -148,7 +137,7 @@ export function supportsTextFormField(field: Pick<TextFormFieldRange, 'type' | '
 /** Grouping punctuation in a numeric picture does not consume the input limit. */
 export function textFormInputLength(
   text: string,
-  field: Pick<TextFormFieldRange, 'type' | 'format'>,
+  field: Pick<TextFormFieldRange, 'type' | 'format' | 'language'>,
   previous = ''
 ): number {
   let input = text;
@@ -186,7 +175,7 @@ export function textFormInputLength(
     }
   }
   if (field.type === 'date' && /[A-Za-z]/.test(previous)) {
-    const date = parseDate(text.trim());
+    const date = parseDate(text.trim(), 'en-US', field.language);
     if (date) input = `${date.month}/${date.day}/${String(date.year).padStart(4, '0')}`;
   }
   return [...input].length;

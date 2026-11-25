@@ -11,9 +11,10 @@ import {
 
 import { parseTextFormDate } from '../store/text-form-date-format.ts';
 import { formatTextFormValue, textFormInputLength } from '../store/text-form-field-options.ts';
-function dateField(value: string, format: string) {
+function dateField(value: string, format: string, lang = '') {
+  const rPr = lang ? `<w:rPr><w:lang w:val="${lang}"/></w:rPr>` : '';
   const opened = readOoxmlPart(
-    `<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body><w:p><w:r><w:fldChar w:fldCharType="begin"><w:ffData><w:name w:val="DateInput"/><w:textInput><w:type w:val="date"/><w:default w:val="7"/><w:format w:val="${format}"/></w:textInput></w:ffData></w:fldChar></w:r><w:r><w:instrText> FORMTEXT </w:instrText></w:r><w:r><w:fldChar w:fldCharType="separate"/></w:r><w:r><w:t>${value}</w:t></w:r><w:r><w:fldChar w:fldCharType="end"/></w:r></w:p></w:body></w:document>`,
+    `<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body><w:p><w:r>${rPr}<w:fldChar w:fldCharType="begin"><w:ffData><w:name w:val="DateInput"/><w:textInput><w:type w:val="date"/><w:default w:val="7"/><w:format w:val="${format}"/></w:textInput></w:ffData></w:fldChar></w:r><w:r><w:instrText> FORMTEXT </w:instrText></w:r><w:r><w:fldChar w:fldCharType="separate"/></w:r><w:r><w:t>${value}</w:t></w:r><w:r><w:fldChar w:fldCharType="end"/></w:r></w:p></w:body></w:document>`,
     { name: '/word/document.xml', contentType: 'application/xml' }
   );
   if (!opened.ok) throw new Error(opened.reason);
@@ -328,4 +329,34 @@ test('clearing a saved date picture keeps the default reopenable at its original
   expect(
     validateTreeOp(cleared.part, { ...change, options: { ...change.options, maxLength: 9 } })
   ).toBe('invalidArgs');
+});
+
+// One date picture formatter for form fields and date controls: a form field shows the month
+// names of its run's language (`w:lang`), as Word shows a date picture in a run's language
+test('a German form field date shows and reads German month names', () => {
+  for (const [format, expected] of [
+    ['d MMMM yyyy', '15 März 2030'],
+    ['MMMM d, yyyy', 'März 15, 2030'],
+    ['dd/MM/yyyy', '15/03/2030'],
+  ] as const) {
+    const { part, paragraph, field } = dateField('3/15/2030', format, 'de-DE');
+    expect(field.language).toBe('de-DE');
+    const op = {
+      op: 'commitTextFormField',
+      paragraphId: paragraph.id,
+      fieldNodeId: field.fieldNodeId,
+      locale: 'en-US',
+    } as const;
+    const result = applyTreeOp(part, op);
+    if (!result.ok) throw new Error(result.reason);
+    expect(paragraphTextOf(result.part, paragraph.id)).toBe(expected);
+  }
+
+  const options = { type: 'date', format: 'd MMMM yyyy', language: 'de-DE' } as const;
+  expect(parseTextFormDate('15 März 2030', 'en-US', 'de-DE')).toEqual({
+    year: 2030,
+    month: 3,
+    day: 15,
+  });
+  expect(formatTextFormValue('15 März 2030', options)).toBe('15 März 2030');
 });

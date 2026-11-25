@@ -197,6 +197,10 @@ describe('a date value, whichever form it takes: the editor string or the typed 
     expect(dateSet('dddd', '0045-03-15').text).toBe('Wednesday');
   });
 
+  test('shows a full year in four digits, as a form field date does', () => {
+    expect(dateSet('M/d/yyyy', '0999-01-02').text).toBe('1/2/0999');
+  });
+
   test('shows a weekday and a time as Word shows them', () => {
     for (const value of both('2026-09-15T14:05:00Z')) {
       expect(dateSet('dddd, MMMM d, yyyy h:mm AM/PM', value).text).toBe(
