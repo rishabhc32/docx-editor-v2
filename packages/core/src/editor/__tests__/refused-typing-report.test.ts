@@ -6,7 +6,9 @@
 // `snapshot().lastRejection` stayed null, so the chrome showed a key that did nothing.
 
 import { GlobalRegistrator } from '@happy-dom/global-registrator';
-if (!GlobalRegistrator.isRegistered) GlobalRegistrator.register();
+if (!GlobalRegistrator.isRegistered) {
+  GlobalRegistrator.register();
+}
 
 import { afterEach, expect, test } from 'bun:test';
 import type { EditorDiagnostic } from '../../contracts/diagnostics.ts';
@@ -22,7 +24,10 @@ const LOCK_REASON = 'this content is locked';
 
 const editors: DocxEditorInstance[] = [];
 afterEach(() => {
-  for (const editor of editors.splice(0)) editor.destroy();
+  for (const editor of editors.splice(0)) {
+    editor.destroy();
+  }
+
   document.body.replaceChildren();
 });
 
@@ -38,7 +43,9 @@ function openAtLockedWords() {
       {
         id: 'diagnostics',
         onDiagnostic: (event: EditorDiagnostic) => {
-          if (event.kind === 'edit.rejected') rejected.push(event);
+          if (event.kind === 'edit.rejected') {
+            rejected.push(event);
+          }
         },
       },
     ],
@@ -54,7 +61,9 @@ function openAtLockedWords() {
 }
 
 async function settle(): Promise<void> {
-  for (let k = 0; k < 4; k += 1) await new Promise((resolve) => setTimeout(resolve, 0));
+  for (let k = 0; k < 4; k += 1) {
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  }
 }
 
 test('a refused key is in the snapshot and the diagnostics, and changes nothing', async () => {
