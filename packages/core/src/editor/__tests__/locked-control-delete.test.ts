@@ -249,3 +249,33 @@ test('Ctrl+Backspace and deleteSelection remove a selected contentLocked control
   expect(n.surface.deleteSelection()).toBe(true);
   expect(bodyText(n)).toBe('az');
 });
+
+describe('a group control, whose own content is locked whatever its lock says', () => {
+  const group = (lock: string, inner = run(TOKEN)) =>
+    `<w:p>${run('aa')}<w:sdt><w:sdtPr>${lock === 'none' ? '' : `<w:lock w:val="${lock}"/>`}` +
+    `<w:group/></w:sdtPr><w:sdtContent>${inner}</w:sdtContent></w:sdt>${run('zz')}</w:p>`;
+
+  test('a selection that covers it removes it whole, with the text around it', () => {
+    const m = mount(group('none'), null);
+    caretAt(m, 1, 8);
+    m.surface.deleteSelection();
+    expect(rejection(m)).toBeNull();
+    expect(bodyText(m)).toBe('az');
+    expect(controls(m)).toBe(0);
+  });
+
+  test('refused when the group, or a control in it, may not be removed, and when suggesting', () => {
+    const nested = run('T') + control('oke', 'sdtLocked', 2) + run('n');
+    const cases = [
+      mount(group('sdtLocked'), null),
+      mount(group('none', nested), null),
+      mount(group('none'), null, { editingMode: 'suggest', author: 'Reviewer' }),
+    ];
+    for (const m of cases) {
+      caretAt(m, 1, 8);
+      m.surface.deleteSelection();
+      expect(rejection(m)).not.toBeNull();
+      expect(bodyText(m)).toBe('aaTokenzz');
+    }
+  });
+});

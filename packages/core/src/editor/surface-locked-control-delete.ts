@@ -20,6 +20,7 @@ import type {
   SemanticSelection,
 } from '@docx-editor.dev/core/layout';
 import type { TreeDocOp } from '@docx-editor.dev/core/store';
+import { lockForbidsEdit } from '../store/package/content-control-nodes.ts';
 
 /** An inline control beside the caret, as the store reports it. */
 export interface InlineControlBesideCaret {
@@ -57,7 +58,7 @@ function contentLockedInline(control: ContentControlBoundaryRecord): boolean {
     control.level === 'inline' &&
     control.range !== undefined &&
     control.range.start < control.range.end &&
-    (control.effectiveLock === 'contentLocked' || control.effectiveLock === 'sdtContentLocked')
+    lockForbidsEdit(control.effectiveLock)
   );
 }
 
