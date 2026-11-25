@@ -243,6 +243,20 @@ describe('a write made between two pending ones of one change record', () => {
   });
 });
 
+// After a fold the pending page write is the file's record, which states the section before it:
+// a direct write over it keeps that statement in the record, live and after another fold
+describe('a direct page write after a fold, over a pending one', () => {
+  test('a portrait page over a landscape one', async () => {
+    const opened = openOrderedWordFile(docx(TEXT), { file: 1 });
+    const landscape = pageWrite(opened.document, EDIT, { orientation: 'landscape' });
+    apply(opened.document, 'ben:1', landscape, 'Ben');
+    const blobs = mediaStore(opened.base);
+    const { document: doc, base } = await folded(opened.document, opened.base, 2, blobs);
+    apply(doc, 'olive:1', pageWrite(doc, DIRECT, { orientation: 'portrait' }), 'Olive');
+    await checkFold(doc, base, blobs, 'a direct portrait page after a fold');
+  });
+});
+
 // After a fold the pending page write is the file's record; a direct break copies it, and the
 // type a first break gave the section goes with that record's reject on the copy too, as Word's
 describe('a direct section break after a fold, in a section with a pending page write', () => {

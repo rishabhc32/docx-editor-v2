@@ -122,12 +122,19 @@ function putBack(
   target: CheckpointOverTarget,
   restored: readonly Restored[]
 ): boolean {
+  // The holder's own record keeps the file's change record, which states the properties before
+  // it, as the room's record that a load read does
+  const fileRecordOf = (r: Restored) =>
+    r.suggestion === record.suggestion && r.replaced === undefined && r.write === undefined
+      ? record.fileRecord
+      : undefined;
+
   if (record.kind !== 'face') {
     if (record.target !== target) {
       return false;
     }
 
-    const props = restored.map((r) => propertyRecord(r, record.target));
+    const props = restored.map((r) => propertyRecord(r, record.target, fileRecordOf(r)));
     relabel(doc, story, item, {
       props: [...item.props.filter((r) => r.target !== target), ...props],
     });
@@ -138,7 +145,7 @@ function putBack(
     return false;
   }
 
-  const fmts = restored.map(formatRecord);
+  const fmts = restored.map((r, k) => formatRecord(r, k, fileRecordOf(r)));
   if (piece === undefined || item.pieces === undefined) {
     relabel(doc, story, item, { fmts });
     return true;
@@ -156,19 +163,30 @@ function putBack(
   return true;
 }
 
-/** A restored record of a run's properties: its format, or the face it gives. */
-function formatRecord(restored: Restored, k: number): OrderedFormatRecord {
+/** A restored record of a run's properties: its format, or the face it gives with `fileRecord`. */
+function formatRecord(
+  restored: Restored,
+  k: number,
+  fileRecord: OoxmlElement | undefined
+): OrderedFormatRecord {
   const { suggestion, seq, replaced, replacedEarlier, over, untracked, element, write } = restored;
   const fields = { id: `${suggestion}>${k}`, suggestion, seq, replaced, replacedEarlier };
   if (write !== undefined && 'format' in write) {
     return { kind: 'properties', ...fields, ...write.format, over, untracked };
   }
 
-  return { kind: 'face', ...fields, face: element };
+  return { kind: 'face', ...fields, face: element, fileRecord };
 }
 
-/** A restored record of a paragraph mark's or a section's properties. */
-function propertyRecord(restored: Restored, target: OrderedPropertyTarget): OrderedPropertyRecord {
+/**
+ * A restored record of a paragraph mark's or a section's properties: its write, or the element it
+ * gives with `fileRecord`.
+ */
+function propertyRecord(
+  restored: Restored,
+  target: OrderedPropertyTarget,
+  fileRecord: OoxmlElement | undefined
+): OrderedPropertyRecord {
   const { suggestion, seq, replaced, replacedEarlier, over, untracked, write } = restored;
   const fields = { suggestion, seq, replaced, replacedEarlier, over, untracked };
   if (write !== undefined && 'paragraphOp' in write) {
@@ -181,5 +199,5 @@ function propertyRecord(restored: Restored, target: OrderedPropertyTarget): Orde
   }
 
   const { element, merge, recordUnchanged } = restored;
-  return { kind: 'element', ...fields, target, element, merge, recordUnchanged };
+  return { kind: 'element', ...fields, target, element, fileRecord, merge, recordUnchanged };
 }
