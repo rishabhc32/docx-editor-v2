@@ -570,6 +570,33 @@ describe("a fold of a table's records", () => {
       apply(doc, 'ana:2', { ...height(doc, 1, 500), ...EDIT }, 'Ana', ANA_1);
       await checkFold(doc, base, mediaStore(base), 'a height again over a direct column');
     });
+
+    // A height on its row's own anchor is Word's form only on a row Word reads as the height: a
+    // row with a record of its own, or a cell with none, keeps no anchor that a fold would read
+    // as a record of the row
+    const style = (doc: OrderedDocument) =>
+      ({
+        kind: 'table-property',
+        ...EDIT,
+        on: [addressOf(opens(doc, 'tbl')[0]!)],
+        op: { op: 'setTableProperties', styleId: 'TableGrid', headerRowCount: 1 },
+      }) as const;
+
+    test("a party's height, then the party's table style with a header row", async () => {
+      const { document: doc, base } = openOrderedWordFile(APPLY_FILE, { file: 1 });
+      apply(doc, 'ana:1', { ...height(doc, 0, 500), ...EDIT }, 'Ana', ANA_1);
+      apply(doc, 'ana:2', style(doc), 'Ana', ANA_1);
+      await checkFold(doc, base, mediaStore(base), 'a height under a header row');
+    });
+
+    test("a party's height and table style, then the organiser's direct column", async () => {
+      const { document: doc, base } = openOrderedWordFile(APPLY_FILE, { file: 1 });
+      apply(doc, 'ana:1', { ...height(doc, 1, 700), ...EDIT }, 'Ana', ANA_1);
+      apply(doc, 'ana:2', style(doc), 'Ana', ANA_1);
+      const cell = addressOf(opens(doc, 'tc')[2]!);
+      apply(doc, 'olive:1', { kind: 'insert-column', ...DIRECT, cell, where: 'right' }, 'Olive');
+      await checkFold(doc, base, mediaStore(base), 'a height and a direct column');
+    });
   });
 
   // The same for the organiser's table alignment: it goes in the schema's place, before borders
