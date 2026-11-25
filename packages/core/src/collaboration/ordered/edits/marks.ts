@@ -424,7 +424,9 @@ export function formatMark(
   write: OrderedFormatWrite,
   into: OrderedSuggestion | null
 ): string | null {
-  if (!formatPassesContentLock(ctx, write.properties)) refuseLockedPlace(ctx, p.blocks);
+  if (!formatPassesContentLock(ctx, write.properties)) {
+    refuseLockedPlace(ctx, p.blocks);
+  }
   const mark = p.mark;
   if (formatKeeps(ctx, mark, currentFace(ctx, mark, false), write)) return into?.id ?? null;
   const own = pendingOwn(ctx, mark.by);
