@@ -1,0 +1,12 @@
+{
+  "impact": "compatible",
+  "fields": [],
+  "before": "After a fold, a reject of a party's insertion in a control inside another control, whose prompt the organiser's Enter had removed, gave the outer control its prompt beside the inner one: the room did not count the inner control as content, where live and the editor alone do.",
+  "after": "A control inside an emptied control that shows its value or its prompt is content (takeWent, as the engine's holdsContent), so the outer control shows no prompt, live as after a fold.",
+  "reason": "Change messages, the change log and its kinds keep their meaning, and the Yjs document format and the checkpoint format do not change. Only the composed Word file of such a control after the decision changes, and it now equals live and after a fold. An ordered room admits only clients of its own code version.",
+  "tests": [
+    "packages/core/src/collaboration/ordered/__tests__/client/editor-controls-prompt-nested.test.ts"
+  ],
+  "changeset": "nested-control-is-content",
+  "migration": null
+}

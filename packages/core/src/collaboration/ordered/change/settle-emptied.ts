@@ -33,6 +33,7 @@ import {
 import { insertItems, relabel, replaceItems } from '../model/mutations.ts';
 import { personAttribution } from '../model/person.ts';
 import {
+  isControl,
   recordDroppedMark,
   recordPromptMarkChange,
   promptlessControlsOf,
@@ -214,11 +215,20 @@ function untrack(
 
 /**
  * Take one item of a control into `went` when it is a unit that went. False when it is a unit
- * that shows: the control is not empty. Units of a prompt that went for good are not the
- * control's words, nor is a unit whose insertion was taken back: it never was.
+ * that shows, or a control in it that shows (its value or its prompt), as the engine reads a
+ * nested control as content: the control is not empty. Units of a prompt that went for good are
+ * not the control's words, nor is a unit whose insertion was taken back: it never was.
  */
 function takeWent(ctx: ComposeContext, item: OrderedItem, went: Went): boolean {
-  if ((item.kind !== 'text' && item.kind !== 'atom') || item.prompt === true) {
+  if (item.prompt === true) {
+    return true;
+  }
+
+  if (isControl(item) && !isHidden(ctx.doc, item)) {
+    return false;
+  }
+
+  if (item.kind !== 'text' && item.kind !== 'atom') {
     return true;
   }
 

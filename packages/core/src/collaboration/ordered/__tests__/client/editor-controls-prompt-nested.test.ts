@@ -4,7 +4,9 @@
 // as the room keeps a control it put in a prompt. The room once read a file's inner control as
 // part of the outer prompt, so the edit took Ana's insertion away with the prompt, with no
 // decision: no card, and an empty control that a save and reopen gave a prompt. Each step is
-// checked on every copy, in the save and reopen, and after one and two folds.
+// checked on every copy, in the save and reopen, and after one and two folds, card by card too.
+// After a fold, a decision on Ana's card once gave the outer control a prompt beside the inner
+// one, where the room and the editor alone read the inner control as content.
 
 import { afterEach, describe, expect, test } from 'bun:test';
 import { serializeOoxmlPart } from '../../../../store/package/ooxml-tree.ts';
@@ -13,7 +15,7 @@ import { openOrderedWordFile } from '../../client/open.ts';
 import { composeOrderedPart } from '../../compose/compose.ts';
 import { orderedCards } from '../../decide.ts';
 import type { OrderedDocument } from '../../model/types.ts';
-import { checkFold, folded, mediaStore } from '../fold-check.ts';
+import { checkEveryCard, checkFold, folded, mediaStore } from '../fold-check.ts';
 import { docx, p, t, W } from '../word-fixtures.ts';
 import {
   BODY,
@@ -205,6 +207,7 @@ describe("an edit in a prompt keeps a control inside it, with a party's insertio
       test(`the organiser's ${edit} in the prompt around a ${type} control`, async () => {
         const { room, olive, bob, base } = await editKeeps(fileWith(inner), edit, act, 'Olive');
         await checkFold(room.room.document, base, mediaStore(base), `${edit}, ${type}`);
+        await checkEveryCard(room.room.document, base, mediaStore(base), `${edit}, ${type}`);
 
         // The organiser rejects Ana's insertion: the emptied control shows its glossary prompt,
         // the same after a save and reopen

@@ -39,7 +39,8 @@ function addFor(
   }
 }
 
-const isControl = (item: OrderedItem): boolean =>
+/** A control's open item, inline or block. */
+export const isControl = (item: OrderedItem): boolean =>
   item.kind === 'open' && (item.token === 'sdt' || item.token === 'sdtBlock');
 
 /**
