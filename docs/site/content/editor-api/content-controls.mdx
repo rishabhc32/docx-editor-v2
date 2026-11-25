@@ -65,6 +65,8 @@ For an existing placeholder, prefer replacing the control value. For untracked r
 
 The runtime combines lock assignments on the same proxy. Changing one lock preserves the other without loading it first. Effective ancestor locks and binding checks still apply; lock setters do not bypass protection. `ContentControlLockState` exports `unlocked`, `sdtLocked`, `contentLocked`, and `sdtContentLocked` as vocabulary. There is no public combined `lock` property taking that alias.
 
+A group control (`w:group`) protects the content it holds outside its nested controls, as Word does. Writes and revision decisions there fail as protected content. A nested control's own content follows its own lock.
+
 If you create the browser runtime over an editor that sets `contentLockPolicy.allowFormattingInLockedContent`, untracked font writes pass a content lock. Text writes, and font writes while `document.changeTrackingMode` tracks changes, still refuse. The server runtime does not take this option. For more information, see [Content controls](/docs/2.x/guides/content-controls#formatting-content-locked-controls).
 
 ## Create a text or date control

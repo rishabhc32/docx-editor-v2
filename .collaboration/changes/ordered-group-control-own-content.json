@@ -1,0 +1,13 @@
+{
+  "impact": "compatible",
+  "fields": [],
+  "before": "A room accepted typing, deletions, Enter and formats in a group control's own content (w:group, outside its nested controls), and the editor alone accepted them too. An author's deletion of their own pending words there emptied the group and the editor alone dropped it.",
+  "after": "The room refuses such an edit as locked, for the organiser and a party alike (locked-content.ts, refuseGroupContent and refuseGroupOwn), as the engine refuses it (ownContentLockOf). The controls nested in a group stay editable. A decision in a group's own content stays allowed in the room, as a decision in a content-locked control is; the editor alone refuses it, as Word does.",
+  "reason": "Change messages, the change log and its kinds keep their meaning, and the Yjs document format and the checkpoint format do not change. The room only refuses more changes, by an existing reason. An ordered room admits only clients of its own code version, and ordered rooms are not deployed yet, so no room needs a migration.",
+  "tests": [
+    "packages/core/src/collaboration/ordered/__tests__/room-group-content.test.ts",
+    "packages/core/src/collaboration/ordered/__tests__/client/editor-controls-group.test.ts"
+  ],
+  "changeset": "group-control-own-content",
+  "migration": null
+}
