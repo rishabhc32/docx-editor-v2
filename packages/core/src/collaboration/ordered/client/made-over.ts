@@ -165,8 +165,9 @@ function formatRecords(holder: FaceRecord, made: readonly Made[]): OrderedFormat
 /** The made records as a paragraph's or a section's records; null for a format. */
 function propertyRecords(made: readonly Made[]): OrderedPropertyRecord[] | null {
   const out: OrderedPropertyRecord[] = [];
-  for (const { suggestion, seq, over, write } of made) {
+  for (const { suggestion, seq, over, untracked, write } of made) {
     if ('paragraphOp' in write) {
+      const flag = untracked === true ? { untracked } : {};
       out.push({
         kind: 'paragraphOp',
         suggestion,
@@ -174,6 +175,7 @@ function propertyRecords(made: readonly Made[]): OrderedPropertyRecord[] | null 
         target: 'pPr',
         op: write.paragraphOp,
         over,
+        ...flag,
       });
     } else if ('sectionOp' in write) {
       out.push({ kind: 'sectionOp', suggestion, seq, target: 'sectPr', op: write.sectionOp, over });

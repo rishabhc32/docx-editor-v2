@@ -1,0 +1,10 @@
+{
+  "impact": "compatible",
+  "fields": [],
+  "before": "A press on its author's own new paragraph, made over a pending paragraph record its mark holds (an Enter copies the record to the new mark), stayed live when that record was rejected; Word keeps one change record, so its reject took the press away, and after a fold the room did too.",
+  "after": "The press names the pending records it was made over (over, pendingRecordsUnder), compose draws it as an own-words format is drawn and leaves it out once one of them is rejected, and a checkpoint's made-over record keeps it untracked, so a fold gives it back as live.",
+  "reason": "Change messages, the change log and its kinds keep their meaning. The checkpoint's madeOver section keeps its shape: a paragraph press record now reads its existing untracked flag, checked against its suggestion's status as a format's is. Only the composed Word file of such a paragraph after a reject changes, and it now equals Word and a fold. An ordered room admits only clients of its own code version.",
+  "tests": ["packages/core/src/collaboration/ordered/__tests__/checkpoint-fold-over.test.ts"],
+  "changeset": "own-press-over-record",
+  "migration": null
+}

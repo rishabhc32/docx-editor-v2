@@ -10,6 +10,7 @@ import {
   openOrderedWordFile,
   OrderedWordFileError,
 } from '../client/open.ts';
+import { orderedCardSeen } from '../change/apply-decide.ts';
 import type { OrderedDocument } from '../model/types.ts';
 import { addressOf, apply, at, DIRECT, EDIT, markOf, opens } from './change-apply-fixture.ts';
 import { checkFold, checkpointBytes, mediaStore } from './fold-check.ts';
@@ -67,6 +68,19 @@ const pageWrite = (doc: OrderedDocument, mode: Mode, page: Record<string, number
 /** The first container of `token`, as a table write names it. */
 const first = (doc: OrderedDocument, token: string) => [addressOf(opens(doc, token)[0]!)];
 
+/**
+ * Ben's indent, his Enter at the end of its paragraph, which copies the record to his new mark,
+ * and his press on that mark, with no change record of its own, each on its own day.
+ */
+function pressOverOwnRecord(doc: OrderedDocument): void {
+  const day = (n: number) => `2026-10-2${n}T09:30:00Z`;
+  apply(doc, 'ben:1', paragraphWrite(doc, EDIT, 'ind', { left: '720' }), 'Ben', day(1));
+  apply(doc, 'ben:2', { kind: 'split', ...EDIT, place: { mark: markOf(doc, 0) } }, 'Ben', day(2));
+  apply(doc, 'ben:3', paragraphWrite(doc, EDIT, 'jc', { val: 'right' }), 'Ben', day(3));
+}
+
+const PRESS = "a press on its author's own new paragraph, over their pending record";
+
 /** Each room: its file, the edits, and the suggestion taken back with its author. */
 const ROOMS: readonly (readonly [string, string, (doc: OrderedDocument) => void, string])[] = [
   [
@@ -105,6 +119,7 @@ const ROOMS: readonly (readonly [string, string, (doc: OrderedDocument) => void,
     },
     'Ana',
   ],
+  [PRESS, TEXT, pressOverOwnRecord, 'Ben'],
   [
     "a direct page write over another's pending one",
     TEXT,
@@ -181,6 +196,23 @@ describe('a write made over a pending record, the record taken back after a fold
       });
     });
   }
+});
+
+// Seed 101 of the fold shapes: a reject of the indent alone takes Ben's press away too, live as
+// after a fold
+test("a press on its author's own new paragraph, its record rejected alone", async () => {
+  const { document: doc, base } = openOrderedWordFile(docx(TEXT), { file: 1 });
+  const blobs = mediaStore(base);
+  pressOverOwnRecord(doc);
+  await checkFold(doc, base, blobs, 'a press on its own new paragraph');
+  const reject = {
+    kind: 'decide',
+    cards: [{ suggestions: orderedCardSeen(doc, 'S:ben:1.1') ?? [] }],
+    status: 'rejected',
+  } as const;
+  apply(doc, 'olive:1', reject, 'Olive');
+  const body = unzipSync(await checkpointBytes(doc, base, blobs))['word/document.xml']!;
+  expect(strFromU8(body)).not.toContain('<w:jc ');
 });
 
 const MANIFEST = 'ordered-checkpoint.json';
@@ -318,6 +350,14 @@ describe("a checkpoint's made-over records are untrusted", () => {
         withMadeOver(
           PARAGRAPH,
           withRecords((r) => ({ ...r, paragraphOp: { op: 'setListNumbering', numId: 'x' } }))
+        ),
+      ],
+      // Ben's press on his own new paragraph read as a direct one: his suggestion is pending
+      [
+        'a press on its own new paragraph as a direct record',
+        withMadeOver(
+          PRESS,
+          withRecords(({ untracked: _untracked, ...r }) => r)
         ),
       ],
       [

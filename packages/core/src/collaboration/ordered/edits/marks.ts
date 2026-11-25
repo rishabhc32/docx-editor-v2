@@ -56,6 +56,7 @@ import {
   formatKeeps,
   noteOwnAddition,
   ownFormat,
+  pendingRecordsUnder,
   struckAlready,
   unitsOf,
   withPressFormat,
@@ -499,20 +500,21 @@ export function paragraphOp(
     return into?.id ?? null;
   }
 
+  // A press on its author's own new paragraph is part of their insertion, with no change record,
+  // as a direct one over the pending records it was made over (`over`)
   const own = pendingOwn(ctx, mark.by);
   if (own && insertedPending(ctx.doc, mark)) {
+    const over = pendingRecordsUnder(ctx, mark, 'pPr');
+    const press = {
+      kind: 'paragraphOp',
+      suggestion: own.id,
+      seq: nextSeq(ctx.doc),
+      target: 'pPr',
+      op,
+      untracked: true,
+    } as const;
     relabel(ctx.doc, ctx.story, mark, {
-      props: [
-        ...mark.props,
-        {
-          kind: 'paragraphOp',
-          suggestion: own.id,
-          seq: nextSeq(ctx.doc),
-          target: 'pPr',
-          op,
-          untracked: true,
-        },
-      ],
+      props: [...mark.props, over.length > 0 ? { ...press, over } : press],
     });
     return own.id;
   }

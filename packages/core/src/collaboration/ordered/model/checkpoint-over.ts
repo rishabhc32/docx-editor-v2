@@ -43,7 +43,10 @@ export interface CheckpointOverRecord {
   readonly suggestion: number;
   /** The pending records it was made over: their suggestions, by their places. */
   readonly over: readonly number[];
-  /** A format on its author's own pending words, shown with no change record. */
+  /**
+   * A format on its author's own pending words, or a press on their own new paragraph, shown with
+   * no change record.
+   */
   readonly untracked?: boolean;
   readonly write: CheckpointOverWrite;
 }

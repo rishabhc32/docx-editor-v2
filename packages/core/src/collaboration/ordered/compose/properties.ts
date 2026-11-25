@@ -421,16 +421,24 @@ export function paragraphPropertiesAfter(
     (p): p is OrderedElementRecord | OrderedParagraphOpRecord => p.target === 'pPr'
   );
   if (records.length === 0) return base;
-  const { accepted, pending } = acceptedAndPending(ctx, records);
+  const shown = acceptedAndPending(ctx, records);
   let current: OoxmlElement | null = base
     ? withChildren(
         base,
         base.children.filter((c) => !isWml(c, 'pPrChange'))
       )
     : null;
-  const [earlier, later] = aroundPending(shownAccepted(ctx, accepted, records), pending);
+
+  // A press on its author's own new paragraph is part of their insertion: no change record. As a
+  // direct one, it goes with the reject of a record it was made over
+  const inserted = shown.pending.filter(
+    (record) => record.untracked === true && !madeOverRejected(ctx, record, records)
+  );
+  const pending = shown.pending.filter((record) => record.untracked !== true);
+  const decided = shownAccepted(ctx, shown.accepted, records);
+  const [earlier, later] = aroundPending([...decided, ...inserted].sort(bySeq), pending);
   for (const record of earlier) current = withDecidedMarkRecord(ctx, current, record, keptByMark);
-  const own = fileRecordAlone(ctx.doc, accepted, pending);
+  const own = fileRecordAlone(ctx.doc, [...shown.accepted, ...inserted], pending);
   const taken: DrawnTakeover[] = [];
   for (const record of pending) {
     const before = current?.children ?? [];

@@ -378,6 +378,21 @@ export const recordedPending = (
   );
 
 /**
+ * The pending records whose change record a write with none of its own (a direct one, or a press
+ * on its author's own new paragraph) is made over: Word keeps one record, so their reject takes
+ * the write away too, as the engine's reject does.
+ */
+export function pendingRecordsUnder(
+  ctx: Ctx,
+  item: OrderedItem,
+  target: OrderedPropertyRecord['target']
+): string[] {
+  const shows =
+    target !== 'pPr' || holdsChangeRecord(shownParagraphProperties(ctx, item), 'pPrChange');
+  return shows ? recordedPending(ctx, item, target) : [];
+}
+
+/**
  * A format or property record Word writes a change record for: not one shown with none
  * (`untracked`: a format on the author's own pending words, a column's lent width), nor one
  * applied only once accepted.
@@ -456,14 +471,11 @@ export function withPropertyRecord(
   const props = item.props;
 
   // A direct edit changes the properties under a pending record and leaves the record, and
-  // names the pending records whose change record it was made over: their reject takes it away
-  // (`over`). A paragraph press that changes nothing writes no record. A change Word records
-  // nowhere (a column's lent width) leaves the record too
+  // names the pending records whose change record it was made over (`over`). A paragraph press
+  // that changes nothing writes no record. A change Word records nowhere (a column's lent width)
+  // leaves the record too
   if (ctx.direct) {
-    const shows =
-      record.target !== 'pPr' ||
-      holdsChangeRecord(shownParagraphProperties(ctx, item), 'pPrChange');
-    const over = shows ? recordedPending(ctx, item, record.target) : [];
+    const over = pendingRecordsUnder(ctx, item, record.target);
     const namesOver = record.kind !== 'object';
     return [...props, over.length > 0 && namesOver ? { ...record, over } : record];
   }
