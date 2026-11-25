@@ -4471,6 +4471,7 @@ export interface TextFormFieldRange {
     readonly fieldNodeId: string;
     // (undocumented)
     readonly format: string;
+    readonly language?: string;
     // (undocumented)
     readonly maxLength: number;
     // (undocumented)
