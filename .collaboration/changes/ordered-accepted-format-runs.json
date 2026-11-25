@@ -1,0 +1,10 @@
+{
+  "impact": "compatible",
+  "fields": [],
+  "before": "A checkpoint numbered a room run (oc:run) by its run and face only. An accepted format record that split a run stays a split in the live room, as in the editor alone, but a fold writes accepted records into the face, so the open joined the pieces: the folded room wrote one run where the live room wrote two.",
+  "after": "compose/inline.ts roomRunOf names a room run by its run, its face and the accepted format records it draws (the records runKey keys by id), so pieces that an accepted record split take different numbers and the open keeps them apart. Pending records still name no room run: a take-back or a reject draws the run whole again.",
+  "reason": "Change messages, the change log and its kinds keep their meaning, and the Yjs document format and the checkpoint format (version 5) do not change: a checkpoint only carries more oc:run numbers, which any reader reads. Only the Word file after a fold changes, and it now equals the live room. An ordered room admits only clients of its own code version.",
+  "tests": ["packages/core/src/collaboration/ordered/__tests__/checkpoint-fold-decide.test.ts"],
+  "changeset": "ordered-accepted-format-runs",
+  "migration": null
+}

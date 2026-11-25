@@ -103,6 +103,24 @@ describe('a decision after a fold, on a suggestion inside a run', () => {
     );
   });
 
+  // An accept keeps the split the format's records made, as the editor keeps the runs a format
+  // split; a fold writes the accepted records into the face, and the pieces stay two runs
+  test('a suggested format on part of a run, then on all of it, accepted', async () => {
+    await foldOf(
+      p(run('Cloud and serverless.')),
+      (doc) => {
+        const bold = { kind: 'format', ...EDIT, properties: [{ localName: 'b' }] } as const;
+        apply(doc, 'bob:1', { ...bold, from: at(doc, 0, 10), to: at(doc, 0, 20) }, 'Bob');
+        apply(doc, 'bob:2', { ...bold, from: at(doc, 0, 0), to: at(doc, 0, 21) }, 'Bob');
+        const suggestions = orderedCardSeen(doc, 'S:bob:2.1')!;
+        const accept = { kind: 'decide', cards: [{ suggestions }], status: 'accepted' } as const;
+        apply(doc, 'olive:1', accept, 'Olive');
+        apply(doc, 'ana:1', { kind: 'insert', ...EDIT, place: at(doc, 0, 0), text: 'A ' });
+      },
+      'an accepted format that split a run'
+    );
+  });
+
   // The room's run goes on in the new paragraph: its piece there is drawn with new ids
   test('a suggested paragraph break, beside a deletion in a combo box', async () => {
     const combo = MATRIX_ITEMS.find((item) => item.key === 'combo');

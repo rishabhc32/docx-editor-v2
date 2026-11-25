@@ -66,6 +66,8 @@ interface Box {
 
 interface RunBuild {
   readonly key: string;
+  /** The room run it is drawn from (`roomRunOf`), which numbers it for a checkpoint; else empty. */
+  readonly roomRun: string;
   readonly item: OrderedItem;
   readonly content: OoxmlNode[];
   readonly deleted: boolean;
@@ -291,13 +293,13 @@ export function composeInline(ctx: ComposeContext, buffer: readonly OrderedItem[
   const flushText = (build: RunBuild): void => {
     if (!build.text) return;
     const text = textElement(ctx, build.text, build.textShell, build.deleted, build.textHomed);
-    build.content.push(ctx.ofRoomText(text, build.item, build.textShell));
+    build.content.push(ctx.ofRoomText(text, build.roomRun, build.textShell));
     build.text = '';
   };
   const flush = (): void => {
     if (!current) return;
     flushText(current);
-    const run = runNode(ctx, current.item, current.content);
+    const run = ctx.ofRoomRun(runNode(ctx, current.item, current.content), current.roomRun);
     place(ctx, box().children, ctx.typed(run, current.unit), current.item);
     current = null;
   };
@@ -361,6 +363,8 @@ export function composeInline(ctx: ComposeContext, buffer: readonly OrderedItem[
       flush();
       current = {
         key,
+        // Only a checkpoint numbers the room's runs
+        roomRun: ctx.options.runs === undefined ? '' : roomRunOf(ctx, item),
         item,
         content: [],
         deleted: struckText(ctx, item),
@@ -511,6 +515,23 @@ function textElement(
   return withId(withChildren(form, [{ id: ctx.mint(), kind: 'textValue', value: text }]), id);
 }
 
+/** A drawn format record as a run's key names it. */
+const recordKey = (record: OrderedFormatRecord): string => `${record.id}:${record.suggestion}`;
+
+/**
+ * The run the room draws a unit in, by what no file holds: its `run`, its face and the accepted
+ * format records it draws. A pending record splits the run only while it shows, and the file
+ * draws that split, so it names no room run: a take-back or a reject draws the run whole again. An
+ * accepted record splits it for good, as the editor keeps the runs a format split, and a fold
+ * writes it into the face: it names the room run.
+ */
+function roomRunOf(ctx: ComposeContext, unit: OrderedItem): string {
+  const accepted = drawnFormats(ctx, unit.fmts).filter(
+    (record) => statusOf(ctx.doc, record.suggestion) === 'accepted'
+  );
+  return [unit.run, unit.face?.id ?? '', ...accepted.map(recordKey)].join(' ');
+}
+
 function runKey(ctx: ComposeContext, item: OrderedItem): string {
   const by = ctx.insertedBy(item) ?? '';
   const del = ctx.struckBy(item) ?? '';
@@ -522,9 +543,7 @@ function runKey(ctx: ComposeContext, item: OrderedItem): string {
   return [
     item.run,
     item.face ? item.face.id : '',
-    drawnFormats(ctx, item.fmts)
-      .map((f) => `${f.id}:${f.suggestion}`)
-      .join(','),
+    drawnFormats(ctx, item.fmts).map(recordKey).join(','),
     by,
     del,
     move,
@@ -541,7 +560,7 @@ function runNode(ctx: ComposeContext, item: OrderedItem, content: OoxmlNode[]): 
     ...(rPr ? [rPr] : []),
     ...content,
   ]);
-  return ctx.ofRoomRun(withId(run, id), item);
+  return withId(run, id);
 }
 
 /** An object in the paragraph itself: an equation, a simple field with its runs. */

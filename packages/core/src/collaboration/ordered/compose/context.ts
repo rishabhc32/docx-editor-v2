@@ -143,13 +143,6 @@ export interface WrapperInfo {
   readonly outer: string;
 }
 
-/**
- * The run the room draws a unit in, by what no file holds: its `run` and face. Format records
- * split the run only while they show, and the file draws that split, so they name no room run: a
- * take-back draws the run whole again.
- */
-const roomRunOf = (unit: OrderedItem): string => `${unit.run} ${unit.face?.id ?? ''}`;
-
 /** The number of a room run or text element in a checkpoint's drawing, the first time a new one. */
 function roomNumber(runs: Map<string, RoomNumber>, key: string): string {
   const known = runs.get(key);
@@ -278,30 +271,30 @@ export class ComposeContext {
     return withAttributes(element, [...element.attributes, attribute]);
   }
 
-  /** A run drawn from `unit` and its neighbours, numbered by its room run for a checkpoint. */
-  ofRoomRun(run: OoxmlElement, unit: OrderedItem): OoxmlElement {
+  /** A run, numbered by the room run it is drawn from (`roomRun`) for a checkpoint. */
+  ofRoomRun(run: OoxmlElement, roomRun: string): OoxmlElement {
     const runs = this.options.runs;
     if (runs === undefined) {
       return run;
     }
 
     this.markedAny = true;
-    const number = roomNumber(runs, roomRunOf(unit));
+    const number = roomNumber(runs, roomRun);
     return withAttributes(run, [...run.attributes, checkpointAttribute('run', number)]);
   }
 
   /**
-   * A text element of `unit`'s run, numbered for a checkpoint by the room's text element: the
-   * text form the room draws it from (`shell`). A piece a pending paragraph break moved out of its
-   * own paragraph takes the same number, so a reject draws the pieces as one element again.
+   * A text element of a run of `roomRun`, numbered for a checkpoint by the room's text element:
+   * the text form the room draws it from (`shell`). A piece a pending paragraph break moved out of
+   * its own paragraph takes the same number, so a reject draws the pieces as one element again.
    */
-  ofRoomText(text: OoxmlNode, unit: OrderedItem, shell: OoxmlElement | undefined): OoxmlNode {
+  ofRoomText(text: OoxmlNode, roomRun: string, shell: OoxmlElement | undefined): OoxmlNode {
     const runs = this.options.runs;
     if (runs === undefined || text.kind === 'textValue') {
       return text;
     }
 
-    const key = `text ${roomRunOf(unit)} ${shell?.id ?? ''}`;
+    const key = `text ${roomRun} ${shell?.id ?? ''}`;
     const number = roomNumber(runs, key);
     return withAttributes(text, [...text.attributes, checkpointAttribute('run', number)]);
   }
