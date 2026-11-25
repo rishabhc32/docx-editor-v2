@@ -1,0 +1,14 @@
+{
+  "impact": "compatible",
+  "fields": [],
+  "before": "When a decision removed a column together with a column made from its cell (a later column's grid held both), compose drew the first column's cell at its width from before the second column and also gave the second column's cell width to the neighbour, so the neighbour got that width twice.",
+  "after": "A removed cell that another removed column took width from is drawn at the width it lent that column, as the engine holds it, so the neighbour gets only what is left, as in the editor alone.",
+  "reason": "Change messages, the change log, the manifest fields and the Yjs format do not change: only the widths compose draws for such a decision change, from the same items, for every client of the room's code version. A room admits only clients of its own code version.",
+  "tests": [
+    "packages/core/src/collaboration/ordered/__tests__/checkpoint-fold-table-records.test.ts",
+    "packages/core/src/collaboration/ordered/__tests__/client/editor-tables.test.ts",
+    "packages/core/src/collaboration/ordered/__tests__/checkpoint-fold-shapes-6.test.ts"
+  ],
+  "changeset": "ordered-removed-cell-lent-width",
+  "migration": null
+}

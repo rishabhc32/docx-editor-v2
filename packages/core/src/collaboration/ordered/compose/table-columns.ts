@@ -231,7 +231,9 @@ interface Survivors {
  * the column, where the engine holds it lent until the decision gives the removed cell's width
  * back. Any other cell whose shown `w:tcPr` was taken when the removed cell did not show (already
  * removed, or not added yet) holds no width of it (`kept`). A column's record names the cell it
- * took width from, so every other cell's own properties hold that column's cell.
+ * took width from, so every other cell's own properties hold that column's cell. A removed cell
+ * that another removed column took width from shows that lent width too: the engine gives the
+ * column's own cell to the neighbour, so the removed cell gives only what is left of it.
  */
 function survivorsOf(
   ctx: ComposeContext,
@@ -257,6 +259,11 @@ function survivorsOf(
     const lending = new Set(cells.flatMap((c) => c.lends.map((r) => r.suggestion)));
     for (const { id, open, lends } of gone.length === 0 ? [] : cells) {
       if (columns.has(id)) {
+        const width = lastWidth(lends.filter((r) => r.suggestion !== columns.get(id)));
+        if (width) {
+          lent.set(id, width);
+        }
+
         continue;
       }
 
@@ -274,8 +281,7 @@ function survivorsOf(
         continue;
       }
 
-      const last = lends.at(-1)?.element;
-      const width = last ? childNamed(last, 'tcW') : undefined;
+      const width = lastWidth(lends);
       if (width) {
         lent.set(id, width);
       } else {
@@ -285,6 +291,12 @@ function survivorsOf(
   }
 
   return { kept, lent };
+}
+
+/** The `w:tcW` the last of a cell's lent width records gives, if any. */
+function lastWidth(records: readonly OrderedElementRecord[]): OoxmlElement | undefined {
+  const last = records.at(-1)?.element;
+  return last ? childNamed(last, 'tcW') : undefined;
 }
 
 /**

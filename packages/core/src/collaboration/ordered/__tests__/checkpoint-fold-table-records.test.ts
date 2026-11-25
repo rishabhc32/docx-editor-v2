@@ -282,6 +282,30 @@ describe('a column removed under a later one', () => {
       expect(widths(doc)).toEqual(['3000,3000', '3000,3000', '3000,3000']);
     }
   );
+
+  // A later column's grid holds both removed columns, so a reject of the column made from the
+  // removed cell takes both out at once: that cell gives back only what is left of it, as the
+  // editor alone gives the later column's width to the cell before it
+  test.each(['taken back', 'rejected'])(
+    "a party's column %s, after the party's column made from its cell and a later column",
+    async (how) => {
+      const { document: doc, base } = openOrderedWordFile(TABLE_FILE, { file: 1 });
+      apply(doc, 'ben:1', column(doc, 0), 'Ben');
+      apply(doc, 'ben:2', column(doc, 1), 'Ben');
+      apply(doc, 'ana:1', column(doc, 3), 'Ana', ANA_1);
+      if (how === 'taken back') {
+        apply(doc, 'ben:3', { kind: 'delete-column', ...EDIT, cell: cell(doc, 1) }, 'Ben');
+      } else {
+        decide(doc, 'olive:1', 'S:ben:1.1', 'rejected');
+      }
+
+      const drawn = ['2250,750,1500,1500', '2250,750,1500,1500', '2250,750,1500,1500'];
+      expect(widths(doc)).toEqual(drawn);
+      await checkFold(doc, base, mediaStore(base), `a column ${how} under two later ones`);
+      decide(doc, 'olive:2', 'S:ben:2.1', 'rejected');
+      expect(widths(doc)).toEqual(['3000,1500,1500', '3000,1500,1500', '3000,1500,1500']);
+    }
+  );
 });
 
 describe("the organiser's direct columns at a decision", () => {

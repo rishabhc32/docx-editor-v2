@@ -350,6 +350,65 @@ describe('columns in an ordered room (task 9.7)', () => {
     expect(gridOf(ana)).toEqual([1500, 1500, 3000, 3000]);
   });
 
+  // A party's column, their column made from its new cell, and a later column: the first one
+  // taken back or rejected, then the second one rejected, live and on the saved file, gives what
+  // the editor alone gives: the cell the first one took width from gets back what is left
+  test.each(['taken back', 'rejected'])(
+    "a party's column %s under their column made from its cell, then that one rejected",
+    async (how) => {
+      const column = (text: string, type: string) => (s: Surface) => {
+        caretInSurface(s, text);
+        expect(commandOn(s, { type, where: 'right' }).ok).toBe(true);
+      };
+      const made = [
+        column('Fee', 'insertColumn'),
+        column('', 'insertColumn'),
+        column('Total', 'insertColumn'),
+      ];
+      const reject = (editor: Person['editor']) => {
+        const [card] = revisionsOf(editor);
+        expect(editor.rejectReviewItem(card?.key ?? '').ok).toBe(true);
+      };
+      const { room, ana, olive } = await seats();
+      for (const step of [...made, ...(how === 'taken back' ? [column('', 'deleteColumn')] : [])]) {
+        step(surface(ana));
+        await settle();
+      }
+
+      if (how === 'rejected') {
+        reject(olive.editor);
+        await settle();
+      }
+
+      converged(room, ana, olive);
+      expect(gridOf(olive)).toEqual([2250, 750, 3000, 1500, 1500]);
+      const saved = new Uint8Array(await ana.editor.save());
+      reject(olive.editor);
+      await settle();
+      converged(room, ana, olive);
+      expect(gridOf(olive)).toEqual([3000, 3000, 1500, 1500]);
+      const expected = alone({ author: 'Ana', mode: 'suggesting', review }, (s, editor) => {
+        for (const step of made) {
+          step(s);
+        }
+
+        if (how === 'taken back') {
+          column('', 'deleteColumn')(s);
+        } else {
+          reject(editor);
+        }
+
+        reject(editor);
+      });
+      expect(comparedBody(surface(olive).session.part())).toBe(expected);
+      const reopened = await seats(saved);
+      reject(reopened.olive.editor);
+      await settle();
+      converged(reopened.room, reopened.ana, reopened.olive);
+      expect(comparedBody(surface(reopened.olive).session.part())).toBe(expected);
+    }
+  );
+
   test('a party deletes their own new column: it is withdrawn, with no card live or reopened', async () => {
     // The engine withdraws the author's own pending cells and gives the lent widths back; the
     // room showed a card for the column's width records until a save and reopen

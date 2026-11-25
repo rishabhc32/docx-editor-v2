@@ -202,7 +202,8 @@ export function caretInSurface(s: Surface, text: string, offset = 0): void {
 
 /**
  * What the editor alone (no room) makes of the same steps, as the matrix compares bodies; with
- * `decide`, after it accepts or rejects every revision.
+ * `decide`, after it accepts or rejects every revision. A step may decide one revision on the
+ * editor.
  */
 export function alone(
   options: {
@@ -212,7 +213,7 @@ export function alone(
     readonly file?: Uint8Array;
     readonly decide?: 'accept' | 'reject';
   },
-  steps: (s: Surface) => void
+  steps: (s: Surface, editor: ReturnType<typeof createDocxEditor>) => void
 ): string {
   const container = document.createElement('div');
   document.body.append(container);
@@ -226,7 +227,7 @@ export function alone(
   try {
     const s = editor.surface;
     if (!s) throw new Error('no surface');
-    steps(s);
+    steps(s, editor);
     if (options.decide !== undefined) {
       const command = {
         type: 'resolveAllReviewChanges',
