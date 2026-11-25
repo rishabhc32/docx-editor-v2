@@ -1,0 +1,13 @@
+{
+  "impact": "compatible",
+  "fields": [],
+  "before": "A record that sets no width (a cell alignment) on the cell a removed column took width from held the cell's width from before that column as its original, or showed the cell wider than the grid, and a fold moved a lent width record after the alignment, which then hid it.",
+  "after": "Compose draws the record's original lent too and the removed column's own cell as inserted, so the engine's resolve gives the width back to the cell and to its record; a fold keeps a moved lent width in the order the records were made.",
+  "reason": "Change messages, the change log, the manifest fields and the Yjs format do not change: every client composes the same table from the same items, and the checkpoint attribute is one the format already has. A room admits only clients of its own code version.",
+  "tests": [
+    "packages/core/src/collaboration/ordered/__tests__/checkpoint-fold-table-records.test.ts",
+    "packages/core/src/collaboration/ordered/__tests__/client/editor-table-removed-columns.test.ts"
+  ],
+  "changeset": "removed-column-alignment-width",
+  "migration": null
+}

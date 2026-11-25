@@ -1,0 +1,12 @@
+{
+  "impact": "compatible",
+  "fields": [],
+  "before": "Compose writes the grid record of a height's own row anchor with no room record, and a checkpoint's open read that grid record as a table record of the height.",
+  "after": "A checkpoint marks that grid record as drawn (the existing oc:drawn attribute) and its open takes such a record off, as it takes off drawn properties; a grid record the room holds carries no mark and stays.",
+  "reason": "Change messages, the change log, the manifest fields and the Yjs format do not change: every client composes the same table from the same items, and the checkpoint attribute is one the format already has. A room admits only clients of its own code version.",
+  "tests": [
+    "packages/core/src/collaboration/ordered/__tests__/checkpoint-fold-table-records.test.ts"
+  ],
+  "changeset": "row-height-anchor-fold",
+  "migration": null
+}

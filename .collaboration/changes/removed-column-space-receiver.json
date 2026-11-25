@@ -1,0 +1,13 @@
+{
+  "impact": "compatible",
+  "fields": [],
+  "before": "When several columns went in one drawing, a cell whose width record was taken before any one of them came kept its width for all of them, also for the column whose space it takes; a removed column's own cell gave its first width after a fold had written the space it took.",
+  "after": "A cell keeps its width only for the removed cells whose space it takes (the engine's spaceReceivers) or whose column it lent width to, and a removed cell gives the width its records gave it before the decision, its own column's too.",
+  "reason": "Change messages, the change log, the manifest fields and the Yjs format do not change: every client composes the same table from the same items, and the checkpoint attribute is one the format already has. A room admits only clients of its own code version.",
+  "tests": [
+    "packages/core/src/collaboration/ordered/__tests__/checkpoint-fold-table-records.test.ts",
+    "packages/core/src/collaboration/ordered/__tests__/client/editor-table-removed-columns.test.ts"
+  ],
+  "changeset": "removed-column-space-receiver",
+  "migration": null
+}
