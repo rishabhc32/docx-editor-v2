@@ -7,6 +7,7 @@ import {
   innermostNewContainer,
   insertedPending,
   isPending,
+  isSplitEdge,
   itemAt,
   statusOf,
   storyOfItem,
@@ -30,11 +31,12 @@ import { deleteText, formatText, insertText, unitsOf, type InsertOptions } from 
 
 /**
  * Accept a direct edit's own suggestion, marked as a direct edit's. Its words and objects in
- * another person's pending new row, cell, note or text box are that container's (no marker of
- * their own), as Word writes them there and a load reads them back; noted as units the change
- * added to it, so its undo deletes them (`inverseOfDirect`). A move's words keep their move.
+ * another person's pending insertion are that insertion's (`into` when given, else
+ * `pendingAround`), as Word writes them there and a load reads them back; noted as units the
+ * change added to it, so its undo deletes them (`inverseOfDirect`). A move's words keep their
+ * move.
  */
-export function settle(ctx: Ctx, suggestion: string | null): void {
+export function settle(ctx: Ctx, suggestion: string | null, into: string | null = null): void {
   const doc = ctx.doc;
   if (!isPending(doc, suggestion)) {
     return;
@@ -47,12 +49,60 @@ export function settle(ctx: Ctx, suggestion: string | null): void {
       continue;
     }
 
-    const container = pendingContainerAround(doc, story, item);
-    if (container !== null) {
-      relabel(doc, story, item, { by: container, quiet: true });
+    const holder = into === null ? pendingAround(doc, story, item) : { by: into, quiet: false };
+    if (holder !== null) {
+      relabel(doc, story, item, holder);
       recordAdded(doc, ctx.ids.changeId, unitsOf(story, [item]));
     }
   }
+}
+
+/**
+ * The pending insertion of another person that a direct edit's unit sits in, as Word writes it
+ * inside their `w:ins`: the new inline control around it, which one `w:ins` holds whole; else
+ * their new row, cell, note or text box, which covers it with no marker of its own (`quiet`).
+ */
+function pendingAround(
+  doc: OrderedDocument,
+  story: OrderedStory,
+  item: OrderedItem
+): { readonly by: string; readonly quiet: boolean } | null {
+  const control = pendingControlAround(doc, story, item);
+  if (control !== null) {
+    return { by: control, quiet: false };
+  }
+
+  const container = pendingContainerAround(doc, story, item);
+  return container === null ? null : { by: container, quiet: true };
+}
+
+/** The pending insertion of a new inline control around the item, in its paragraph, if any. */
+function pendingControlAround(
+  doc: OrderedDocument,
+  story: OrderedStory,
+  item: OrderedItem
+): string | null {
+  const closed = new Set<string>();
+  for (
+    let prev = story.tree.prev(item);
+    prev && prev.kind !== 'mark';
+    prev = story.tree.prev(prev)
+  ) {
+    if (prev.pair === undefined) {
+      continue;
+    }
+
+    if (prev.kind === 'close') {
+      closed.add(prev.pair);
+    } else if (prev.token === 'sdt' && !closed.has(prev.pair) && !isSplitEdge(prev)) {
+      const by = prev.by;
+      if (by !== null && isPending(doc, by)) {
+        return by;
+      }
+    }
+  }
+
+  return null;
 }
 
 /**
@@ -109,6 +159,13 @@ export function directInsert(
   // `w:ins`); undo takes those units back with a direct deletion
   if (before && after === before && map[offset - 1]?.address.space === map[offset]?.address.space) {
     insertText(asAuthor(ctx, before), p, offset, text, what);
+    return;
+  }
+
+  // Where two parts of one pending insertion meet (typed by two changes): into it too, but in the
+  // edit's own space, so the units name who typed them (as the author, it would grow a part)
+  if (before && after === before) {
+    settle(ctx, insertText(ctx, p, offset, text, what), before.id);
     return;
   }
 

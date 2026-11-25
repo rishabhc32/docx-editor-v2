@@ -8,7 +8,7 @@ import {
 } from '../../../store/package/ooxml-tree.ts';
 import { orderedViewParagraph } from '../compose/compose.ts';
 import type { OrderedViewParagraph } from '../compose/context.ts';
-import { addOrderedStory, labelUnindex, mainStory } from '../model/document.ts';
+import { addOrderedStory, itemAt, labelUnindex, mainStory } from '../model/document.ts';
 import { insertItems } from '../model/mutations.ts';
 import { OrderedRefusal } from '../model/refusal.ts';
 import type { OrderedItem, OrderedStory } from '../model/types.ts';
@@ -196,15 +196,16 @@ export function noteReference(
  * part of the kind gets one. Inside the author's own earlier suggestion, the reference and the
  * note are noted for the change's undo. A direct reference goes where a direct object goes
  * (`directInsert`): into another person's pending insertion or new row, cell, note or text box
- * around it, as Word writes it there; the note is then a suggestion of its own, which the edit
- * settles with any words typed in it.
+ * around it, as Word writes it there. In their insertion the note is theirs too, as a load reads
+ * a note whose reference a suggestion inserts (`linkNewNotes`); else it is a suggestion of its
+ * own, which the edit settles with any words typed in it.
  */
 export function insertNote(
   ctx: Ctx,
   p: OrderedViewParagraph,
   offset: number,
   kind: OrderedNoteKind
-): string {
+): { readonly suggestion: string; readonly note: string } {
   if (ctx.story.part.root.localName !== 'document')
     throw new OrderedRefusal('note-outside-body', 'a note reference outside the main document');
   const existing = notesStoryOf(ctx.doc, kind);
@@ -212,34 +213,56 @@ export function insertNote(
   const { face, atom } = noteReference(ctx, kind, id);
   const pieces = [{ text: '￼', face, content: atom }];
   let sid: string;
+  let owner: string;
   if (ctx.direct) {
     directInsert(ctx, p, offset, '', { pieces });
     sid = suggestionFor(ctx).id;
+    owner = insertionHolding(ctx, atom) ?? sid;
   } else {
     sid = insertText(ctx, p, offset, '', { pieces });
+    owner = sid;
   }
 
   const notes = existing ?? addNotesStory(ctx, kind, sid);
-  const items = newNoteItems(ctx, notes, kind, id, sid);
+  const items = newNoteItems(ctx, notes, kind, id, owner);
   insertItems(ctx.doc, notes, notes.tree.last(), items);
-  noteOwnAddition(ctx, sid, unitsOf(notes, items));
-  return sid;
+  noteOwnAddition(ctx, owner, unitsOf(notes, items));
+  return { suggestion: sid, note: owner };
 }
 
 /**
- * Text typed in the note `insertNote` just made, at the end of its paragraph: part of the
- * note's suggestion, inside its insertion as the rest of the note's runs are.
+ * The pending insertion a direct edit put the reference `atom` into (`settle`), or null: none, or
+ * a container that covers it with no marker of its own (`quiet`).
+ */
+function insertionHolding(ctx: Ctx, atom: OoxmlElement): string | null {
+  for (const range of ctx.doc.added.get(ctx.ids.changeId) ?? []) {
+    const item =
+      range.story === ctx.story.name
+        ? itemAt(ctx.story, { space: range.space, offset: range.from })
+        : null;
+    if (item?.node === atom) {
+      return item.quiet ? null : item.by;
+    }
+  }
+
+  return null;
+}
+
+/**
+ * Text typed in the note `insertNote` just made (its paragraph is `note`'s), at the end of its
+ * paragraph: part of the change's `suggestion`, inside its insertion as the rest of the note's
+ * runs are.
  */
 export function typeInNewNote(
   ctx: Ctx,
-  suggestion: string,
+  { suggestion, note }: { readonly suggestion: string; readonly note: string },
   kind: OrderedNoteKind,
   text: string
 ): void {
   const notes = notesStoryOf(ctx.doc, kind);
   if (!notes) throw new OrderedRefusal('unknown-story', `the document has no ${notesRootOf(kind)}`);
   const p = orderedViewParagraph(ctx.doc, notes.name, notes.tree.summary.marks - 1);
-  if (!p || p.mark.by !== suggestion)
+  if (!p || p.mark.by !== note)
     throw new OrderedRefusal('malformed-story', 'the new note has no paragraph');
   const into: Ctx = { ...ctx, story: notes, join: suggestion, direct: false };
   insertText(into, p, p.chars.length, text);

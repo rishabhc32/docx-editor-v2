@@ -20,6 +20,7 @@ import { isTextBoxStoryName } from '../model/text-boxes.ts';
 import type { OrderedDocument, OrderedItem } from '../model/types.ts';
 import { orderedUnitTyper } from '../model/typers.ts';
 import { takeBack, withUndoRecord } from '../model/undo-record.ts';
+import { isWml } from '../ooxml-nodes.ts';
 import { orderedStampDate } from '../room/room.ts';
 import {
   addressOf,
@@ -646,7 +647,7 @@ describe('a fold of a move with words inside it', () => {
   });
 });
 
-describe('who typed inside a new row, cell or note', () => {
+describe('who typed inside a new row, cell, note, control or words', () => {
   // Olive's units in a part that `olives` picks: who holds each, as a reader of the labels finds
   // it (its own label, else the new row or cell around it), and who typed it
   const reads = (
@@ -678,9 +679,29 @@ describe('who typed inside a new row, cell or note', () => {
     return [doc, once.document, twice.document];
   }
 
-  // Ana's new row, cell or note, and Olive's direct typing in it: the container covers the
-  // words, as Word writes them with no mark of their own, so a reader of the labels finds them
-  // in Ana's insertion and the read names Olive who typed them, in the room and after each fold
+  // Ana's new control round "fee", and the k-th unit of the words it took
+  const newControl = (doc: OrderedDocument) => {
+    apply(doc, 'ana:1', {
+      kind: 'wrap-control',
+      ...EDIT,
+      from: at(doc, 0, 4),
+      to: at(doc, 0, 7),
+      control: { type: 'richText' },
+    });
+    return opens(doc, 'sdt').find((open) => open.by === 'S:ana:1.1')!;
+  };
+  const inNewControl = (doc: OrderedDocument, k: number) => {
+    const items = [...(doc.stories.get(BODY)?.tree.items() ?? [])];
+    const open = items.findIndex((item) => item.token === 'sdt' && item.by === 'S:ana:1.1');
+    const words = items.slice(open).find((item) => item.kind === 'text')!;
+    return { space: words.space, offset: words.offset + k };
+  };
+
+  // Ana's new row, cell, note, control or words, and Olive's direct typing in it: the container
+  // or the insertion covers the words, as Word writes them with no mark of their own, so a reader
+  // of the labels finds them in Ana's insertion and the read names Olive who typed them, in the
+  // room and after each fold. In a control and in words Ana typed in two parts, Olive types
+  // where the parts meet: one insertion in the file on both sides
   const containers = [
     [
       'a new row',
@@ -728,6 +749,28 @@ describe('who typed inside a new row, cell or note', () => {
         return at(doc, 3, 1, FOOTNOTES);
       },
     ],
+    [
+      'a new control',
+      BODY,
+      (doc: OrderedDocument) => {
+        newControl(doc);
+        apply(doc, 'ana:2', { kind: 'insert', ...EDIT, place: inNewControl(doc, 1), text: 'new ' });
+
+        // Between Ana's typing and the rest of the words the control took
+        return inNewControl(doc, 1);
+      },
+    ],
+    [
+      'new words typed in two parts',
+      BODY,
+      (doc: OrderedDocument) => {
+        apply(doc, 'ana:1', { kind: 'insert', ...EDIT, place: at(doc, 0, 4), text: 'new ' });
+        apply(doc, 'ana:2', { kind: 'insert', ...EDIT, place: at(doc, 0, 6), text: 'ab' });
+
+        // After "ab", before the "w" of "new "
+        return at(doc, 0, 8);
+      },
+    ],
   ] as const;
   for (const [label, part, insert] of containers) {
     test(`${label}: the read names the organiser who typed in it`, async () => {
@@ -742,8 +785,21 @@ describe('who typed inside a new row, cell or note', () => {
     });
   }
 
-  // Olive's direct footnote in Ana's new row or cell: its reference goes where a direct object
-  // goes, into the container, as Word writes it there; the note itself stays Olive's
+  // Olive's typing at the start of Ana's new control, in it as the keyboard types on in a control
+  // (`inside`): one `w:ins` holds the whole control, so the words are Ana's insertion's
+  test("the start of a new control: the organiser's typing is in it", async () => {
+    const { document: doc, base } = openOrderedWordFile(APPLY_FILE, { file: 1 });
+    const inside = addressOf(newControl(doc));
+    const place = inNewControl(doc, 0);
+    apply(doc, 'olive:2', { kind: 'insert', ...DIRECT, place, inside, text: 'XY' }, 'Olive');
+    const copies = await copiesOf(doc, base);
+    expect(copies.map((copy) => reads(copy, BODY, typed))).toEqual(copies.map(() => [anas, anas]));
+    await checkFold(doc, base, mediaStore(base), 'the start of a new control');
+  });
+
+  // Olive's direct footnote in Ana's new row, cell, control or words: its reference goes where a
+  // direct object goes, into the container or the insertion, as Word writes it there; the note
+  // itself stays Olive's
   for (const [label, part, insert] of containers.filter(([, part]) => part === BODY)) {
     test(`${label}: a direct note's reference is the container's`, async () => {
       const { document: doc, base } = openOrderedWordFile(APPLY_FILE, { file: 1 });
@@ -754,16 +810,18 @@ describe('who typed inside a new row, cell or note', () => {
         { kind: 'insert-note', part, mode: 'edit', place, note: 'footnote', text: 'XY' },
         'Olive'
       );
-      const reference = (item: OrderedItem) => item.kind === 'atom' && item.within.by.length > 0;
+      const reference = (item: OrderedItem) =>
+        item.node !== null && isWml(item.node, 'footnoteReference');
       const copies = await copiesOf(doc, base);
       expect(copies.map((copy) => reads(copy, part, reference))).toEqual(copies.map(() => [anas]));
       await checkFold(doc, base, mediaStore(base), label);
     });
   }
 
-  // Olive's direct paste in Ana's new row, cell or note: its words are the container's, as her
-  // typing is, and the read names Olive who pasted them
-  for (const [label, part, insert] of containers) {
+  // Olive's direct paste in Ana's new row, cell, note or control: its words are the container's,
+  // as her typing is, and the read names Olive who pasted them. In Ana's words a paste sits
+  // beside them, as Word pastes (`client/editor-paste-inside.test.ts`)
+  for (const [label, part, insert] of containers.filter(([name]) => !name.includes('words'))) {
     test(`${label}: a direct paste's words are the container's`, async () => {
       const { document: doc, base } = openOrderedWordFile(APPLY_FILE, { file: 1 });
       const place = insert(doc);
