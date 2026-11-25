@@ -17,6 +17,7 @@ import {
   roomBlobs,
   SPLIT_RUN,
   STYLE_RECORDS,
+  TABLE_RECORDS,
   TYPED_BARE,
   TYPED_RUNS,
   type CheckpointRoom,
@@ -30,6 +31,7 @@ const GOLDEN: readonly CheckpointRoom[] = [
   TYPED_BARE,
   SPLIT_RUN,
   PASTED_LIST,
+  TABLE_RECORDS,
 ];
 
 const WRITE = process.env.ORDERED_GOLDEN_WRITE === '1';

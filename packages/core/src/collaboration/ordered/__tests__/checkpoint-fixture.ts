@@ -240,3 +240,58 @@ export const PASTED_LIST: CheckpointRoom = {
     });
   },
 };
+
+/** A table cell of the given text, 3000 twips wide. */
+const cell = (text: string) =>
+  `<w:tc><w:tcPr><w:tcW w:w="3000" w:type="dxa"/></w:tcPr>${p(t(text))}</w:tc>`;
+
+/** Cy's insertion in the file, with an attribute past its triple, as Word 2023 writes it. */
+const DATED_INSERTION =
+  '<w:ins w:id="3" w:author="Cy" w:date="2026-01-01T00:00:00Z" ' +
+  'xmlns:w16du="http://schemas.microsoft.com/office/word/2023/wordml/word16du" ' +
+  `w16du:dateUtc="2026-01-01T00:00:00Z">${t(' later')}</w:ins>`;
+
+/**
+ * Table records a change record holds (section `changeRecords`: `merge`, `tableCells`, a record
+ * that took another's, `replaced`), with Ana's column's lent widths (`untracked`, a cell's
+ * record that sets only what it changed, `recordUnchanged`), Ben's and Pia's control values, and
+ * a file suggestion's attribute past its triple (`suggestions[].attributes`).
+ */
+export const TABLE_RECORDS: CheckpointRoom = {
+  name: 'table change records',
+  source: docx(
+    p(t('Fees') + DATED_INSERTION) +
+      '<w:tbl><w:tblPr><w:tblW w:w="0" w:type="auto"/></w:tblPr><w:tblGrid>' +
+      '<w:gridCol w:w="3000"/><w:gridCol w:w="3000"/></w:tblGrid>' +
+      `<w:tr>${cell('A1')}${cell('B1')}</w:tr><w:tr>${cell('A2')}${cell('B2')}</w:tr></w:tbl>` +
+      p(
+        t('Signed by ') +
+          `<w:sdt><w:sdtPr><w:id w:val="5"/><w:text/></w:sdtPr><w:sdtContent>${t('Acme')}` +
+          '</w:sdtContent></w:sdt>'
+      )
+  ),
+  edit: (doc) => {
+    const tc = (k: number) => addressOf(opens(doc, 'tc')[k]!);
+    apply(doc, 'ana:3', { kind: 'insert-column', ...EDIT, cell: tc(1), where: 'right' });
+    const fill = { op: 'setTableCellFill', color: { kind: 'hex', value: 'FFCC00' } } as const;
+    apply(doc, 'ana:1', { kind: 'table-property', ...EDIT, on: [tc(0)], op: fill });
+    const width = {
+      op: 'setTableProperties',
+      preferredWidth: { type: 'pct', value: 5000 },
+    } as const;
+    const table = addressOf(opens(doc, 'tbl')[0]!);
+    apply(doc, 'ana:2', { kind: 'table-property', ...EDIT, on: [table], op: width });
+    const control = addressOf(opens(doc, 'sdt')[0]!);
+    for (const [id, who, text] of [
+      ['ben:1', 'Ben', 'Beta Ltd'],
+      ['pia:1', 'Pia', 'Gamma Ltd'],
+    ] as const) {
+      apply(
+        doc,
+        id,
+        { kind: 'control-value', ...EDIT, control, value: { kind: 'text', text } },
+        who
+      );
+    }
+  },
+};
