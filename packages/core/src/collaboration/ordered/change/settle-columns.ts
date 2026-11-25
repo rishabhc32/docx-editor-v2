@@ -118,10 +118,10 @@ function settleTable(
   { before, after, cells }: RemovedColumns,
   ids: OrderedIdMinter
 ): void {
-  // Only an accepted deletion is written: its decision is final. A direct column (the organiser
-  // takes it back with `revert`), a rejected insertion, and a table whose grid holds a pending
-  // change record (its join waits for that decision) stay drawn from the items at every compose.
-  if (cells.some((c) => c.how === 'direct' || statusOf(doc, c.suggestion) !== 'accepted')) {
+  // Only an accepted deletion is written: its decision is final. A rejected insertion, and a
+  // table whose grid holds a pending change record (its join waits for that decision), stay
+  // drawn from the items at every compose.
+  if (cells.some((c) => statusOf(doc, c.suggestion) !== 'accepted')) {
     return;
   }
 

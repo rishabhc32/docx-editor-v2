@@ -2,11 +2,8 @@
 
 import { findNode } from '../../../store/package/ooxml-edit.ts';
 import type { OoxmlElement, OoxmlNode } from '../../../store/package/ooxml-tree.ts';
-import { applyTreeOp } from '../../../store/store/tree-op-apply.ts';
 import { resolveRevisions } from '../../../store/store/tree-op-revisions.ts';
 import { compactRevisionGrid } from '../../../store/store/revision-table-rebuild.ts';
-import { cellsCoveringColumn } from '../../../store/store/tree-op-table-merged-columns.ts';
-import { readEditableTableTopology } from '../../../store/store/tree-op-table-topology.ts';
 import { build, revisionAttributes } from '../../../store/store/tree-op-tracked.ts';
 import { mintedChange } from '../change/ids.ts';
 import { itemAt, statusOf } from '../model/document.ts';
@@ -26,8 +23,6 @@ import { acceptedAndPending, containerPropertiesAfter } from './properties.ts';
 export interface RemovedCell {
   /** The cell's node id in the drawn table. */
   readonly id: string;
-  /** `direct`: an organiser's direct column; `tracked`: a suggestion's. */
-  readonly how: 'tracked' | 'direct';
   readonly suggestion: string;
   /** The shown grid was taken while the cell showed (a tie-break; the count decides). */
   readonly held: boolean;
@@ -98,7 +93,10 @@ export function holdsCell(
 /**
  * Why a cell that shows nowhere was removed by a decision on its column, while the table's
  * widths still hold that column; null otherwise (its row or table went, or the widths were
- * taken after it went). Only called for a cell of a row that shows.
+ * taken after it went). A direct column is no decision: its own grid record took its column, and
+ * a cell it removed just goes, as after a fold, which holds no such cell, and as in the editor
+ * alone (a reject of a record it was made over gives that record's grid back, which the decision
+ * fits to the cells). Only called for a cell of a row that shows.
  */
 export function removedColumnCell(
   ctx: ComposeContext,
@@ -110,11 +108,8 @@ export function removedColumnCell(
   // A container around it went: not a column decision
   if (ctx.containerWent(open)) return null;
   const held = holdsCell(shownRecord(ctx, table, 'tblGrid'), table, open);
-  const removedBy = (suggestion: string): Omit<RemovedCell, 'id'> => ({
-    held,
-    how: ctx.doc.suggestions.get(suggestion)?.direct === true ? 'direct' : 'tracked',
-    suggestion,
-  });
+  const removedBy = (suggestion: string): Omit<RemovedCell, 'id'> | null =>
+    ctx.doc.suggestions.get(suggestion)?.direct === true ? null : { held, suggestion };
   if (open.by !== null && (open.retracted || ctx.rejectedOrDrawnSo(open.by)))
     return removedBy(open.by);
   if (open.retracted) return null;
@@ -210,45 +205,6 @@ function withoutCells(table: OoxmlElement, ids: ReadonlySet<string>): OoxmlEleme
           )
     )
   );
-}
-
-/**
- * The direct removed cells that fill whole grid columns: those grid columns' ids. An organiser's
- * direct column follows the editor's untracked ops: its grid column goes with no width given to
- * anyone, as the engine's `deleteTableColumn` removes it.
- */
-function wholeDirectColumns(
-  table: OoxmlElement,
-  root: OoxmlElement,
-  direct: ReadonlySet<string>
-): string[] {
-  const read = readEditableTableTopology(root, table.id);
-  if (!read.ok || !read.topology.grid) return [];
-  const { topology } = read;
-  const { gridColumns, rows } = topology;
-  if (!topology.hasMerge) {
-    const out: string[] = [];
-    gridColumns.forEach((column, index) => {
-      if (rows.length > 0 && rows.every(({ cells }) => direct.has(cells[index]?.id ?? '')))
-        out.push(column.id);
-    });
-    return out;
-  }
-
-  // With merged cells, the engine deletes the cell of each row that covers the column (Word's
-  // rule), and keeps the ids of the columns left of it: from the last column, each covering set
-  // once
-  const out: string[] = [];
-  const taken = new Set<string>();
-  for (const column of [...gridColumns].reverse()) {
-    const covering = (cellsCoveringColumn(topology, column.id) ?? []).filter((c) => c !== null);
-    if (covering.length === 0 || !covering.every((c) => direct.has(c.id))) continue;
-    if (covering.every((c) => taken.has(c.id))) continue;
-    for (const c of covering) taken.add(c.id);
-    out.push(column.id);
-  }
-
-  return out;
 }
 
 /** The survivors of the rows a decision removes cells from, as the engine holds them before it. */
@@ -589,9 +545,8 @@ function withRowPlacements(
 }
 
 /**
- * The drawn table with its removed cells gone, by the engine's rules: a direct column's grid
- * column goes with no width given to anyone; every other removed cell's width goes to its
- * neighbour (the engine accepts a cell deletion). The result is the same on every copy: the
+ * The drawn table with its removed cells gone, by the engine's rules: a removed cell's width goes
+ * to its neighbour (the engine accepts a cell deletion). The result is the same on every copy: the
  * engine is deterministic, and the ids it mints are replaced by compose's own.
  *
  * The engine's tracked column insertion lends half the neighbour's width to the new cells, with
@@ -633,16 +588,7 @@ function withoutCandidates(
   if (removed.length === 0) return withJoinedGrid(ctx, drawn);
   const { kept, lent } = survivorsOf(ctx, drawn, removed);
   const before = withLentWidths(drawn, lent);
-  let part = withStoryBlocks(ctx.story.part, [before]);
-  const direct = new Set(removed.filter((r) => r.how === 'direct').map((r) => r.id));
-  for (const gridColumnId of wholeDirectColumns(before, part.root, direct)) {
-    const result = applyTreeOp(part, { op: 'deleteTableColumn', tableId: drawn.id, gridColumnId });
-    if (result.ok) part = result.part;
-  }
-
-  const current = findNode(part, drawn.id);
-  if (!current || current.kind === 'textValue') return drawn;
-  const joined = withJoinedGrid(ctx, withCellsAccepted(ctx, current, removed));
+  const joined = withJoinedGrid(ctx, withCellsAccepted(ctx, before, removed));
   const out = withComposeIds(ctx, withKeptCellProperties(joined, drawn, kept), known);
   return out.kind === 'textValue' ? drawn : out;
 }

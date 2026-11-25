@@ -527,6 +527,22 @@ describe("a fold of a table's records", () => {
     await checkFold(doc, base, blobs, 'a direct column deletion over a row height');
   });
 
+  // The organiser's direct deletion of a column, after a party's row height and the organiser's
+  // own pending column beside it: a reject of the height gives the height's grid back and fits
+  // it to the cells, as the editor alone does; the cells the direct deletion removed are gone
+  // after a fold, so live draws none of them either
+  test("a row height, a column, then the organiser's direct deletion of its neighbour", async () => {
+    const { document: doc, base } = openOrderedWordFile(APPLY_FILE, { file: 1 });
+    const on = [addressOf(opens(doc, 'tr')[0]!)];
+    const op = { op: 'setTableRowHeight', heightTwips: 500 } as const;
+    apply(doc, 'ben:1', { kind: 'table-property', ...EDIT, on, op }, 'Ben');
+    const right = { cell: addressOf(opens(doc, 'tc')[0]!), where: 'right' } as const;
+    apply(doc, 'olive:1', { kind: 'insert-column', ...EDIT, ...right }, 'Olive');
+    const cell = addressOf(opens(doc, 'tc')[0]!);
+    apply(doc, 'olive:2', { kind: 'delete-column', ...DIRECT, cell }, 'Olive');
+    await checkFold(doc, base, mediaStore(base), 'a direct deletion beside a pending column');
+  });
+
   // Ben strikes a row that Olive's new table then goes in, and the organiser adds a row to that
   // table directly: the new row is in Ben's struck row as the table's other rows are, as a load
   // reads it, so an accept of Ben's deletion takes it too, after a fold as live
