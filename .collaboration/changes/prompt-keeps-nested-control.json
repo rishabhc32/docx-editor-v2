@@ -1,0 +1,10 @@
+{
+  "impact": "compatible",
+  "fields": [],
+  "before": "After a fold, a reject of a party's typing over a prompt that held a combo box gave the prompt back with the combo box's words only: the prompt's items kept units alone, so the control in it was lost.",
+  "after": "A prompt given back as items keeps a control it holds whole, marked as a load marks a prompt (promptUnits, as markPrompt), live as after a fold.",
+  "reason": "Change messages, the change log and its kinds keep their meaning, and the Yjs document format and the checkpoint format do not change. Only the composed Word file of such a prompt after the decision changes, and it now equals live and after a fold. An ordered room admits only clients of its own code version.",
+  "tests": ["packages/core/src/collaboration/ordered/__tests__/checkpoint-fold-prompts.test.ts"],
+  "changeset": "prompt-keeps-nested-control",
+  "migration": null
+}

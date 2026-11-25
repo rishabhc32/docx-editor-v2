@@ -87,4 +87,22 @@ describe("a control's prompt shown again, decided card by card after a fold", ()
     apply(doc, 'ben:3', { kind: 'retract', suggestions: ['S:ben:1.1'] }, 'Ben');
     await checkEveryCard(doc, base, mediaStore(base), 'a format taken back');
   });
+
+  // The prompt a party typed over holds a combo box: after a fold the glossary gives it back, and a
+  // reject of the typing shows the combo box in it again, not its words alone
+  test('a block prompt that holds a control, typed over and rejected', async () => {
+    const face = '<w:rStyle w:val="PlaceholderText"/>';
+    const city =
+      '<w:sdt><w:sdtPr><w:id w:val="9204"/><w:showingPlcHdr/><w:comboBox>' +
+      '<w:listItem w:displayText="Mumbai" w:value="Mumbai"/></w:comboBox></w:sdtPr>' +
+      `<w:sdtContent>${t('Choose a city.', face)}</w:sdtContent></w:sdt>`;
+    const prompt = p(t('Courts at ', face) + city + t(' have jurisdiction.', face));
+    const venue =
+      '<w:sdt><w:sdtPr><w:id w:val="9203"/><w:showingPlcHdr/></w:sdtPr>' +
+      `<w:sdtContent>${prompt}</w:sdtContent></w:sdt>`;
+    const file = docx(p(t('Venue:')) + venue + p(t('Signed.')));
+    const { document: doc, base } = openOrderedWordFile(file, { file: 1 });
+    apply(doc, 'ben:1', { kind: 'insert', ...EDIT, place: at(doc, 1, 0), text: 'QR' }, 'Ben');
+    await checkEveryCard(doc, base, mediaStore(base), 'a prompt that holds a control');
+  });
 });
