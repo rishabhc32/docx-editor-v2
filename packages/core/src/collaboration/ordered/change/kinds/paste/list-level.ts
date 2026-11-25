@@ -8,11 +8,10 @@ import {
   type OrderedChangeAddress,
   type OrderedEditBase,
 } from '../../types.ts';
+import { NUM_ID } from '../../apply-properties.ts';
 import { address } from '../../values.ts';
 import { orderedKindSpec } from '../spec.ts';
 import { pressKeeps, pressParagraphs, type ParagraphPress } from './paragraph-presses.ts';
-
-const NUM_ID = /^\d{1,9}$/;
 
 /**
  * Declare a list level that a list's definition lacks, in Word's default format for that depth

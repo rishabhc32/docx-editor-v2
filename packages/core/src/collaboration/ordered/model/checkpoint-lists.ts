@@ -6,6 +6,7 @@ import {
   FRAGMENT_PART_CONTENT_TYPES,
   type OrderedFragmentPartType,
 } from '../change/fragment-names-objects.ts';
+import { NUM_ID } from '../change/apply-properties.ts';
 import { at, int, Invalid, oneOf, plainFields, required, type Fields } from '../change/read.ts';
 import { manifestString, readNamedOnce } from './checkpoint-suggestions.ts';
 import { orderedResourceToken } from './resources.ts';
@@ -107,7 +108,6 @@ export type CheckpointResourceKind =
 
 const KINDS = ['list-level', 'relationship', 'part', 'media'] as const;
 const PART_TYPES = Object.keys(FRAGMENT_PART_CONTENT_TYPES) as OrderedFragmentPartType[];
-const NUM_ID = /^\d{1,9}$/;
 
 /**
  * The listed resources, each checked: every value comes from storage. Each names a suggestion of
