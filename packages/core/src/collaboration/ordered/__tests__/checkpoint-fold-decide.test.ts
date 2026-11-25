@@ -543,6 +543,17 @@ describe("a fold of a table's records", () => {
     await checkFold(doc, base, mediaStore(base), 'a direct deletion beside a pending column');
   });
 
+  // A party's deletion of the organiser's direct column: an accept gives the column's width to
+  // its neighbour, as the editor alone does; after a fold the direct cells are the file's
+  test("the organiser's direct column, then a party's deletion of it", async () => {
+    const { document: doc, base } = openOrderedWordFile(APPLY_FILE, { file: 1 });
+    const right = { cell: addressOf(opens(doc, 'tc')[0]!), where: 'right' } as const;
+    apply(doc, 'olive:1', { kind: 'insert-column', ...DIRECT, ...right }, 'Olive');
+    const cell = addressOf(opens(doc, 'tc')[1]!);
+    apply(doc, 'ana:1', { kind: 'delete-column', ...EDIT, cell }, 'Ana');
+    await checkFold(doc, base, mediaStore(base), "a party's deletion of a direct column");
+  });
+
   // Ben strikes a row that Olive's new table then goes in, and the organiser adds a row to that
   // table directly: the new row is in Ben's struck row as the table's other rows are, as a load
   // reads it, so an accept of Ben's deletion takes it too, after a fold as live

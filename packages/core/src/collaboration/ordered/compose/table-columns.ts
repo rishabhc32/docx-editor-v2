@@ -42,8 +42,15 @@ export interface RemovedColumns {
 export const isRow = (n: OoxmlNode): boolean => n.kind === 'tableRow' || isWml(n, 'tr');
 export const isCell = (n: OoxmlNode): boolean => n.kind === 'tableCell' || isWml(n, 'tc');
 
-/** The change that made an item (its node id is minted from it, `n:<change>.<k>`), or `file`. */
-function creation(item: OrderedItem): string {
+/**
+ * The change that made an item (its node id is minted from it, `n:<change>.<k>`), or `file`: the
+ * file's, and an organiser's direct change's, which the table holds as its own, as a fold does.
+ */
+function creation(ctx: ComposeContext, item: OrderedItem): string {
+  if (item.by !== null && ctx.doc.suggestions.get(item.by)?.direct === true) {
+    return 'file';
+  }
+
   return mintedChange(loadedSpace(item.space)?.node ?? '', 'n') ?? 'file';
 }
 
@@ -82,12 +89,13 @@ export function shownRecord(
  * column is not removed again.
  */
 export function holdsCell(
+  ctx: ComposeContext,
   record: OrderedElementRecord | null,
   owner: OrderedItem,
   cell: OrderedItem
 ): boolean {
   if (record?.tableCells !== undefined) return record.tableCells.includes(cell.space);
-  return creation(owner) === creation(cell);
+  return creation(ctx, owner) === creation(ctx, cell);
 }
 
 /**
@@ -107,7 +115,7 @@ export function removedColumnCell(
 
   // A container around it went: not a column decision
   if (ctx.containerWent(open)) return null;
-  const held = holdsCell(shownRecord(ctx, table, 'tblGrid'), table, open);
+  const held = holdsCell(ctx, shownRecord(ctx, table, 'tblGrid'), table, open);
   const removedBy = (suggestion: string): Omit<RemovedCell, 'id'> | null =>
     ctx.doc.suggestions.get(suggestion)?.direct === true ? null : { held, suggestion };
   if (open.by !== null && (open.retracted || ctx.rejectedOrDrawnSo(open.by)))
@@ -256,11 +264,11 @@ function survivorsOf(
       const holds = (cell: (typeof gone)[number]): boolean => {
         const column = columns.get(cell.id) ?? '';
         if (shown !== null) {
-          return holdsCell(shown, open, cell.open);
+          return holdsCell(ctx, shown, open, cell.open);
         }
 
         const lender = lends.some((r) => r.suggestion === column);
-        return !lender && (lending.has(column) || holdsCell(null, open, cell.open));
+        return !lender && (lending.has(column) || holdsCell(ctx, null, open, cell.open));
       };
       if (gone.every(holds)) {
         continue;
