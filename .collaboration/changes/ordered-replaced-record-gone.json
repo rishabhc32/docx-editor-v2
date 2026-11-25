@@ -1,0 +1,13 @@
+{
+  "impact": "compatible",
+  "fields": [],
+  "before": "orderedReplacedSuggestions named a record a suggestion took over (policy 2) on an item hidden for good, such as a paragraph in a column the organiser deleted directly. The Word file holds no change record there, so a fold named nothing and the card's report differed live and after a fold.",
+  "after": "takenChanges in compose/replaced.ts passes over items hidden for good (isHidden): the report names only records that show, live and after a fold. A pending deletion still shows the record struck, and the report names it.",
+  "reason": "Change messages, the change log and its kinds keep their meaning, and the Yjs document format and the checkpoint format do not change. Only the replaced-change report of such a card changes, and it now equals the report after a fold. An ordered room admits only clients of its own code version.",
+  "tests": [
+    "packages/core/src/collaboration/ordered/__tests__/replaced-record-gone.test.ts",
+    "packages/core/src/collaboration/ordered/__tests__/client/editor-tables.test.ts"
+  ],
+  "changeset": "ordered-replaced-record-gone",
+  "migration": null
+}

@@ -10,9 +10,12 @@ import { serializeOoxmlPart } from '../../../../store/package/ooxml-tree.ts';
 import { openOrderedWordFile } from '../../client/open.ts';
 import { composeOrderedPart } from '../../compose/compose.ts';
 import { orderedPackageBytes } from '../../compose/package.ts';
+import { orderedReplacedSuggestions } from '../../compose/replaced.ts';
 import { orderedCards } from '../../decide.ts';
 import { suggestionsOnlyPolicy } from '../../room/suggestions-only.ts';
 import type { OrderedLocalRoom } from '../../client/local-room.ts';
+import type { OrderedDocument } from '../../model/types.ts';
+import { folded, mediaStore } from '../fold-check.ts';
 import {
   BODY,
   caretAt,
@@ -33,6 +36,7 @@ import {
   wordCreatedNewRowHeight,
 } from '../../../../store/__tests__/fixtures/word-created-row-height.ts';
 import { docx, p, t } from '../word-fixtures.ts';
+import { exec } from './format-harness.ts';
 import { reviewTestModule } from './review-module.ts';
 import {
   alone,
@@ -260,6 +264,35 @@ describe('columns in an ordered room (task 9.7)', () => {
       grid: [4500, 3000],
       row: [4500, 3000],
     });
+  });
+
+  // Ana centres the rate she right-aligned, which takes her first record there; the organiser's
+  // deletion of the column takes the paragraph, so the record shows nowhere: no copy names the
+  // change it replaced, as a fold reads the file
+  test("a party's taken record in a column the organiser deletes", async () => {
+    const { room, ana, olive } = await seats();
+    caretIn(ana, 'Rate');
+    exec(ana.editor, { type: 'setAlignment', align: 'right' });
+    await settle();
+    exec(ana.editor, { type: 'setAlignment', align: 'center' });
+    await settle();
+    const doc = room.room.document;
+    const centre = [...doc.suggestions.values()].at(-1)?.id ?? '';
+    const replaced = (copy: OrderedDocument) =>
+      orderedReplacedSuggestions(copy, centre).map((r) => r.author);
+    expect(replaced(doc)).toEqual(['Ana']);
+    caretIn(olive, 'Rate');
+    expect(tableCommand(olive, { type: 'deleteColumn' }).ok).toBe(true);
+    await settle();
+    converged(room, ana, olive);
+    const { base } = openOrderedWordFile(TABLE_FILE, { file: 1 });
+    const copies = [
+      doc,
+      ana.handle.session.orderedDocument(),
+      olive.handle.session.orderedDocument(),
+      (await folded(doc, base, 2, mediaStore(base))).document,
+    ];
+    expect(copies.map(replaced)).toEqual([[], [], [], []]);
   });
 
   test('a party deletes a column while another types in it', async () => {
