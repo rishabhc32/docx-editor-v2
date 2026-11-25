@@ -43,6 +43,7 @@ import { ComposeContext } from '../compose/context.ts';
 import { showsPrompt } from '../compose/paragraph.ts';
 import { orderedPackageBytes } from '../compose/package.ts';
 import { orderedReplacedSuggestions } from '../compose/replaced.ts';
+import { isSectionItem } from '../compose/sections.ts';
 import { orderedCards } from '../decide.ts';
 import { MOVE_RANGE } from '../load/moves.ts';
 import { oneChangeRecord } from '../model/checkpoint-untracked.ts';
@@ -122,6 +123,18 @@ const showsOn = (read: CardRead, story: OrderedStory, item: OrderedItem): boolea
   (item.kind === 'zero'
     ? !isOrderedItemHidden(read.doc, item) && !isMoveRange(item)
     : isCardUnit(read.doc, item));
+
+/**
+ * An item's element by name. The body's own section reads alike with its properties or none: a
+ * load gives a file that states none an item with none, and a fold loads the section the room drew.
+ */
+function nodeName(item: OrderedItem): string {
+  if (isSectionItem(item)) {
+    return 'sectPr';
+  }
+
+  return item.node?.kind === 'textValue' ? '' : (item.node?.localName ?? '');
+}
 
 /** A move's range marker: a fold writes the file's own, which the room draws from the move. */
 const isMoveRange = (item: OrderedItem): boolean =>
@@ -204,7 +217,7 @@ export function foldPrint(doc: OrderedDocument, base: OoxmlPackage, blobs: FoldB
 
   // Each unit of an item on its own: a load joins units of one face into one item
   const units = (story: OrderedStory, item: OrderedItem): string[] => {
-    const node = item.node?.kind === 'textValue' ? '' : (item.node?.localName ?? '');
+    const node = nodeName(item);
 
     // A unit in a new row or note keeps its label in the room, where a load reads it from the
     // container

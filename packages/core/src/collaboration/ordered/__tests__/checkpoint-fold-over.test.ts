@@ -19,13 +19,6 @@ type Mode = typeof EDIT | typeof DIRECT;
 
 const TEXT = p(t('Cloud and serverless.')) + p(t('After.'));
 
-/** The text with its body's own section, as Word writes one. */
-const SECTION =
-  TEXT +
-  '<w:sectPr><w:pgSz w:w="12240" w:h="15840"/>' +
-  '<w:pgMar w:top="1440" w:right="1440" w:bottom="1440" w:left="1440" w:header="720" ' +
-  'w:footer="720" w:gutter="0"/></w:sectPr>';
-
 /** A cell of a fixed width, holding one paragraph. */
 const cell = (text: string) =>
   `<w:tc><w:tcPr><w:tcW w:w="3000" w:type="dxa"/></w:tcPr>${p(t(text))}</w:tc>`;
@@ -47,13 +40,10 @@ const format = (doc: OrderedDocument, mode: Mode, from: number, to: number, loca
     properties: [{ localName }],
   }) as const;
 
-/**
- * Ana's new words, and Olive's suggested bold over the whole paragraph: each run whole, as a
- * take-back joins a run a format split only in the room (another difference).
- */
+/** Ana's new words, and Olive's suggested bold over part of them and the words before. */
 function boldOverNewWords(doc: OrderedDocument): void {
   apply(doc, 'ana:1', { kind: 'insert', ...EDIT, place: at(doc, 0, 6), text: 'net ' });
-  apply(doc, 'olive:1', format(doc, EDIT, 0, 25, 'b'), 'Olive');
+  apply(doc, 'olive:1', format(doc, EDIT, 2, 8, 'b'), 'Olive');
 }
 
 /** A write of the first paragraph's properties. */
@@ -84,7 +74,7 @@ const ROOMS: readonly (readonly [string, string, (doc: OrderedDocument) => void,
     TEXT,
     (doc) => {
       boldOverNewWords(doc);
-      apply(doc, 'olive:2', format(doc, DIRECT, 6, 10, 'i'), 'Olive');
+      apply(doc, 'olive:2', format(doc, DIRECT, 6, 8, 'i'), 'Olive');
     },
     'Olive',
   ],
@@ -93,7 +83,7 @@ const ROOMS: readonly (readonly [string, string, (doc: OrderedDocument) => void,
     TEXT,
     (doc) => {
       boldOverNewWords(doc);
-      apply(doc, 'olive:2', format(doc, DIRECT, 0, 6, 'i'), 'Olive');
+      apply(doc, 'olive:2', format(doc, DIRECT, 2, 4, 'i'), 'Olive');
     },
     'Olive',
   ],
@@ -102,7 +92,7 @@ const ROOMS: readonly (readonly [string, string, (doc: OrderedDocument) => void,
     TEXT,
     (doc) => {
       boldOverNewWords(doc);
-      apply(doc, 'ana:2', format(doc, EDIT, 6, 10, 'i'));
+      apply(doc, 'ana:2', format(doc, EDIT, 6, 8, 'i'));
     },
     'Olive',
   ],
@@ -117,7 +107,7 @@ const ROOMS: readonly (readonly [string, string, (doc: OrderedDocument) => void,
   ],
   [
     "a direct page write over another's pending one",
-    SECTION,
+    TEXT,
     (doc) => {
       apply(doc, 'ana:1', pageWrite(doc, EDIT, { marginLeftTwips: 1800 }));
       const margins = { marginTopTwips: 720, marginBottomTwips: 720 };

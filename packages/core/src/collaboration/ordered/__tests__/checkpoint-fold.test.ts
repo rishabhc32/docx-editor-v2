@@ -453,6 +453,15 @@ describe('a fold of a section press', () => {
     });
   }
 
+  // A file that states no body section: live keeps the section item the load made for it, and
+  // a fold loads the section the room drew; both are the body's section
+  test('a margin on a file that states no body section', async () => {
+    const { document: doc, base } = openOrderedWordFile(docx(p(t('Cloud.'))), { file: 1 });
+    const page = { marginLeftTwips: 1800 };
+    apply(doc, 'ana:1', { kind: 'section-property', ...EDIT, sections: [], page });
+    await checkFold(doc, base, mediaStore(base), 'no body section');
+  });
+
   // The record keeps the values as the file stated them, and Bob's later press on a folded copy
   // takes it over with them. A reject gives the section back as Word restores it
   for (const [label, page] of [
