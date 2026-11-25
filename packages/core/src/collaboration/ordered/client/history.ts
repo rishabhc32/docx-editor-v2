@@ -1,10 +1,6 @@
 import type { CollaborationLocalSelection } from '../../index.ts';
 import type { HistoryGroup } from '../../../store/store/history-group.ts';
-import {
-  isOrderedCommentChange,
-  isOrderedEditChange,
-  type OrderedChange,
-} from '../change/types.ts';
+import { isOrderedCommentChange, type OrderedChange } from '../change/types.ts';
 import { orderedListNumber } from '../model/resources.ts';
 import type { OrderedDocument } from '../model/types.ts';
 
@@ -47,14 +43,6 @@ const MAX_STEPS = 500;
  * that holds one (`t:<file>:n:<change>.<k>`).
  */
 const MINTED = /^((?:t:\d{1,9}:)?)([ikcxpSn]):(.+)\.(\d{1,9})$/;
-
-/** A direct keystroke that goes on typing at the same caret as the last one. */
-function continuesTyping(last: OrderedChange | undefined, next: OrderedChange): boolean {
-  if (!last || !isOrderedEditChange(last) || !isOrderedEditChange(next)) return false;
-  if (last.kind !== 'insert' || next.kind !== 'insert') return false;
-  if (last.mode !== 'edit' || next.mode !== 'edit' || last.part !== next.part) return false;
-  return JSON.stringify(last.place) === JSON.stringify(next.place);
-}
 
 /**
  * What a change minted under an old id, under the new id; any other string as it is. A redo
@@ -146,8 +134,9 @@ function mergedStep(
 /**
  * Undo and redo of the person's own changes (design D7). A step is one or more of the person's
  * suggestions and the changes that made them. Undo takes a step's suggestions back with a
- * `retract`, so it never touches another person's text. Direct steps (a typing run is one, as in
- * Word) undo by their inverse, read from the list (`undo-direct.ts`).
+ * `retract`, so it never touches another person's text. Direct steps undo by their inverse, read
+ * from the list (`undo-direct.ts`). The editor's undo group decides which commits are one step, a
+ * typing run among them (`editor/typing-history.ts`), for direct changes as for suggestions.
  */
 /** How `OrderedHistory.record` takes a change. */
 export interface OrderedRecordOptions {
@@ -203,11 +192,6 @@ export class OrderedHistory {
       }
 
       top.direct ||= direct;
-      return;
-    }
-
-    if (direct && top?.direct && continuesTyping(top.changes[top.changes.length - 1], change)) {
-      top.changes.push(change);
       return;
     }
 

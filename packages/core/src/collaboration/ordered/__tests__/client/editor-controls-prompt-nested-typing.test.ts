@@ -25,6 +25,7 @@ import {
   screenFollowsList,
   settle,
   surface,
+  typeKeys,
   type Person,
 } from './editor-harness.ts';
 import { reviewTestModule } from './review-module.ts';
@@ -127,13 +128,6 @@ async function seats(mode: 'edit' | 'suggesting') {
 }
 
 /** Each key on its own, the room's answer before the next one, as a person types. */
-async function typeKeys(person: Person, text: string): Promise<void> {
-  for (const key of text) {
-    surface(person).type(key);
-    await settle();
-  }
-}
-
 async function folds(room: ReturnType<typeof localRoom>, label: string): Promise<void> {
   const { base } = openOrderedWordFile(FILE, { file: 1 });
   await checkFold(room.room.document, base, mediaStore(base), label);
@@ -153,18 +147,16 @@ describe('typing over a prompt that holds a control with its own prompt', () => 
     await everywhere([olive, ben], expected);
     await folds(room, 'typed');
 
-    // The organiser's undo brings the prompt back with the combo box, and redo types again
-    for (let step = 0; step < 2; step += 1) {
-      surface(olive).undo();
-      await settle();
-    }
-
+    // The organiser's undo of the typing run brings the prompt back with the combo box, and redo
+    // types the run again
+    surface(olive).undo();
+    await settle();
     converged(room, [olive, ben]);
     await everywhere([olive, ben], UNCHANGED);
     surface(olive).redo();
     await settle();
     converged(room, [olive, ben]);
-    expect(shapeOf(editorXml(ben))).toBe('Venue: [#9203 ]¶Signed.¶');
+    expect(shapeOf(editorXml(ben))).toBe(expected);
   });
 
   test('a party suggests a city over the inner prompt key by key', async () => {

@@ -1,16 +1,20 @@
 // The organiser's undo and redo of direct edits (task 6.7), with real editors: the organiser
-// edits with tracking off and a party suggests in the same room. A typing run is one step; undo
-// takes back typing, a deletion, Enter, a join and a format exactly, and redo makes them again.
+// edits with tracking off and a party suggests in the same room. A typing run is one step, as the
+// editor alone groups it (a pause or a caret move ends it); undo takes back typing, a deletion,
+// Enter, a join and a format exactly, and redo makes them again. The room once joined every key
+// typed at one caret into one step, where the editor alone ends a run after a pause.
 // A party's suggestion inside the text the undo takes back or shows again stays as it is, on
 // both editors. After every step both copies equal the room and both screens show their lists.
 
-import { afterEach, describe, expect, test } from 'bun:test';
+import { afterEach, describe, expect, spyOn, test } from 'bun:test';
+import { createDocxEditor } from '../../../../editor/docx-editor.ts';
 import type { OrderedLocalRoom } from '../../client/local-room.ts';
 import {
   caretAt,
   closeAll,
   editorTexts,
   editorXml,
+  FILE,
   join,
   localRoom,
   HeldTransport,
@@ -20,6 +24,7 @@ import {
   screenFollowsList,
   settle,
   surface,
+  typeKeys,
   type Person,
 } from './editor-harness.ts';
 import { testPerson } from '../test-persons.ts';
@@ -52,13 +57,6 @@ async function seats() {
   return { room, org, ana };
 }
 
-async function type(person: Person, text: string): Promise<void> {
-  for (const ch of text) {
-    surface(person).insertPlainText(ch);
-    await settle();
-  }
-}
-
 async function undo(person: Person): Promise<void> {
   surface(person).undo();
   await settle();
@@ -73,7 +71,7 @@ describe("the organiser's undo of direct edits", () => {
   test('a typing run is one step; undo takes it back and redo makes it again', async () => {
     const { room, org, ana } = await seats();
     caretAt(org, 0, 4);
-    await type(org, 'abc');
+    await typeKeys(org, 'abc');
     expect(editorTexts(ana)[0]).toBe('The abcfee is 100 USD.');
     expect(surface(org).state().canUndo).toBe(true);
     await undo(org);
@@ -90,10 +88,54 @@ describe("the organiser's undo of direct edits", () => {
     expect(editorXml(org)).not.toContain('<w:ins ');
   });
 
+  test('typing undoes in the steps the editor alone takes: a pause ends a run', async () => {
+    let now = 0;
+    const clock = spyOn(performance, 'now').mockImplementation(() => now);
+    const typing = async (person: Person) => {
+      caretAt(person, 0, 4);
+      await typeKeys(person, 'ab');
+      now = 1500;
+      await typeKeys(person, 'cd');
+    };
+    try {
+      const container = document.createElement('div');
+      document.body.append(container);
+      const editor = createDocxEditor({ container, document: FILE, author: 'Org', mode: 'edit' });
+      const alone = { name: 'alone', editor, container } as unknown as Person;
+      await typing(alone);
+      const trail = async (person: Person) => {
+        const texts: string[] = [];
+        for (const step of [undo, undo, redo, redo]) {
+          await step(person);
+          texts.push(editorTexts(person)[0] ?? '');
+        }
+
+        return texts;
+      };
+      const expected = await trail(alone);
+      editor.destroy();
+      container.remove();
+      expect(expected).toEqual([
+        'The abfee is 100 USD.',
+        'The fee is 100 USD.',
+        'The abfee is 100 USD.',
+        'The abcdfee is 100 USD.',
+      ]);
+
+      now = 0;
+      const { room, org, ana } = await seats();
+      await typing(org);
+      expect(await trail(org)).toEqual(expected);
+      converged(room, org, ana);
+    } finally {
+      clock.mockRestore();
+    }
+  });
+
   test("a party's insertion inside the organiser's text stays when the text goes", async () => {
     const { room, org, ana } = await seats();
     caretAt(org, 0, 4);
-    await type(org, 'abc');
+    await typeKeys(org, 'abc');
     caretAt(ana, 0, 5);
     surface(ana).insertPlainText('X');
     await settle();
@@ -193,7 +235,7 @@ describe("the organiser's undo of direct edits", () => {
     surface(ana).insertPlainText('XYZ');
     await settle();
     caretAt(org, 2, 1);
-    await type(org, 'q');
+    await typeKeys(org, 'q');
     expect(editorTexts(ana)[2]).toBe('XqYZSigned here.');
     await undo(org);
     expect(editorTexts(ana)[2]).toBe('XYZSigned here.');
@@ -206,7 +248,7 @@ describe("the organiser's undo of direct edits", () => {
   test("an undo and a party's typing inside the same text at once end with the room", async () => {
     const { room, org, ana } = await seats();
     caretAt(org, 0, 4);
-    await type(org, 'abc');
+    await typeKeys(org, 'abc');
     // Both go out before either copy hears of the other
     caretAt(ana, 0, 6);
     surface(ana).insertPlainText('X');

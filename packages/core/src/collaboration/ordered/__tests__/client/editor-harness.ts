@@ -196,6 +196,19 @@ export async function settle(rounds = 8): Promise<void> {
   for (let k = 0; k < rounds; k += 1) await new Promise((resolve) => setTimeout(resolve, 0));
 }
 
+/**
+ * Type `text` as a person types it: one key per task, through the editor's input, so the keys
+ * typed at one caret without a pause are one typing run, one undo step.
+ */
+export async function typeKeys(person: Person, text: string): Promise<void> {
+  for (const data of text) {
+    const pages = person.container.querySelector('.docx-pages');
+    const init = { bubbles: true, cancelable: true, inputType: 'insertText', data };
+    pages?.dispatchEvent(new InputEvent('beforeinput', init));
+    await settle();
+  }
+}
+
 export function surface(person: Person) {
   const found = person.editor.surface;
   if (!found) throw new Error('no surface');

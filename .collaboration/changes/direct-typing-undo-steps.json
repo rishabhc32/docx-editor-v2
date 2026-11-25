@@ -1,0 +1,13 @@
+{
+  "impact": "compatible",
+  "fields": [],
+  "before": "In a room, the organiser's direct keys typed at one caret were one undo step however long the typing ran, where the editor alone ends a typing run after a pause, after 2 s of typing or at a caret move.",
+  "after": "The editor's undo group decides which of the organiser's direct commits are one undo step, as it does for a party's suggestions and in the editor alone: a pause, 2 s of typing or a caret move starts a new step.",
+  "reason": "Change messages, the change log and its kinds keep their meaning, and the Yjs document format and the checkpoint format do not change. Only the local undo history of the organiser's direct typing changes; each undo still sends the same revert change. An ordered room admits only clients of its own code version.",
+  "tests": [
+    "packages/core/src/collaboration/ordered/__tests__/client/editor-direct-undo.test.ts",
+    "packages/core/src/collaboration/ordered/__tests__/client/editor-controls-prompt-nested-typing.test.ts"
+  ],
+  "changeset": "direct-typing-undo-steps",
+  "migration": null
+}
