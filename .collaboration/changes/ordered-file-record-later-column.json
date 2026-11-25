@@ -1,0 +1,12 @@
+{
+  "impact": "compatible",
+  "fields": [],
+  "before": "Compose wrote a pending table or cell record back as the file's change record when it was the one record drawn, also after a column made since the load had changed the record's original (a lent width, a grid with the new column): live wrote the original the load read, while the pending view and the next fold hold the changed one.",
+  "after": "The file's record is written back only when nothing made later changed its original.",
+  "reason": "Change messages, the change log, checkpoints and the Yjs format do not change; compose draws the table as the editor does, the same on every copy. A room admits only clients of its own code version.",
+  "tests": [
+    "packages/core/src/collaboration/ordered/__tests__/checkpoint-fold-table-records.test.ts"
+  ],
+  "changeset": "ordered-file-record-later-column",
+  "migration": null
+}
