@@ -46,7 +46,7 @@ export function pressParagraphs(
   }
 
   if (ctx.direct) {
-    settle(ctx.doc, sid);
+    settle(ctx, sid);
   }
 
   return { suggestions: [...suggestions], replaced };

@@ -343,6 +343,6 @@ export function convertNotes(ctx: Ctx, opens: readonly OrderedItem[]): string {
     }
   }
 
-  settle(ctx.doc, suggestion);
+  settle(ctx, suggestion);
   return suggestion;
 }

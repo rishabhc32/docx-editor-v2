@@ -26,7 +26,7 @@ export function runKindEdit(
   return editOutcome(input.edit, (ctx) => {
     const made = edit(ctx);
     if (options.settleDirect === true && ctx.direct) {
-      settle(ctx.doc, made);
+      settle(ctx, made);
     }
 
     return [made];

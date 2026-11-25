@@ -34,13 +34,13 @@ import { deleteText, formatText, insertText, unitsOf, type InsertOptions } from 
  * their own), as Word writes them there and a load reads them back; noted as units the change
  * added to it, so its undo deletes them (`inverseOfDirect`). A move's words keep their move.
  */
-export function settle(doc: OrderedDocument, suggestion: string | null): void {
+export function settle(ctx: Ctx, suggestion: string | null): void {
+  const doc = ctx.doc;
   if (!isPending(doc, suggestion)) {
     return;
   }
 
   settleDirect(doc, suggestion);
-  const change = suggestion.slice(2, suggestion.lastIndexOf('.'));
   for (const item of [...(doc.labelled.get(suggestion) ?? [])]) {
     const story = storyOfItem(doc, item);
     if (!story || !isUnit(item) || item.by !== suggestion || item.move !== null) {
@@ -50,7 +50,7 @@ export function settle(doc: OrderedDocument, suggestion: string | null): void {
     const container = pendingContainerAround(doc, story, item);
     if (container !== null) {
       relabel(doc, story, item, { by: container, quiet: true });
-      recordAdded(doc, change, unitsOf(story, [item]));
+      recordAdded(doc, ctx.ids.changeId, unitsOf(story, [item]));
     }
   }
 }
@@ -116,7 +116,7 @@ export function directInsert(
   if (before && !after) {
     // At a pending insertion's end: on the base side, with the next character's face
     settle(
-      ctx.doc,
+      ctx,
       insertText(ctx, p, offset, text, {
         face: next?.item.face ?? null,
         outsideOf: before.id,
@@ -135,7 +135,7 @@ export function directInsert(
       ? neighbour.item.fmts.filter((f) => statusOf(ctx.doc, f.suggestion) === 'pending')
       : [];
   settle(
-    ctx.doc,
+    ctx,
     insertText(
       ctx,
       p,
@@ -150,7 +150,7 @@ export function directDelete(ctx: Ctx, p: OrderedViewParagraph, start: number, e
   // Every unit, struck or not, base or another person's pending insertion, break or row, leaves
   // with one settled deletion, as the engine removes it: taken back, each shows again as it was
   const base = deleteText(ctx, p, start, end, null, { evenStruck: true });
-  settle(ctx.doc, base);
+  settle(ctx, base);
   const firstChar = p.chars[start];
   const lastChar = p.chars[end - 1];
   if (base === null || !firstChar || !lastChar) return;
@@ -171,12 +171,12 @@ export function directFormat(
   end: number,
   write: OrderedFormatWrite
 ): void {
-  settle(ctx.doc, formatText(ctx, p, start, end, write, null));
+  settle(ctx, formatText(ctx, p, start, end, write, null));
 }
 
 /** Enter: inside a pending insertion too, the break is base. */
 export function directEnter(ctx: Ctx, p: OrderedViewParagraph, offset: number): void {
-  settle(ctx.doc, splitParagraph(ctx, p, offset));
+  settle(ctx, splitParagraph(ctx, p, offset));
 }
 
 /** Backspace joins with a settled deletion of the mark, a pending break's too. */
@@ -185,7 +185,7 @@ export function directJoin(
   previous: OrderedViewParagraph,
   p: OrderedViewParagraph
 ): void {
-  settle(ctx.doc, joinParagraphs(ctx, previous, p, { evenStruck: true }));
+  settle(ctx, joinParagraphs(ctx, previous, p, { evenStruck: true }));
 }
 
 export function directFormatMark(
@@ -193,7 +193,7 @@ export function directFormatMark(
   p: OrderedViewParagraph,
   write: OrderedFormatWrite
 ): void {
-  settle(ctx.doc, formatMark(ctx, p, write, null));
+  settle(ctx, formatMark(ctx, p, write, null));
 }
 
 export function directParagraphOps(
@@ -206,10 +206,10 @@ export function directParagraphOps(
     into = suggestionOrNull(ctx.doc, paragraphOp(ctx, p, op, into));
   }
 
-  settle(ctx.doc, into?.id ?? null);
+  settle(ctx, into?.id ?? null);
 }
 
 /** A settled deletion of the row, struck or not, a pending one too. */
 export function directDeleteRow(ctx: Ctx, p: OrderedViewParagraph): void {
-  settle(ctx.doc, deleteRow(ctx, p, { evenStruck: true }));
+  settle(ctx, deleteRow(ctx, p, { evenStruck: true }));
 }

@@ -349,7 +349,7 @@ function formatOverRange(
 /** Settle the suggestion at once when the edit is direct (an edit with no direct form). */
 function settledIfDirect(ctx: Ctx, suggestion: string | null): string | null {
   if (ctx.direct) {
-    settle(ctx.doc, suggestion);
+    settle(ctx, suggestion);
   }
 
   return suggestion;

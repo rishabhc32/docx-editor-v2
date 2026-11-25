@@ -139,7 +139,7 @@ export function insertToc(
   const control = buildTocContentControl(() => ctx.ids.node(), plans, toc, alias);
   const items = insertedItems(ctx, [control], suggestion.id);
   insertItems(ctx.doc, ctx.story, ctx.story.tree.prev(firstItemOf(p)), items);
-  settle(ctx.doc, suggestion.id);
+  settle(ctx, suggestion.id);
   return suggestion.id;
 }
 
@@ -341,6 +341,6 @@ export function replaceTocResult(
     )
   );
   insertItems(ctx.doc, ctx.story, separate, insertedItems(ctx, rows, suggestion.id));
-  settle(ctx.doc, suggestion.id);
+  settle(ctx, suggestion.id);
   return suggestion.id;
 }

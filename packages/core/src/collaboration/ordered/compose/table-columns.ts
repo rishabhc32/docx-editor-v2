@@ -8,6 +8,7 @@ import { compactRevisionGrid } from '../../../store/store/revision-table-rebuild
 import { cellsCoveringColumn } from '../../../store/store/tree-op-table-merged-columns.ts';
 import { readEditableTableTopology } from '../../../store/store/tree-op-table-topology.ts';
 import { build, revisionAttributes } from '../../../store/store/tree-op-tracked.ts';
+import { mintedChange } from '../change/ids.ts';
 import { itemAt, statusOf } from '../model/document.ts';
 import {
   loadedSpace,
@@ -48,8 +49,7 @@ export const isCell = (n: OoxmlNode): boolean => n.kind === 'tableCell' || isWml
 
 /** The change that made an item (its node id is minted from it, `n:<change>.<k>`), or `file`. */
 function creation(item: OrderedItem): string {
-  const node = loadedSpace(item.space)?.node ?? '';
-  return node.startsWith('n:') ? node.slice(2, node.lastIndexOf('.')) : 'file';
+  return mintedChange(loadedSpace(item.space)?.node ?? '', 'n') ?? 'file';
 }
 
 /**

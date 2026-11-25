@@ -81,7 +81,7 @@ function deleteParagraph(ctx: Ctx, story: OrderedStory, address: OrderedChangeAd
     strikeItems(ctx, story, left, struck);
   }
 
-  settle(ctx.doc, struck);
+  settle(ctx, struck);
 }
 
 export const DELETE_PARAGRAPH_SPEC = orderedKindSpec<OrderedDeleteParagraphChange>({

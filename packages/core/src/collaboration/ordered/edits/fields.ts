@@ -245,7 +245,10 @@ function replaceField(ctx: Ctx, item: OrderedItem, form: FieldForm): string {
   });
   insertItems(ctx.doc, ctx.story, item, [copy]);
   refuseFieldInField(ctx, [copy]);
-  if (ctx.direct) settle(ctx.doc, suggestion.id);
+  if (ctx.direct) {
+    settle(ctx, suggestion.id);
+  }
+
   return suggestion.id;
 }
 
@@ -377,7 +380,10 @@ export function setRunText(ctx: Ctx, units: readonly OrderedItem[], text: string
     insertItems(ctx.doc, ctx.story, last, [copy]);
   }
 
-  if (ctx.direct) settle(ctx.doc, suggestion.id);
+  if (ctx.direct) {
+    settle(ctx, suggestion.id);
+  }
+
   return suggestion.id;
 }
 
@@ -499,7 +505,7 @@ export function editBookmark(
     ]);
   }
 
-  settle(ctx.doc, suggestion.id);
+  settle(ctx, suggestion.id);
   return suggestion.id;
 }
 

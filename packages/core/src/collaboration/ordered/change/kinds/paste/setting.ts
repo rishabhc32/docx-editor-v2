@@ -42,7 +42,7 @@ export const SETTING_SPEC = orderedKindSpec<OrderedSettingChange>({
 
     const suggestion = suggestionFor(ctx).id;
     addSetting(ctx, suggestion, change.setting);
-    settle(ctx.doc, suggestion);
+    settle(ctx, suggestion);
     return { suggestions: [suggestion], replaced: [] };
   },
   policy: { text: false, properties: false },

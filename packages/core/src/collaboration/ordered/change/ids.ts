@@ -157,3 +157,18 @@ export function orderedIdMinter(changeId: string): OrderedIdMinter {
     decimal: () => mintedNumber(fnv1a32(`ordered decimal ${next('d')}`)),
   };
 }
+
+/**
+ * The change a minted id of one prefix was made from, the inverse of the minter's formats
+ * (`mintedChange('n:ana:4.2', 'n')` is `ana:4`), or null for any other id: a file's, or one of
+ * another prefix.
+ */
+export function mintedChange(id: string, prefix: string): string | null {
+  const dot = id.lastIndexOf('.');
+  if (!id.startsWith(`${prefix}:`) || !/^[1-9][0-9]*$/.test(id.slice(dot + 1))) {
+    return null;
+  }
+
+  const change = id.slice(prefix.length + 1, dot);
+  return isOrderedChangeId(change) ? change : null;
+}

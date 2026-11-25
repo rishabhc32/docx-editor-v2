@@ -256,7 +256,10 @@ export const INSERT_FRAGMENT_SPEC = orderedKindSpec<OrderedInsertFragmentChange>
     const p = orderedViewParagraph(ctx.doc, story.name, at.index);
     if (!p) throw new OrderedRefusal('malformed-story', `no paragraph ${at.index}`);
     pasteFragment(ctx, p, at.offset, blocks, change.whole === true, sid);
-    if (ctx.direct) settle(ctx.doc, sid);
+    if (ctx.direct) {
+      settle(ctx, sid);
+    }
+
     return { suggestions: [sid], replaced: [] };
   },
   policy: { text: true, properties: false },

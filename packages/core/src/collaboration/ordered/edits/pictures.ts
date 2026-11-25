@@ -288,6 +288,6 @@ export function changeObject(
     op,
   }));
   relabel(ctx.doc, ctx.story, atom, { props: [...atom.props, ...records] });
-  settle(ctx.doc, suggestion.id);
+  settle(ctx, suggestion.id);
   return suggestion.id;
 }

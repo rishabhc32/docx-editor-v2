@@ -30,7 +30,7 @@ export function setNoteProperties(
       throw new OrderedRefusal('invalid-edit', 'not the end of a section');
     if (isHidden(ctx.doc, holder)) throw new OrderedRefusal('hidden-target', 'the section');
     const made = addSectionWrites(ctx, [sectionAt(ctx, holder).section], op, null);
-    settle(ctx.doc, made);
+    settle(ctx, made);
     return made;
   }
 
@@ -45,6 +45,6 @@ export function setNoteProperties(
     suggestion: suggestion.id,
     op,
   });
-  settle(ctx.doc, suggestion.id);
+  settle(ctx, suggestion.id);
   return suggestion.id;
 }

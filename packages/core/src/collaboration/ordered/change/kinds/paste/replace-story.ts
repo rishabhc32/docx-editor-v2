@@ -88,7 +88,7 @@ export const REPLACE_STORY_SPEC = orderedKindSpec<OrderedReplaceStoryChange>({
 
     const after = keep ? story.tree.prev(keep) : story.tree.last();
     insertItems(ctx.doc, story, after, fresh);
-    settle(ctx.doc, sid);
+    settle(ctx, sid);
     return { suggestions: [sid], replaced: [] };
   },
   policy: { text: true, properties: false, strikes: true },

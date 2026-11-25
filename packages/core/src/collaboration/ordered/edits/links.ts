@@ -241,7 +241,10 @@ export function insertLink(
   insertItems(ctx.doc, ctx.story, openAfter(ctx, first), [open]);
   if (look.style !== undefined) styleUnits(ctx, units, { set: look.style }, suggestion);
   if (look.newStyle !== undefined) addStyle(ctx, suggestion.id, look.newStyle);
-  if (ctx.direct) settle(ctx.doc, suggestion.id);
+  if (ctx.direct) {
+    settle(ctx, suggestion.id);
+  }
+
   return suggestion.id;
 }
 
@@ -361,7 +364,7 @@ export function removeLink(
     const kept = shellOf(open).attributes;
     rewrap(ctx, open, close, partList(before, inside, after, kept, null, kept), suggestion);
     if (unstyle) styleUnits(ctx, inside, unstyle, suggestion);
-    settle(ctx.doc, suggestion.id);
+    settle(ctx, suggestion.id);
     return suggestion.id;
   }
 
@@ -501,7 +504,7 @@ export function retargetLink(
 
   const parts = partList(before, inside, after, shell.attributes, aimed, shell.attributes);
   rewrap(ctx, open, close, parts, suggestion);
-  settle(ctx.doc, suggestion.id);
+  settle(ctx, suggestion.id);
   return suggestion.id;
 }
 

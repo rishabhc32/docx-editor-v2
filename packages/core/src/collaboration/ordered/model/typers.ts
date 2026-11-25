@@ -1,7 +1,7 @@
 // Who typed the units of a pending insertion: the namespace of the room change that typed them,
 // and its person.
 
-import { parseOrderedChangeId } from '../change/ids.ts';
+import { mintedChange, parseOrderedChangeId } from '../change/ids.ts';
 import { inserter } from './document.ts';
 import type { OrderedPerson } from './person.ts';
 import { isUnit, loadedSpace, type OrderedDocument, type OrderedItem } from './types.ts';
@@ -47,10 +47,10 @@ export function orderedUnitTyper(
   // paragraph it made, `n:<change id>.<k>`; a prompt is typed by no one
   const runs = LOADED.get(doc)?.get(item.space);
   const kept = runs?.find((run) => offset >= run.from && offset < run.to);
-  const minted = loadedSpace(item.space)?.node ?? item.space;
+  const node = loadedSpace(item.space)?.node ?? '';
   const change =
-    item.prompt !== true && /^[in]:/.test(minted) ? minted.slice(2, minted.lastIndexOf('.')) : '';
-  const namespace = kept?.typer ?? parseOrderedChangeId(change)?.namespace;
+    item.prompt === true ? null : (mintedChange(item.space, 'i') ?? mintedChange(node, 'n'));
+  const namespace = kept?.typer ?? parseOrderedChangeId(change ?? '')?.namespace;
   const person = namespace === undefined ? undefined : doc.namespaces.get(namespace);
   if (namespace === undefined || person === undefined) {
     return null;
