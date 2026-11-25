@@ -1,0 +1,10 @@
+{
+  "impact": "compatible",
+  "fields": [],
+  "before": "An accepted strike of a note's text drew the note's last paragraph mark away even while another reference still cited the note: compose wrote an empty note, or, with a pending move inside the note, refused the room's file after the decision applied.",
+  "after": "A note's last paragraph mark draws when a decision took it away, with what still shows in it, as the engine keeps a story's last paragraph.",
+  "reason": "Change messages, the change log, checkpoints and the Yjs format do not change; compose writes the same file on every copy. A room admits only clients of its own code version.",
+  "tests": ["packages/core/src/collaboration/ordered/__tests__/note-moves-fold.test.ts"],
+  "changeset": "ordered-struck-note-keeps-paragraph",
+  "migration": null
+}
