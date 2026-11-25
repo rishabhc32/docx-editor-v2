@@ -129,6 +129,29 @@ for (const action of ['accept', 'reject'] as const) {
     expect(revisionItemsOf(applied.part).map((item) => item.revisionKind)).toEqual(['format']);
     expect(serializeOoxmlPart(applied.part)).toContain(action === 'accept' ? 'New' : 'Old');
   });
+  test(`${action}: a format record and the text change its runs sit in are decided apart`, () => {
+    const format =
+      '<w:rPr><w:b/><w:rPrChange w:id="1" w:author="Ada"><w:rPr/></w:rPrChange></w:rPr>';
+    const part = load(
+      `<w:p><w:r>${format}<w:t>Base</w:t></w:r><w:del w:id="2" w:author="Grace">` +
+        `<w:r>${format}<w:delText>Old</w:delText></w:r></w:del></w:p>`
+    );
+    for (const kind of ['format', 'delete']) {
+      const keys = revisionItemsOf(part)
+        .filter((item) => item.revisionKind === kind)
+        .map(reviewItemKey);
+      const plan = planRevisionBatch(part, action, keys);
+      expect(plan.result.skipped).toEqual([]);
+      const applied = applyTreeOp(part, plan.ops[0]!);
+      if (!applied.ok) {
+        throw new Error(applied.reason);
+      }
+
+      expect(revisionItemsOf(applied.part).map((item) => item.revisionKind)).toEqual([
+        kind === 'format' ? 'delete' : 'format',
+      ]);
+    }
+  });
 }
 
 for (const action of ['accept', 'reject'] as const) {

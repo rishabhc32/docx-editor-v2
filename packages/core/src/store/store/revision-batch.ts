@@ -225,12 +225,21 @@ export function planRevisionBatch(
       neighbourProperties.add(property.id);
     }
   }
+  const isTextChange = (index: number): boolean =>
+    sites[index]!.node.kind === 'revisionInsert' || sites[index]!.node.kind === 'revisionDelete';
   const visit = (node: OoxmlNode, ancestor?: number, neighbour = false): void => {
     const site = indices.get(node.id);
     const owner = owners.get(node.id);
     if (site !== undefined && owner !== undefined) join(owner, site);
     const own = site ?? owner;
-    const apart = neighbour && site !== undefined && sites[site]!.propertyChange;
+
+    // A format record on runs inside a text insertion or deletion is decided apart from it, as
+    // Word decides them: deciding the record keeps or restores the runs' properties, and deciding
+    // the text change keeps or removes the runs with the record on them
+    const apart =
+      own !== undefined &&
+      sites[own]!.propertyChange &&
+      ((neighbour && site !== undefined) || (ancestor !== undefined && isTextChange(ancestor)));
     if (own !== undefined && ancestor !== undefined && !apart) join(ancestor, own);
     const next = own ?? ancestor;
     const below = neighbour || neighbourProperties.has(node.id);

@@ -112,6 +112,32 @@ describe('shared Review menu commands', () => {
       editor.destroy();
     });
 
+    // Word decides a format record apart from the text change its runs sit in
+    for (const change of ['del', 'ins'] as const) {
+      test(`${action} decides a format record that reaches into another author's ${change}`, () => {
+        const format =
+          '<w:rPr><w:u w:val="single"/><w:rPrChange w:id="1" w:author="Ada"><w:rPr/></w:rPrChange></w:rPr>';
+        const text = change === 'del' ? 'delText' : 't';
+        const editor = mountEditor(
+          `<w:p><w:r>${format}<w:t>Base</w:t></w:r><w:${change} w:id="2" w:author="Grace">` +
+            `<w:r>${format}<w:${text}>Inner</w:${text}></w:r></w:${change}></w:p>`
+        );
+        const kinds = () =>
+          editor
+            .getReviewItems({ pairReplacements: false })
+            .flatMap((item) => (item.kind === 'revision' ? [item.revisionKind] : []));
+        const record = editor
+          .getReviewItems({ pairReplacements: false })
+          .find((item) => item.kind === 'revision' && item.revisionKind === 'format');
+        expect(editor[action](record!.key).ok).toBe(true);
+        expect(kinds()).toEqual([change === 'del' ? 'delete' : 'insert']);
+        const xml = serializeOoxmlPart(editor.surface!.session.storyParts()[0]!);
+        expect(xml).not.toContain('rPrChange');
+        expect(xml.includes('<w:u ')).toBe(action === 'acceptReviewItem');
+        editor.destroy();
+      });
+    }
+
     test(`${action} on a paragraph break preserves non-adjacent text with the same address`, () => {
       const address = 'w:id="1" w:author="Ada" w:date="2026-09-09T10:00:00Z"';
       const editor = mountEditor(

@@ -1,0 +1,13 @@
+{
+  "impact": "compatible",
+  "fields": [],
+  "before": "A format record whose runs reached into a text insertion or deletion was planned in one group with that change, so the engine left both cards (incomplete-group): the editor alone refused the format card, and a room refused it as engine-refused.",
+  "after": "The engine plans a format record apart from the text insertion or deletion its runs sit in (revision-batch visit), as Word decides them, so each card is decided on its own, in the editor alone and in a room.",
+  "reason": "Change messages, the change log and its kinds keep their meaning, and the Yjs document format and the checkpoint format do not change. Only the verdict of such a decision changes, from refused to decided, as the engine plans it. An ordered room admits only clients of its own code version.",
+  "tests": [
+    "packages/core/src/store/__tests__/revision-batch.test.ts",
+    "packages/core/src/editor/__tests__/review-menu-commands.test.ts"
+  ],
+  "changeset": "format-record-in-text-change",
+  "migration": null
+}

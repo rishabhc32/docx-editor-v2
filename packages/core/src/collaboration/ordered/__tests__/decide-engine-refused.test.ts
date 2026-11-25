@@ -10,6 +10,9 @@
 //
 // A card of several suggestions is decided together, as the engine plans a batch of them: Ben's
 // paragraph record in a cell of Ana's new column joins her card, and its reject takes both.
+//
+// A format record whose runs reach into another person's suggested deletion is a card of its own,
+// and each of the two is decided alone, as Word decides them (r5-s10 of the pre-send check).
 
 import { describe, expect, test } from 'bun:test';
 import { orderedCardSeen } from '../change/apply-decide.ts';
@@ -18,6 +21,7 @@ import type { OrderedDocument } from '../model/types.ts';
 import {
   addressOf,
   apply,
+  at,
   APPLY_FILE,
   DIRECT,
   EDIT,
@@ -88,5 +92,32 @@ describe('a card of several suggestions', () => {
       apply(doc, 'olive:1', decide(doc, 'S:bob:1.1', status), 'Olive');
       expect([...doc.suggestions.values()].map((s) => s.status)).toEqual([status, status]);
     });
+  }
+});
+
+describe("a format record that reaches into another person's deletion", () => {
+  for (const status of ['accepted', 'rejected'] as const) {
+    for (const suggestion of ['S:ana:1.1', 'S:ben:1.1']) {
+      test(`${suggestion} is ${status} on its own`, () => {
+        const { document: doc } = openOrderedWordFile(APPLY_FILE, { file: 1 });
+        const bold = [{ localName: 'b' }];
+        apply(doc, 'ana:1', {
+          kind: 'format',
+          ...EDIT,
+          from: at(doc, 0, 0),
+          to: at(doc, 0, 8),
+          properties: bold,
+        });
+        apply(
+          doc,
+          'ben:1',
+          { kind: 'delete', ...EDIT, from: at(doc, 0, 4), to: at(doc, 0, 12) },
+          'Ben'
+        );
+        expect(orderedCardSeen(doc, suggestion)?.map((s) => s.suggestion)).toEqual([suggestion]);
+        apply(doc, 'olive:1', decide(doc, suggestion, status), 'Olive');
+        expect(doc.suggestions.get(suggestion)?.status).toBe(status);
+      });
+    }
   }
 });
