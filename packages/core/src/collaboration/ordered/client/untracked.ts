@@ -8,7 +8,7 @@ import {
   type CheckpointUntracked,
 } from '../model/checkpoint-untracked.ts';
 import { createOrderedItem, storyOfAddress } from '../model/document.ts';
-import { replaceItems } from '../model/mutations.ts';
+import { nextSeq, replaceItems } from '../model/mutations.ts';
 import {
   tokenSpace,
   type OrderedDocument,
@@ -25,7 +25,7 @@ import { childWhere, isWml, withChildren } from '../ooxml-nodes.ts';
 /**
  * Put back in the document loaded from a checkpoint each container's properties that a record
  * changes with no change record: the container's own properties of the target are the manifest's
- * again, and the manifest's records, each with its suggestion's order, take the place of those
+ * again, and the manifest's records, in the order they were made, take the place of those
  * loaded from the file (but the records a takeover put back), so compose draws them over those
  * properties as the room did. `labels` gives the elements that carry each label. False when a
  * label is on no container the load holds whose properties the target is (a cell for a table's
@@ -163,8 +163,10 @@ function cellSpaces(
 }
 
 /**
- * The manifest's records of a container's properties as the document's, each with its
- * suggestion's order and its table's cells; null when a suggestion or a cell is not there.
+ * The manifest's records of a container's properties as the document's, each with its table's
+ * cells and a new seq in the manifest's order: a record made after another keeps drawing on top
+ * of it when its suggestion is the older one (a change on its author's own new row). Null when a
+ * suggestion or a cell is not there.
  */
 function restoredRecords(
   doc: OrderedDocument,
@@ -175,12 +177,11 @@ function restoredRecords(
   const restored: OrderedElementRecord[] = [];
   for (const record of records) {
     const id = listedIds[record.suggestion];
-    const seq = id === undefined ? undefined : doc.suggestions.get(id)?.seq;
     const replaced = record.replaced === undefined ? undefined : listedIds[record.replaced];
     const over = record.over?.flatMap((k) => listedIds[k] ?? []);
     if (
       id === undefined ||
-      seq === undefined ||
+      !doc.suggestions.has(id) ||
       (record.replaced !== undefined && replaced === undefined) ||
       over?.length !== record.over?.length
     ) {
@@ -196,7 +197,7 @@ function restoredRecords(
       ...record,
       kind: 'element',
       suggestion: id,
-      seq,
+      seq: nextSeq(doc),
       target,
       tableCells: record.tableCells === undefined ? undefined : cells,
       replaced,
@@ -210,7 +211,7 @@ function restoredRecords(
 /**
  * A container's open item with its properties of the target as the manifest gives them, and the
  * restored records in the place of those loaded from the file (but the records a takeover put
- * back), in their order.
+ * back, which take the seq of the record that took them, so they draw first), in their order.
  */
 function restoredOpen(
   open: OrderedItem,
@@ -224,9 +225,12 @@ function restoredOpen(
     : undefined;
   const node = withChildren(shell, withProperties(shell.children, target, properties, keys));
   const taken = (r: OrderedPropertyRecord) => r.kind === 'element' && r.replaced !== undefined;
-  const props = [...open.props.filter((r) => r.target !== target || taken(r)), ...restored].sort(
-    (a, b) => a.seq - b.seq
-  );
+  const withHolderSeq = (r: OrderedPropertyRecord): OrderedPropertyRecord => {
+    const holder = restored.find((h) => h.suggestion === r.suggestion && h.replaced === undefined);
+    return r.target === target && holder !== undefined ? { ...r, seq: holder.seq } : r;
+  };
+  const kept = open.props.filter((r) => r.target !== target || taken(r)).map(withHolderSeq);
+  const props = [...kept, ...restored].sort((a, b) => a.seq - b.seq);
   return createOrderedItem({ ...open, node, props });
 }
 

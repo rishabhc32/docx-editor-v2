@@ -534,6 +534,44 @@ describe("a fold of a table's records", () => {
     await checkFold(doc, base, mediaStore(base), 'a direct row inside a struck row');
   });
 
+  // Records apply in the order they were made, after a fold too: a record of an older suggestion
+  // made after another's (a height on the organiser's own new row, a direct height, a second
+  // height of one person) still shows on top of it
+  describe('row heights made in turn', () => {
+    const height = (doc: OrderedDocument, row: number, heightTwips: number) =>
+      ({
+        kind: 'table-property',
+        on: [addressOf(opens(doc, 'tr')[row]!)],
+        op: { op: 'setTableRowHeight', heightTwips },
+      }) as const;
+
+    test("a party's height on the organiser's new row, then the organiser's", async () => {
+      const { document: doc, base } = openOrderedWordFile(APPLY_FILE, { file: 1 });
+      const row = addressOf(opens(doc, 'tr')[0]!);
+      apply(doc, 'olive:1', { kind: 'insert-row', ...EDIT, row, where: 'below' }, 'Olive');
+      apply(doc, 'ana:1', { ...height(doc, 1, 600), ...EDIT }, 'Ana', ANA_1);
+      apply(doc, 'olive:2', { ...height(doc, 1, 400), ...EDIT }, 'Olive');
+      await checkFold(doc, base, mediaStore(base), 'a height on a new row of its maker');
+    });
+
+    test("a party's height, the organiser's direct one, then the party's on another row", async () => {
+      const { document: doc, base } = openOrderedWordFile(APPLY_FILE, { file: 1 });
+      apply(doc, 'ana:1', { ...height(doc, 1, 700), ...EDIT }, 'Ana', ANA_1);
+      apply(doc, 'olive:1', { ...height(doc, 1, 400), ...DIRECT }, 'Olive');
+      apply(doc, 'ana:2', { ...height(doc, 0, 500), ...EDIT }, 'Ana', ANA_1);
+      await checkFold(doc, base, mediaStore(base), 'a direct height between two');
+    });
+
+    test("a party's height, the organiser's direct column, then the party's height again", async () => {
+      const { document: doc, base } = openOrderedWordFile(APPLY_FILE, { file: 1 });
+      apply(doc, 'ana:1', { ...height(doc, 1, 600), ...EDIT }, 'Ana', ANA_1);
+      const cell = addressOf(opens(doc, 'tc')[2]!);
+      apply(doc, 'olive:1', { kind: 'insert-column', ...DIRECT, cell, where: 'right' }, 'Olive');
+      apply(doc, 'ana:2', { ...height(doc, 1, 500), ...EDIT }, 'Ana', ANA_1);
+      await checkFold(doc, base, mediaStore(base), 'a height again over a direct column');
+    });
+  });
+
   // The same for the organiser's table alignment: it goes in the schema's place, before borders
   test("a row height, then the organiser's table alignment", async () => {
     const cell = (text: string) =>
