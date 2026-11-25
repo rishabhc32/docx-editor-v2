@@ -1,0 +1,15 @@
+{
+  "impact": "compatible",
+  "fields": [],
+  "before": "The engine kept a table's grid while the table held any pending change record, so accepting a deleted column beside a pending cell fill kept the old grid with a span and rewrote the fill's record to the new width; the room joined the grid, and its decision's width record stayed after a reject of the cell's pending record.",
+  "after": "The engine keeps the grid only while a pending grid record holds another grid, a record that holds a row's or a cell's placement as it is follows the join, and only a rejected new column's lent width goes into a record. The room's width record of a cell that took a deleted column's space is made over the cell's pending records, so their reject takes it away, as the engine's does.",
+  "reason": "Change messages, the change log, the manifest fields and the Yjs format do not change: every client runs the same engine resolve and the same settle step after the same decision change, and a fold writes the result as the table's own properties. A room admits only clients of its own code version.",
+  "tests": [
+    "packages/core/src/collaboration/ordered/__tests__/client/editor-tables.test.ts",
+    "packages/core/src/collaboration/ordered/__tests__/change-settle-columns.test.ts",
+    "packages/core/src/store/__tests__/tracked-table-structure.test.ts",
+    "packages/core/src/store/__tests__/revision-table-geometry.test.ts"
+  ],
+  "changeset": "column-join-beside-pending-record",
+  "migration": null
+}
