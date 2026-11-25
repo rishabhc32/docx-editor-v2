@@ -43,13 +43,15 @@ export function settle(ctx: Ctx, suggestion: string | null, into: string | null 
   }
 
   settleDirect(doc, suggestion);
+  const read = new Map<OrderedItem, Surroundings>();
   for (const item of [...(doc.labelled.get(suggestion) ?? [])]) {
     const story = storyOfItem(doc, item);
     if (!story || !isUnit(item) || item.by !== suggestion || item.move !== null) {
       continue;
     }
 
-    const holder = into === null ? pendingAround(doc, story, item) : { by: into, quiet: false };
+    const holder =
+      into === null ? pendingAround(doc, story, item, read) : { by: into, quiet: false };
     if (holder !== null) {
       relabel(doc, story, item, holder);
       recordAdded(doc, ctx.ids.changeId, unitsOf(story, [item]));
@@ -57,23 +59,98 @@ export function settle(ctx: Ctx, suggestion: string | null, into: string | null 
   }
 }
 
+/** What is around an item in its paragraph: the pending inline control it is in, and the mark. */
+interface Surroundings {
+  readonly control: string | null;
+  readonly mark: OrderedItem | null;
+}
+
 /**
- * The pending insertion of another person that a direct edit's unit sits in, as Word writes it
- * inside their `w:ins`: the new inline control around it, which one `w:ins` holds whole; else
- * their new row, cell, note or text box, which covers it with no marker of its own (`quiet`).
+ * The surroundings of every item of the paragraph `item` is in, in one walk: back to the
+ * paragraph's start, then forward to its mark with the controls still open at each item.
+ */
+function readParagraph(
+  doc: OrderedDocument,
+  story: OrderedStory,
+  item: OrderedItem,
+  read: Map<OrderedItem, Surroundings>
+): void {
+  let start = item;
+  for (
+    let prev = story.tree.prev(item);
+    prev && prev.kind !== 'mark';
+    prev = story.tree.prev(prev)
+  ) {
+    start = prev;
+  }
+
+  const items: OrderedItem[] = [];
+  const controls: (string | null)[] = [];
+  const open: OrderedItem[] = [];
+  let mark: OrderedItem | null = null;
+  for (let at: OrderedItem | null = start; at; at = story.tree.next(at)) {
+    items.push(at);
+    controls.push(openControl(doc, open));
+    if (at.kind === 'mark') {
+      mark = at;
+      break;
+    }
+
+    if (at.kind === 'open' && at.pair !== undefined) {
+      open.push(at);
+    } else if (at.kind === 'close') {
+      const k = open.map((o) => o.pair).lastIndexOf(at.pair);
+      if (k >= 0) {
+        open.splice(k, 1);
+      }
+    }
+  }
+
+  for (const [k, at] of items.entries()) {
+    read.set(at, { control: controls[k] ?? null, mark });
+  }
+}
+
+/** The innermost pending new inline control of the open items, if any. */
+function openControl(doc: OrderedDocument, open: readonly OrderedItem[]): string | null {
+  for (let k = open.length - 1; k >= 0; k -= 1) {
+    const item = open[k]!;
+    if (item.token === 'sdt' && !isSplitEdge(item) && item.by !== null && isPending(doc, item.by)) {
+      return item.by;
+    }
+  }
+
+  return null;
+}
+
+/**
+ * The pending insertion that a direct edit's unit sits in, as Word writes it inside the
+ * insertion's `w:ins`: the new inline control around it, which one `w:ins` holds whole; else a
+ * new row, cell, note or text box, which covers it with no marker of its own (`quiet`). The
+ * organiser's own pending insertion takes the unit too. `read` keeps each paragraph's walk.
  */
 function pendingAround(
   doc: OrderedDocument,
   story: OrderedStory,
-  item: OrderedItem
+  item: OrderedItem,
+  read: Map<OrderedItem, Surroundings>
 ): { readonly by: string; readonly quiet: boolean } | null {
-  const control = pendingControlAround(doc, story, item);
-  if (control !== null) {
-    return { by: control, quiet: false };
+  if (!read.has(item)) {
+    readParagraph(doc, story, item, read);
   }
 
-  const container = pendingContainerAround(doc, story, item);
-  return container === null ? null : { by: container, quiet: true };
+  const around = read.get(item);
+  if (around?.control) {
+    return { by: around.control, quiet: false };
+  }
+
+  const container = innermostNewContainer(doc, item);
+  if (container !== null) {
+    return { by: container, quiet: true };
+  }
+
+  const mark = around?.mark;
+  return mark?.quiet === true && isPending(doc, mark.by) ? { by: mark.by, quiet: true } : null;
 }
 
 /**
@@ -85,50 +162,9 @@ export function pendingControlAround(
   story: OrderedStory,
   item: OrderedItem
 ): string | null {
-  const closed = new Set<string>();
-  for (
-    let prev = story.tree.prev(item);
-    prev && prev.kind !== 'mark';
-    prev = story.tree.prev(prev)
-  ) {
-    if (prev.pair === undefined) {
-      continue;
-    }
-
-    if (prev.kind === 'close') {
-      closed.add(prev.pair);
-    } else if (prev.token === 'sdt' && !closed.has(prev.pair) && !isSplitEdge(prev)) {
-      const by = prev.by;
-      if (by !== null && isPending(doc, by)) {
-        return by;
-      }
-    }
-  }
-
-  return null;
-}
-
-/**
- * The pending new row, cell, note or text box a unit sits in, if any: the innermost new row or
- * cell around it, else the note or text box whose paragraph mark carries its insertion unmarked
- * (`quiet`).
- */
-function pendingContainerAround(
-  doc: OrderedDocument,
-  story: OrderedStory,
-  item: OrderedItem
-): string | null {
-  const container = innermostNewContainer(doc, item);
-  if (container !== null) {
-    return container;
-  }
-
-  let mark = story.tree.next(item);
-  while (mark && mark.kind !== 'mark') {
-    mark = story.tree.next(mark);
-  }
-
-  return mark?.quiet === true && isPending(doc, mark.by) ? mark.by : null;
+  const read = new Map<OrderedItem, Surroundings>();
+  readParagraph(doc, story, item, read);
+  return read.get(item)?.control ?? null;
 }
 
 /** The pending insertion that shows a character with its own marker, if any. */
