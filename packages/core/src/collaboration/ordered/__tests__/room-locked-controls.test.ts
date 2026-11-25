@@ -114,6 +114,8 @@ const CASES: readonly Case[] = [
     kind: 'delete',
     layouts: ['inline'],
     who: BOTH,
+    // The organiser's takes a content-locked control whole, as the editor alone does
+    when: (lock, _layout, who) => content(lock) && (who === 'party' || removal(lock)),
     make: (doc, who) => ({ kind: 'delete', ...edit(who), from: at(doc, 0, 6), to: at(doc, 0, 11) }),
   },
   {

@@ -1,7 +1,8 @@
 // A group control's own content in a room (security): Word refuses every edit of what a group
 // holds outside its nested controls, and the controls nested in it stay editable. The room
 // refuses the same edits by the engine's name (`locked`), for the organiser and a party alike,
-// whatever a client sends. The engine's side is `store/__tests__/content-control-group-content`.
+// whatever a client sends. The organiser's deletion over the whole group takes it whole, as the
+// editor alone does. The engine's side is `store/__tests__/content-control-group-content`.
 
 import { describe, expect, test } from 'bun:test';
 import { at } from './change-apply-fixture.ts';
@@ -72,12 +73,18 @@ describe("a room refuses an edit of a group control's own content (Word)", () =>
     typing: insert(0, 4),
     'a deletion': remove(0, 3, 5),
     'a deletion into the nested control': remove(0, 4, 6),
-    'a deletion of the group and words around it': remove(0, 1, 9),
     Enter: split(0, 4),
     'a format': bold(0, 3, 5),
   };
   test('an inline group', () => {
     expect(verdicts(INLINE, inline)).toEqual(all(inline, 'apply-refused/locked'));
+  });
+
+  test("a deletion of the group and words around it: the organiser's takes it whole", () => {
+    expect(verdicts(INLINE, { whole: remove(0, 1, 9) })).toEqual([
+      'whole organiser: accepted',
+      'whole party: apply-refused/locked',
+    ]);
   });
 
   const block = {
