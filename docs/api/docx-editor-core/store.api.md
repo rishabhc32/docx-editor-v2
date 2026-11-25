@@ -3938,6 +3938,7 @@ export interface RetainedPrompt {
     readonly inline: boolean;
     readonly name: string;
     readonly nodes: readonly OoxmlNode[];
+    readonly owner: string;
 }
 
 // @public

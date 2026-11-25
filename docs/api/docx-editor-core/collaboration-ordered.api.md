@@ -2432,6 +2432,7 @@ export interface OrderedRetainedPrompt {
     readonly inline: boolean;
     readonly name: string;
     readonly nodes: readonly OoxmlNode[];
+    readonly owner: string;
 }
 
 // @public
