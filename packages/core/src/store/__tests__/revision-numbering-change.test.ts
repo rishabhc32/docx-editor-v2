@@ -4,6 +4,8 @@
 
 import { describe, expect, test } from 'bun:test';
 import { readOoxmlPart, revisionItemsOf, serializeOoxmlPart, type OoxmlPart } from '../index.ts';
+import { storyParagraphs } from '../package/story-blocks.ts';
+import { bodyNodeOf } from '../store/tree-op-section-address.ts';
 import { applyTreeOp } from '../store/tree-ops.ts';
 
 const W = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main';
@@ -46,4 +48,34 @@ describe("a file's own w:numberingChange", () => {
     const odd = load(`<w:p><w:pPr>${RECORD}</w:pPr><w:r><w:t>Odd.</w:t></w:r></w:p>`);
     expect(revisionItemsOf(odd)).toEqual([]);
   });
+});
+
+describe('the same list and level again', () => {
+  // Word writes no revision for it (Format > Bullets and Numbering, the same list, tracked,
+  // 2026-11-25): the numbering and a record in it stay as they were
+  const INSERTED = '<w:ins w:id="8" w:author="Cara" w:date="2026-01-01T00:00:00Z"/>';
+  for (const [name, record] of [
+    ['a tracked list membership', INSERTED],
+    ['a numbering record', RECORD],
+  ] as const) {
+    test(`over ${name}: changes nothing, tracked or not`, () => {
+      const part = load(item(record, 'One.'));
+      const [paragraph] = storyParagraphs(bodyNodeOf(part)!);
+      for (const revision of [undefined, { author: 'Ana', date: '2026-02-01T00:00:00Z' }]) {
+        const result = applyTreeOp(part, {
+          op: 'setListNumbering',
+          paragraphId: paragraph!.id,
+          numId: '1',
+          level: 0,
+          ...(revision ? { revision } : {}),
+        });
+        expect(result.ok).toBe(true);
+        if (!result.ok) {
+          return;
+        }
+
+        expect(serializeOoxmlPart(result.part)).toBe(serializeOoxmlPart(part));
+      }
+    });
+  }
 });

@@ -269,6 +269,13 @@ function applySetListNumberingUntracked(
     return fromEdit(removeNode(part, existing.id, options), effect);
   }
 
+  // The same list and level again changes nothing: a record in the reference stays, as Word
+  // writes no revision for it
+  const sameLevel = (attributeValueOf(namedChild(existing, 'ilvl'), 'val') ?? '0') === `${level}`;
+  if (sameLevel && attributeValueOf(namedChild(existing, 'numId'), 'val') === numId) {
+    return ok(part, effect);
+  }
+
   const numPr = sectionElement(
     nextId(),
     'numPr',
