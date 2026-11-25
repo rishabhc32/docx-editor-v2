@@ -350,8 +350,11 @@ describe('a party’s paragraph change on another person’s pending numbering',
     ],
   };
   const centre = { localName: 'jc', attributes: { val: 'center' } };
-  const listed = () =>
-    setup(p(t(SENTENCE), LISTED) + p(t('Second paragraph.')), {
+  const SECTION =
+    '<w:sectPr><w:pgSz w:w="12240" w:h="15840"/><w:pgMar w:top="1440" w:right="1440" ' +
+    'w:bottom="1440" w:left="1440" w:header="720" w:footer="720" w:gutter="0"/></w:sectPr>';
+  const listed = (pPr = LISTED) =>
+    setup(p(t(SENTENCE), pPr) + p(t('Second paragraph.')), {
       parts: { 'word/numbering.xml': NUMBERING },
       contentTypes:
         '<Override PartName="/word/numbering.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.numbering+xml"/>',
@@ -383,5 +386,19 @@ describe('a party’s paragraph change on another person’s pending numbering',
     expect(property(room, 0, [NUM])).toBe('accepted');
     expect(room.xml()).toBe(before);
     expect(before).toMatch(/<w:numId w:val="1"\/><w:ins [^>]*w:author="Cara"/);
+  });
+
+  test('a page setup on the section that paragraph ends: allowed, Word decides it apart', () => {
+    const room = listed(LISTED + SECTION);
+    const change = {
+      kind: 'section-property',
+      ...EDIT,
+      sections: [],
+      page: { marginTopTwips: 1000 },
+      pageAt: room.markOf(0),
+    };
+    expect(room.send(ANA, change)).toBe('accepted');
+    expect(room.xml()).toContain('<w:sectPrChange');
+    expect(room.xml()).toMatch(/<w:numId w:val="1"\/><w:ins [^>]*w:author="Cara"/);
   });
 });

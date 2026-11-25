@@ -22,6 +22,7 @@ import {
   isUnit,
   type OrderedDocument,
   type OrderedItem,
+  type OrderedPropertyRecord,
   type OrderedStory,
 } from '../model/types.ts';
 import { orderedKindSpecOf } from '../change/kinds/registry.ts';
@@ -231,11 +232,14 @@ function copiesOthersRecords(
 
 /**
  * Another person's pending numbering record (a file's own `w:numPr/w:ins` or `w:numberingChange`,
- * `load/properties.ts`) on a paragraph mark the change gave a record of its own, or null. Word
- * decides a paragraph's numbering with its properties record: an accept or a reject of the
- * party's record settles the other person's numbering too, so their suggestion would go without
- * a decision. Refused as `others_suggestions`, as a page setup over another person's pending
- * section record is. A change that leaves the paragraph as it is writes no record and passes.
+ * `load/properties.ts`) on a paragraph mark that holds a paragraph record of the change's
+ * suggestions, or null. Only this change can have put that record there: such a numbering record
+ * comes only from the file, and a party owns no file record. Word decides a paragraph's numbering
+ * with its properties record: an accept or a reject of the party's record settles the other
+ * person's numbering too, so their suggestion would go without a decision. Refused as
+ * `others_suggestions`, as a page setup over another person's pending section record is. A change
+ * that leaves the paragraph as it is writes no record and passes, and so does a page setup: Word
+ * decides a section record apart from the paragraph's.
  */
 function othersNumbering(
   doc: OrderedDocument,
@@ -244,8 +248,10 @@ function othersNumbering(
   outcome: OrderedChangeOutcome
 ): string | null {
   const made = new Set(outcome.suggestions);
+  const wrote = (record: OrderedPropertyRecord) =>
+    (record.target === 'pPr' || record.target === 'numPr') && made.has(record.suggestion);
   for (const item of touched.items) {
-    if (item.kind !== 'mark' || !item.props.some((record) => made.has(record.suggestion))) {
+    if (item.kind !== 'mark' || !item.props.some(wrote)) {
       continue;
     }
 
