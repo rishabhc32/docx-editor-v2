@@ -51,6 +51,7 @@ describe('words whose paragraph mark a decision took away before a table', () =>
     const { doc, base, blobs } = wordsBeforeNewTable(true);
     await checkEveryCard(doc, base, blobs, 'before the decision');
     reject(doc, 'olive:4', 'S:ben:1.1');
+
     // Ana's words in the first cell of her row, which joins them to its card
     expect(textOf(doc, 8)).toBe('Ltd');
     expect(orderedCardOf(doc, 'S:ana:3.1')?.suggestions).toEqual(['S:ana:2.1', 'S:ana:3.1']);
