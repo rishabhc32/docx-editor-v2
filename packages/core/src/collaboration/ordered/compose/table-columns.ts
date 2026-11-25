@@ -527,7 +527,10 @@ export function joinedBy(
 export function withJoinedGrid(ctx: ComposeContext, resolved: OoxmlElement): OoxmlElement {
   const grid = resolved.children.find((c) => isWml(c, 'tblGrid'));
   if (!grid || grid.kind === 'textValue') return resolved;
-  if (holdsOtherGrid(grid)) return resolved;
+  if (holdsOtherGrid(grid)) {
+    return resolved;
+  }
+
   const unchanged = unchangedGridRecord(grid);
   const bare = withoutHistory(resolved);
   const compacted = compactRevisionGrid(bare, ctx.mint);
@@ -744,7 +747,10 @@ function withoutCandidates(
       : table;
 
   // No width to give back, but the decision still joins the grid, as the engine does
-  if (removed.length === 0) return joinedBy(ctx, drawn, decision);
+  if (removed.length === 0) {
+    return joinedBy(ctx, drawn, decision);
+  }
+
   const { kept, lent } = survivorsOf(ctx, drawn, removed);
   const before = withLentWidths(drawn, lent);
   const joined = joinedBy(ctx, withCellsAccepted(ctx, before, removed), decision);

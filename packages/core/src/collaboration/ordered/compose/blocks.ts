@@ -169,6 +169,7 @@ export function composeBlocks(ctx: ComposeContext): {
       if (isLeftOut(ctx, item, () => orphans)) {
         skip = item.pair ?? null;
         for (const b of stack) b.touched = true;
+
         // A row or a cell this drawing's decision takes away is a decision on its table
         const takenAway = (item.token === 'tr' || item.token === 'tc') && ctx.decidedAway(item);
         const decided = takenAway ? decisionOn(ctx, item) : undefined;

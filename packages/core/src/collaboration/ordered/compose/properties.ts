@@ -816,6 +816,7 @@ function containerAfter(ctx: ComposeContext, open: OrderedItem, child: OoxmlNode
 
     return withLentWidth(current, lentFrom, given);
   };
+
   // A grid a decision wrote (`settled`) is the table's own, under every pending record: one that
   // holds the grid unchanged (a row height's anchor) holds the joined grid too
   const ownGrid = (record: OrderedElementRecord) => target === 'tblGrid' && record.settled === true;

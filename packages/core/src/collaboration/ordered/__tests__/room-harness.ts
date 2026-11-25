@@ -138,7 +138,10 @@ export const testApply: OrderedApplyChange = (doc, change, ctx) => {
   switch (change.kind) {
     case 'decide': {
       const decided = change.cards.flatMap((card) => card.suggestions.map((s) => s.suggestion));
-      for (const id of decided) setStatus(doc, id, change.status);
+      for (const id of decided) {
+        setStatus(doc, id, change.status);
+      }
+
       settleDecidedTables(doc, decided, ctx.ids);
       return;
     }

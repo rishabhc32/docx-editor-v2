@@ -61,7 +61,10 @@ type Status = 'accepted' | 'rejected';
 function decided(doc: OrderedDocument, order: readonly (readonly [string, Status])[]): string[] {
   const { record } = withUndoRecord(doc, () => {
     const made = order.filter(([id]) => doc.suggestions.get(id)?.status === 'pending');
-    for (const [id, status] of made) setStatus(doc, id, status);
+    for (const [id, status] of made) {
+      setStatus(doc, id, status);
+    }
+
     settleDecidedTables(
       doc,
       made.map(([id]) => id),

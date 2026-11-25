@@ -171,6 +171,7 @@ describe('a decided row', () => {
     const row = addressOf(opens(doc, 'tr')[1]!);
     apply(doc, 'ana:2', { kind: 'insert-row', ...EDIT, row, where: 'below' });
     apply(doc, 'olive:2', { kind: 'delete-row', ...DIRECT, row }, 'Olive');
+
     // A drawing as if every suggestion were rejected joins it as the reject does
     expect(tableOf(doc, 'reject')).toEqual(['grid 6000', '6000']);
     checkSaveAndLoad(doc, 'a rejected row, the last over a grid line', packageOf(SPANNED));

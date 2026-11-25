@@ -106,6 +106,7 @@ export function containerShell(
         child.children.filter((c) => c !== record)
       )
     );
+
     // A grid record that holds the grid as it is sets nothing, as the live one (`merge: []`):
     // it holds a grid a later decision writes under it too
     const unchanged = name === 'tblGrid' && unchangedGridRecord(child) !== undefined;

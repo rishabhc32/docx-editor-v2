@@ -39,7 +39,10 @@ const FILES = readdirSync(FIXTURES)
 function view(doc: OrderedDocument, ids: readonly string[], status?: 'accepted' | 'rejected') {
   const { record } = withUndoRecord(doc, () => {
     if (status) {
-      for (const id of ids) setStatus(doc, id, status);
+      for (const id of ids) {
+        setStatus(doc, id, status);
+      }
+
       settleDecidedTables(doc, ids, orderedIdMinter('check:1'));
     }
   });
