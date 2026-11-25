@@ -493,7 +493,9 @@ function paragraphRuns(blocks: readonly OoxmlNode[]): OoxmlNode[] {
 }
 
 /**
- * The items of the prompt in a prompted control's content, loaded as a paragraph would be. A
+ * The units of the prompt in a prompted control's content, loaded as a paragraph would be, with
+ * the edges of the containers that hold them (a link on its words) and each control in it whole,
+ * as a load marks a prompt. A
  * record a room checkpoint listed (a prompt the glossary kept with its records) is its
  * suggestion's again.
  */
@@ -505,8 +507,9 @@ export function promptUnits(ctx: Ctx, control: OoxmlElement, open: OrderedItem):
   const paragraph = build(ctx.ids.node(), 'paragraph', 'p', [], runs);
   const items = templateItems(ctx, paragraph, RevisionReader.forPrompt(ctx.doc, open.by ?? ''));
 
-  // Its units, and each control in it whole, marked as a load marks a prompt (`markPrompt`): a
-  // control keeps its own items, and only its open item is the prompt's
+  // Its units, the edges of the containers that hold them, and each control in it whole, marked
+  // as a load marks a prompt (`markPrompt`): a control keeps its own items, and only its open item
+  // is the prompt's
   const out: OrderedItem[] = [];
   let nested: string | undefined;
   for (const item of items) {
@@ -515,7 +518,7 @@ export function promptUnits(ctx: Ctx, control: OoxmlElement, open: OrderedItem):
       nested = item.pair;
     } else if (item.kind === 'close' && item.pair === nested) {
       nested = undefined;
-    } else if (own && !isUnit(item)) {
+    } else if (own && !isUnit(item) && item.kind !== 'open' && item.kind !== 'close') {
       continue;
     }
 

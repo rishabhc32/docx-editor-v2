@@ -2,6 +2,7 @@
 // suggestion is pending or accepted and something written uses them. Every copy writes the same
 // package: names come from change ids, and elements are built from typed values.
 
+import { glossaryPartOf } from '../../../store/package/building-blocks.ts';
 import { withPart, type OoxmlPackage } from '../../../store/package/ooxml-package.ts';
 import { isRelationshipReference } from '../../../store/package/canonical-media-references.ts';
 import { ensureNumberingLevel } from '../../../store/package/numbering-part.ts';
@@ -310,6 +311,11 @@ function reach(
   // A chart's or a diagram's part names relationships of its own, read as a story's are. A
   // diagram's drawing is the story's, named by its data part's `relId`
   const { objects, drawings } = objectPartsOf(shown.values());
+
+  // A prompt the glossary keeps shows again in its story once its control empties: a
+  // relationship it names (a link on its words) is used
+  const glossary = glossaryPartOf(pkg);
+  const kept = glossary === null ? new Set<string>() : usesOf(glossary).relationships;
   const queue = [...doc.stories.keys()].filter((name) => !added.has(name));
   const seen = new Set(queue);
   for (let owner = queue.pop(); owner !== undefined; owner = queue.pop()) {
@@ -327,7 +333,8 @@ function reach(
       if (relationship.owner !== owner) continue;
       const pointsAt = 'resource' in relationship.target ? relationship.target.resource : undefined;
       const target = pointsAt === undefined ? undefined : shown.get(pointsAt);
-      const used = ids === null || isRelationshipUsed(relationship, ids, target);
+      const used =
+        ids === null || kept.has(relationship.id) || isRelationshipUsed(relationship, ids, target);
       if (!used && !drawings.has(relationship.id)) continue;
       if (pointsAt !== undefined) {
         // A target that does not show takes its relationship with it

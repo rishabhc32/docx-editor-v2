@@ -28,7 +28,12 @@ import {
   promptedControlsOf,
 } from '../model/prompt-marks.ts';
 import { suggestionOfRevision } from '../model/revision-ids.ts';
-import type { OrderedDocument, OrderedItem, OrderedStory } from '../model/types.ts';
+import {
+  isUnit,
+  type OrderedDocument,
+  type OrderedItem,
+  type OrderedStory,
+} from '../model/types.ts';
 import { recordUndo } from '../model/undo-record.ts';
 import { isControlContent, isParagraphProperties, isWml, withChildren } from '../ooxml-nodes.ts';
 import { closeOf, itemsInside } from '../placement.ts';
@@ -253,7 +258,9 @@ function keepPrompt(
     recordUndo(doc, () => kept.delete(open.space));
   }
 
-  const redraw = first ? scan.prompt.some(isLabelled) : formatTakenOff(doc, shell, scan);
+  const redraw = first
+    ? promptItems(story, open).some((item) => !item.gone && isLabelled(item))
+    : formatTakenOff(doc, shell, scan);
   const control = redraw ? drawnPrompt(doc, story, open, shell, scan) : null;
   if (control) {
     setOriginal(doc, shell.id, control);
@@ -277,6 +284,33 @@ function formatTakenOff(doc: OrderedDocument, shell: OoxmlElement, scan: Scan): 
   });
 }
 
+/**
+ * A control's prompt items, in the containers that hold its words (the organiser's link on
+ * them), as the engine keeps the control's content whole.
+ */
+function promptItems(story: OrderedStory, open: OrderedItem): OrderedItem[] {
+  const own = [...ownItems(story.tree.items(story.tree.next(open)), open)];
+  const around: string[] = [];
+  const holding = new Set<string>();
+  for (const item of own) {
+    if (item.kind === 'open' && item.pair !== undefined) {
+      around.push(item.pair);
+    } else if (item.kind === 'close') {
+      around.pop();
+    } else if (item.prompt === true && isUnit(item)) {
+      for (const pair of around) {
+        holding.add(pair);
+      }
+    }
+  }
+
+  return own.filter(
+    (item) =>
+      item.kind !== 'mark' &&
+      (item.prompt === true || (item.pair !== undefined && holding.has(item.pair)))
+  );
+}
+
 /** The control's original, its content drawn from the prompt's items as compose draws them. */
 function drawnPrompt(
   doc: OrderedDocument,
@@ -295,9 +329,7 @@ function drawnPrompt(
     return null;
   }
 
-  const prompt = [...ownItems(story.tree.items(story.tree.next(open)), open)].filter(
-    (item) => item.prompt === true && item.kind !== 'mark'
-  );
+  const prompt = promptItems(story, open);
   const ctx = new ComposeContext(doc, story, {});
   ctx.paragraphKey = scan.mark.space;
   const drawn =

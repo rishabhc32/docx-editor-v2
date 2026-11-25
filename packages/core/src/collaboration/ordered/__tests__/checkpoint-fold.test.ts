@@ -273,6 +273,17 @@ describe('a fold of a filled prompt', () => {
       });
     }
   }
+
+  // The organiser's link on the prompt's words is part of the prompt, as a load reads a link in
+  // a prompt: the glossary keeps the prompt with the link, and a reject of the typing gives it
+  // back with the link, live and after a fold
+  test("a suggested insertion fills a prompt with the organiser's link", async () => {
+    const { document: doc, base } = openOrderedWordFile(docx(bodyOf(item!)), { file: 1 });
+    const link = { from: at(doc, 1, 7), to: at(doc, 1, 9), href: 'https://example.com/fees' };
+    apply(doc, 'olive:1', { kind: 'insert-link', ...DIRECT, ...link }, 'Olive');
+    apply(doc, 'bob:2', { kind: 'insert', ...EDIT, place: at(doc, 1, 6), text: 'Q' }, 'Bob');
+    await checkFold(doc, base, mediaStore(base), 'a link on a filled prompt');
+  });
 });
 
 describe('a prompt record the glossary keeps', () => {
