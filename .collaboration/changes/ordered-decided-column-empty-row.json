@@ -1,0 +1,13 @@
+{
+  "impact": "compatible",
+  "fields": [],
+  "before": "An accepted column deletion that took every cell of a row left the row in the items, so the room drew and saved an empty row.",
+  "after": "The settle step marks gone a row that compose took out with the removed cells, as the engine removes it.",
+  "reason": "Change messages, the change log, the manifest fields and the Yjs format do not change: every client runs the same settle step after the same decision change. A room admits only clients of its own code version.",
+  "tests": [
+    "packages/core/src/collaboration/ordered/__tests__/change-settle-columns.test.ts",
+    "packages/core/src/collaboration/ordered/__tests__/matrix/matrix-edits.test.ts"
+  ],
+  "changeset": "ordered-decided-column-empty-row",
+  "migration": null
+}

@@ -1149,6 +1149,7 @@ export interface OrderedElementRecord {
     readonly replacedEarlier?: readonly string[];
     // (undocumented)
     readonly seq: number;
+    readonly settled?: boolean;
     // (undocumented)
     readonly suggestion: string;
     readonly tableCells?: readonly string[];

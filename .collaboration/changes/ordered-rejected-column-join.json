@@ -1,0 +1,13 @@
+{
+  "impact": "compatible",
+  "fields": [],
+  "before": "Compose took out a rejected column insertion's cells at every drawing and joined the whole grid each time, so a grid line that a later direct row deletion left unused was joined live but not after a fold.",
+  "after": "The join happens only when a decision is drawn, and the settle step writes it into the items; later drawings only take the cells out.",
+  "reason": "Change messages, the change log, the manifest fields and the Yjs format do not change: every client runs the same settle step after the same decision change. A room admits only clients of its own code version.",
+  "tests": [
+    "packages/core/src/collaboration/ordered/__tests__/change-settle-columns.test.ts",
+    "packages/core/src/collaboration/ordered/__tests__/checkpoint-fold-table-records.test.ts"
+  ],
+  "changeset": "ordered-rejected-column-join",
+  "migration": null
+}

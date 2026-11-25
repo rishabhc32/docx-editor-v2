@@ -1,0 +1,16 @@
+{
+  "impact": "compatible",
+  "fields": [],
+  "before": "Compose joined a table's grid at every drawing while the table held a decided label. A save, a fold and a reopen keep no such label, so a decision that took away the last row over a grid line was joined live only, a later direct row deletion was joined live only, and a file's grid record that held the grid unchanged loaded with the whole grid.",
+  "after": "A decision joins the grid once, as it is applied, and writes the result into the table's items as settled records that apply whatever the decision was (settleDecidedTables, also in decideOrdered). Compose joins only for the decision it writes and for a preview with every suggestion rejected. A file's unchanged grid record loads as the live one, a record that sets nothing.",
+  "reason": "Change messages, the change log, the manifest fields and the Yjs format do not change: every client runs the same settle step after the same decision change, and a fold writes the settled records as the table's own properties. A room admits only clients of its own code version.",
+  "tests": [
+    "packages/core/src/collaboration/ordered/__tests__/change-settle-columns.test.ts",
+    "packages/core/src/collaboration/ordered/__tests__/client/editor-row-grid-decided.test.ts",
+    "packages/core/src/collaboration/ordered/__tests__/matrix/matrix-edits.test.ts",
+    "packages/core/src/collaboration/ordered/__tests__/fold-rules.test.ts",
+    "packages/core/src/collaboration/ordered/__tests__/sessions-two.test.ts"
+  ],
+  "changeset": "ordered-decision-settles-grid",
+  "migration": null
+}
