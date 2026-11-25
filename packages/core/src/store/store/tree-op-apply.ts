@@ -96,7 +96,6 @@ import { actorScopedSeed } from '../package/actor-scoped-ids.ts';
 import { dateControlValue } from './content-control-dates.ts';
 import {
   TEXT_DEPS,
-  attributeValueOf,
   checkboxPayloadOf,
   cloneWithNewIds,
   contentControlContentOf,
