@@ -459,6 +459,25 @@ describe("a fold of a table's records", () => {
     await checkFold(doc, base, blobs, 'a direct column deletion over a row height');
   });
 
+  // Ben strikes a row that Olive's new table then goes in, and the organiser adds a row to that
+  // table directly: the new row is in Ben's struck row as the table's other rows are, as a load
+  // reads it, so an accept of Ben's deletion takes it too, after a fold as live
+  test("the organiser's direct row in a new table inside a struck row", async () => {
+    const { document: doc, base } = openOrderedWordFile(APPLY_FILE, { file: 1 });
+    const struck = addressOf(opens(doc, 'tr')[1]!);
+    apply(doc, 'ben:1', { kind: 'delete-row', ...EDIT, row: struck }, 'Ben');
+    const table = { rows: 2, columns: 2, columnWidth: 1200 };
+    apply(
+      doc,
+      'olive:1',
+      { kind: 'insert-table', ...EDIT, place: at(doc, 6, 0), ...table },
+      'Olive'
+    );
+    const row = addressOf(opens(doc, 'tr')[2]!);
+    apply(doc, 'olive:2', { kind: 'insert-row', ...DIRECT, row, where: 'below' }, 'Olive');
+    await checkFold(doc, base, mediaStore(base), 'a direct row inside a struck row');
+  });
+
   // The same for the organiser's table alignment: it goes in the schema's place, before borders
   test("a row height, then the organiser's table alignment", async () => {
     const cell = (text: string) =>

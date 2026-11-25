@@ -113,8 +113,12 @@ export function insertRow(ctx: Ctx, p: OrderedViewParagraph, where: 'above' | 'b
   );
   if (!inserted || inserted.kind === 'textValue')
     throw new OrderedRefusal('engine-refused', 'the engine inserted no row');
+
+  // The new row is in the containers the caret's row is in (a struck row around its table)
   const suggestion = suggestionFor(ctx);
-  const items = templateItems(ctx, inserted, suggestion.id);
+  const items = templateItems(ctx, inserted, suggestion.id).map((item) =>
+    nestedIn(item, row.within)
+  );
   const after = where === 'below' ? closeOf(ctx.story, row) : ctx.story.tree.prev(row);
   insertItems(ctx.doc, ctx.story, after, items);
   return suggestion.id;
