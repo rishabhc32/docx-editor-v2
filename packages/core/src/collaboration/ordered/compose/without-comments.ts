@@ -11,7 +11,7 @@ import {
 } from '../../../store/package/relationships.ts';
 import { OrderedRefusal } from '../model/refusal.ts';
 import { isRunProperties, isWml, withChildren } from '../ooxml-nodes.ts';
-import { OFFICE_RELATIONSHIPS } from './resources.ts';
+import { OFFICE_RELATIONSHIPS } from './relationship-types.ts';
 
 /** The comments part and the parts Word keeps a comment's thread and ids in. */
 const COMMENT_RELATIONSHIPS: ReadonlySet<string> = new Set([

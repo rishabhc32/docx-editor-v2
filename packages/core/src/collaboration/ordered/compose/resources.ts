@@ -32,11 +32,7 @@ import {
 } from '../../../store/store/tree-op-properties.ts';
 import { build } from '../../../store/store/tree-op-tracked.ts';
 import { withRequiredNamespaceBindings } from '../../../store/store/tree-op-fragment.ts';
-import {
-  FRAGMENT_OBJECT_RELATIONSHIP_TYPES,
-  FRAGMENT_PART_CONTENT_TYPES,
-  FRAGMENT_PART_RELATIONSHIP_TYPES,
-} from '../change/fragment-names-objects.ts';
+import { FRAGMENT_PART_CONTENT_TYPES } from '../change/fragment-names-objects.ts';
 import { customNodeBindingTarget } from '../../../store/package/custom-node-payloads.ts';
 import { OrderedRefusal } from '../model/refusal.ts';
 import {
@@ -60,25 +56,11 @@ import {
   wmlAttribute,
 } from '../ooxml-nodes.ts';
 import { customXmlBindingKey, hasCustomXml, withCustomXml } from './custom-xml.ts';
+import { OFFICE_RELATIONSHIPS, RELATIONSHIP_TYPES } from './relationship-types.ts';
 import { withSettings } from './settings.ts';
 
-export const OFFICE_RELATIONSHIPS =
-  'http://schemas.openxmlformats.org/officeDocument/2006/relationships';
 const PACKAGE_RELATIONSHIPS = 'http://schemas.openxmlformats.org/package/2006/relationships';
 const WML_TYPE = 'application/vnd.openxmlformats-officedocument.wordprocessingml';
-
-/** The full type of each kind of relationship a change adds. */
-export const RELATIONSHIP_TYPES: Readonly<Record<OrderedRelationshipResource['type'], string>> = {
-  image: `${OFFICE_RELATIONSHIPS}/image`,
-  hyperlink: `${OFFICE_RELATIONSHIPS}/hyperlink`,
-  header: `${OFFICE_RELATIONSHIPS}/header`,
-  footer: `${OFFICE_RELATIONSHIPS}/footer`,
-  footnotes: `${OFFICE_RELATIONSHIPS}/footnotes`,
-  endnotes: `${OFFICE_RELATIONSHIPS}/endnotes`,
-  oleObject: FRAGMENT_OBJECT_RELATIONSHIP_TYPES.oleObject,
-  ink: FRAGMENT_OBJECT_RELATIONSHIP_TYPES.ink,
-  ...FRAGMENT_PART_RELATIONSHIP_TYPES,
-};
 
 const STORY_TYPES = {
   header: `${WML_TYPE}.header+xml`,
@@ -314,7 +296,8 @@ function reach(
   const { objects, drawings } = objectPartsOf(shown.values());
 
   // A prompt the glossary keeps shows again in its story once its control empties: a
-  // relationship it names (a link on its words) is used
+  // relationship it names (a link on its words) is used. A room relationship's id is minted from
+  // its key (`orderedRelationshipId`), so it names one relationship in the whole package
   const glossary = glossaryPartOf(pkg);
   const kept = glossary === null ? new Set<string>() : usesOf(glossary).relationships;
   const queue = [...doc.stories.keys()].filter((name) => !added.has(name));
