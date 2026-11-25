@@ -236,9 +236,7 @@ function closeBlock(ctx: ComposeContext, builder: Builder, open: OrderedItem, in
   const height = open.token === 'tr' ? pendingHeightOf(ctx, open) : undefined;
   if (height !== undefined) (into.heights ??= new Map()).set(element.id, height);
   const decided = builder.tableDecided === true || holdsDecision(ctx, open);
-  if (open.token === 'tbl') {
-    element = withRowHeightAnchors(ctx, element, builder.heights);
-  } else if (decided && (open.token === 'tr' || open.token === 'tc')) {
+  if (decided && (open.token === 'tr' || open.token === 'tc')) {
     into.tableDecided = true;
   }
 
@@ -247,6 +245,11 @@ function closeBlock(ctx: ComposeContext, builder: Builder, open: OrderedItem, in
     element = withoutRemovedCells(ctx, element, builder.removed);
   } else if (decided && open.token === 'tbl' && element.kind !== 'textValue') {
     element = withJoinedGrid(ctx, element);
+  }
+
+  // A height's anchor reads the cells the table keeps: a removed cell holds no record of it
+  if (open.token === 'tbl') {
+    element = withRowHeightAnchors(ctx, element, builder.heights);
   }
 
   into.children.push(element);

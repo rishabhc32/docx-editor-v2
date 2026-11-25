@@ -75,6 +75,21 @@ describe('row heights made in turn', () => {
     await checkFold(doc, base, mediaStore(base), 'a height and a direct column');
   });
 
+  // A column its author took back holds cells until compose removes them, which hold no record of
+  // a height: the height's anchor reads the cells the table keeps, live as after a fold
+  test("a party's column taken back, then another party's height and widths", async () => {
+    const { document: doc, base } = openOrderedWordFile(APPLY_FILE, { file: 1 });
+    const right = { cell: addressOf(opens(doc, 'tc')[2]!), where: 'right' } as const;
+    apply(doc, 'ben:1', { kind: 'insert-column', ...EDIT, ...right }, 'Ben');
+    const added = addressOf(opens(doc, 'tc')[1]!);
+    apply(doc, 'ben:2', { kind: 'delete-column', ...EDIT, cell: added }, 'Ben');
+    apply(doc, 'ana:1', { ...height(doc, 1, 500), ...EDIT }, 'Ana', ANA_1);
+    const on = [addressOf(opens(doc, 'tc')[0]!)];
+    const op = { op: 'setTableColumnWidths', leftWidthTwips: 3600, rightWidthTwips: 2400 } as const;
+    apply(doc, 'ana:2', { kind: 'table-property', ...EDIT, on, op }, 'Ana', ANA_1);
+    await checkFold(doc, base, mediaStore(base), 'a height beside a column taken back');
+  });
+
   // An accepted height keeps the records it took from its author's table style after a fold, on
   // a row whose cells keep every record (another party's column lent them width)
   test("a party's table style and height, another's column, then the height accepted", async () => {
