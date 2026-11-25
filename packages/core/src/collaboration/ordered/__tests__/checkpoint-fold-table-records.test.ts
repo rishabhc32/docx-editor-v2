@@ -164,22 +164,67 @@ test.each([false, true])(
   }
 );
 
+// A table of two columns and two rows, and a paragraph after it
+const TABLE_FILE = docx(
+  '<w:tbl><w:tblPr><w:tblW w:w="0" w:type="auto"/></w:tblPr>' +
+    '<w:tblGrid><w:gridCol w:w="3000"/><w:gridCol w:w="3000"/></w:tblGrid>' +
+    ['Fee', 'Late fee']
+      .map((text) => {
+        const cell = (body: string) =>
+          `<w:tc><w:tcPr><w:tcW w:w="3000" w:type="dxa"/></w:tcPr>${p(t(body))}</w:tc>`;
+        return `<w:tr>${cell(text)}${cell('Net 30 days')}</w:tr>`;
+      })
+      .join('') +
+    '</w:tbl>' +
+    p(t('Signed.'))
+);
+
 // A party's new row joined to their split after the table: the marks of the row's cells take the
 // row's `w:id` and the split's mark its own, live as after a fold
 test("a party's split after a table, then the party's row joined to it", async () => {
-  const file = docx(
-    '<w:tbl><w:tblPr><w:tblW w:w="0" w:type="auto"/></w:tblPr>' +
-      '<w:tblGrid><w:gridCol w:w="3000"/></w:tblGrid>' +
-      `<w:tr><w:tc><w:tcPr><w:tcW w:w="3000" w:type="dxa"/></w:tcPr>${p(t('Fee'))}</w:tc></w:tr>` +
-      '</w:tbl>' +
-      p(t('Signed.'))
-  );
-  const { document: doc, base } = openOrderedWordFile(file, { file: 1 });
-  apply(doc, 'ben:1', { kind: 'split', ...EDIT, place: at(doc, 1, 3) }, 'Ben');
+  const { document: doc, base } = openOrderedWordFile(TABLE_FILE, { file: 1 });
+  apply(doc, 'ben:1', { kind: 'split', ...EDIT, place: at(doc, 4, 3) }, 'Ben');
   const row = addressOf(opens(doc, 'tr')[0]!);
   const into = 'S:ben:1.1';
   apply(doc, 'ben:2', { kind: 'insert-row', ...EDIT, into, row, where: 'below' }, 'Ben');
   await checkFold(doc, base, mediaStore(base), 'a row joined to a split after its table');
+});
+
+// A column a take-back or a reject removed, under a later column: the later column's records of
+// the grid and of the widths were taken while it showed, and a fold writes them as the table
+// shows without it
+describe('a column removed under a later one', () => {
+  const cell = (doc: OrderedDocument, k: number) => addressOf(opens(doc, 'tc')[k]!);
+  const column = (doc: OrderedDocument, k: number) =>
+    ({ kind: 'insert-column', ...EDIT, cell: cell(doc, k), where: 'right' }) as const;
+
+  test.each(['taken back', 'rejected'])(
+    "a party's column %s, after the party's column beside another",
+    async (how) => {
+      const { document: doc, base } = openOrderedWordFile(TABLE_FILE, { file: 1 });
+      apply(doc, 'ben:1', column(doc, 0), 'Ben');
+      apply(doc, 'ben:2', column(doc, 2), 'Ben');
+      if (how === 'taken back') {
+        apply(doc, 'ben:3', { kind: 'delete-column', ...EDIT, cell: cell(doc, 1) }, 'Ben');
+      } else {
+        const suggestions = orderedCardSeen(doc, 'S:ben:1.1')!;
+        const status = 'rejected';
+        apply(doc, 'olive:1', { kind: 'decide', cards: [{ suggestions }], status }, 'Olive');
+      }
+
+      await checkFold(doc, base, mediaStore(base), `a column ${how} under a later grid`);
+    }
+  );
+
+  // The later column took its width from the same cell, and the removed column's width goes to
+  // the later column's new cell before it
+  test("a party's column taken back, after the party's column at the same cell", async () => {
+    const { document: doc, base } = openOrderedWordFile(TABLE_FILE, { file: 1 });
+    apply(doc, 'ben:1', column(doc, 0), 'Ben');
+    apply(doc, 'ben:2', column(doc, 0), 'Ben');
+    apply(doc, 'ben:3', { kind: 'delete-column', ...EDIT, cell: cell(doc, 2) }, 'Ben');
+    await checkFold(doc, base, mediaStore(base), 'a column taken back beside a later cell');
+  });
 });
 
 describe("the organiser's direct columns at a decision", () => {

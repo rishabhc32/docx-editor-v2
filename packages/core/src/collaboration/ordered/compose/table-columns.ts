@@ -573,6 +573,65 @@ export function withoutRemovedCells(
   return after;
 }
 
+/**
+ * A table's or a cell's record that holds removed cells, as compose draws it while the record
+ * shows: the drawn table with only the cells the record holds, under the record, without those
+ * removed cells; a cell's record keeps its own children but the width. Undefined when the record
+ * holds none, or `container` (the node id of the record's table or cell) is in no table this
+ * drawing removed cells from. A fold writes no removed cell, so it writes the record so (a column
+ * made after one that a take-back or a reject removed).
+ */
+export function recordWithoutRemoved(
+  ctx: ComposeContext,
+  record: OrderedElementRecord,
+  container: string
+): OoxmlElement | undefined {
+  const table = ctx.removedColumns.find(
+    ({ before }) => before.id === container || cellsById(before).has(container)
+  );
+  const held = new Set(record.tableCells ?? []);
+  const holds = (id: string) => held.has(tokenSpace(ctx.doc.file, id));
+  const removed = (table?.cells ?? [])
+    .filter((cell) => holds(cell.id))
+    .map((cell) => ({ ...cell, held: true }));
+  const { element, target } = record;
+  if (table === undefined || removed.length === 0 || element === null) {
+    return undefined;
+  }
+
+  const others = [...cellsById(table.before).keys()].filter((id) => !holds(id));
+  const own = withoutCells(table.before, new Set(others));
+  if (target === 'tblGrid') {
+    const shown = withChildren(
+      own,
+      own.children.map((child) => (isWml(child, 'tblGrid') ? element : child))
+    );
+    return childNamed(withoutCandidates(ctx, shown, removed), 'tblGrid');
+  }
+
+  // A removal changes only the grid and the cells' widths
+  if (target !== 'tcPr') {
+    return undefined;
+  }
+
+  const shown = withTableCells(own, (cell) =>
+    cell.id === container
+      ? withChildren(cell, [element, ...cell.children.filter((c) => !isWml(c, 'tcPr'))])
+      : cell
+  );
+  const drawn = cellsById(withoutCandidates(ctx, shown, removed)).get(container);
+  const tcPr = drawn && childNamed(drawn, 'tcPr');
+  const width = tcPr && childNamed(tcPr, 'tcW');
+  if (!width) {
+    return undefined;
+  }
+
+  return withChildren(
+    element,
+    element.children.map((child) => (isWml(child, 'tcW') ? width : child))
+  );
+}
+
 function withoutCandidates(
   ctx: ComposeContext,
   table: OoxmlElement,

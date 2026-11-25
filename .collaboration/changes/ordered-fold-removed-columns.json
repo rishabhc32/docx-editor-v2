@@ -1,0 +1,13 @@
+{
+  "impact": "compatible",
+  "fields": [],
+  "before": "A checkpoint left out the cells of a column that a take-back or a reject removed, but wrote a later column's grid and width records as they were taken, with the removed column in them. After a reopen the grid held one column too many, and a cell lost the width the removed column gave it.",
+  "after": "A checkpoint writes each table or cell record that holds a removed cell as compose draws it without that cell, so the table is the same live and after a fold.",
+  "reason": "Change messages, the change log, the manifest fields and the Yjs format do not change: only the properties a checkpoint writes for those records change, and every reader reads them as before. A room admits only clients of its own code version.",
+  "tests": [
+    "packages/core/src/collaboration/ordered/__tests__/checkpoint-fold-table-records.test.ts",
+    "packages/core/src/collaboration/ordered/__tests__/checkpoint-fold-shapes-6.test.ts"
+  ],
+  "changeset": "ordered-fold-removed-columns",
+  "migration": null
+}

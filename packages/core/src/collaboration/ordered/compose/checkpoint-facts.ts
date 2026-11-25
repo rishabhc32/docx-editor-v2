@@ -56,8 +56,10 @@ import type {
   OrderedSuggestion,
 } from '../model/types.ts';
 import { attributeOf, eachElement, isWml } from '../ooxml-nodes.ts';
-import type { RoomNumber } from './context.ts';
+import { composeBlocks } from './blocks.ts';
+import { ComposeContext, type RoomNumber } from './context.ts';
 import { overOf } from './properties.ts';
+import { recordWithoutRemoved } from './table-columns.ts';
 import { styleResourceKeyOf } from './resources.ts';
 import type { OrderedPartTakeovers } from './package.ts';
 
@@ -653,6 +655,7 @@ function checkpointUntracked(
   list: SuggestionList
 ): CheckpointUntracked[] {
   const out: CheckpointUntracked[] = [];
+  const drawn = new Map<OrderedStory, ComposeContext>();
   for (const { story, shell, byTarget } of opens) {
     const label = labels.get(shell.id);
     if (label === undefined) {
@@ -664,7 +667,8 @@ function checkpointUntracked(
       for (const record of records) {
         const kept = changeRecordOf(doc, story, record, labels, list);
         if (kept !== undefined) {
-          const { element, untracked, recordUnchanged } = record;
+          const { untracked, recordUnchanged } = record;
+          const element = writtenElement(doc, { story, shell }, record, labels, drawn);
 
           // A direct record goes with a reject of the pending records it was made over, and a
           // column's lent record stays lent, after a fold too
@@ -686,6 +690,34 @@ function checkpointUntracked(
   }
 
   return out;
+}
+
+/**
+ * A record's properties as a fold writes them. A table's or a cell's record that holds a cell the
+ * file does not write (a column a take-back or a reject removed) gives what compose draws without
+ * that cell (`recordWithoutRemoved`): a load has no such cell to take out. `drawn` keeps each
+ * story drawn for its removed columns once.
+ */
+function writtenElement(
+  doc: OrderedDocument,
+  { story, shell }: { readonly story: OrderedStory; readonly shell: OoxmlElement },
+  record: OrderedElementRecord,
+  labels: ReadonlyMap<string, number>,
+  drawn: Map<OrderedStory, ComposeContext>
+): OoxmlElement | null {
+  const written = (space: string) => labels.has(cellShell(story, space) ?? '');
+  if ((record.tableCells ?? []).every(written)) {
+    return record.element;
+  }
+
+  let ctx = drawn.get(story);
+  if (ctx === undefined) {
+    ctx = new ComposeContext(doc, story, {});
+    composeBlocks(ctx);
+    drawn.set(story, ctx);
+  }
+
+  return recordWithoutRemoved(ctx, record, shell.id) ?? record.element;
 }
 
 /** What the room holds of each pending record with a change record, by the label on its container. */
