@@ -1,0 +1,10 @@
+{
+  "impact": "compatible",
+  "fields": [],
+  "before": "A suggested pick of the value a drop-down stores, part of it taken back by its author, then rejected beside another person's words: live the room counted the taken-back words as words the reject took away and cleared w:lastValue; after a fold, and in the editor alone on the room's file, the record stays.",
+  "after": "A unit taken back gives no words a reject took away (ComposeContext.rejectedWords), so live keeps the record as a fold and the engine do.",
+  "reason": "Change messages, the change log and its kinds keep their meaning, and the Yjs document format and the checkpoint format do not change. Only the composed Word file of such a control after the decision changes, and it now equals the editor alone and a fold. An ordered room admits only clients of its own code version.",
+  "tests": ["packages/core/src/collaboration/ordered/__tests__/checkpoint-fold-decide.test.ts"],
+  "changeset": "pick-taken-back-record",
+  "migration": null
+}

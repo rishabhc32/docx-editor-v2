@@ -279,6 +279,31 @@ describe('a decision after a fold, beside a pending control value', () => {
       'a drop-down list beside a check box'
     );
   });
+
+  // Olive takes part of her pick of the value the list stores back: those words never were, so a
+  // reject of her pick beside Ana's words reads only the words left, which state no value, and
+  // the record stays, as in the editor alone on the room's file
+  test('a pick of a stored value, part of it taken back, then rejected', async () => {
+    const items =
+      '<w:listItem w:displayText="Net 30" w:value="30"/>' +
+      '<w:listItem w:displayText="Net 60" w:value="60"/>';
+    const list =
+      '<w:sdt><w:sdtPr><w:id w:val="3"/><w:showingPlcHdr/><w:dropDownList w:lastValue="30">' +
+      `${items}</w:dropDownList></w:sdtPr><w:sdtContent>` +
+      `${t('Choose an item.', '<w:rStyle w:val="PlaceholderText"/>')}</w:sdtContent></w:sdt>`;
+    await foldOf(
+      p(t('Terms are ') + list + t(' from today.')),
+      (doc) => {
+        apply(doc, 'ana:1', { kind: 'insert', ...EDIT, place: at(doc, 0, 10), text: ' due' });
+        const value = { kind: 'listItem', value: '30' } as const;
+        const control = addressOf(opens(doc, 'sdt')[0]!);
+        apply(doc, 'olive:1', { kind: 'control-value', ...EDIT, control, value }, 'Olive');
+        const [from, to] = [at(doc, 0, 18), at(doc, 0, 20)];
+        apply(doc, 'olive:2', { kind: 'delete', ...EDIT, from, to }, 'Olive');
+      },
+      'a pick partly taken back'
+    );
+  });
 });
 
 describe('a decision after a fold, on a value in a pending control', () => {

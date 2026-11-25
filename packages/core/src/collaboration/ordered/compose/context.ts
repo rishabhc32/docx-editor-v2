@@ -444,11 +444,15 @@ export class ComposeContext {
     return pendingDeleters(this.doc, item)[0] ?? null;
   }
 
-  /** The words of a unit whose insertion a reject took away, as a control reads its text, or ''. */
+  /**
+   * The words of a unit whose insertion a reject took away, as a control reads its text, or ''.
+   * A unit taken back before never was: the reject took nothing of it away.
+   */
   rejectedWords(item: OrderedItem): string {
     const found = item.by === null ? undefined : this.doc.suggestions.get(item.by);
     const rejected = found?.status === 'rejected' && found.direct !== true;
-    return rejected && !item.gone && item.kind === 'text' && item.instr !== true ? item.text : '';
+    const words = item.kind === 'text' && item.instr !== true;
+    return rejected && words && !item.gone && !item.retracted ? item.text : '';
   }
 
   /** Whether a shown unit is a control's own word: neither struck nor a suggestion's insertion. */
