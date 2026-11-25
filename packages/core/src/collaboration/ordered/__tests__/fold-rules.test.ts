@@ -39,7 +39,6 @@ import { addressOf, apply, APPLY_FILE, DIRECT, EDIT, opens } from './change-appl
 import {
   PASTED_LIST,
   ROOM_FACTS,
-  roomBlobs,
   SPLIT_RUN,
   STYLE_RECORDS,
   TABLE_RECORDS,
@@ -47,6 +46,7 @@ import {
   TYPED_RUNS,
   type CheckpointRoom,
 } from './checkpoint-fixture.ts';
+import { RESOURCE_ROOMS, resourceBlobs } from './checkpoint-resources-fixture.ts';
 import { checkpointBytes } from './fold-check.ts';
 
 /** A read checkpoint. */
@@ -63,6 +63,7 @@ const SECTIONS = {
   changeRecords: (read: CheckpointOpened) => read.facts.changeRecords.length,
   lists: (read: CheckpointOpened) => read.facts.lists.length,
   styles: (read: CheckpointOpened) => read.facts.styles.length,
+  resources: (read: CheckpointOpened) => read.facts.resources.length,
 };
 
 type ManifestSection = keyof typeof SECTIONS;
@@ -354,20 +355,26 @@ type ResourceRules<K extends OrderedResource['kind']> = Rules<
   Extract<OrderedResource, { readonly kind: K }>
 >;
 
-// What every resource has: after a fold a resource is the file's, but for a list or a style
+// What every resource has: one the manifest does not list is the file's after a fold
 const KEY = dropped(
   'the fold writes the resource under the names its key gave; a load reads those'
 );
 const KIND = file('written as a part, a relationship or a definition of the file');
 
+// What every resource the manifest's `resources` lists has: client/checkpoint-resources.ts gives
+// it back to its suggestion
+const LISTED_KIND = manifest('resources', 'kind', 'by its kind');
+const LISTED_KEY = manifest('resources', 'key', 'its names come from it');
+const LISTED_SUGGESTION = manifest('resources', 'suggestion', 'a decision writes it or not');
+
 const MEDIA: ResourceRules<'media'> = {
-  kind: KIND,
-  key: KEY,
-  suggestion: derived("the file's after a fold: it goes with the relationship that names it"),
-  part: manifest('media', 'part', 'a reference of the file'),
-  contentType: manifest('media', 'contentType', 'a reference of the file'),
-  sha256: manifest('media', 'sha256', 'a reference of the file'),
-  size: manifest('media', 'size', 'a reference of the file'),
+  kind: LISTED_KIND,
+  key: LISTED_KEY,
+  suggestion: LISTED_SUGGESTION,
+  part: derived('from the key and the content type (`orderedMediaPart`)'),
+  contentType: manifest('media', 'contentType', "its reference; ink's from the package"),
+  sha256: manifest('media', 'sha256', "its reference; ink's from the bytes the package holds"),
+  size: manifest('media', 'size', "its reference; ink's from the bytes the package holds"),
 };
 
 const STORY_RESOURCE: ResourceRules<'story'> = {
@@ -382,22 +389,22 @@ const STORY_RESOURCE: ResourceRules<'story'> = {
 };
 
 const PART_RESOURCE: ResourceRules<'part'> = {
-  kind: KIND,
-  key: KEY,
-  suggestion: open('124', "the file's after a fold: a reject of the pasted chart keeps the part"),
-  part: file('a part of the file'),
-  type: file("the part's content type and relationship type"),
-  root: file('the part as written'),
+  kind: LISTED_KIND,
+  key: LISTED_KEY,
+  suggestion: LISTED_SUGGESTION,
+  part: derived('from the key and the type (`orderedObjectPart`)'),
+  type: manifest('resources', 'type', 'checked against the content type'),
+  root: file('client/checkpoint-resources.ts: the part as the file holds it'),
 };
 
 const RELATIONSHIP: ResourceRules<'relationship'> = {
-  kind: KIND,
-  key: KEY,
-  suggestion: open('123', "the file's after a fold: only an image's goes with its last use"),
-  owner: file('load/load.ts `recordFileNames`'),
-  id: file('load/load.ts `recordFileNames`: the id minted from the key'),
-  type: file('the relationship as written'),
-  target: file('the relationship as written'),
+  kind: LISTED_KIND,
+  key: LISTED_KEY,
+  suggestion: LISTED_SUGGESTION,
+  owner: manifest('resources', 'owner', 'a part the file holds'),
+  id: derived('from the key (`orderedRelationshipId`)'),
+  type: file("client/checkpoint-resources.ts: the relationship's type"),
+  target: file('client/checkpoint-resources.ts: a listed part or media, or a safe address'),
 };
 
 const LIST: ResourceRules<'list'> = {
@@ -408,16 +415,16 @@ const LIST: ResourceRules<'list'> = {
   abstractNumId: derived('from the key (`orderedListNumber`)'),
   levels: file('client/lists.ts: the definition the numbering part holds'),
   definition: file('client/lists.ts: the definition the numbering part holds'),
-  bullets: open('125', "a list with picture bullets stays the file's: a reject keeps it"),
+  bullets: file('client/lists.ts: the bullets its levels name, their images the listed media'),
 };
 
 const LIST_LEVEL: ResourceRules<'list-level'> = {
-  kind: KIND,
-  key: KEY,
-  suggestion: open('122', "the file's after a fold: a reject of the indent keeps the level"),
-  numId: file('the numbering part'),
-  level: file('the numbering part'),
-  format: file('the numbering part'),
+  kind: LISTED_KIND,
+  key: LISTED_KEY,
+  suggestion: LISTED_SUGGESTION,
+  numId: manifest('resources', 'numId', 'the list whose definition holds it'),
+  level: manifest('resources', 'level', 'checked against the level the file holds'),
+  format: manifest('resources', 'format', 'the engine declares the same level of it'),
 };
 
 const STYLE: ResourceRules<'style'> = {
@@ -544,6 +551,7 @@ const ROOMS: readonly CheckpointRoom[] = [
   PASTED_LIST,
   TABLE_RECORDS,
   DIRECT_OVER,
+  ...RESOURCE_ROOMS,
 ];
 
 /** The checkpoint of each room: its manifest as JSON, and as the reader reads it. */
@@ -554,7 +562,7 @@ async function roomCheckpoints(): Promise<
   for (const room of ROOMS) {
     const { document: doc, base } = openOrderedWordFile(room.source, { file: 1 });
     room.edit(doc);
-    const bytes = await checkpointBytes(doc, base, roomBlobs(base));
+    const bytes = await checkpointBytes(doc, base, resourceBlobs(base));
     const entry = unzipSync(bytes)[CHECKPOINT_MANIFEST.slice(1)];
     const pkg = readOoxmlPackage(bytes, {});
     if (entry === undefined || !pkg.ok) {
