@@ -57,6 +57,8 @@ export interface CheckpointUntrackedRecord extends CheckpointChangeRecord {
   /** Shown with no change record. */
   readonly untracked?: boolean;
   readonly recordUnchanged?: boolean;
+  /** A direct record's pending records it was made over: their suggestions, by their places. */
+  readonly over?: readonly number[];
 }
 
 /**
@@ -148,6 +150,7 @@ function readRecord(
   suggestions: number
 ): CheckpointUntrackedRecord {
   const f = plainFields(value, path);
+  const over = f.has('over') ? manifestList(f.get('over'), at(path, 'over')) : undefined;
   return {
     ...readChangeRecord(f, suggestions),
     element: f.has('element')
@@ -157,6 +160,7 @@ function readRecord(
     recordUnchanged: f.has('recordUnchanged')
       ? bool(f.get('recordUnchanged'), at(path, 'recordUnchanged'))
       : undefined,
+    over: over?.map((k, j) => int(k, at(at(path, 'over'), j), 0, suggestions - 1)),
   };
 }
 

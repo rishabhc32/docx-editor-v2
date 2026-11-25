@@ -387,6 +387,26 @@ describe("a fold of a table's records", () => {
     await checkFold(doc, base, mediaStore(base), "a row height, then the organiser's column");
   });
 
+  // A direct column beside the organiser's own new cell is made over the row height's grid
+  // record, so a reject of the height takes the direct grid away too, after a fold as live; and
+  // the row the reject leaves with no properties writes none
+  test("a row height, a column, then the organiser's direct column beside its new cell", async () => {
+    const { document: doc, base } = openOrderedWordFile(APPLY_FILE, { file: 1 });
+    const height = (row: number) =>
+      ({
+        kind: 'table-property',
+        on: [addressOf(opens(doc, 'tr')[row]!)],
+        op: { op: 'setTableRowHeight', heightTwips: 500 },
+      }) as const;
+    const right = (k: number) =>
+      ({ cell: addressOf(opens(doc, 'tc')[k]!), where: 'right' }) as const;
+    apply(doc, 'ana:1', { ...height(1), ...EDIT }, 'Ana', ANA_1);
+    apply(doc, 'olive:1', { kind: 'insert-column', ...EDIT, ...right(3) }, 'Olive');
+    apply(doc, 'olive:2', { ...height(0), ...DIRECT }, 'Olive');
+    apply(doc, 'olive:3', { kind: 'insert-column', ...DIRECT, ...right(4) }, 'Olive');
+    await checkFold(doc, base, mediaStore(base), 'a direct column over a row height');
+  });
+
   // The same for the organiser's table alignment: it goes in the schema's place, before borders
   test("a row height, then the organiser's table alignment", async () => {
     const cell = (text: string) =>

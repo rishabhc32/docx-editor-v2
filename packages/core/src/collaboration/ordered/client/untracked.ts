@@ -177,10 +177,12 @@ function restoredRecords(
     const id = listedIds[record.suggestion];
     const seq = id === undefined ? undefined : doc.suggestions.get(id)?.seq;
     const replaced = record.replaced === undefined ? undefined : listedIds[record.replaced];
+    const over = record.over?.flatMap((k) => listedIds[k] ?? []);
     if (
       id === undefined ||
       seq === undefined ||
-      (record.replaced !== undefined && replaced === undefined)
+      (record.replaced !== undefined && replaced === undefined) ||
+      over?.length !== record.over?.length
     ) {
       return null;
     }
@@ -198,6 +200,7 @@ function restoredRecords(
       target,
       tableCells: record.tableCells === undefined ? undefined : cells,
       replaced,
+      over,
     });
   }
 
@@ -241,10 +244,10 @@ function withProperties(
   const loaded = children[at];
   let restored = properties;
   if (keys !== undefined && loaded !== undefined && loaded.kind !== 'textValue') {
-    restored = withChildren(
-      loaded,
-      withMergedChildren(target, properties ?? null, keys, loaded.children)
-    );
+    const kept = withMergedChildren(target, properties ?? null, keys, loaded.children);
+    // With no properties of its own, the container's held only what the records give
+    restored =
+      properties === undefined && kept.length === 0 ? undefined : withChildren(loaded, kept);
   }
 
   if (restored === undefined) {

@@ -306,6 +306,7 @@ function inRoomOrder(
         ...r,
         suggestion: renumbered(r.suggestion),
         replaced: r.replaced === undefined ? undefined : renumbered(r.replaced),
+        over: r.over?.map(renumbered),
       })),
     })),
     changeRecords: facts.changeRecords.map((c) => ({
@@ -443,7 +444,13 @@ function checkpointUntracked(
         const kept = changeRecordOf(doc, story, record, labels, list);
         if (kept !== undefined) {
           const { element, untracked, recordUnchanged } = record;
-          listed.push({ ...kept, element, untracked, recordUnchanged });
+          // A direct record goes with a reject of the pending records it was made over, after a
+          // fold too
+          const over = record.over?.flatMap((id) => {
+            const made = doc.suggestions.get(id);
+            return made === undefined ? [] : [list.indexOf(made)];
+          });
+          listed.push({ ...kept, element, untracked, recordUnchanged, over });
         }
       }
 
