@@ -37,6 +37,7 @@ import { orderedPackageBytes } from '../compose/package.ts';
 import { orderedReplacedSuggestions } from '../compose/replaced.ts';
 import { orderedCards } from '../decide.ts';
 import { MOVE_RANGE } from '../load/moves.ts';
+import { movedAwayBy } from '../model/document.ts';
 import { setStatus } from '../model/mutations.ts';
 import { isTextBoxStoryName } from '../model/text-boxes.ts';
 import { orderedUnitTyper } from '../model/typers.ts';
@@ -226,7 +227,12 @@ export function foldPrint(doc: OrderedDocument, base: OoxmlPackage, blobs: FoldB
       ),
       // Records apply in their order of creation, whatever their place in the list
       props: keys(roles.prop).sort(),
-      move: item.move !== null && (key(item.by) !== null || keys(item.dels).length > 0),
+      // A move's name stays on its words after its decision: they show as a pending move's
+      // destination, or as its source the move struck
+      move:
+        item.move !== null &&
+        (key(item.by) !== null ||
+          item.dels.some((d) => key(d) !== null && movedAwayBy(doc, item, d))),
       within: [keys(item.within.by), keys(item.within.dels)],
     };
     return Array.from({ length: Math.max(item.text.length, 1) }, (_, k) => {

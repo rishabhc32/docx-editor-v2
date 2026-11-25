@@ -645,6 +645,17 @@ describe('a fold of a move with words inside it', () => {
     apply(doc, 'olive:1', decide, 'Olive');
     await checkFold(doc, base, mediaStore(base), 'a rejected move out of a struck cell');
   });
+
+  // Olive's direct move is no suggestion: her moved words, which Ana then strikes, show as Ana's
+  // plain deletion, though the room keeps the move's name on them; a fold writes them plain
+  test("a direct move's words another person struck", async () => {
+    const file = docx(p(t('Rich text here.')) + p(t('Other words.')));
+    const { document: doc, base } = openOrderedWordFile(file, { file: 1 });
+    const move = { kind: 'move', ...DIRECT, from: at(doc, 0, 0), to: at(doc, 0, 5) } as const;
+    apply(doc, 'olive:1', { ...move, place: at(doc, 1, 6) }, 'Olive');
+    apply(doc, 'ana:1', { kind: 'delete', ...EDIT, from: at(doc, 1, 6), to: at(doc, 1, 11) });
+    await checkFold(doc, base, mediaStore(base), "a direct move's words struck");
+  });
 });
 
 describe('who typed inside a new row, cell, note, control or words', () => {
