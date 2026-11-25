@@ -84,6 +84,12 @@ export function resourceFor(ctx: Ctx, key: string, suggestion: string): OrderedR
   return found;
 }
 
+/** Whether a link's address is one `sanitizeHref` keeps as it is. */
+export function isSafeLinkAddress(href: string): boolean {
+  const projection = sanitizeHref(href);
+  return projection.ok && projection.href === href;
+}
+
 /**
  * A relationship from a story part (the edit's own by default) to a resource the same
  * suggestion added, or for a link to an address that `sanitizeHref` keeps as it is.
@@ -105,8 +111,7 @@ export function addRelationship(
   } else {
     // Only a link's address points outside: never a picture's, which Word loads when it opens
     // the file (design D18)
-    const projection = sanitizeHref(target.external);
-    if (type !== 'hyperlink' || !projection.ok || projection.href !== target.external)
+    if (type !== 'hyperlink' || !isSafeLinkAddress(target.external))
       throw new OrderedRefusal('invalid-edit', 'only a safe link address points outside');
   }
 

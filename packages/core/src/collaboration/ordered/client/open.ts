@@ -18,6 +18,12 @@ import { recordFileMedia } from '../model/file-media.ts';
 import { orderedAuthorName, type OrderedPerson } from '../model/person.ts';
 import type { OrderedFileMedia } from '../model/resources.ts';
 import type { OrderedDocument } from '../model/types.ts';
+import {
+  listedMedia,
+  withCheckpointResources,
+  withoutCheckpointLevels,
+  withoutCheckpointObjects,
+} from './checkpoint-resources.ts';
 import { withoutDrawnProperties } from './drawn-properties.ts';
 import {
   withCheckpointLists,
@@ -157,20 +163,26 @@ function openCheckpointRead(pkg: OoxmlPackage, options: OrderedWordFileOptions):
     throw new OrderedWordFileError(checkpoint.reason);
   }
 
-  // The list definitions and styles changes added out of the file, before the load reads them
-  const { facts } = checkpoint;
-  const lists = withoutCheckpointLists(checkpoint.base, facts.lists);
+  // What changes added outside the story text out of the file, before the load reads it: a list
+  // level before its list, whose definition holds it, and a bullet's images before their media
+  const { facts, media } = checkpoint;
+  const listed = listedMedia(media, facts.resources);
+  const levels = listed && withoutCheckpointLevels(checkpoint.base, facts.resources);
+  const lists = listed && levels && withoutCheckpointLists(levels.pkg, facts.lists, listed);
   const styles = lists && withoutCheckpointStyles(lists.pkg, facts.styles);
-  if (lists === null || styles === null) {
+  const objects =
+    listed && styles && withoutCheckpointObjects(styles.pkg, media, facts.resources, listed);
+  if (levels === null || lists === null || styles === null || objects === null) {
     throw new OrderedWordFileError('checkpoint-manifest');
   }
 
-  const { opened, marks } = openRead(styles.pkg, checkpoint.media, options, facts);
+  const { opened, marks } = openRead(objects.pkg, objects.media, options, facts);
   const doc = opened.document;
   const listedIds = [...doc.revisionIds.listed.keys()];
   if (
     !withCheckpointLists(doc, lists.taken, listedIds) ||
     !withCheckpointStyles(doc, styles.taken, listedIds) ||
+    !withCheckpointResources(doc, [...levels.taken, ...objects.taken], listedIds) ||
     !withCheckpointTakeovers(doc, marks.labels, facts.takeovers, listedIds) ||
     !withCheckpointUntracked(doc, marks.labels, facts.untracked, listedIds) ||
     !withCheckpointChangeRecords(doc, marks.labels, facts.changeRecords, listedIds) ||

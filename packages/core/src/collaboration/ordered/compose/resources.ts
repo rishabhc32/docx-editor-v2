@@ -67,7 +67,8 @@ export const OFFICE_RELATIONSHIPS =
 const PACKAGE_RELATIONSHIPS = 'http://schemas.openxmlformats.org/package/2006/relationships';
 const WML_TYPE = 'application/vnd.openxmlformats-officedocument.wordprocessingml';
 
-const RELATIONSHIP_TYPES: Readonly<Record<OrderedRelationshipResource['type'], string>> = {
+/** The full type of each kind of relationship a change adds. */
+export const RELATIONSHIP_TYPES: Readonly<Record<OrderedRelationshipResource['type'], string>> = {
   image: `${OFFICE_RELATIONSHIPS}/image`,
   hyperlink: `${OFFICE_RELATIONSHIPS}/hyperlink`,
   header: `${OFFICE_RELATIONSHIPS}/header`,

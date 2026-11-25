@@ -3,11 +3,18 @@
 // rules of the day, so neither is kept.
 
 import { glossaryPartOf } from '../../../store/package/building-blocks.ts';
+import { ensureNumberingLevel } from '../../../store/package/numbering-part.ts';
 import type { OoxmlPackage } from '../../../store/package/ooxml-package.ts';
 import type { OoxmlElement } from '../../../store/package/ooxml-tree.ts';
-import { orderedStoryParts } from '../load/load.ts';
+import { partNameKey } from '../../../store/package/opc-names.ts';
+import { loadedPackageOf, orderedStoryParts } from '../load/load.ts';
 import type { CheckpointFacts } from '../model/checkpoint.ts';
-import type { CheckpointList, CheckpointStyle } from '../model/checkpoint-lists.ts';
+import type {
+  CheckpointList,
+  CheckpointResource,
+  CheckpointResourceKind,
+  CheckpointStyle,
+} from '../model/checkpoint-lists.ts';
 import type { CheckpointSuggestion } from '../model/checkpoint-suggestions.ts';
 import { withCheckpointLabels } from '../model/checkpoint-labels.ts';
 import {
@@ -23,7 +30,13 @@ import {
   type CheckpointUntrackedRecord,
 } from '../model/checkpoint-untracked.ts';
 import type { OrderedPerson } from '../model/person.ts';
-import { orderedResourceShows } from '../model/resources.ts';
+import { referencedMediaType } from '../model/file-media.ts';
+import {
+  orderedResourceShows,
+  type OrderedListLevelResource,
+  type OrderedRelationshipResource,
+  type OrderedResource,
+} from '../model/resources.ts';
 import { revisionIdsOf } from '../model/revision-ids.ts';
 import type {
   OrderedDocument,
@@ -172,13 +185,14 @@ export function checkpointFacts(
     changeRecords: checkpointChangeRecords(doc, opens, labels, list),
     lists: checkpointLists(doc, pkg, list),
     styles: checkpointStyles(doc, pkg, list),
+    resources: checkpointResources(doc, pkg, list),
   });
   return { pkg: labelled.pkg, facts };
 }
 
 /**
  * Each list definition a change added that shows (its suggestion pending or accepted) and the file
- * holds, with no picture bullet: all of them, so an open gives them back in the room's order.
+ * holds: all of them, so an open gives them back in the room's order.
  */
 function checkpointLists(
   doc: OrderedDocument,
@@ -202,7 +216,6 @@ function checkpointLists(
     const suggestion = doc.suggestions.get(resource.suggestion);
     if (
       resource.kind === 'list' &&
-      resource.bullets === undefined &&
       written.has(resource.numId) &&
       suggestion !== undefined &&
       orderedResourceShows(doc, resource)
@@ -245,6 +258,88 @@ function checkpointStyles(
   }
 
   return out;
+}
+
+/**
+ * Each list level, chart or diagram part, media part a checkpoint names by reference, and
+ * relationship to one of them or to an address outside, that a change added and the file holds:
+ * all of them, whatever their suggestion's status (a rejected link's address stays while a link
+ * names it), so an open gives each back to its suggestion. A level the loaded file declares is
+ * the file's, and so is an ink part, which stays inside a checkpoint.
+ */
+function checkpointResources(
+  doc: OrderedDocument,
+  pkg: OoxmlPackage,
+  list: SuggestionList
+): CheckpointResource[] {
+  const loaded = loadedPackageOf(doc);
+  const held = new Set([...pkg.partBytes.keys()].map(partNameKey));
+  const targets = new Set<string>();
+  for (const resource of doc.resources.added.values()) {
+    const media =
+      resource.kind === 'media' &&
+      referencedMediaType(resource.contentType) !== null &&
+      held.has(partNameKey(resource.part));
+    if (media || (resource.kind === 'part' && pkg.parts.has(resource.part))) {
+      targets.add(resource.key);
+    }
+  }
+
+  const out: CheckpointResource[] = [];
+  for (const resource of doc.resources.added.values()) {
+    const suggestion = doc.suggestions.get(resource.suggestion);
+    const entry = resourceEntry(doc, pkg, loaded, targets, resource);
+    if (suggestion !== undefined && entry !== null) {
+      out.push({ suggestion: list.indexOf(suggestion), key: resource.key, ...entry });
+    }
+  }
+
+  return out;
+}
+
+/** What the manifest says of a resource past its suggestion and key, or null when not listed. */
+function resourceEntry(
+  doc: OrderedDocument,
+  pkg: OoxmlPackage,
+  loaded: OoxmlPackage | null,
+  targets: ReadonlySet<string>,
+  resource: OrderedResource
+): CheckpointResourceKind | null {
+  switch (resource.kind) {
+    case 'media':
+      return targets.has(resource.key) ? { kind: 'media' } : null;
+    case 'part':
+      return targets.has(resource.key) ? { kind: 'part', type: resource.type } : null;
+    case 'list-level': {
+      const { numId, level, format } = resource;
+      const fileLevel = loaded !== null && declaresLevel(loaded, resource);
+      const shown = orderedResourceShows(doc, resource) && declaresLevel(pkg, resource);
+      return shown && !fileLevel ? { kind: 'list-level', numId, level, format } : null;
+    }
+    case 'relationship': {
+      const target = 'external' in resource.target || targets.has(resource.target.resource);
+      return target && writesRelationship(pkg, resource)
+        ? { kind: 'relationship', owner: resource.owner }
+        : null;
+    }
+    default:
+      return null;
+  }
+}
+
+/** Whether a package's numbering declares a list level's level. */
+const declaresLevel = (pkg: OoxmlPackage, { numId, level, format }: OrderedListLevelResource) =>
+  ensureNumberingLevel(pkg, numId, level, format) === pkg;
+
+/** Whether a package writes a relationship, to a part or to an address outside. */
+function writesRelationship(
+  pkg: OoxmlPackage,
+  { owner, id }: OrderedRelationshipResource
+): boolean {
+  return (
+    (pkg.relationships.get(owner) ?? []).some((record) => record.id === id) ||
+    pkg.externalTargets.some((target) => target.ownerPart === owner && target.id === id)
+  );
 }
 
 /** Each change record of the file that holds records by takeover, by its label. */
@@ -319,6 +414,7 @@ function inRoomOrder(
     })),
     lists: facts.lists.map((l) => ({ ...l, suggestion: renumbered(l.suggestion) })),
     styles: facts.styles.map((s) => ({ ...s, suggestion: renumbered(s.suggestion) })),
+    resources: facts.resources.map((r) => ({ ...r, suggestion: renumbered(r.suggestion) })),
   };
 }
 

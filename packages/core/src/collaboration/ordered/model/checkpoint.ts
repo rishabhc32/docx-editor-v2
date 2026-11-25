@@ -10,8 +10,10 @@ import { at, attempt, Invalid, isForbiddenKey, plainFields, required } from '../
 import { sha256 } from '../change/resources.ts';
 import {
   readLists,
+  readResources,
   readStyles,
   type CheckpointList,
+  type CheckpointResource,
   type CheckpointStyle,
 } from './checkpoint-lists.ts';
 import {
@@ -80,9 +82,9 @@ export const checkpointAttribute = (
  * suggestion whole, and each decided one another section names; the person of each room comment
  * by its `w:id`; the records each change record holds by takeover; the person of each namespace
  * the parts name as a typer; the records Word writes no change record for, decided or not; what
- * the room holds of a record that its change record does not say; and the list definitions and
- * styles changes added. Every section names a suggestion by its place in `suggestions`, and an
- * element of the file by its label.
+ * the room holds of a record that its change record does not say; and the list definitions,
+ * styles, list levels, relationships, parts and media changes added. Every section names a
+ * suggestion by its place in `suggestions`, and an element of the file by its label.
  */
 export interface CheckpointFacts {
   readonly suggestions: readonly CheckpointSuggestion[];
@@ -93,6 +95,7 @@ export interface CheckpointFacts {
   readonly changeRecords: readonly CheckpointChangeRecords[];
   readonly lists: readonly CheckpointList[];
   readonly styles: readonly CheckpointStyle[];
+  readonly resources: readonly CheckpointResource[];
 }
 
 /**
@@ -140,6 +143,7 @@ export function checkpointManifestBytes(
       changeRecords: facts.changeRecords,
       lists: facts.lists,
       styles: facts.styles,
+      resources: facts.resources,
     })
   );
   if (bytes.byteLength > XML_HARD_MAX_BYTES) {
@@ -228,6 +232,7 @@ function factsOf(manifest: Record<string, unknown>): CheckpointFacts {
       manifest.changeRecords === undefined ? [] : readChangeRecords(manifest.changeRecords, count),
     lists: manifest.lists === undefined ? [] : readLists(manifest.lists, count),
     styles: manifest.styles === undefined ? [] : readStyles(manifest.styles, count),
+    resources: manifest.resources === undefined ? [] : readResources(manifest.resources, count),
   };
 }
 

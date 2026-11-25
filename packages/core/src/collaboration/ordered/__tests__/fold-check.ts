@@ -403,26 +403,6 @@ function semanticParts(bytes: Uint8Array): Record<string, string> {
   );
 }
 
-/** A link's relationship in a relationships part. */
-const LINK_RELATIONSHIP = /<Relationship [^>]*Type="[^"]*\/hyperlink"[^>]*\/>/g;
-
-/**
- * A folded copy's decided file without the link relationships that the room's own decided file
- * does not hold. A known difference: a reject of a suggested link in a folded copy keeps the
- * link's relationship, which nothing names.
- */
-function withoutFoldedLinks(
-  file: Record<string, string>,
-  live: Record<string, string>
-): Record<string, string> {
-  return Object.fromEntries(
-    Object.entries(file).map(([name, xml]) => [
-      name,
-      xml.replace(LINK_RELATIONSHIP, (link) => (live[name]?.includes(link) ? link : '')),
-    ])
-  );
-}
-
 /** The ids of each maker's pending suggestions that a fold keeps. */
 function byMaker(doc: OrderedDocument): Map<string, string[]> {
   const out = new Map<string, string[]>();
@@ -468,7 +448,7 @@ export async function checkFold(
     for (const { maker, status, file } of live) {
       const ids = reopened.get(maker) ?? [];
       const decided = decidedFile(copy.document, copy.base, blobs, ids, status);
-      expect({ label, fold, maker, status, file: withoutFoldedLinks(decided, file) }).toEqual({
+      expect({ label, fold, maker, status, file: decided }).toEqual({
         label,
         fold,
         maker,
@@ -539,7 +519,7 @@ export async function checkEveryCard(
         ['twice', twice],
       ] as const) {
         const { decided, file } = cardDecided(copy.document, copy.base, blobs, seen, status);
-        const shown = { decided, file: withoutFoldedLinks(file, live.file) };
+        const shown = { decided, file };
         expect({ label, fold, card: card.suggestions, status, ...shown }).toEqual({
           label,
           fold,
