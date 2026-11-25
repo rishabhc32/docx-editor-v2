@@ -45,7 +45,13 @@ export interface CheckpointOverRecord extends CheckpointUntrackedRecord {
 }
 
 /** The properties elements whose one change record a record may be made over. */
-export type CheckpointOverTarget = 'rPr' | 'pPr' | 'sectPr';
+const OVER_TARGETS = ['rPr', 'pPr', 'sectPr'] as const;
+
+export type CheckpointOverTarget = (typeof OVER_TARGETS)[number];
+
+/** Whether a properties element's change record may hold records made over it. */
+export const isCheckpointOverTarget = (name: string): name is CheckpointOverTarget =>
+  (OVER_TARGETS as readonly string[]).includes(name);
 
 /**
  * The records of one change record's properties when one was made over its pending records, by
@@ -110,11 +116,7 @@ export function readMadeOver(value: unknown, suggestions: number): CheckpointMad
 
 function readEntry(value: unknown, path: string, suggestions: number): CheckpointMadeOver {
   const f = plainFields(value, path);
-  const target = oneOf(required(f, 'target'), at(path, 'target'), [
-    'rPr',
-    'pPr',
-    'sectPr',
-  ] as const);
+  const target = oneOf(required(f, 'target'), at(path, 'target'), OVER_TARGETS);
   const records = manifestList(required(f, 'records'), at(path, 'records'), 1);
   return {
     label: int(required(f, 'label'), at(path, 'label')),

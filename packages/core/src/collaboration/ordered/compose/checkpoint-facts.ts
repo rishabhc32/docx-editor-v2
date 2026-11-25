@@ -15,10 +15,10 @@ import type {
   CheckpointResourceKind,
   CheckpointStyle,
 } from '../model/checkpoint-lists.ts';
-import type {
-  CheckpointMadeOver,
-  CheckpointOverRecord,
-  CheckpointOverTarget,
+import {
+  isCheckpointOverTarget,
+  type CheckpointMadeOver,
+  type CheckpointOverRecord,
 } from '../model/checkpoint-over.ts';
 import type { CheckpointSuggestion } from '../model/checkpoint-suggestions.ts';
 import { withCheckpointLabels } from '../model/checkpoint-labels.ts';
@@ -37,6 +37,7 @@ import {
   type CheckpointUntrackedRecord,
 } from '../model/checkpoint-untracked.ts';
 import type { OrderedPerson } from '../model/person.ts';
+import { OrderedRefusal } from '../model/refusal.ts';
 import {
   orderedResourceShows,
   type OrderedListLevelResource,
@@ -399,6 +400,9 @@ function checkpointTakeovers(
 /**
  * Each change record of the file with a record made over its pending ones, by its label: every
  * record the room draws from the first pending one, as the room holds it.
+ *
+ * @throws OrderedRefusal `engine-refused` when the manifest cannot keep one: no other section
+ *   lists it, so the fold would lose its records.
  */
 function checkpointMadeOver(
   doc: OrderedDocument,
@@ -410,11 +414,17 @@ function checkpointMadeOver(
   for (const records of held.values()) {
     for (const [id, { record, drawn }] of records) {
       const label = labels.get(id);
-      const kept = drawn?.map((made) => overRecord(doc, list, made));
-      if (label !== undefined && kept !== undefined && kept.every((r) => r !== undefined)) {
-        const target = recordedProperties(record) as CheckpointOverTarget;
-        out.push({ label, target, records: kept });
+      if (label === undefined || drawn === undefined) {
+        continue;
       }
+
+      const target = recordedProperties(record);
+      const kept = drawn.map((made) => overRecord(doc, list, made));
+      if (!isCheckpointOverTarget(target) || !kept.every((r) => r !== undefined)) {
+        throw new OrderedRefusal('engine-refused', `records made over a ${record}`);
+      }
+
+      out.push({ label, target, records: kept });
     }
   }
 
