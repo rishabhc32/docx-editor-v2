@@ -1,0 +1,10 @@
+{
+  "impact": "compatible",
+  "fields": [],
+  "before": "A reject of a party's new link that the party had split, and whose first half the party had given another target, dropped the second half around another person's text: the split edge asked only the link's first open edge, which the new target had remade. After a fold, and in Word, the half stayed.",
+  "after": "A split edge's link decides by any end of its own that only its rejection hides (rejectedLinkEdge), so the half stays around the other person's text, live as after a fold.",
+  "reason": "Change messages, the change log and its kinds keep their meaning, and the Yjs document format and the checkpoint format do not change. Only the composed Word file of such a link after the reject changes, and it now equals Word and a fold. An ordered room admits only clients of its own code version.",
+  "tests": ["packages/core/src/collaboration/ordered/__tests__/link-left-with-markers.test.ts"],
+  "changeset": "split-link-half-kept",
+  "migration": null
+}

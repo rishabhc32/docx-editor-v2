@@ -28,12 +28,13 @@ function rejectedLinkEdge(ctx: ComposeContext, item: OrderedItem): boolean {
     return false;
   if (!isSplitEdge(item)) return rejectedInsertion(ctx, item);
 
-  // A split's edge: its Enter taken back joins the halves again; else the link decides
+  // A split's edge: its Enter taken back joins the halves again; else the link decides, by an end
+  // of its own that only its rejection hides (a new target for one half remakes that half's ends)
   if (item.by !== null && ctx.revertedDirect(item.by)) return false;
-  const open = ctx.story.spaces
-    .get(item.pair)
-    ?.find((end) => end.kind === 'open' && !isSplitEdge(end));
-  return open !== undefined && !hiddenOtherwise(ctx, open) && rejectedInsertion(ctx, open);
+  const ends = ctx.story.spaces.get(item.pair) ?? [];
+  return ends.some(
+    (end) => !isSplitEdge(end) && !hiddenOtherwise(ctx, end) && rejectedInsertion(ctx, end)
+  );
 }
 
 /** Whether an item is an edge (open or close item) of a link whose rejection alone hides it. */

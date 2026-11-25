@@ -104,6 +104,24 @@ describe('a new link that a decision leaves with only a comment start', () => {
     checkSaveAndLoad(doc, "another person's text in a rejected new link", base);
   });
 
+  // Seed 84 of the fold shapes: Ana splits her new link and gives its first half another target,
+  // which remakes that half's edges; Olga's text in the second half keeps that half, as in Word
+  test("another person's text in the second half of a rejected new link, its first retargeted", () => {
+    const { doc, base, suggestion } = proposedWithDiscussion();
+    const split = apply(doc, 'ana-1:2', { kind: 'split', ...EDIT, place: at(doc, 1, 16) });
+    const first = opens(doc, 'hyperlink').find((open) => open.by === suggestion)!;
+    const target = { space: first.space, offset: first.offset };
+    apply(doc, 'ana-1:3', { kind: 'link-target', ...EDIT, link: target, href: NEW_ADDRESS });
+    apply(doc, 'olga-2:1', { kind: 'insert', ...EDIT, place: at(doc, 2, 2), text: 'X' }, 'Olga');
+    for (const id of [suggestion, ...split.suggestions]) {
+      setStatus(doc, id, 'rejected');
+    }
+
+    const xml = strFromU8(unzipSync(orderedPackageBytes(doc, base))['word/document.xml']!);
+    expect(xml).toMatch(/<w:hyperlink [^>]*>(?:(?!<\/w:hyperlink>).)*>X<\/w:t>/);
+    checkSaveAndLoad(doc, "another person's text in a split rejected new link", base);
+  });
+
   test('a take-back is no decision: the link goes with its address, the start stays', () => {
     const { doc, base, suggestion } = proposedWithDiscussion();
     apply(doc, 'ana-2:1', { kind: 'retract', suggestions: [suggestion] });
