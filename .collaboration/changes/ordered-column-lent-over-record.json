@@ -1,0 +1,13 @@
+{
+  "impact": "compatible",
+  "fields": [],
+  "before": "A suggested column's lent width and grid were drawn as whole properties: a reject of a pending table or cell record they were lent over gave the cell the width it had before the column, and the pending file wrote the grid record's original as the lent grid, not as the engine splits it.",
+  "after": "The lent records name the pending records they were lent over (`over`, already a field of the checkpoint's untracked records), a lent width lends from what showed when it was lent, and a lent grid keeps the original as the engine split it.",
+  "reason": "Change messages, the change log and the Yjs format do not change; every copy makes the same records from the same change. Checkpoints keep `over` on an untracked record, which the reader already reads; a checkpoint written before has no `over` on a lent record and draws as before. A room admits only clients of its own code version.",
+  "tests": [
+    "packages/core/src/collaboration/ordered/__tests__/table-row-records.test.ts",
+    "packages/core/src/collaboration/ordered/__tests__/checkpoint-fold-table-records.test.ts"
+  ],
+  "changeset": "ordered-column-lent-over-record",
+  "migration": null
+}
