@@ -212,9 +212,7 @@ function restoredRecords(
 
 /**
  * A container's open item with its properties of the target as the manifest gives them, and the
- * restored records in the place of those loaded from the file, in their order. A record taken from
- * another that the manifest does not list (one written before it listed them) stays as the file's
- * takeover put it back, with the seq of the record that took it, so it draws first.
+ * restored records in the place of those loaded from the file, in their order.
  */
 function restoredOpen(
   open: OrderedItem,
@@ -227,22 +225,8 @@ function restoredOpen(
     ? records.flatMap((r) => r.merge ?? [])
     : undefined;
   const node = withChildren(shell, withProperties(shell.children, target, properties, keys));
-  const unlisted = open.props.flatMap((r) => {
-    const same = (h: OrderedElementRecord) => h.suggestion === r.suggestion;
-    if (
-      r.target !== target ||
-      r.kind !== 'element' ||
-      r.replaced === undefined ||
-      restored.some((h) => same(h) && h.replaced === r.replaced)
-    ) {
-      return [];
-    }
-
-    const holder = restored.find((h) => same(h) && h.replaced === undefined);
-    return [holder === undefined ? r : { ...r, seq: holder.seq }];
-  });
   const kept = open.props.filter((r) => r.target !== target);
-  const props = [...kept, ...unlisted, ...restored].sort((a, b) => a.seq - b.seq);
+  const props = [...kept, ...restored].sort((a, b) => a.seq - b.seq);
   return createOrderedItem({ ...open, node, props });
 }
 

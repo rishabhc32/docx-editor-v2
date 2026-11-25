@@ -3,8 +3,9 @@
 // of each one opened. Every later engine must read them to the same print. They were all written
 // again in one step by sp.5's final writer, which numbers a split room run, gives a list and a
 // style back to their change, and keeps a table record's room facts and each suggestion's
-// version: delete the checkpoints, run `ORDERED_GOLDEN_WRITE=1 bun test <this file>`, then format
-// the prints. After sp.5 ships they are never written again; write a missing
+// version; the table change records one again by the writer that lists each record taken from
+// another of a container it lists: delete the checkpoints, run
+// `ORDERED_GOLDEN_WRITE=1 bun test <this file>`, then format the prints. After sp.5 ships they are never written again; write a missing
 // one, and the prints, the same way. A print changes only when what it shows changes (an engine
 // that composes the Word file another way), never because a checkpoint reads otherwise.
 
