@@ -20,7 +20,7 @@ import {
 import { attributeOf, childNamed, isWml, withChildren, withId } from '../ooxml-nodes.ts';
 import type { ComposeContext } from './context.ts';
 import { withStoryBlocks } from './paragraph-ops.ts';
-import { acceptedAndPending, containerPropertiesAfter } from './properties.ts';
+import { acceptedAndPending, containerPropertiesAfter, propertyKey } from './properties.ts';
 
 /** A cell a column decision removed, drawn as the engine holds it before the decision. */
 export interface RemovedCell {
@@ -267,7 +267,8 @@ function survivorsOf(
     const lending = new Set(cells.flatMap((c) => c.lends.map((r) => r.suggestion)));
     for (const { id, open, lends } of gone.length === 0 ? [] : cells) {
       if (columns.has(id)) {
-        const width = lastWidth(lends.filter((r) => r.suggestion !== columns.get(id)));
+        const others = lends.filter((r) => r.suggestion !== columns.get(id));
+        const width = lentWidth(ctx, open, others);
         if (width) {
           lent.set(id, width);
         }
@@ -289,7 +290,7 @@ function survivorsOf(
         continue;
       }
 
-      const width = lastWidth(lends);
+      const width = lentWidth(ctx, open, lends);
       if (width) {
         lent.set(id, width);
       } else {
@@ -301,10 +302,29 @@ function survivorsOf(
   return { kept, lent };
 }
 
-/** The `w:tcW` the last of a cell's lent width records gives, if any. */
-function lastWidth(records: readonly OrderedElementRecord[]): OoxmlElement | undefined {
-  const last = records.at(-1)?.element;
-  return last ? childNamed(last, 'tcW') : undefined;
+/**
+ * The `w:tcW` the last of a cell's lent width records gives, if any: none once a record made
+ * after it gives the cell a width (a direct width), which the cell shows, as the engine holds it.
+ */
+function lentWidth(
+  ctx: ComposeContext,
+  open: OrderedItem,
+  records: readonly OrderedElementRecord[]
+): OoxmlElement | undefined {
+  const last = records.at(-1);
+  const width = last?.element ? childNamed(last.element, 'tcW') : undefined;
+  if (last === undefined || width === undefined) {
+    return undefined;
+  }
+
+  const later = appliedRecords(ctx, open, 'tcPr').some((r) => r.seq > last.seq && givesWidth(r));
+  return later ? undefined : width;
+}
+
+/** Whether a cell's record sets its width: it has one, and sets every child or that one. */
+function givesWidth(record: OrderedElementRecord): boolean {
+  const width = record.element ? childNamed(record.element, 'tcW') : undefined;
+  return width !== undefined && (record.merge?.includes(propertyKey(width)) ?? true);
 }
 
 /**

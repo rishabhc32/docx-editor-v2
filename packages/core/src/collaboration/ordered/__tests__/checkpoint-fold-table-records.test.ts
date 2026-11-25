@@ -295,6 +295,12 @@ describe('a column removed under a later one', () => {
     const blobs = mediaStore(base);
     const once = await folded(doc, base, 2, blobs);
     expect(foldPrint(once.document, once.base, blobs)).toEqual(foldPrint(doc, base, blobs));
+    await checkFold(doc, base, blobs, 'a column rejected under direct widths');
+
+    // Olive's widths, made after Ben's second column lent from his first one's cell, are what
+    // that cell gives back: the editor alone on the same file gives cell 0 its whole width back
+    decide(doc, 'olive:3', 'S:ben:2.1', 'rejected');
+    expect(widths(doc)).toEqual(['3000,3000', '3000,3000', '3000,3000']);
   });
 
   // A later column's grid holds both removed columns, so a reject of the column made from the
