@@ -1,0 +1,13 @@
+{
+  "impact": "compatible",
+  "fields": [],
+  "before": "A load read the paragraph marks in the cells of a new row with the paragraph mark role, though compose writes them with the row's w:id. When the row came first, the suggestion's other new paragraph marks took the row's w:id after a fold.",
+  "after": "A load reads an insertion marker whose suggestion also made a container it is in with the role compose writes it for (the row's), so every mark keeps its w:id live, after a fold and in the editor alone.",
+  "reason": "Change messages, the change log, checkpoints and the Yjs format do not change: only the w:id the load keeps for a role changes, and compose wrote the same ids before. A room admits only clients of its own code version.",
+  "tests": [
+    "packages/core/src/collaboration/ordered/__tests__/checkpoint-fold-table-records.test.ts",
+    "packages/core/src/collaboration/ordered/__tests__/checkpoint-fold-shapes-5.test.ts"
+  ],
+  "changeset": "ordered-row-mark-ids",
+  "migration": null
+}

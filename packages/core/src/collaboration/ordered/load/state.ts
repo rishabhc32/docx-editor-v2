@@ -159,10 +159,15 @@ export class RevisionReader {
   }
 
   /**
-   * The suggestion for one revision element, its `w:id` kept for `role`. Both halves of a named
-   * move (`move`) by one author are one suggestion: the engine decides them together.
+   * The suggestion for one revision element, its `w:id` kept for `role` (or the role it gives
+   * that suggestion). Both halves of a named move (`move`) by one author are one suggestion: the
+   * engine decides them together.
    */
-  suggestionFor(revision: OoxmlElement, role: string, move?: string): string {
+  suggestionFor(
+    revision: OoxmlElement,
+    role: string | ((suggestion: string) => string),
+    move?: string
+  ): string {
     const triple = tripleOf(revision);
     const listed =
       this.listedByTriple.get(triple) ??
@@ -190,7 +195,8 @@ export class RevisionReader {
 
     this.byTriple.set(triple, suggestion);
     if (moveKey !== undefined && !this.byMove.has(moveKey)) this.byMove.set(moveKey, suggestion);
-    seedRevisionId(this.doc, suggestion, role, revision);
+    const kept = typeof role === 'string' ? role : role(suggestion);
+    seedRevisionId(this.doc, suggestion, kept, revision);
     return suggestion;
   }
 
@@ -286,7 +292,7 @@ export interface LoadState {
    * The roles of the story's paragraph marks, and of its inserted runs (`run`); a notes part has
    * its own.
    */
-  readonly markRoles: { readonly insert: string; readonly delete: string; readonly run: string };
+  readonly markRoles: MarkerRoles & { readonly run: string };
 }
 
 export function newLoadState(
@@ -472,20 +478,22 @@ export function markerLabels(
   state: LoadState,
   properties: OoxmlElement | undefined,
   outer: Labels,
-  roles: { readonly insert: string; readonly delete: string }
+  roles: MarkerRoles
 ): Labels {
   if (!properties) return outer;
   let by = outer.by;
   let move = outer.move;
   const dels = [...outer.dels];
+  const insertRole = (suggestion: string) =>
+    outer.within.by.includes(suggestion) ? roles.insertWithin : roles.insert;
   for (const child of properties.children) {
     if (child.kind === 'textValue') continue;
     if (isWml(child, 'ins') || isWml(child, 'cellIns')) {
-      by = state.revisions.suggestionFor(child, roles.insert);
+      by = state.revisions.suggestionFor(child, insertRole);
     } else if (isWml(child, 'del') || isWml(child, 'cellDel')) {
       dels.push(state.revisions.suggestionFor(child, roles.delete));
     } else if (isWml(child, 'moveTo')) {
-      by = state.revisions.suggestionFor(child, roles.insert);
+      by = state.revisions.suggestionFor(child, insertRole);
       move = moveName(state.moveTo, child);
     } else if (isWml(child, 'moveFrom')) {
       dels.push(state.revisions.suggestionFor(child, roles.delete));
@@ -496,19 +504,36 @@ export function markerLabels(
   return { by, dels, move, within: outer.within };
 }
 
+/**
+ * The roles a container's or a mark's markers are read for, as compose writes them: an insertion
+ * by a suggestion that also made a container it is in takes `insertWithin` (a mark in a cell of
+ * a new row takes the row's `w:id`).
+ */
+interface MarkerRoles {
+  readonly insert: string;
+  readonly insertWithin: string;
+  readonly delete: string;
+}
+
 /** The roles of a row's or a cell's markers. */
-export const ROW_ROLES = { insert: REVISION_ROLE.rowInsert, delete: REVISION_ROLE.rowDelete };
+export const ROW_ROLES = {
+  insert: REVISION_ROLE.rowInsert,
+  insertWithin: REVISION_ROLE.rowInsert,
+  delete: REVISION_ROLE.rowDelete,
+};
 
 /** The roles of a paragraph mark's markers. */
 export const MARK_ROLES = {
   insert: REVISION_ROLE.markInsert,
+  insertWithin: REVISION_ROLE.rowInsert,
   delete: REVISION_ROLE.markDelete,
   run: REVISION_ROLE.insert,
 };
 
-/** The roles of a paragraph mark's markers in a notes part. */
+/** The roles of a paragraph mark's markers in a notes part: a note's own, inside a table too. */
 export const NOTE_MARK_ROLES = {
   insert: REVISION_ROLE.noteMarkInsert,
+  insertWithin: REVISION_ROLE.noteMarkInsert,
   delete: REVISION_ROLE.noteMarkDelete,
   run: REVISION_ROLE.noteInsert,
 };

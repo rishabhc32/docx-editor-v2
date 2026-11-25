@@ -8,6 +8,7 @@ import { openOrderedWordFile } from '../client/open.ts';
 import type { OrderedDocument } from '../model/types.ts';
 import { addressOf, apply, APPLY_FILE, at, DIRECT, EDIT, opens } from './change-apply-fixture.ts';
 import { checkFold, folded, mediaStore } from './fold-check.ts';
+import { docx, p, t } from './word-fixtures.ts';
 
 const ANA_1 = '2026-10-28T09:01:00Z';
 
@@ -162,6 +163,24 @@ test.each([false, true])(
     await checkFold(doc, base, blobs, 'a column over a file record of widths');
   }
 );
+
+// A party's new row joined to their split after the table: the marks of the row's cells take the
+// row's `w:id` and the split's mark its own, live as after a fold
+test("a party's split after a table, then the party's row joined to it", async () => {
+  const file = docx(
+    '<w:tbl><w:tblPr><w:tblW w:w="0" w:type="auto"/></w:tblPr>' +
+      '<w:tblGrid><w:gridCol w:w="3000"/></w:tblGrid>' +
+      `<w:tr><w:tc><w:tcPr><w:tcW w:w="3000" w:type="dxa"/></w:tcPr>${p(t('Fee'))}</w:tc></w:tr>` +
+      '</w:tbl>' +
+      p(t('Signed.'))
+  );
+  const { document: doc, base } = openOrderedWordFile(file, { file: 1 });
+  apply(doc, 'ben:1', { kind: 'split', ...EDIT, place: at(doc, 1, 3) }, 'Ben');
+  const row = addressOf(opens(doc, 'tr')[0]!);
+  const into = 'S:ben:1.1';
+  apply(doc, 'ben:2', { kind: 'insert-row', ...EDIT, into, row, where: 'below' }, 'Ben');
+  await checkFold(doc, base, mediaStore(base), 'a row joined to a split after its table');
+});
 
 describe("the organiser's direct columns at a decision", () => {
   // The organiser's direct deletion of a column, after a party's row height and the organiser's
