@@ -30,7 +30,8 @@
 // over a prompt formatted after its first fill showed that format live: the prompt the control
 // kept at the first fill shows, as the editor alone and a fold show it. A comment on part of a
 // plain prompt kept its markers between the prompt's words when a reject showed the prompt again
-// live: the prompt goes whole inside the range, as the editor alone writes it.
+// live: the prompt goes whole inside the range, as the editor alone writes it. A date in a German
+// date picker once showed English names: it shows the names of the control's language, as Word.
 
 import { afterEach, describe, expect, test } from 'bun:test';
 import { createDocxEditor } from '../../../../editor/docx-editor.ts';
@@ -83,6 +84,12 @@ const block = (props: string, content: string) =>
 const ITEMS =
   '<w:listItem w:displayText="Net 30" w:value="30"/><w:listItem w:displayText="Net 60" w:value="60"/>';
 const DATE_FORMAT = '<w:dateFormat w:val="M/d/yyyy"/><w:lid w:val="en-US"/>';
+
+/** A date picker in Word's German long form, with words that state no date. */
+const GERMAN_DATE = line(
+  '<w:date><w:dateFormat w:val="dddd, d. MMMM yyyy"/><w:lid w:val="de-DE"/></w:date>',
+  t('bald')
+);
 
 /** Words of a date that Cy struck and formatted, as a file holds them. */
 const STRUCK =
@@ -201,6 +208,7 @@ const CASES = [
     [6, 6],
     pick('2026-09-15'),
   ],
+  ['a date in a German date picker', GERMAN_DATE, [6, 6], pick('2026-09-15')],
   [
     'a date over a date in a format that shows no day',
     line(
@@ -466,6 +474,14 @@ describe("a party's edit of a control, decided live and after a fold, as the edi
       });
     }
   }
+});
+
+// Word for Mac shows a de-DE date picture with these names (2026-11-25); the cases above check that
+// the room, a save and a fold write what the editor alone writes
+test("a date in a German date picker shows Word's German names", () => {
+  expect(alone(GERMAN_DATE, [6, 6], pick('2026-09-15'), 'accept').decided).toContain(
+    '<w:t>Dienstag, 15. September 2026</w:t>'
+  );
 });
 
 describe('a value picked over a prompt the control shows beside a stored value', () => {

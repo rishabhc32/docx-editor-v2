@@ -672,7 +672,7 @@ export function valueRecordEdits(control: OoxmlElement, stale: boolean): RecordE
 function statedValue(summary: ContentControlProperties, text: string): string | undefined {
   const current = summary.type === 'date' ? summary.date?.fullDate : undefined;
   const previous = current === undefined ? null : controlDateOf(current);
-  if (previous && formatContentControlDate(previous, summary.date?.dateFormat) === text) {
+  if (previous && formatContentControlDate(previous, summary.date) === text) {
     return current;
   }
 
@@ -692,7 +692,7 @@ function readBack(summary: ContentControlProperties, text: string): string | und
 
   const current = summary.date?.fullDate;
   const previous = current === undefined ? null : controlDateOf(current);
-  const shown = parseContentControlDate(text, summary.date?.dateFormat, previous);
+  const shown = parseContentControlDate(text, summary.date, previous);
   return shown ? fullDateOf(shown) : undefined;
 }
 

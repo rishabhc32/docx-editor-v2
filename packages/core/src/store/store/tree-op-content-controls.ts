@@ -1355,9 +1355,7 @@ function planValue(
     case 'date': {
       if (properties.type !== 'date') return 'typeMismatch';
       const picked =
-        typeof value.iso === 'string'
-          ? dateControlValue(value.iso, properties.date?.dateFormat)
-          : null;
+        typeof value.iso === 'string' ? dateControlValue(value.iso, properties.date) : null;
       if (!picked) {
         return 'invalidArgs';
       }

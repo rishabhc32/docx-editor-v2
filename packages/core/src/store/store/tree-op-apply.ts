@@ -2274,8 +2274,10 @@ function applySetContentControlValue(
     case 'date': {
       const properties = contentControlPropertiesOf(control);
       const date = sdtPrChild(properties, 'date');
-      const format = attributeValueOf(sdtPrChild(date, 'dateFormat'), 'val');
-      const picked = dateControlValue(value, format);
+      const picked = dateControlValue(value, {
+        dateFormat: attributeValueOf(sdtPrChild(date, 'dateFormat'), 'val'),
+        lid: attributeValueOf(sdtPrChild(date, 'lid'), 'val'),
+      });
       if (picked === null) {
         return { ok: false, reason: 'invalidArgs' };
       }

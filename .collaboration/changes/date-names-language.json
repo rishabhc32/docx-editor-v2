@@ -1,0 +1,13 @@
+{
+  "impact": "compatible",
+  "fields": [],
+  "before": "A date control's text used English month and weekday names whatever the control's language (w:lid), in the editor alone, the room and a fold.",
+  "after": "The text uses Word's names for the control's language from one fixed table in the engine (store/store/date-names.ts), never the runtime's locale data, so every copy and a fold write the same text; an unknown or missing language gives English.",
+  "reason": "Change messages, the change log and its kinds keep their meaning, and the Yjs document format and the checkpoint format do not change. Only the text a date value writes for a non-English control changes. An ordered room admits only clients of its own code version.",
+  "tests": [
+    "packages/core/src/collaboration/ordered/__tests__/client/editor-controls-value-fold.test.ts",
+    "packages/core/src/store/__tests__/content-control-dates.test.ts"
+  ],
+  "changeset": "date-names-language",
+  "migration": null
+}
