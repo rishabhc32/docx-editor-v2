@@ -1146,6 +1146,7 @@ export interface OrderedElementRecord {
     readonly over?: readonly string[];
     readonly recordUnchanged?: boolean;
     readonly replaced?: string;
+    readonly replacedEarlier?: readonly string[];
     // (undocumented)
     readonly seq: number;
     // (undocumented)
@@ -1249,6 +1250,7 @@ export type OrderedFormatRecord = {
     readonly properties: readonly OoxmlProperty[];
     readonly remove?: readonly string[];
     readonly replaced?: string;
+    readonly replacedEarlier?: readonly string[];
     readonly seq: number;
     readonly style?: OrderedStyleWrite;
     readonly suggestion: string;
@@ -1259,6 +1261,7 @@ export type OrderedFormatRecord = {
     readonly id: string;
     readonly kind: 'face';
     readonly replaced?: string;
+    readonly replacedEarlier?: readonly string[];
     readonly seq: number;
     readonly suggestion: string;
 };
@@ -2154,6 +2157,7 @@ export interface OrderedParagraphOpRecord {
     readonly op: OrderedParagraphOp;
     readonly over?: readonly string[];
     readonly replaced?: string;
+    readonly replacedEarlier?: readonly string[];
     // (undocumented)
     readonly seq: number;
     // (undocumented)
@@ -2606,6 +2610,7 @@ export interface OrderedSectionRecord {
     readonly op: OrderedSectionOp;
     readonly over?: readonly string[];
     readonly replaced?: string;
+    readonly replacedEarlier?: readonly string[];
     // (undocumented)
     readonly seq: number;
     // (undocumented)
