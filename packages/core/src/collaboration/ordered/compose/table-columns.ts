@@ -1,7 +1,11 @@
 // Cells a column decision removed from a row that still shows (task 9.7).
 
 import { findNode } from '../../../store/package/ooxml-edit.ts';
-import type { OoxmlElement, OoxmlNode } from '../../../store/package/ooxml-tree.ts';
+import {
+  WML_NAMESPACE_URI,
+  type OoxmlElement,
+  type OoxmlNode,
+} from '../../../store/package/ooxml-tree.ts';
 import { resolveRevisions } from '../../../store/store/tree-op-revisions.ts';
 import {
   compactRevisionGrid,
@@ -29,6 +33,8 @@ export interface RemovedCell {
   readonly suggestion: string;
   /** The shown grid was taken while the cell showed (a tie-break; the count decides). */
   readonly held: boolean;
+  /** The cell is its column's insertion, rejected or taken back: its width was lent. */
+  readonly inserted: boolean;
 }
 
 /**
@@ -72,6 +78,10 @@ function appliedRecords(
   const { accepted, pending } = acceptedAndPending(ctx, records);
   return [...accepted, ...pending];
 }
+
+/** Whether a cell's record sets its width: a whole `w:tcPr`, or one that names `w:tcW`. */
+const setsWidth = (record: OrderedElementRecord): boolean =>
+  record.merge?.includes(`${WML_NAMESPACE_URI} tcW`) ?? true;
 
 /** The record whose properties a target shows, or null for the container's own (the file's). */
 export function shownRecord(
@@ -124,7 +134,9 @@ export function removedColumnCell(
   if (ctx.containerWent(open)) return null;
   const held = holdsCell(ctx, shownRecord(ctx, table, 'tblGrid'), table, open);
   const removedBy = (suggestion: string): Omit<RemovedCell, 'id'> | null =>
-    ctx.doc.suggestions.get(suggestion)?.direct === true ? null : { held, suggestion };
+    ctx.doc.suggestions.get(suggestion)?.direct === true
+      ? null
+      : { held, suggestion, inserted: suggestion === open.by };
   if (open.by !== null && (open.retracted || ctx.rejectedOrDrawnSo(open.by)))
     return removedBy(open.by);
   if (open.retracted) return null;
@@ -232,15 +244,16 @@ interface Survivors {
 
 /**
  * The survivors of each row with a removed cell, by how the engine holds them before the
- * decision. A cell whose shown `w:tcPr` was taken while the removed cell showed is widened by
- * the engine's rule. A cell a removed column took width from, under that column's record, shows
- * the width it lent (`lent`): Word writes no record of it, so the cell shows its width from before
- * the column, where the engine holds it lent until the decision gives the removed cell's width
- * back. Any other cell whose shown `w:tcPr` was taken when the removed cell did not show (already
- * removed, or not added yet) holds no width of it (`kept`). A column's record names the cell it
- * took width from, so every other cell's own properties hold that column's cell. A removed cell
- * that another removed column took width from shows that lent width too: the engine gives the
- * column's own cell to the neighbour, so the removed cell gives only what is left of it.
+ * decision. A cell whose width (`w:tcW`) a record taken while the removed cell showed sets is
+ * widened by the engine's rule. A cell a removed column took width from, under that column's
+ * record, shows the width it lent (`lent`): Word writes no record of it, so the cell shows its
+ * width from before the column, where the engine holds it lent until the decision gives the
+ * removed cell's width back. A record that keeps the width (a cell alignment) shows it lent too.
+ * Any other cell whose width a record taken when the removed cell did not show (already removed,
+ * or not added yet) sets holds no width of it (`kept`). A column's record names the cell it took
+ * width from, so every other cell's own properties hold that column's cell. A removed cell that
+ * another removed column took width from shows that lent width too: the engine gives the column's
+ * own cell to the neighbour, so the removed cell gives only what is left of it.
  */
 function survivorsOf(
   ctx: ComposeContext,
@@ -276,7 +289,7 @@ function survivorsOf(
         continue;
       }
 
-      const shown = shownRecord(ctx, open, 'tcPr');
+      const shown = appliedRecords(ctx, open, 'tcPr').filter(setsWidth).at(-1) ?? null;
       const holds = (cell: (typeof gone)[number]): boolean => {
         const column = columns.get(cell.id) ?? '';
         if (shown !== null) {
@@ -700,7 +713,7 @@ function withoutCandidates(
   }
 
   const { kept, lent } = survivorsOf(ctx, drawn, removed);
-  const before = withLentWidths(drawn, lent);
+  const before = withLentWidths(drawn, lent, ctx.mint);
   const joined = joinedBy(ctx, withCellsAccepted(ctx, before, removed), decision);
   const out = withComposeIds(ctx, withKeptCellProperties(joined, drawn, kept), known);
   return out.kind === 'textValue' ? drawn : out;
@@ -722,13 +735,26 @@ function withCellsAccepted(
   };
   const byId = new Map(removed.map((r) => [r.id, r]));
   const sites: string[] = [];
+  const marker = (name: string, suggestion: string) =>
+    build(
+      ctx.mint(),
+      'generic',
+      name,
+      revisionAttributes(freshId(), ctx.attribution(suggestion)),
+      []
+    );
   const marked = withTableCells(current, (cell) => {
     const entry = byId.get(cell.id);
     if (!entry) return cell;
-    const attributes = revisionAttributes(freshId(), ctx.attribution(entry.suggestion));
-    const marker = build(ctx.mint(), 'generic', 'cellDel', attributes, []);
-    sites.push(marker.id);
-    return withCellMarker(cell, marker, ctx.mint);
+
+    // A column's own cell is inserted, as the engine holds it before the reject: the width it
+    // gives back was lent, so a record that holds the width the cell before it showed follows
+    const inserted = entry.inserted
+      ? withCellMarker(cell, marker('cellIns', entry.suggestion), ctx.mint)
+      : cell;
+    const deleted = marker('cellDel', entry.suggestion);
+    sites.push(deleted.id);
+    return withCellMarker(inserted, deleted, ctx.mint);
   });
   if (sites.length === 0) return marked;
   const scratch = withStoryBlocks(ctx.story.part, [marked]);
@@ -741,10 +767,15 @@ function withCellsAccepted(
   return withoutCells(current, new Set(byId.keys()));
 }
 
-/** The table with each cell of `lent` at the width it lent, as the engine holds it. */
+/**
+ * The table with each cell of `lent` at the width it lent, as the engine holds it. A change record
+ * whose original holds the width the cell showed holds the lent width too, as the engine's record
+ * taken over the lent cell does: the decision then gives the removed width back to both.
+ */
 function withLentWidths(
   table: OoxmlElement,
-  lent: ReadonlyMap<string, OoxmlElement>
+  lent: ReadonlyMap<string, OoxmlElement>,
+  mint: () => string
 ): OoxmlElement {
   if (lent.size === 0) {
     return table;
@@ -753,17 +784,39 @@ function withLentWidths(
   return withTableCells(table, (cell) => {
     const width = lent.get(cell.id);
     const tcPr = childNamed(cell, 'tcPr');
-    if (!width || !tcPr) {
+    const shown = tcPr && childNamed(tcPr, 'tcW');
+    if (!width || !tcPr || !shown) {
       return cell;
     }
 
-    const props = withChildren(
-      tcPr,
-      tcPr.children.map((c) => (isWml(c, 'tcW') ? width : c))
-    );
+    const sameWidth = (node: OoxmlElement) =>
+      ['w', 'type'].every((name) => attributeOf(node, name) === attributeOf(shown, name));
+    const lend = (props: OoxmlElement): OoxmlElement =>
+      withChildren(
+        props,
+        props.children.map((c) => {
+          if (c.kind === 'textValue') {
+            return c;
+          }
+
+          if (isWml(c, 'tcW') && sameWidth(c)) {
+            return withId(width, mint());
+          }
+
+          const original = isWml(c, 'tcPrChange') ? childNamed(c, 'tcPr') : undefined;
+          if (!original) {
+            return c;
+          }
+
+          return withChildren(
+            c,
+            c.children.map((o) => (o === original ? lend(original) : o))
+          );
+        })
+      );
     return withChildren(
       cell,
-      cell.children.map((c) => (c === tcPr ? props : c))
+      cell.children.map((c) => (c === tcPr ? lend(tcPr) : c))
     );
   });
 }

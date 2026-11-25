@@ -326,6 +326,44 @@ describe('a column removed under a later one', () => {
       expect(widths(doc)).toEqual(['3000,1500,1500', '3000,1500,1500', '3000,1500,1500']);
     }
   );
+
+  // A cell alignment sets no width: the cell the removed column took width from shows what that
+  // column left it, and the alignment's record holds that width as its original, made before the
+  // removal or after it, as the editor alone writes it
+  test.each([
+    ['taken back', 'after'],
+    ['taken back', 'before'],
+    ['rejected', 'after'],
+    ['rejected', 'before'],
+  ])(
+    "a party's column %s, after the party's column made from its cell, their cell alignment %s",
+    async (how, when) => {
+      const { document: doc, base } = openOrderedWordFile(TABLE_FILE, { file: 1 });
+      apply(doc, 'ben:1', column(doc, 0), 'Ben');
+      apply(doc, 'ben:2', column(doc, 1), 'Ben');
+      const op = { op: 'setTableCellVerticalAlignment', alignment: 'center' } as const;
+      const align = () =>
+        apply(doc, 'ben:3', { kind: 'table-property', ...EDIT, on: [cell(doc, 0)], op }, 'Ben');
+      if (when === 'before') {
+        align();
+      }
+
+      if (how === 'taken back') {
+        apply(doc, 'ben:4', { kind: 'delete-column', ...EDIT, cell: cell(doc, 1) }, 'Ben');
+      } else {
+        decide(doc, 'olive:1', 'S:ben:1.1', 'rejected');
+      }
+
+      if (when === 'after') {
+        align();
+      }
+
+      // Each cell's width, then its record's original
+      const row = '2250,2250,750,750,3000,3000';
+      expect(widths(doc)).toEqual(['2250,750,3000', row, '2250,750,3000']);
+      await checkFold(doc, base, mediaStore(base), `a cell alignment ${when} a column ${how}`);
+    }
+  );
 });
 
 describe("the organiser's direct columns at a decision", () => {
