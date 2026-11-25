@@ -1,0 +1,10 @@
+{
+  "impact": "compatible",
+  "fields": [],
+  "before": "Compose fitted a table's grid to its cells only when a column decision removed cells. After a fold, the cells a direct column deletion removed were gone from the items, and a reject of a row height made before the deletion gave back the old grid with a column no cell used, where the live room and the editor alone fit the grid.",
+  "after": "A decision (not a direct edit) on any record or label of the table, a row or a cell fits the grid to the cells by the engine's compactRevisionGrid rule, live and after a fold alike.",
+  "reason": "Change messages, the change log, checkpoints and the Yjs format do not change; compose draws the decided table as the editor does, the same on every copy. A room admits only clients of its own code version.",
+  "tests": ["packages/core/src/collaboration/ordered/__tests__/checkpoint-fold-decide.test.ts"],
+  "changeset": "ordered-decided-table-grid",
+  "migration": null
+}
