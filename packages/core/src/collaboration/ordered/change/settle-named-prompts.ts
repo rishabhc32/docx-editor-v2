@@ -2,7 +2,7 @@
 // each change (task 9.6). The writes go in the change's undo record.
 
 import { isHyperlinkNode } from '../../../store/package/hyperlink.ts';
-import { createNodeIdAllocator, replaceNode } from '../../../store/package/ooxml-edit.ts';
+import { replaceNode } from '../../../store/package/ooxml-edit.ts';
 import { ooxmlTreesEqual } from '../../../store/package/ooxml-serialize.ts';
 import type { OoxmlElement, OoxmlNode } from '../../../store/package/ooxml-tree.ts';
 import { withRestoredPrompt } from '../../../store/store/content-control-prompt-restore.ts';
@@ -217,7 +217,7 @@ function settleNamedControl(
   // control is no decision's (compose shows a decision's prompt only after one). The control
   // keeps naming the glossary block that its prompt went to when those words filled it.
   if (decided.length > 0) {
-    readValueBack(doc, story, open, shell, decided);
+    readValueBack(doc, story, open, shell, decided, apply);
     for (const item of decided) {
       relabel(doc, story, item, { gone: true });
     }
@@ -229,18 +229,19 @@ function settleNamedControl(
 /**
  * The control's value record read back from the prompt it shows again, as the engine reads it
  * after a decision (`readsRecordBack`): the words the decision took away go for good, so no
- * later drawing can tell they stated it.
+ * later drawing can tell they stated it. Its node ids are the change's, as every copy mints them.
  */
 function readValueBack(
   doc: OrderedDocument,
   story: OrderedStory,
   open: OrderedItem,
   shell: OoxmlElement,
-  went: readonly OrderedItem[]
+  went: readonly OrderedItem[],
+  apply: OrderedApplyContext
 ): void {
   const properties = contentControlPropertiesOf(shell);
   const edited = readsRecordBack(doc, shell, went)
-    ? propertiesReadBack(shell, false, createNodeIdAllocator(story.part))
+    ? propertiesReadBack(shell, false, () => apply.ids.node())
     : undefined;
   if (!properties || !edited) {
     return;
