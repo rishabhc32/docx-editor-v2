@@ -125,9 +125,10 @@ export type OrderedFormatRecord =
       /** The suggestion a later format took this record from (policy 2), if any. */
       readonly replaced?: string;
       /**
-       * A direct format made over pending format records: their suggestions. Word keeps one
-       * record, the face before the first pending format, so a reject of one of them takes this
-       * format away too, as the engine's reject does.
+       * A format with no change record of its own (a direct one, or an `untracked` one) made
+       * over pending format records: their suggestions. Word keeps one record, the face before
+       * the first pending format, so a reject of one of them takes this format away too, as the
+       * engine's reject does.
        */
       readonly over?: readonly string[];
       /**

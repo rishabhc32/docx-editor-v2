@@ -96,6 +96,29 @@ describe('a decision after a fold, on a suggestion inside a run', () => {
       'a paragraph break inside a run'
     );
   });
+
+  // Bob's format holds the run's one change record, and Ana's format on her own new words shows
+  // with no record of its own: a reject of Bob's format takes Ana's away too, as Word's does
+  for (const [label, from] of [
+    ['on her own new words', 6],
+    ['from before her new words', 2],
+  ] as const) {
+    test(`a format ${label}, over another person's format`, async () => {
+      await foldOf(
+        p(run('Cloud and serverless.')),
+        (doc) => {
+          apply(doc, 'ana:1', { kind: 'insert', ...EDIT, place: at(doc, 0, 6), text: 'net ' });
+          const bold = [{ localName: 'b' }];
+          const range = { from: at(doc, 0, 2), to: at(doc, 0, 8) };
+          apply(doc, 'bob:1', { kind: 'format', ...EDIT, ...range, properties: bold }, 'Bob');
+          const italic = [{ localName: 'i' }];
+          const own = { from: at(doc, 0, from), to: at(doc, 0, 8) };
+          apply(doc, 'ana:2', { kind: 'format', ...EDIT, ...own, properties: italic });
+        },
+        `a format ${label}`
+      );
+    });
+  }
 });
 
 describe("a checkpoint's room run numbers", () => {

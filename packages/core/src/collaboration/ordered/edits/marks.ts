@@ -428,7 +428,7 @@ export function formatMark(
   const seq = nextSeq(ctx.doc);
   if (own && insertedPending(ctx.doc, mark)) {
     relabel(ctx.doc, ctx.story, mark, {
-      fmts: [...mark.fmts, ownFormat(ctx, own, seq, write)],
+      fmts: [...mark.fmts, ownFormat(ctx, mark, own, seq, write)],
     });
     return into?.id ?? own.id;
   }

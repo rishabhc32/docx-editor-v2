@@ -419,15 +419,9 @@ export function withFormat(
 ): OrderedFormatRecord[] {
   const fmts = item.fmts;
 
-  // A direct edit changes the text under a pending format and leaves the format record; it
-  // names the pending formats whose change record it was made over: their reject takes it away
+  // A direct edit changes the text under a pending format and leaves the format record
   if (ctx.direct) {
-    const recorded = holdsChangeRecord(shownFace(ctx, item), 'rPrChange');
-    const over = recorded ? pendingSuggestionsOf(ctx, fmts.filter(writesRecord)) : [];
-    return [
-      ...fmts,
-      over.length > 0 && record.kind === 'properties' ? { ...record, over } : record,
-    ];
+    return [...fmts, madeOver(ctx, item, record)];
   }
 
   return withTakeOver(ctx, fmts, record, (kept) => !writesRecord(kept));
@@ -514,6 +508,17 @@ export function formatKeeps(
   return keepsPropertyChildren(children, merged);
 }
 
+/**
+ * A format with no change record of its own (a direct one, or one on its author's own pending
+ * words), naming the pending formats whose change record holds the unit (`over`): Word keeps one
+ * record for each run, so their reject takes it away too, as the engine's reject does.
+ */
+function madeOver(ctx: Ctx, item: OrderedItem, record: OrderedFormatRecord): OrderedFormatRecord {
+  const recorded = holdsChangeRecord(shownFace(ctx, item), 'rPrChange');
+  const over = recorded ? pendingSuggestionsOf(ctx, item.fmts.filter(writesRecord)) : [];
+  return over.length > 0 && record.kind === 'properties' ? { ...record, over } : record;
+}
+
 /** A format record of a suggestion's press, with its own id. */
 function formatRecord(
   suggestion: string,
@@ -525,16 +530,19 @@ function formatRecord(
 
 /**
  * A format on the author's own pending words: a record of their own suggestion that shows with
- * no change record (`untracked`), as the engine formats its own insertion. It names the change
- * that made it, so that change's undo takes it off and leaves the words.
+ * no change record (`untracked`), as the engine formats its own insertion, on the unit `item`.
+ * It names the change that made it, so that change's undo takes it off and leaves the words, and
+ * the pending formats it was made over (`madeOver`).
  */
 export function ownFormat(
   ctx: Ctx,
+  item: OrderedItem,
   own: OrderedSuggestion,
   seq: number,
   write: OrderedFormatWrite
 ): OrderedFormatRecord {
-  return { ...formatRecord(own.id, seq, write), untracked: true, change: ctx.ids.changeId };
+  const record = { ...formatRecord(own.id, seq, write), untracked: true, change: ctx.ids.changeId };
+  return madeOver(ctx, item, record);
 }
 
 /**
@@ -569,7 +577,7 @@ export function formatText(
       const own = pendingOwn(ctx, item.by);
       if (own && insertedPending(ctx.doc, item)) {
         relabel(ctx.doc, ctx.story, item, {
-          fmts: [...item.fmts, ownFormat(ctx, own, seq, written)],
+          fmts: [...item.fmts, ownFormat(ctx, item, own, seq, written)],
         });
         result ??= own.id;
         continue;

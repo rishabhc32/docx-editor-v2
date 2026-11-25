@@ -221,8 +221,11 @@ export function faceAfter(
   const shown = acceptedAndPending(ctx, fmts);
   const accepted = shownAccepted(ctx, shown.accepted, fmts);
 
-  // A format on its author's own pending words is part of their insertion: no change record
-  const inserted = shown.pending.filter(isUntracked);
+  // A format on its author's own pending words is part of their insertion: no change record. As a
+  // direct one, it goes with the reject of a format it was made over
+  const inserted = shown.pending.filter(
+    (record) => isUntracked(record) && !madeOverRejected(ctx, record, fmts)
+  );
   const pending = shown.pending.filter((record) => !isUntracked(record));
   const [earlier, later] = aroundPending([...accepted, ...inserted].sort(bySeq), pending);
   let children: readonly OoxmlNode[] = (base?.children ?? []).filter((c) => !isWml(c, 'rPrChange'));
