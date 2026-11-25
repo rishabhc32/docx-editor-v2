@@ -1,0 +1,10 @@
+{
+  "impact": "compatible",
+  "fields": [],
+  "before": "A room decided every card as seen by its statuses alone. A card the editor alone refuses to decide (the engine plans no change for it, incomplete-group) was decided in the room, and a fold of the room's file gave other cell records than the live room.",
+  "after": "Each copy composes the parts the cards are in and plans them with the engine's planRevisionBatch, as the editor plans the same decision (every item of a decision of many cards; one card's items that the editor plans with their dependencies). A card the plan leaves stays pending, refused as engine-refused with the engine's reason; the other cards are decided.",
+  "reason": "Change messages, the change log, checkpoints and the Yjs format do not change. Every copy applies the same rule to the same document and leaves the same cards. A room admits only clients of its own code version.",
+  "tests": ["packages/core/src/collaboration/ordered/__tests__/decide-engine-refused.test.ts"],
+  "changeset": "ordered-decide-engine-plan",
+  "migration": null
+}
