@@ -107,6 +107,25 @@ export function showsPastJoin(ctx: ComposeContext, item: OrderedItem): boolean {
   return !ctx.gone(item);
 }
 
+/**
+ * Whether a mark is the last of its note: a note that shows keeps a paragraph, as the engine keeps
+ * a story's last one, so its last mark draws when a decision took it away (a struck note whose
+ * other reference stays) and what shows before it stays in that paragraph.
+ */
+function endsNote(ctx: ComposeContext, mark: OrderedItem): boolean {
+  for (let next = ctx.story.tree.next(mark); next; next = ctx.story.tree.next(next)) {
+    if (next.kind === 'close' && next.token === 'note') {
+      return true;
+    }
+
+    if (!ctx.gone(next)) {
+      return false;
+    }
+  }
+
+  return false;
+}
+
 /** Draw the whole story: its blocks and its view paragraphs. */
 export function composeBlocks(ctx: ComposeContext): {
   children: OoxmlNode[];
@@ -118,7 +137,8 @@ export function composeBlocks(ctx: ComposeContext): {
   const top = (): Builder => stack[stack.length - 1] ?? root;
 
   // Notes whose references show nowhere go with them
-  const orphans = isNotesStory(ctx.story) ? notesWithHiddenReferences(ctx.doc) : null;
+  const notes = isNotesStory(ctx.story);
+  const orphans = notes ? notesWithHiddenReferences(ctx.doc) : null;
   let buffer: OrderedItem[] = [];
   let skip: string | null = null;
 
@@ -171,7 +191,7 @@ export function composeBlocks(ctx: ComposeContext): {
       continue;
     }
 
-    if (item.kind === 'mark' && ctx.gone(item)) {
+    if (item.kind === 'mark' && ctx.gone(item) && !(notes && endsNote(ctx, item))) {
       if (ctx.decidedAway(item)) for (const b of stack) b.decided = true;
       top().touched = true;
 

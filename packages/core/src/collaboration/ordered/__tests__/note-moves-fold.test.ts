@@ -227,3 +227,45 @@ describe('a decision on a deletion of words that hold a note reference, after a 
     });
   });
 });
+
+// Ana moves the reference, Olive strikes the moved copy, and Ana takes her move back: the source
+// still cites the note when Olive's strike of the note's text is accepted. The note keeps its
+// paragraph, as the engine keeps a story's last one, with what still shows in it: another
+// person's move inside the note, when Olive's strike is decided alone (the fold check decides each
+// person's suggestions, as the editor alone can decide each revision of the file)
+describe('a struck note whose other reference stays, decided', () => {
+  const strikeCopy = (doc: OrderedDocument) => {
+    const moved = apply(
+      doc,
+      'ana:1',
+      { kind: 'move', ...EDIT, from: at(doc, 0, 7), to: at(doc, 0, 14), place: at(doc, 1, 4) },
+      'Ana'
+    ).suggestions;
+    const struck = { from: at(doc, 1, 4), to: at(doc, 1, 11) };
+    const olives = apply(doc, 'olive:2', { kind: 'delete', ...EDIT, ...struck }, 'Olive');
+    apply(doc, 'ana:3', { kind: 'retract', suggestions: [...moved] }, 'Ana');
+    return olives.suggestions;
+  };
+
+  test('the note keeps an empty paragraph', async () => {
+    await checkNotes(fileWith(FOOTNOTE), strikeCopy, {
+      accepted: ['footnote reference 1', 'footnote 1:', ANNEX],
+      rejected: ['footnote reference 1', FEES, ANNEX],
+    });
+  });
+
+  test("the note keeps its paragraph with another person's move in it", async () => {
+    const edit = (doc: OrderedDocument) => {
+      const words = { from: at(doc, 2, 14, FOOTNOTES), to: at(doc, 2, 18, FOOTNOTES) };
+      const place = at(doc, 2, 1, FOOTNOTES);
+      apply(doc, 'bob:1', { kind: 'move', ...NOTE_EDIT, ...words, place }, 'Bob');
+      return strikeCopy(doc);
+    };
+
+    // Olive's card holds Bob's move, which her strike covers: its accept takes both
+    await checkNotes(fileWith(FOOTNOTE), edit, {
+      accepted: ['footnote reference 1', 'footnote 1:', ANNEX],
+      rejected: ['footnote reference 1', FEES, ANNEX],
+    });
+  });
+});
