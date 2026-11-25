@@ -569,7 +569,10 @@ function run(ctx: Ctx, edit: OrderedEdit): (string | null)[] {
       if (text.length > 0) checkText(text);
       const at = resolve(ctx, edit.at);
       const made = insertNote(ctx, at.paragraph, at.offset, edit.note);
-      if (text.length > 0) typeInNewNote(ctx, made, edit.note, text);
+      if (text.length > 0) {
+        typeInNewNote(ctx, made, edit.note, text);
+      }
+
       return [settledIfDirect(ctx, made.suggestion)];
     }
     case 'retract':

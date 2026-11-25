@@ -262,8 +262,10 @@ export function typeInNewNote(
   const notes = notesStoryOf(ctx.doc, kind);
   if (!notes) throw new OrderedRefusal('unknown-story', `the document has no ${notesRootOf(kind)}`);
   const p = orderedViewParagraph(ctx.doc, notes.name, notes.tree.summary.marks - 1);
-  if (!p || p.mark.by !== note)
+  if (!p || p.mark.by !== note) {
     throw new OrderedRefusal('malformed-story', 'the new note has no paragraph');
+  }
+
   const into: Ctx = { ...ctx, story: notes, join: suggestion, direct: false };
   insertText(into, p, p.chars.length, text);
 }
