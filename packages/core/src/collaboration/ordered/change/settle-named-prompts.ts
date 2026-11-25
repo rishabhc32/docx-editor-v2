@@ -52,7 +52,7 @@ import {
 
 /** A control's prompt as it is now: its units that show, the units that went, and its mark. */
 interface Scan {
-  /** The prompt's units that are not gone. */
+  /** The prompt's units and the markers made on it (a comment's range) that are not gone. */
   readonly prompt: readonly OrderedItem[];
   /** Units that filled the prompt and went by a decision or a deletion, not taken back. */
   readonly went: readonly OrderedItem[];
@@ -419,9 +419,16 @@ function scanControl(doc: OrderedDocument, story: OrderedStory, open: OrderedIte
       continue;
     }
 
-    if (item.kind !== 'text' && item.kind !== 'atom') continue;
-    if (item.prompt === true) {
-      if (!item.gone) prompt.push(item);
+    // A marker a fold read as the prompt's (a comment's range) goes and comes back with its units
+    if (item.prompt === true && (isUnit(item) || item.kind === 'zero')) {
+      if (!item.gone) {
+        prompt.push(item);
+      }
+
+      continue;
+    }
+
+    if (!isUnit(item)) {
       continue;
     }
 
@@ -438,7 +445,7 @@ function scanControl(doc: OrderedDocument, story: OrderedStory, open: OrderedIte
     mark = shownMarkOf(doc, story, open);
   }
 
-  return mark && prompt.length > 0 ? { prompt, went, present, takenBack, mark } : null;
+  return mark && prompt.some(isUnit) ? { prompt, went, present, takenBack, mark } : null;
 }
 
 /**
@@ -536,14 +543,20 @@ function swapPrompt(
   decided: boolean
 ): void {
   const units = promptUnits(settleContext(doc, story, apply), control, open);
-  const after = promptPlace(doc, story, promptEnd(story, open, scan));
-  if (units.length === 0 || !after) return;
-  insertItems(doc, story, after, units);
+  if (units.length === 0) {
+    return;
+  }
+
+  // The replaced prompt goes first, so the new one goes where the engine puts it among what is
+  // left: inside a comment's range made on the prompt. The control's open item shows, so the place
+  // is at the latest right after it
   const state = stateOf(doc);
   for (const unit of scan.prompt) {
     relabel(doc, story, unit, { gone: true });
     state.replaced.add(unit);
   }
+
+  insertItems(doc, story, promptPlace(doc, story, promptEnd(story, open, scan)) ?? open, units);
 
   recordUndo(doc, () => {
     for (const unit of scan.prompt) state.replaced.delete(unit);

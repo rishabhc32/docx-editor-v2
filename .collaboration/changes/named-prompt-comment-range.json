@@ -1,0 +1,10 @@
+{
+  "impact": "compatible",
+  "fields": [],
+  "before": "A reject of a value over a control's prompt that a comment's range was made on put the block the control names after the range, and kept a range the prompt held before a fold, while after a fold the block showed inside the range, or with no range.",
+  "after": "The replaced prompt goes before the place of the named block is found, so the block goes inside the range, where the engine puts it; the markers a fold read as the prompt's go and come back with its units (scanControl).",
+  "reason": "Change messages, the change log and its kinds keep their meaning, and the Yjs document format and the checkpoint format do not change. Only the room's units and Word file of such a control after the decision change, and they now equal the engine and a fold. An ordered room admits only clients of its own code version.",
+  "tests": ["packages/core/src/collaboration/ordered/__tests__/checkpoint-fold-prompts.test.ts"],
+  "changeset": "named-prompt-comment-range",
+  "migration": null
+}

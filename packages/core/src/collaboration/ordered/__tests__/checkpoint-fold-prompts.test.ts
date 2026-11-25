@@ -155,39 +155,63 @@ describe("a control's prompt shown again, decided card by card after a fold", ()
   }
 
   // After a fold the control names the glossary block Ben's value kept: a reject of Ana's value
-  // over the prompt shows that block, not Olive's link she made on the prompt, as the engine does
-  test('a link on a prompt that names a block, under a value rejected', async () => {
+  // over the prompt shows that block, as the engine does. A link on the prompt goes; a comment's
+  // range made before the fold is the prompt's and goes with it; one made after the fold keeps its
+  // range round the block
+  const signed = () => {
     const prompt = t('Click here to enter text.', '<w:rStyle w:val="PlaceholderText"/>');
     const control =
       '<w:sdt><w:sdtPr><w:id w:val="4"/><w:showingPlcHdr/><w:text/></w:sdtPr>' +
       `<w:sdtContent>${prompt}</w:sdtContent></w:sdt>`;
-    const file = docx(p(t('Signed by ') + control + t(' for the buyer.')));
-    const { document: doc, base } = openOrderedWordFile(file, { file: 1 });
-    const blobs = mediaStore(base);
-    const value = (room: OrderedDocument, text: string) =>
-      ({
-        kind: 'control-value',
-        ...EDIT,
-        control: addressOf(opens(room, 'sdt')[0]!),
-        value: { kind: 'text', text },
-      }) as const;
-    const reject = (room: OrderedDocument, id: string) =>
-      ({
-        kind: 'decide',
-        cards: [{ suggestions: orderedCardSeen(room, id) ?? [] }],
-        status: 'rejected',
-      }) as const;
-    apply(doc, 'ben:1', value(doc, 'Acme'), 'Ben');
-    apply(doc, 'olive:1', reject(doc, 'S:ben:1.1'), 'Olive');
-    const { document: room, base: named } = await folded(doc, base, 2, blobs);
-    const link = { kind: 'insert-link', ...DIRECT, href: 'https://example.com/fees' } as const;
-    apply(room, 'olive:2', { ...link, from: at(room, 0, 31), to: at(room, 0, 33) }, 'Olive');
-    apply(room, 'ana:1', value(room, 'Acme due'));
-    await checkFold(room, named, blobs, 'a link on a named prompt');
-    apply(room, 'olive:3', reject(room, 'S:ana:1.1'), 'Olive');
-    expect(textOf(room, 0)).toBe('Signed by Click here to enter text. for the buyer.');
-    expect(partsOf(room).join('')).not.toContain('hyperlink');
-  });
+    return docx(p(t('Signed by ') + control + t(' for the buyer.')));
+  };
+  const value = (room: OrderedDocument, text: string) =>
+    ({
+      kind: 'control-value',
+      ...EDIT,
+      control: addressOf(opens(room, 'sdt')[0]!),
+      value: { kind: 'text', text },
+    }) as const;
+  const reject = (room: OrderedDocument, id: string) =>
+    ({
+      kind: 'decide',
+      cards: [{ suggestions: orderedCardSeen(room, id) ?? [] }],
+      status: 'rejected',
+    }) as const;
+  const link = { kind: 'insert-link', ...DIRECT, href: 'https://example.com/fees' } as const;
+  const comment = { kind: 'comment', part: BODY, text: 'Why?' } as const;
+  const block =
+    '<w:r><w:rPr><w:rStyle w:val="PlaceholderText"/></w:rPr><w:t>Click here to enter text.</w:t></w:r>';
+  const around = new RegExp(`^<w:commentRangeStart w:id="\\d+"/>${block}<w:commentRangeEnd `);
+  for (const [name, mark, early, content] of [
+    ['a link', link, false, new RegExp(`^${block}$`)],
+    ["a comment's range made before the fold", comment, true, new RegExp(`^${block}$`)],
+    ["a comment's range made after the fold", comment, false, around],
+  ] as const) {
+    test(`${name} on a prompt that names a block, under a value rejected`, async () => {
+      const { document: doc, base } = openOrderedWordFile(signed(), { file: 1 });
+      const blobs = mediaStore(base);
+      const marked = (room: OrderedDocument) =>
+        apply(room, 'olive:2', { ...mark, from: at(room, 0, 31), to: at(room, 0, 33) }, 'Olive');
+      apply(doc, 'ben:1', value(doc, 'Acme'), 'Ben');
+      apply(doc, 'olive:1', reject(doc, 'S:ben:1.1'), 'Olive');
+      if (early) {
+        marked(doc);
+      }
+
+      const { document: room, base: named } = await folded(doc, base, 2, blobs);
+      if (!early) {
+        marked(room);
+      }
+
+      apply(room, 'ana:1', value(room, 'Acme due'));
+      await checkFold(room, named, blobs, `${name} on a named prompt`);
+      apply(room, 'olive:3', reject(room, 'S:ana:1.1'), 'Olive');
+      expect(textOf(room, 0)).toBe('Signed by Click here to enter text. for the buyer.');
+      const [, shown] = partsOf(room)[0]!.match(/<w:sdtContent>(.*?)<\/w:sdtContent>/) ?? [];
+      expect(shown).toMatch(content);
+    });
+  }
 
   // The prompt a party typed over holds a combo box: after a fold the glossary gives it back, and a
   // reject of the typing shows the combo box in it again, not its words alone, and each of its
