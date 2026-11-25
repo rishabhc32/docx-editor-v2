@@ -46,12 +46,7 @@ import {
   withChildren,
   wmlAttribute,
 } from '../ooxml-nodes.ts';
-import {
-  isChangeRecord,
-  type ComposeContext,
-  type DrawnOver,
-  type DrawnTakeover,
-} from './context.ts';
+import { isChangeRecord, type ComposeContext, type DrawnTakeover } from './context.ts';
 import { withoutRemoved, withParagraphOp } from './paragraph-ops.ts';
 
 type AnyRecord = OrderedFormatRecord | OrderedPropertyRecord;
@@ -175,17 +170,21 @@ export function fileRecordAlone(
 }
 
 /**
- * Accepted records made before the first pending one, and those made after it. The engine
- * keeps one change record holding the properties before the first pending change; a direct
- * change made later shows on top of it.
+ * A property's records in the order changes made them, around the first pending one: the decided
+ * ones made before it, which Word's one change record holds as the original, and from it on the
+ * pending and decided ones together, so the latest write shows on top, as Word shows it.
  */
-export function aroundPending<T extends AnyRecord>(
-  accepted: readonly T[],
-  pending: readonly AnyRecord[]
+export function fromFirstPending<T extends AnyRecord>(
+  decided: readonly T[],
+  pending: readonly T[]
 ): [T[], T[]] {
   const first = pending[0]?.seq;
-  if (first === undefined) return [[...accepted], []];
-  return [accepted.filter((r) => r.seq < first), accepted.filter((r) => r.seq > first)];
+  if (first === undefined) {
+    return [[...decided], []];
+  }
+
+  const later = decided.filter((r) => r.seq > first);
+  return [decided.filter((r) => r.seq < first), [...pending, ...later].sort(bySeq)];
 }
 
 /** A format on its author's own pending words, shown with no change record. */
@@ -202,56 +201,48 @@ function holderOf(records: readonly AnyRecord[], suggestion: string): string | u
     ?.suggestion;
 }
 
+/** The pending records' suggestions a record with no change record of its own was made over. */
+export const overOf = (record: AnyRecord): readonly string[] =>
+  'over' in record ? (record.over ?? []) : [];
+
 /**
  * Whether a direct record (or a column's lent record) was made over a pending record whose holder
- * is now rejected (or drawn so): Word keeps one record, the properties before the first pending
- * change, so the reject takes the direct change away too. `keeps` names a rejected suggestion
- * whose reject keeps them.
+ * (`holderOf`) passes `test`: Word keeps one record, the properties before the first pending
+ * change, so that record's decision decides the direct change too.
  */
-export function madeOverRejected(
-  ctx: ComposeContext,
+export function madeOverWhere(
   record: AnyRecord,
   records: readonly AnyRecord[],
-  keeps: (suggestion: string) => boolean = () => false
+  test: (holder: string) => boolean
 ): boolean {
-  const over = 'over' in record ? (record.over ?? []) : [];
-  return over.some((suggestion) => {
+  return overOf(record).some((suggestion) => {
     const holder = holderOf(records, suggestion);
-    return holder !== undefined && ctx.rejectedOrDrawnSo(holder) && !keeps(holder);
+    return holder !== undefined && test(holder);
   });
 }
 
 /**
- * `start` under the decided records drawn over pending ones (`later`), in their order. When some
- * were made over a pending record with no change record of their own (`over`), also those
- * records and `start` under the others: Word's one change record does not hold them, so a
- * checkpoint keeps them.
+ * Whether a direct record was made over a pending record whose holder is now rejected (or drawn
+ * so): the reject takes the direct change away too. `keeps` names a rejected suggestion whose
+ * reject keeps them.
  */
-export function drawnLater<T, R extends AnyRecord>(
-  start: T,
-  later: readonly R[],
-  apply: (current: T, record: R) => T,
-  childrenOf: (current: T) => readonly OoxmlNode[]
-): { readonly drawn: T; readonly over: DrawnOver | undefined } {
-  let drawn = start;
-  for (const record of later) {
-    drawn = apply(drawn, record);
-  }
+export const madeOverRejected = (
+  ctx: ComposeContext,
+  record: AnyRecord,
+  records: readonly AnyRecord[],
+  keeps: (suggestion: string) => boolean = () => false
+): boolean =>
+  madeOverWhere(record, records, (holder) => ctx.rejectedOrDrawnSo(holder) && !keeps(holder));
 
-  const records = later.filter((record) => 'over' in record && (record.over?.length ?? 0) > 0);
-  if (records.length === 0) {
-    return { drawn, over: undefined };
-  }
-
-  let own = start;
-  for (const record of later) {
-    if (!records.includes(record)) {
-      own = apply(own, record);
-    }
-  }
-
-  return { drawn, over: { own: childrenOf(own).filter((c) => !isChangeRecord(c)), records } };
-}
+/**
+ * The records drawn from the first pending one, when one of them was made over a pending record
+ * with no change record of its own (`over`): Word's change record does not say them, so a
+ * checkpoint keeps them all.
+ */
+export const madeOverDrawn = <T extends AnyRecord>(
+  drawn: readonly T[]
+): readonly T[] | undefined =>
+  drawn.some((record) => overOf(record).length > 0) ? drawn : undefined;
 
 /**
  * The format records a run draws, in their order: accepted and pending ones, less those a reject
@@ -293,25 +284,17 @@ export function faceAfter(
     (record) => isUntracked(record) && !madeOverRejected(ctx, record, fmts)
   );
   const pending = shown.pending.filter((record) => !isUntracked(record));
-  const [earlier, later] = aroundPending([...accepted, ...inserted].sort(bySeq), pending);
+  const [earlier, drawn] = fromFirstPending([...accepted, ...inserted].sort(bySeq), pending);
   let children: readonly OoxmlNode[] = (base?.children ?? []).filter((c) => !isWml(c, 'rPrChange'));
   for (const record of earlier) children = applyFormat(record, children, ctx.mint);
   const old = children;
   const taken: DrawnTakeover[] = [];
-  for (const record of pending) {
+  for (const record of drawn) {
     const before = children;
     children = applyFormat(record, children, ctx.mint);
     noteTakeover(ctx, taken, record, before, children);
   }
 
-  // A decided change made after a pending one shows on top, and the record keeps the original
-  const drawn = drawnLater(
-    children,
-    later,
-    (current, record) => applyFormat(record, current, ctx.mint),
-    (current) => current
-  );
-  children = drawn.drawn;
   const latest = pending[pending.length - 1];
   const own = fileRecordAlone(ctx.doc, shown.accepted, pending);
   if (own) {
@@ -334,7 +317,7 @@ export function faceAfter(
     );
   }
 
-  ctx.keepTakeovers(children, taken, drawn.over);
+  ctx.keepTakeovers(children, taken, madeOverDrawn(drawn));
   if (children.length === 0 && !base) return null;
   return withChildren(
     base ?? ctx.drawn(build(ctx.mint(), 'runProperties', 'rPr', [], [])),
@@ -436,27 +419,27 @@ export function paragraphPropertiesAfter(
   );
   const pending = shown.pending.filter((record) => record.untracked !== true);
   const decided = shownAccepted(ctx, shown.accepted, records);
-  const [earlier, later] = aroundPending([...decided, ...inserted].sort(bySeq), pending);
+  const [earlier, drawn] = fromFirstPending([...decided, ...inserted].sort(bySeq), pending);
   for (const record of earlier) current = withDecidedMarkRecord(ctx, current, record, keptByMark);
   const own = fileRecordAlone(ctx.doc, [...shown.accepted, ...inserted], pending);
   const taken: DrawnTakeover[] = [];
-  for (const record of pending) {
+
+  // A decided change made after the first pending one keeps the pending record
+  const keepRecord = (c: OoxmlNode) => keptByMark(c) || isWml(c, 'pPrChange');
+  for (const record of drawn) {
     const before = current?.children ?? [];
-    if (record.kind === 'paragraphOp') current = withPendingParagraphOp(ctx, current, record);
-    else current = withPendingMarkRecord(ctx, current, record, own);
+    if (!pending.includes(record)) {
+      current = withDecidedMarkRecord(ctx, current, record, keepRecord);
+    } else if (record.kind === 'paragraphOp') {
+      current = withPendingParagraphOp(ctx, current, record);
+    } else {
+      current = withPendingMarkRecord(ctx, current, record, own);
+    }
+
     noteTakeover(ctx, taken, record, before, current?.children ?? []);
   }
 
-  // A decided change made after a pending one shows on top; the pending record stays
-  const keepRecord = (c: OoxmlNode) => keptByMark(c) || isWml(c, 'pPrChange');
-  const drawn = drawnLater(
-    current,
-    later,
-    (under, record) => withDecidedMarkRecord(ctx, under, record, keepRecord),
-    (under) => under?.children ?? []
-  );
-  current = drawn.drawn;
-  ctx.keepTakeovers(current?.children ?? [], taken, drawn.over);
+  ctx.keepTakeovers(current?.children ?? [], taken, madeOverDrawn(drawn));
   return current && current.children.length === 0 && !base ? null : current;
 }
 
@@ -817,7 +800,7 @@ function containerAfter(ctx: ComposeContext, open: OrderedItem, child: OoxmlNode
 
     return withLentWidth(current, lentFrom, given);
   };
-  const [earlier, later] = aroundPending([...decided, ...kept].sort(bySeq), pending);
+  const [earlier, drawn] = fromFirstPending([...decided, ...kept].sort(bySeq), pending);
   const under = [...earlier, ...unrecorded].sort(bySeq);
   let inner: readonly OoxmlNode[] = child.children;
   for (const record of under) {
@@ -827,7 +810,7 @@ function containerAfter(ctx: ComposeContext, open: OrderedItem, child: OoxmlNode
   const loaded = inner;
   let old = loaded;
   const taken: DrawnTakeover[] = [];
-  for (const record of [...pending, ...later]) {
+  for (const record of drawn) {
     const before = inner;
     inner = draw(record, inner);
     noteTakeover(ctx, taken, record, before, inner);

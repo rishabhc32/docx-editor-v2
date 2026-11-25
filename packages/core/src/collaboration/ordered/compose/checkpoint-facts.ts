@@ -18,11 +18,12 @@ import type {
 import type {
   CheckpointMadeOver,
   CheckpointOverRecord,
-  CheckpointOverWrite,
+  CheckpointOverTarget,
 } from '../model/checkpoint-over.ts';
 import type { CheckpointSuggestion } from '../model/checkpoint-suggestions.ts';
 import { withCheckpointLabels } from '../model/checkpoint-labels.ts';
 import {
+  recordedProperties,
   takenProperties,
   type CheckpointTaken,
   type CheckpointTakeover,
@@ -43,6 +44,7 @@ import {
   type OrderedResource,
 } from '../model/resources.ts';
 import { revisionIdsOf } from '../model/revision-ids.ts';
+import { takenFrom } from '../model/takeovers.ts';
 import type {
   OrderedDocument,
   OrderedElementRecord,
@@ -55,6 +57,7 @@ import type {
 } from '../model/types.ts';
 import { attributeOf, eachElement, isWml } from '../ooxml-nodes.ts';
 import type { RoomNumber } from './context.ts';
+import { overOf } from './properties.ts';
 import { styleResourceKeyOf } from './resources.ts';
 import type { OrderedPartTakeovers } from './package.ts';
 
@@ -365,7 +368,9 @@ function checkpointTakeovers(
   for (const records of held.values()) {
     for (const [id, found] of records) {
       const label = labels.get(id);
-      if (label === undefined || found.taken.length === 0) {
+
+      // A change record with a record made over it keeps every record in `madeOver`
+      if (label === undefined || found.taken.length === 0 || found.drawn !== undefined) {
         continue;
       }
 
@@ -388,8 +393,8 @@ function checkpointTakeovers(
 }
 
 /**
- * Each change record of the file with records made over its pending ones, by its label: the
- * properties drawn without them, and each record's write.
+ * Each change record of the file with a record made over its pending ones, by its label: every
+ * record the room draws from the first pending one, as the room holds it.
  */
 function checkpointMadeOver(
   doc: OrderedDocument,
@@ -397,31 +402,14 @@ function checkpointMadeOver(
   labels: ReadonlyMap<string, number>,
   list: SuggestionList
 ): CheckpointMadeOver[] {
-  const listed = (id: string): number[] => {
-    const suggestion = doc.suggestions.get(id);
-    return suggestion === undefined ? [] : [list.indexOf(suggestion)];
-  };
   const out: CheckpointMadeOver[] = [];
   for (const records of held.values()) {
-    for (const [id, { record, over: drawn }] of records) {
+    for (const [id, { record, drawn }] of records) {
       const label = labels.get(id);
-      if (label === undefined || drawn === undefined) {
-        continue;
-      }
-
-      const madeOver = drawn.records.flatMap((made): CheckpointOverRecord[] => {
-        const write = overWrite(made);
-        const [suggestion] = listed(made.suggestion);
-        if (write === undefined || suggestion === undefined) {
-          return [];
-        }
-
-        const over = 'over' in made ? (made.over ?? []) : [];
-        const untracked = 'untracked' in made ? made.untracked : undefined;
-        return [{ suggestion, over: over.flatMap(listed), untracked, write }];
-      });
-      if (madeOver.length > 0) {
-        out.push({ label, properties: takenProperties(record, drawn.own), records: madeOver });
+      const kept = drawn?.map((made) => overRecord(doc, list, made));
+      if (label !== undefined && kept !== undefined && kept.every((r) => r !== undefined)) {
+        const target = recordedProperties(record) as CheckpointOverTarget;
+        out.push({ label, target, records: kept });
       }
     }
   }
@@ -429,19 +417,52 @@ function checkpointMadeOver(
   return out;
 }
 
-/** A record's write as the manifest keeps it; undefined for a record of no such kind. */
-function overWrite(
+/** A record as the manifest keeps it; undefined when a suggestion it names is not the document's. */
+function overRecord(
+  doc: OrderedDocument,
+  list: SuggestionList,
   record: OrderedFormatRecord | OrderedPropertyRecord
-): CheckpointOverWrite | undefined {
+): CheckpointOverRecord | undefined {
+  const chain = takenFrom(record);
+  const over = overOf(record);
+  const [suggestion] = listedOf(doc, list, [record.suggestion]);
+  const taken = listedOf(doc, list, chain);
+  const listedOver = listedOf(doc, list, over);
+  if (
+    suggestion === undefined ||
+    taken.length !== chain.length ||
+    listedOver.length !== over.length
+  ) {
+    return undefined;
+  }
+
+  const fields = {
+    suggestion,
+    replaced: taken.at(-1),
+    replacedEarlier: taken.length > 1 ? taken.slice(0, -1) : undefined,
+    over: over.length > 0 ? listedOver : undefined,
+    untracked: 'untracked' in record ? record.untracked : undefined,
+  };
   switch (record.kind) {
     case 'properties': {
       const { properties, remove, style } = record;
-      return { format: { properties, remove, style } };
+      return { ...fields, element: null, write: { format: { properties, remove, style } } };
+    }
+    case 'face':
+      return { ...fields, element: record.face };
+    case 'element': {
+      const { element, merge, recordUnchanged } = record;
+      return { ...fields, element, merge, recordUnchanged };
     }
     case 'paragraphOp':
-      return { paragraphOp: record.op };
+      return { ...fields, element: null, write: { paragraphOp: record.op } };
     case 'sectionOp':
-      return { sectionOp: record.op };
+      return {
+        ...fields,
+        element: null,
+        write: { sectionOp: record.op },
+        keptOnReject: record.keptOnReject,
+      };
     default:
       return undefined;
   }
@@ -461,6 +482,15 @@ function inRoomOrder(
     .sort((a, b) => a.suggestion.seq - b.suggestion.seq);
   const place = new Map(sorted.map(({ k }, n) => [k, n]));
   const renumbered = (k: number): number => place.get(k) ?? k;
+
+  // A record of properties as the room holds it names its suggestions by their places
+  const renumberedRecord = <R extends CheckpointUntrackedRecord>(r: R): R => ({
+    ...r,
+    suggestion: renumbered(r.suggestion),
+    replaced: r.replaced === undefined ? undefined : renumbered(r.replaced),
+    replacedEarlier: r.replacedEarlier?.map(renumbered),
+    over: r.over?.map(renumbered),
+  });
   return {
     suggestions: sorted.map(({ suggestion }) => list.entryOf(suggestion)),
     commentPersons: facts.commentPersons,
@@ -473,16 +503,7 @@ function inRoomOrder(
       })),
     })),
     namespacePersons: facts.namespacePersons,
-    untracked: facts.untracked.map((u) => ({
-      ...u,
-      records: u.records.map((r) => ({
-        ...r,
-        suggestion: renumbered(r.suggestion),
-        replaced: r.replaced === undefined ? undefined : renumbered(r.replaced),
-        replacedEarlier: r.replacedEarlier?.map(renumbered),
-        over: r.over?.map(renumbered),
-      })),
-    })),
+    untracked: facts.untracked.map((u) => ({ ...u, records: u.records.map(renumberedRecord) })),
     changeRecords: facts.changeRecords.map((c) => ({
       ...c,
       records: c.records.map((r) => ({
@@ -491,14 +512,7 @@ function inRoomOrder(
         replaced: r.replaced === undefined ? undefined : renumbered(r.replaced),
       })),
     })),
-    madeOver: facts.madeOver.map((m) => ({
-      ...m,
-      records: m.records.map((r) => ({
-        ...r,
-        suggestion: renumbered(r.suggestion),
-        over: r.over.map(renumbered),
-      })),
-    })),
+    madeOver: facts.madeOver.map((m) => ({ ...m, records: m.records.map(renumberedRecord) })),
     lists: facts.lists.map((l) => ({ ...l, suggestion: renumbered(l.suggestion) })),
     styles: facts.styles.map((s) => ({ ...s, suggestion: renumbered(s.suggestion) })),
     resources: facts.resources.map((r) => ({ ...r, suggestion: renumbered(r.suggestion) })),

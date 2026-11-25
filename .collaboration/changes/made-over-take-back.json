@@ -1,13 +1,14 @@
 {
   "impact": "compatible",
   "fields": [],
-  "before": "A direct format, paragraph, page, table or cell write, or a format on its author's own new words, made over another person's pending record shows in Word's one change record, which a load read as part of the pending suggestion's record: after a fold, that person's take-back of the record took the write away too, while live keeps it.",
-  "after": "The checkpoint manifest has an optional section madeOver: for each run's, paragraph's or section's change record with such records, by its label, the properties the pending records give without them and each record's write, read with the readers of the change that makes it. The open puts them back after the takeovers. A table's or a cell's properties with such a record are listed in untracked with every record. An entry that does not fit the file refuses the checkpoint as checkpoint-manifest.",
+  "before": "A direct format, paragraph, page, table or cell write, or a format on its author's own new words, made over another person's pending record shows in Word's one change record, which a load read as part of the pending suggestion's record: after a fold, that person's take-back of the record took the write away too, while live keeps it. Compose drew every decided record made after the first pending one on top of all the pending ones, so a pending change made after a direct one showed under it, where Word shows it on top; after a fold an accept gave the other order. A direct section break copied the section it cut with a direct write made over a pending record, so a reject of that record on the new section kept the write, where Word's reject of the copied record takes it.",
+  "after": "Compose draws a property's records from the first pending one in the order changes made them, pending and decided together. The checkpoint manifest has an optional section madeOver: for each run's, paragraph's or section's change record with a record made over its pending ones, by its label, every record compose draws from the first pending one, as the room holds it (its write, or the properties a loaded record gives, with its suggestion, takeover links and over), read with the readers of the change that makes it. The open puts them in the place of the item's records of those properties after the takeovers. A table's or a cell's properties with such a record are listed in untracked with every record. A direct break's copy leaves out a direct write made over a pending record and takes it with the pending records it copies. An entry that does not fit the file refuses the checkpoint as checkpoint-manifest.",
   "reason": "The section is optional and new, and left out when empty: a checkpoint without it reads as before, version 5 stays and the golden checkpoints open to the same prints. Change messages, the change log and the Yjs format do not change. An ordered room admits only clients of its own code version, and the reader refuses a checkpoint it cannot read as checkpoint-manifest. Ordered rooms are not deployed yet, so no room needs a migration.",
   "tests": [
     "packages/core/src/collaboration/ordered/__tests__/checkpoint-fold-over.test.ts",
-    "packages/core/src/collaboration/ordered/__tests__/fold-rules.test.ts",
-    "packages/core/src/collaboration/ordered/__tests__/checkpoint-golden.test.ts"
+    "packages/core/src/collaboration/ordered/__tests__/checkpoint-fold-shapes-1.test.ts",
+    "packages/core/src/collaboration/ordered/__tests__/checkpoint-golden.test.ts",
+    "packages/core/src/collaboration/ordered/__tests__/fold-rules.test.ts"
   ],
   "changeset": "made-over-take-back",
   "migration": null

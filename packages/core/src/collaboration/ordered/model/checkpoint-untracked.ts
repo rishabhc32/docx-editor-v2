@@ -162,12 +162,17 @@ function readEntry(value: unknown, path: string, suggestions: number): Checkpoin
       ? readPropertiesXml(f.get('properties'), at(path, 'properties'), new Set([target]))
       : undefined,
     records: records.map((record, j) =>
-      readRecord(record, at(at(path, 'records'), j), target, suggestions)
+      readPropertyRecord(record, at(at(path, 'records'), j), target, suggestions)
     ),
   };
 }
 
-function readRecord(
+/**
+ * A record of properties as the room holds it, its element read as properties of `target`.
+ *
+ * @throws Invalid when it does not read.
+ */
+export function readPropertyRecord(
   value: unknown,
   path: string,
   target: string,

@@ -19,7 +19,7 @@ import {
 import { bodySectionOf, metricsOfSection } from '../../../store/store/tree-op-section-address.ts';
 import { build } from '../../../store/store/tree-op-tracked.ts';
 import type { RevisionAttributionInput } from '../../../store/store/tree-op-types.ts';
-import { isHidden, statusOf } from '../model/document.ts';
+import { isHidden, isPending, statusOf } from '../model/document.ts';
 import { REVISION_ROLE } from '../model/revision-ids.ts';
 import type { OrderedSectionOp, OrderedSectionRecord } from '../model/sections.ts';
 import type {
@@ -43,10 +43,11 @@ import type { ComposeContext, DrawnTakeover } from './context.ts';
 import { withStoryBlocks } from './paragraph-ops.ts';
 import {
   acceptedAndPending,
-  aroundPending,
-  drawnLater,
   fileRecordAlone,
+  fromFirstPending,
+  madeOverDrawn,
   madeOverRejected,
+  madeOverWhere,
   noteTakeover,
 } from './properties.ts';
 
@@ -274,7 +275,7 @@ export function sectionAfter(
   const pending = shown.pending.filter((r) => !untracked(r));
   const rejected = records.filter((r) => isRejectedWrite(ctx, r, records));
   const decided = [...accepted, ...rejected].sort((a, b) => a.seq - b.seq);
-  const [earlier, later] = aroundPending(decided, pending);
+  const [earlier, drawn] = fromFirstPending(decided, pending);
   let section = withoutSectionRecord(base);
   for (const record of earlier) {
     section = applyDecided(ctx, section, record, records);
@@ -288,25 +289,20 @@ export function sectionAfter(
     (r): r is OrderedElementRecord => r.kind === 'element' && r.fileRecord !== undefined
   )?.fileRecord;
   let held = (standing && firstElement(standing)) ?? section;
-  for (const record of later.filter(untracked)) {
+  for (const record of drawn.filter(untracked)) {
     held = applyDecided(ctx, held, record, records);
   }
 
   const prior = held?.children ?? [];
   const taken: DrawnTakeover[] = [];
-  for (const record of pending) {
+  for (const record of drawn) {
     const before = section?.children ?? [];
-    section = applyRecord(ctx, section, record);
+    section = pending.includes(record)
+      ? applyRecord(ctx, section, record)
+      : applyDecided(ctx, section, record, records);
     noteTakeover(ctx, taken, record, before, section?.children ?? []);
   }
 
-  const drawn = drawnLater(
-    section,
-    later,
-    (under, record) => applyDecided(ctx, under, record, records),
-    (under) => under?.children ?? []
-  );
-  section = drawn.drawn;
   if (section === null) return null;
   const fileRecord = fileRecordAlone(ctx.doc, accepted, pending);
   const latest = pending.at(-1);
@@ -325,17 +321,18 @@ export function sectionAfter(
   }
 
   const written = cloneWithNewIds(withChildren(section, children), ids) as OoxmlElement;
-  ctx.keepTakeovers(written.children, taken, drawn.over);
+  ctx.keepTakeovers(written.children, taken, madeOverDrawn(drawn));
   return written;
 }
 
 /**
  * The section a holder shows without its pending tracked writes: `base` under its decided
- * records and the untracked ones still pending, in the order changes made them. An untracked
- * record has no change record to take back (a break's own section on its author's new mark, a
- * type Word writes untracked), so the section shows it as it is. What a section break's copy
- * takes as its own: the engine copies the section as it shows, and the pending tracked writes
- * go with the copy under their own suggestions.
+ * records and the untracked ones still pending, in the order changes made them, but a direct one
+ * made over a pending record, which Word's change record holds with it. An untracked record has
+ * no change record to take back (a break's own section on its author's new mark, a type Word
+ * writes untracked), so the section shows it as it is. What a section break's copy takes as its
+ * own: the engine copies the section as it shows, and the pending tracked writes, with the direct
+ * ones made over them, go with the copy under their own suggestions.
  */
 export function sectionWithoutPendingWrites(
   ctx: ComposeContext,
@@ -343,6 +340,8 @@ export function sectionWithoutPendingWrites(
   base: OoxmlElement | null
 ): OoxmlElement | null {
   const records = sectionRecordsOf(holder);
+  const held = (suggestion: string) =>
+    ctx.rejectedOrDrawnSo(suggestion) || isPending(ctx.doc, suggestion);
   const shown = (r: SectionRecord): boolean => {
     const status = statusOf(ctx.doc, r.suggestion);
     if (r.kind === 'sectionOp' && r.keptOnReject === true) {
@@ -353,7 +352,7 @@ export function sectionWithoutPendingWrites(
       return status === 'pending';
     }
 
-    if (status === 'accepted' && !madeOverRejected(ctx, r, records)) {
+    if (status === 'accepted' && !madeOverWhere(r, records, held)) {
       return true;
     }
 

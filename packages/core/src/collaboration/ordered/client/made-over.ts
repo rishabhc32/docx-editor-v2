@@ -1,48 +1,43 @@
-// A checkpoint's records made over a change record's pending ones back in the document (design
-// D14).
+// A checkpoint's records of the change records with a record made over them, back in the
+// document (design D14).
 
 import type { OoxmlElement } from '../../../store/package/ooxml-tree.ts';
-import type { CheckpointMadeOver, CheckpointOverRecord } from '../model/checkpoint-over.ts';
+import type {
+  CheckpointMadeOver,
+  CheckpointOverRecord,
+  CheckpointOverTarget,
+} from '../model/checkpoint-over.ts';
 import { createOrderedItem } from '../model/document.ts';
 import { nextSeq, relabel, replaceItems } from '../model/mutations.ts';
 import type {
   OrderedDocument,
   OrderedFormatRecord,
-  OrderedItem,
   OrderedPropertyRecord,
-  OrderedStory,
+  OrderedPropertyTarget,
 } from '../model/types.ts';
 import { isWml } from '../ooxml-nodes.ts';
 import { holdersOf, type Holder } from './takeovers.ts';
 
-/** A made-over record with its suggestions' ids and its order, the item's last. */
-type Made = Omit<CheckpointOverRecord, 'suggestion' | 'over'> & {
+/** A listed record with its suggestions' ids and its new order. */
+type Restored = Omit<
+  CheckpointOverRecord,
+  'suggestion' | 'replaced' | 'replacedEarlier' | 'over'
+> & {
   readonly suggestion: string;
   readonly seq: number;
-  readonly over: readonly string[];
+  readonly replaced?: string;
+  readonly replacedEarlier?: readonly string[];
+  readonly over?: readonly string[];
 };
 
-/** A file's format record. */
-type FaceRecord = Extract<OrderedFormatRecord, { readonly kind: 'face' }>;
-
-/** What one item gets back: each holder with its properties, and the records made over it. */
-interface ItemOver {
-  readonly story: OrderedStory;
-  readonly fmts: Map<OrderedFormatRecord, readonly OrderedFormatRecord[]>;
-  readonly props: Map<OrderedPropertyRecord, readonly OrderedPropertyRecord[]>;
-  /** A field's runs: each one's own face under the holder, by its piece's place. */
-  readonly faces: Map<number, Map<string, OoxmlElement>>;
-}
-
 /**
- * Put back in the document loaded from a checkpoint the records made over the pending records of
- * each change record the manifest names: each loaded record that holds it gives the properties
- * the manifest gives, without those records, and the records follow it, each in an order after
- * every record of the document, so compose draws them on top as the room did. `labels` gives the
- * elements that carry each label. False when an entry does not fit the file: its label on no
- * change record of its properties that a loaded record holds, or on two; a suggestion not listed,
- * or of another status than its record's (a record on its author's own new words is pending, a
- * direct one accepted).
+ * Put back in the document loaded from a checkpoint the records of each change record the
+ * manifest names: on each item whose loaded record holds it, the manifest's records take the
+ * place of the item's records of those properties (the loaded one and those a takeover put
+ * back), in the order they apply, each with a new order after every record of the document.
+ * `labels` gives the elements that carry each label. False when an entry does not fit the file:
+ * its label on no change record of its properties that a loaded record holds, or on two; a
+ * suggestion not listed; a record on its author's own new words whose suggestion is not pending.
  */
 export function withCheckpointMadeOver(
   doc: OrderedDocument,
@@ -55,158 +50,121 @@ export function withCheckpointMadeOver(
   }
 
   const holders = holdersOf(doc);
-  const items = new Map<OrderedItem, ItemOver>();
-  for (const { label, properties, records } of madeOver) {
+  for (const { label, target, records } of madeOver) {
     const held = (labels.get(String(label)) ?? []).filter((e) => holders.has(e));
     const element = held[0];
-    const made = madeRecords(doc, records, listedIds);
+    const restored = restoredRecords(doc, records, listedIds);
     if (
       held.length !== 1 ||
       element === undefined ||
-      !isWml(element, `${properties.localName}Change`) ||
-      made === null ||
-      !(holders.get(element) ?? []).every((holder) => noteOver(items, holder, properties, made))
+      !isWml(element, `${target}Change`) ||
+      restored === null ||
+      !(holders.get(element) ?? []).every((holder) => putBack(doc, holder, target, restored))
     ) {
       return false;
     }
   }
 
-  for (const [item, over] of items) {
-    putBack(doc, item, over);
-  }
-
   return true;
 }
 
-/** The listed records with their suggestions' ids, each a new order after every record. */
-function madeRecords(
+/** The listed records with their suggestions' ids, each a new order; null when one does not fit. */
+function restoredRecords(
   doc: OrderedDocument,
   records: readonly CheckpointOverRecord[],
   listedIds: readonly string[]
-): Made[] | null {
-  const out: Made[] = [];
-  for (const { suggestion: k, over: madeOver, untracked, write } of records) {
-    const suggestion = listedIds[k];
-    const over = madeOver.flatMap((j) => listedIds[j] ?? []);
-    const status = suggestion === undefined ? undefined : doc.suggestions.get(suggestion)?.status;
+): Restored[] | null {
+  const out: Restored[] = [];
+  for (const record of records) {
+    const suggestion = listedIds[record.suggestion];
+    const replaced = record.replaced === undefined ? undefined : listedIds[record.replaced];
+    const replacedEarlier = record.replacedEarlier?.flatMap((k) => listedIds[k] ?? []);
+    const over = record.over?.flatMap((k) => listedIds[k] ?? []);
     if (
       suggestion === undefined ||
-      status !== (untracked === true ? 'pending' : 'accepted') ||
-      over.length !== madeOver.length
+      (record.replaced !== undefined && replaced === undefined) ||
+      replacedEarlier?.length !== record.replacedEarlier?.length ||
+      over?.length !== record.over?.length ||
+      (record.untracked === true && doc.suggestions.get(suggestion)?.status !== 'pending')
     ) {
       return null;
     }
 
-    out.push({ suggestion, seq: nextSeq(doc), over, untracked, write });
+    out.push({ ...record, suggestion, replaced, replacedEarlier, over, seq: nextSeq(doc) });
   }
 
   return out;
 }
 
 /**
- * Note in `items` what a holder gets back: the properties, and the records made over it, as the
- * document's records of its kind. A field's runs each give their own face, and the field's one
- * record takes the records once. False when the holder is not a record of those properties.
+ * A holder's item with the restored records in the place of its records of `target`. A field's
+ * run gives its own face to each record that gives one, by the record's place. False when the
+ * holder is not a record of those properties.
  */
-function noteOver(
-  items: Map<OrderedItem, ItemOver>,
+function putBack(
+  doc: OrderedDocument,
   { story, item, record, piece }: Holder,
-  properties: OoxmlElement,
-  made: readonly Made[]
+  target: CheckpointOverTarget,
+  restored: readonly Restored[]
 ): boolean {
-  let entry = items.get(item);
-  if (entry === undefined) {
-    entry = { story, fmts: new Map(), props: new Map(), faces: new Map() };
-    items.set(item, entry);
-  }
-
-  if (record.kind === 'face') {
-    const fmts = formatRecords(record, made);
-    if (properties.localName !== 'rPr' || fmts === null) {
+  if (record.kind !== 'face') {
+    if (record.target !== target) {
       return false;
     }
 
-    entry.fmts.set(record, [
-      piece === undefined ? { ...record, face: properties } : record,
-      ...fmts,
-    ]);
-    if (piece !== undefined) {
-      entry.faces.set(piece, new Map([[record.id, properties]]));
-    }
-
+    const props = restored.map((r) => propertyRecord(r, record.target));
+    relabel(doc, story, item, {
+      props: [...item.props.filter((r) => r.target !== target), ...props],
+    });
     return true;
   }
 
-  const props = propertyRecords(made);
-  if (record.target !== properties.localName || props === null) {
+  if (target !== 'rPr') {
     return false;
   }
 
-  entry.props.set(record, [{ ...record, element: properties }, ...props]);
+  const fmts = restored.map(formatRecord);
+  if (piece === undefined || item.pieces === undefined) {
+    relabel(doc, story, item, { fmts });
+    return true;
+  }
+
+  const faces = new Map(item.pieces[piece]?.recordFaces);
+  for (const restoredRecord of fmts) {
+    if (restoredRecord.kind === 'face') {
+      faces.set(restoredRecord.id, restoredRecord.face);
+    }
+  }
+
+  const pieces = item.pieces.map((p, k) => (k === piece ? { ...p, recordFaces: faces } : p));
+  replaceItems(doc, story, [item], [createOrderedItem({ ...item, fmts, pieces })]);
   return true;
 }
 
-/** The made records as format records on a run, each with an id of the holder's; null for another write. */
-function formatRecords(holder: FaceRecord, made: readonly Made[]): OrderedFormatRecord[] | null {
-  const out: OrderedFormatRecord[] = [];
-  for (const [k, { suggestion, seq, over, untracked, write }] of made.entries()) {
-    if (!('format' in write)) {
-      return null;
-    }
-
-    const id = `${holder.id}>${k}`;
-    const flag = untracked === true ? { untracked } : {};
-    out.push({ kind: 'properties', id, suggestion, seq, ...write.format, over, ...flag });
+/** A restored record of a run's properties: its format, or the face it gives. */
+function formatRecord(restored: Restored, k: number): OrderedFormatRecord {
+  const { suggestion, seq, replaced, replacedEarlier, over, untracked, element, write } = restored;
+  const fields = { id: `${suggestion}>${k}`, suggestion, seq, replaced, replacedEarlier };
+  if (write !== undefined && 'format' in write) {
+    return { kind: 'properties', ...fields, ...write.format, over, untracked };
   }
 
-  return out;
+  return { kind: 'face', ...fields, face: element };
 }
 
-/** The made records as a paragraph's or a section's records; null for a format. */
-function propertyRecords(made: readonly Made[]): OrderedPropertyRecord[] | null {
-  const out: OrderedPropertyRecord[] = [];
-  for (const { suggestion, seq, over, untracked, write } of made) {
-    if ('paragraphOp' in write) {
-      const flag = untracked === true ? { untracked } : {};
-      out.push({
-        kind: 'paragraphOp',
-        suggestion,
-        seq,
-        target: 'pPr',
-        op: write.paragraphOp,
-        over,
-        ...flag,
-      });
-    } else if ('sectionOp' in write) {
-      out.push({ kind: 'sectionOp', suggestion, seq, target: 'sectPr', op: write.sectionOp, over });
-    } else {
-      return null;
-    }
+/** A restored record of a paragraph mark's or a section's properties. */
+function propertyRecord(restored: Restored, target: OrderedPropertyTarget): OrderedPropertyRecord {
+  const { suggestion, seq, replaced, replacedEarlier, over, untracked, write } = restored;
+  const fields = { suggestion, seq, replaced, replacedEarlier, over, untracked };
+  if (write !== undefined && 'paragraphOp' in write) {
+    return { kind: 'paragraphOp', ...fields, target: 'pPr', op: write.paragraphOp };
   }
 
-  return out;
-}
-
-/**
- * An item with each holder giving its properties and followed by the records made over it. A
- * field's runs get their own faces.
- */
-function putBack(doc: OrderedDocument, item: OrderedItem, over: ItemOver): void {
-  const { story, faces } = over;
-  const fmts = item.fmts.flatMap((record) => over.fmts.get(record) ?? [record]);
-  const props = item.props.flatMap((record) => over.props.get(record) ?? [record]);
-  if (item.pieces === undefined || faces.size === 0) {
-    relabel(doc, story, item, { fmts, props });
-    return;
+  if (write !== undefined && 'sectionOp' in write) {
+    const { keptOnReject } = restored;
+    return { kind: 'sectionOp', ...fields, target: 'sectPr', op: write.sectionOp, keptOnReject };
   }
 
-  const pieces = item.pieces.map((piece, k) => {
-    const more = faces.get(k);
-    if (more === undefined) {
-      return piece;
-    }
-
-    return { ...piece, recordFaces: new Map([...(piece.recordFaces ?? []), ...more]) };
-  });
-  replaceItems(doc, story, [item], [createOrderedItem({ ...item, fmts, props, pieces })]);
+  const { element, merge, recordUnchanged } = restored;
+  return { kind: 'element', ...fields, target, element, merge, recordUnchanged };
 }

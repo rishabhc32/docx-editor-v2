@@ -12,8 +12,17 @@ import {
 } from '../client/open.ts';
 import { orderedCardSeen } from '../change/apply-decide.ts';
 import type { OrderedDocument } from '../model/types.ts';
-import { addressOf, apply, at, DIRECT, EDIT, markOf, opens } from './change-apply-fixture.ts';
-import { checkFold, checkpointBytes, mediaStore } from './fold-check.ts';
+import {
+  addressOf,
+  apply,
+  at,
+  DIRECT,
+  EDIT,
+  markOf,
+  opens,
+  partsOf,
+} from './change-apply-fixture.ts';
+import { checkFold, checkpointBytes, folded, mediaStore } from './fold-check.ts';
 import { docx, p, t } from './word-fixtures.ts';
 
 type Mode = typeof EDIT | typeof DIRECT;
@@ -32,13 +41,20 @@ const TABLE =
   p(t('After.'));
 
 /** A format of words of the first paragraph, as `mode` makes it. */
-const format = (doc: OrderedDocument, mode: Mode, from: number, to: number, localName: string) =>
+const format = (
+  doc: OrderedDocument,
+  mode: Mode,
+  from: number,
+  to: number,
+  localName: string,
+  attributes?: Record<string, string>
+) =>
   ({
     kind: 'format',
     ...mode,
     from: at(doc, 0, from),
     to: at(doc, 0, to),
-    properties: [{ localName }],
+    properties: [attributes === undefined ? { localName } : { localName, attributes }],
   }) as const;
 
 /** Ana's new words, and Olive's suggested bold over part of them and the words before. */
@@ -62,7 +78,7 @@ const paragraphWrite = (
   }) as const;
 
 /** A write of the page setup of the first paragraph's section. */
-const pageWrite = (doc: OrderedDocument, mode: Mode, page: Record<string, number>) =>
+const pageWrite = (doc: OrderedDocument, mode: Mode, page: Record<string, number | string>) =>
   ({ kind: 'section-property', ...mode, sections: [], page, pageAt: markOf(doc, 0) }) as const;
 
 /** The first container of `token`, as a table write names it. */
@@ -174,7 +190,69 @@ const ROOMS: readonly (readonly [string, string, (doc: OrderedDocument) => void,
     },
     'Ana',
   ],
+  [
+    "a direct format between two pending ones of one run's record",
+    TEXT,
+    (doc) => {
+      const color = (val: string) => ({ val });
+      apply(doc, 'ben:1', format(doc, EDIT, 0, 5, 'color', color('FF0000')), 'Ben');
+      apply(doc, 'olive:1', format(doc, DIRECT, 0, 5, 'color', color('0000FF')), 'Olive');
+      apply(doc, 'ana:1', format(doc, EDIT, 0, 5, 'color', color('00FF00')));
+    },
+    'Ben',
+  ],
+  [
+    "a direct paragraph write between two pending ones of the mark's record",
+    TEXT,
+    (doc) => {
+      apply(doc, 'ben:1', paragraphWrite(doc, EDIT, 'jc', { val: 'center' }), 'Ben');
+      apply(doc, 'olive:1', paragraphWrite(doc, DIRECT, 'jc', { val: 'right' }), 'Olive');
+      apply(doc, 'ana:1', paragraphWrite(doc, EDIT, 'jc', { val: 'both' }));
+    },
+    'Ben',
+  ],
+  [
+    "a direct page write between two pending ones of the section's record",
+    TEXT,
+    (doc) => {
+      apply(doc, 'ben:1', pageWrite(doc, EDIT, { marginLeftTwips: 1800 }), 'Ben');
+      apply(doc, 'olive:1', pageWrite(doc, DIRECT, { orientation: 'landscape' }), 'Olive');
+      apply(doc, 'ana:1', pageWrite(doc, EDIT, { orientation: 'portrait' }));
+    },
+    'Ben',
+  ],
 ];
+
+describe('a write made between two pending ones of one change record', () => {
+  // Word shows the latest write on top: the later pending orientation, not the direct one
+  test('the later pending write shows on top of the direct one', () => {
+    const { document: doc } = openOrderedWordFile(docx(TEXT), { file: 1 });
+    const [, , edit] = ROOMS.find(([name]) => name.startsWith('a direct page write between'))!;
+    edit(doc);
+    const shown = /<w:sectPr>(.*?)<w:sectPrChange /.exec(partsOf(doc)[0] ?? '')?.[1] ?? '';
+    expect(shown).not.toContain('landscape');
+  });
+});
+
+// After a fold the pending page write is the file's record; a direct break copies it, and the
+// type a first break gave the section goes with that record's reject on the copy too, as Word's
+describe('a direct section break after a fold, in a section with a pending page write', () => {
+  test('two continuous breaks', async () => {
+    const opened = openOrderedWordFile(docx(TEXT + p(t('Signed.'))), { file: 1 });
+    apply(opened.document, 'ana:1', pageWrite(opened.document, EDIT, { marginTopTwips: 720 }));
+    const blobs = mediaStore(opened.base);
+    const { document: doc, base } = await folded(opened.document, opened.base, 2, blobs);
+    for (const [id, k] of [
+      ['olive:1', 0],
+      ['olive:2', 1],
+    ] as const) {
+      const mark = markOf(doc, k);
+      apply(doc, id, { kind: 'section-break', ...DIRECT, mark, type: 'continuous' }, 'Olive');
+    }
+
+    await checkFold(doc, base, blobs, 'two continuous breaks after a fold');
+  });
+});
 
 describe('a write made over a pending record, the record taken back after a fold', () => {
   for (const [label, body, edit, author] of ROOMS) {
@@ -223,7 +301,7 @@ const PAGE = "a direct page write over another's pending one";
 /** A manifest's entry of made-over records, as JSON. */
 interface Entry {
   readonly label: number;
-  readonly properties: string;
+  readonly target: string;
   readonly records: readonly Record<string, unknown>[];
 }
 
@@ -244,10 +322,13 @@ const withMadeOver = (label: string, edit: (entries: Entry[]) => unknown) =>
     return JSON.stringify({ ...manifest, madeOver: edit(manifest.madeOver) });
   });
 
-/** Each entry's records edited. */
-const withRecords =
+/** Each entry's records made over a pending one edited. */
+const withMade =
   (edit: (record: Record<string, unknown>) => Record<string, unknown>) => (entries: Entry[]) =>
-    entries.map((entry) => ({ ...entry, records: entry.records.map(edit) }));
+    entries.map((entry) => ({
+      ...entry,
+      records: entry.records.map((record) => ('over' in record ? edit(record) : record)),
+    }));
 
 /** The reason a checkpoint does not open, or `opens`. */
 function openReason(bytes: Uint8Array): string {
@@ -280,76 +361,97 @@ describe("a checkpoint's made-over records are untrusted", () => {
       ['a change record named twice', withMadeOver(FORMAT, (list) => [...list, ...list])],
       ['no records', withMadeOver(FORMAT, (list) => list.map((e) => ({ ...e, records: [] })))],
       [
-        "the properties of another change record than the label's",
+        "another target than the label's change record",
         withMadeOver(FORMAT, (list) =>
           list.map((e) => ({
             ...e,
-            properties: `<w:pPr xmlns:w="${W}"/>`,
-            records: e.records.map(({ format: _format, ...r }) => ({
-              ...r,
-              paragraphOp: { op: 'setListLevel', level: 1 },
-            })),
+            target: 'pPr',
+            records: e.records.map(({ format: _format, element: _element, ...r }) => r),
           }))
         ),
       ],
       [
-        'a write of another kind than its properties',
+        "another target's write",
         withMadeOver(
           FORMAT,
-          withRecords(({ format: _format, ...r }) => ({
-            ...r,
-            sectionOp: { op: 'type', type: 'continuous' },
-          }))
+          withMade((r) => ({ ...r, sectionOp: { op: 'type', type: 'continuous' } }))
+        ),
+      ],
+      [
+        'the properties of another element than its target',
+        withMadeOver(
+          FORMAT,
+          withMade(({ format: _format, ...r }) => ({ ...r, element: `<w:pPr xmlns:w="${W}"/>` }))
+        ),
+      ],
+      [
+        'a write beside an element',
+        withMadeOver(
+          FORMAT,
+          withMade((r) => ({ ...r, element: `<w:rPr xmlns:w="${W}"/>` }))
+        ),
+      ],
+      [
+        'children a run record sets',
+        withMadeOver(
+          FORMAT,
+          withMade((r) => ({ ...r, merge: [] }))
+        ),
+      ],
+      [
+        "a table's cells",
+        withMadeOver(
+          FORMAT,
+          withMade((r) => ({ ...r, tableCells: [0] }))
         ),
       ],
       [
         'a suggestion the list does not hold',
         withMadeOver(
           FORMAT,
-          withRecords((r) => ({ ...r, suggestion: 99 }))
+          withMade((r) => ({ ...r, suggestion: 99 }))
         ),
       ],
       [
         'made over a suggestion the list does not hold',
         withMadeOver(
           FORMAT,
-          withRecords((r) => ({ ...r, over: [99] }))
+          withMade((r) => ({ ...r, over: [99] }))
         ),
       ],
-      // The pending format's suggestion: a direct record is an accepted suggestion's
       [
-        'a direct record of a pending suggestion',
+        'taken from a suggestion the list does not hold',
         withMadeOver(
           FORMAT,
-          withRecords((r) => ({ ...r, suggestion: (r.over as number[])[0] }))
+          withMade((r) => ({ ...r, replaced: 0, replacedEarlier: [99] }))
         ),
       ],
       [
         'a record on its own new words of a decided suggestion',
         withMadeOver(
           FORMAT,
-          withRecords((r) => ({ ...r, untracked: true }))
+          withMade((r) => ({ ...r, untracked: true }))
         ),
       ],
       [
         'a property no format writes',
         withMadeOver(
           FORMAT,
-          withRecords((r) => ({ ...r, format: { properties: [{ localName: 'pStyle' }] } }))
+          withMade((r) => ({ ...r, format: { properties: [{ localName: 'pStyle' }] } }))
         ),
       ],
       [
         'a field a property does not have',
         withMadeOver(
           FORMAT,
-          withRecords((r) => ({ ...r, format: { properties: [{ localName: 'i', val: 1 }] } }))
+          withMade((r) => ({ ...r, format: { properties: [{ localName: 'i', val: 1 }] } }))
         ),
       ],
       [
         'a list number that is no number',
         withMadeOver(
           PARAGRAPH,
-          withRecords((r) => ({ ...r, paragraphOp: { op: 'setListNumbering', numId: 'x' } }))
+          withMade((r) => ({ ...r, paragraphOp: { op: 'setListNumbering', numId: 'x' } }))
         ),
       ],
       // Ben's press on his own new paragraph read as a direct one: his suggestion is pending
@@ -357,14 +459,14 @@ describe("a checkpoint's made-over records are untrusted", () => {
         'a press on its own new paragraph as a direct record',
         withMadeOver(
           PRESS,
-          withRecords(({ untracked: _untracked, ...r }) => r)
+          withMade(({ untracked: _untracked, ...r }) => r)
         ),
       ],
       [
         "a margin past the engine's bound",
         withMadeOver(
           PAGE,
-          withRecords((r) => ({ ...r, sectionOp: { op: 'page', marginTopTwips: 99_999_999 } }))
+          withMade((r) => ({ ...r, sectionOp: { op: 'page', marginTopTwips: 99_999_999 } }))
         ),
       ],
       [

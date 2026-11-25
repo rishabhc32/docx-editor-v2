@@ -10,6 +10,7 @@ import {
 import { build } from '../../../store/store/tree-op-tracked.ts';
 import { applyTreeOp } from '../../../store/store/tree-op-apply.ts';
 import { withStoryBlocks } from '../compose/paragraph-ops.ts';
+import { madeOverWhere } from '../compose/properties.ts';
 import {
   bodySectionNode,
   isSectionItem,
@@ -342,8 +343,8 @@ export function insertSectionBreak(
 
 /**
  * The pending tracked writes on the section `from` holds go with its copy on `mark`, under their
- * own suggestions (an untracked one is in the copy already), as the engine's clone keeps the
- * section's change record.
+ * own suggestions (an untracked one is in the copy already), with the direct writes made over
+ * them, as the engine's clone keeps the section's change record.
  */
 function copyPendingWrites(
   doc: OrderedDocument,
@@ -351,8 +352,11 @@ function copyPendingWrites(
   from: OrderedItem,
   mark: OrderedItem
 ): void {
-  for (const record of sectionRecordsOf(from)) {
-    if (statusOf(doc, record.suggestion) === 'pending' && !isOwnBreak(record)) {
+  const records = sectionRecordsOf(from);
+  const pending = (suggestion: string) => statusOf(doc, suggestion) === 'pending';
+  for (const record of records) {
+    const tracked = pending(record.suggestion) && !isOwnBreak(record);
+    if (tracked || madeOverWhere(record, records, pending)) {
       relabel(doc, story, mark, { props: [...mark.props, { ...record, seq: nextSeq(doc) }] });
     }
   }

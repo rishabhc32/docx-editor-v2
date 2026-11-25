@@ -1,7 +1,6 @@
 // The records a checkpoint's manifest keeps that were made over a pending record with no change
 // record of their own (`over`), by the change record they were made over (design D14).
 
-import type { OoxmlElement } from '../../../store/package/ooxml-tree.ts';
 import type { OoxmlProperty } from '../../../store/store/tree-op-types.ts';
 import { ALIGNMENTS, NUM_ID, TAB_LEADERS } from '../change/apply-properties.ts';
 import { readFurniture, readPage, noteWrites } from '../change/kinds/sections/read.ts';
@@ -20,6 +19,7 @@ import { ORDERED_CHANGE_LIMITS as LIMITS } from '../change/types.ts';
 import { properties } from '../change/values.ts';
 import { manifestList, manifestString, readNamedOnce, xmlText } from './checkpoint-suggestions.ts';
 import { propertiesXml, readPropertiesXml } from './checkpoint-takeovers.ts';
+import { readPropertyRecord, type CheckpointUntrackedRecord } from './checkpoint-untracked.ts';
 import type { OrderedSectionOp } from './sections.ts';
 import type { OrderedFormatWrite, OrderedParagraphOp, OrderedStyleWrite } from './types.ts';
 
@@ -28,41 +28,37 @@ export interface CheckpointFormatWrite extends OrderedFormatWrite {
   readonly style?: OrderedStyleWrite;
 }
 
-/**
- * A record's write, by the record's kind: a format's (under `w:rPr`), a paragraph press (under
- * `w:pPr`) or a section's write (under `w:sectPr`).
- */
+/** A record's write, for a record the room made: a format, a paragraph press or a section's write. */
 export type CheckpointOverWrite =
   | { readonly format: CheckpointFormatWrite }
   | { readonly paragraphOp: OrderedParagraphOp }
   | { readonly sectionOp: OrderedSectionOp };
 
-/** A record made over the change record's pending records, with its write. */
-export interface CheckpointOverRecord {
-  /** The suggestion, by its place in the manifest's list. */
-  readonly suggestion: number;
-  /** The pending records it was made over: their suggestions, by their places. */
-  readonly over: readonly number[];
-  /**
-   * A format on its author's own pending words, or a press on their own new paragraph, shown with
-   * no change record.
-   */
-  readonly untracked?: boolean;
-  readonly write: CheckpointOverWrite;
+/**
+ * A record as the room holds it: its write, or the properties element it gives (`element`: a
+ * record a load read from a file's change record), with the fields of a record of properties.
+ */
+export interface CheckpointOverRecord extends CheckpointUntrackedRecord {
+  readonly write?: CheckpointOverWrite;
+  /** A section write every decision keeps. */
+  readonly keptOnReject?: boolean;
 }
 
+/** The properties elements whose one change record a record may be made over. */
+export type CheckpointOverTarget = 'rPr' | 'pPr' | 'sectPr';
+
 /**
- * The records made over the pending records of one change record, by the label on it: the
- * properties those pending records give without the records made over them (the properties
- * element the change record names), and the records, in the order they apply.
+ * The records of one change record's properties when one was made over its pending records, by
+ * the label on it: each record the room draws from the first pending one, in the order they
+ * apply. Word's one change record says none of them.
  */
 export interface CheckpointMadeOver {
   readonly label: number;
-  readonly properties: OoxmlElement;
+  readonly target: CheckpointOverTarget;
   readonly records: readonly CheckpointOverRecord[];
 }
 
-/** The write of a record under each properties element, and how it reads. */
+/** The write a record of each target may have, and how it reads. */
 const WRITES = {
   rPr: ['format', (value: unknown, path: string) => ({ format: readFormatWrite(value, path) })],
   pPr: [
@@ -77,10 +73,13 @@ const WRITES = {
 
 /** The made-over records as the manifest lists them: JSON leaves out a field with no value. */
 export function madeOverJson(madeOver: readonly CheckpointMadeOver[]): unknown[] {
-  return madeOver.map(({ properties, records, ...entry }) => ({
+  return madeOver.map(({ records, ...entry }) => ({
     ...entry,
-    properties: propertiesXml(properties),
-    records: records.map(({ write, ...record }) => ({ ...record, ...writeJson(write) })),
+    records: records.map(({ element, write, ...record }) => ({
+      ...record,
+      element: element === null ? undefined : propertiesXml(element),
+      ...(write === undefined ? {} : writeJson(write)),
+    })),
   }));
 }
 
@@ -95,8 +94,8 @@ function writeJson(write: CheckpointOverWrite): CheckpointOverWrite | object {
 
 /**
  * The listed made-over records, each checked: every value comes from storage. Each names a
- * suggestion of the manifest's list of `suggestions`, and a change record once; each record's
- * write is one of the properties the entry gives.
+ * suggestion of the manifest's list of `suggestions`, and a change record once; a record has the
+ * write its target takes, or else gives an element of that target.
  *
  * @throws Invalid when one does not read.
  */
@@ -111,18 +110,17 @@ export function readMadeOver(value: unknown, suggestions: number): CheckpointMad
 
 function readEntry(value: unknown, path: string, suggestions: number): CheckpointMadeOver {
   const f = plainFields(value, path);
-  const properties = readPropertiesXml(
-    required(f, 'properties'),
-    at(path, 'properties'),
-    new Set(Object.keys(WRITES))
-  );
-  const write = WRITES[properties.localName as keyof typeof WRITES];
+  const target = oneOf(required(f, 'target'), at(path, 'target'), [
+    'rPr',
+    'pPr',
+    'sectPr',
+  ] as const);
   const records = manifestList(required(f, 'records'), at(path, 'records'), 1);
   return {
     label: int(required(f, 'label'), at(path, 'label')),
-    properties,
+    target,
     records: records.map((record, k) =>
-      readRecord(record, at(at(path, 'records'), k), suggestions, write)
+      readRecord(record, at(at(path, 'records'), k), target, suggestions)
     ),
   };
 }
@@ -130,16 +128,32 @@ function readEntry(value: unknown, path: string, suggestions: number): Checkpoin
 function readRecord(
   value: unknown,
   path: string,
-  suggestions: number,
-  [key, readWrite]: (typeof WRITES)[keyof typeof WRITES]
+  target: CheckpointOverTarget,
+  suggestions: number
 ): CheckpointOverRecord {
   const f = plainFields(value, path);
-  const over = manifestList(required(f, 'over'), at(path, 'over'), 1);
+  const record = readPropertyRecord(value, path, target, suggestions);
+  const [key, readWrite] = WRITES[target];
+  const write = f.has(key) ? readWrite(f.get(key), at(path, key)) : undefined;
+  const others = Object.values(WRITES).filter(([other]) => other !== key);
+
+  // A record has its target's write or gives an element; only a section's element sets some
+  // children
+  if (
+    others.some(([other]) => f.has(other)) ||
+    record.tableCells !== undefined ||
+    (write !== undefined && (record.element !== null || record.merge !== undefined)) ||
+    (target !== 'sectPr' && record.merge !== undefined)
+  ) {
+    throw new Invalid('invalid-value', path, 'not a record of its properties');
+  }
+
   return {
-    suggestion: int(required(f, 'suggestion'), at(path, 'suggestion'), 0, suggestions - 1),
-    over: over.map((k, j) => int(k, at(at(path, 'over'), j), 0, suggestions - 1)),
-    untracked: f.has('untracked') ? bool(f.get('untracked'), at(path, 'untracked')) : undefined,
-    write: readWrite(required(f, key), at(path, key)),
+    ...record,
+    write,
+    keptOnReject: f.has('keptOnReject')
+      ? bool(f.get('keptOnReject'), at(path, 'keptOnReject'))
+      : undefined,
   };
 }
 
