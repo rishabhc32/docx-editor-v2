@@ -343,24 +343,27 @@ export function removeControl(ctx: Ctx, open: OrderedItem): string {
  */
 export function deleteControl(ctx: Ctx, open: OrderedItem): string {
   directOnly(ctx, 'removing a control with its content');
+  const suggestion = suggestionFor(ctx);
+  strikeControl(ctx, open, suggestion.id);
+  return suggestion.id;
+}
+
+/**
+ * Strike a control with its content by `suggestion`, as the engine removes it: its own op on the
+ * view refuses a lock that keeps the control, or a control in it.
+ */
+export function strikeControl(ctx: Ctx, open: OrderedItem, suggestion: string): void {
   shownControl(ctx, open);
   engineOnView(ctx, { op: 'removeContentControl', controlId: shellId(open), keepContent: false });
-  const suggestion = suggestionFor(ctx);
 
   // A block control goes as a struck row does: its content through `within`
   if (open.token === 'sdtBlock') {
-    strikeBlock(ctx, open, suggestion.id);
-    return suggestion.id;
+    strikeBlock(ctx, open, suggestion);
+    return;
   }
 
   const close = closeOf(ctx.story, open, ctx.doc);
-  strikeItems(
-    ctx,
-    ctx.story,
-    [open, ...itemsInside(ctx.story, open, ctx.doc), close],
-    suggestion.id
-  );
-  return suggestion.id;
+  strikeItems(ctx, ctx.story, [open, ...itemsInside(ctx.story, open, ctx.doc), close], suggestion);
 }
 
 /**

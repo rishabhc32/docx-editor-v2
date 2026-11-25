@@ -347,6 +347,7 @@ export const KNOWN: readonly KnownDifference[] = [
       'type inside',
       'Enter inside',
       'delete it',
+      'move it',
       'delete across',
       'replace across',
       'delete from the paragraph before',
@@ -399,15 +400,6 @@ export const KNOWN: readonly KnownDifference[] = [
     sets: ['nested'],
     kinds: inGroup((item) => NESTED_CONTROLS.includes(item) && !TYPED_INTO.includes(item)),
     edits: ['type before it'],
-  },
-  {
-    cause:
-      "Open: a direct cut or deletion over a whole group. The editor removes the control whole, as a content-locked control goes whole; the room refuses the deletion of the group's own content",
-    owner: 'model',
-    codes: 'S',
-    sets: ['single', 'pairs'],
-    kinds: ['group'],
-    edits: ['move it', 'Ana types after, Olive deletes across'],
   },
   {
     cause:
@@ -482,15 +474,6 @@ export const KNOWN: readonly KnownDifference[] = [
   },
   {
     cause:
-      'The model refuses a move of words out of a control bound to custom XML, by name; the engine cuts them',
-    owner: 'model',
-    codes: 'S',
-    sets: ['single'],
-    kinds: ['bound'],
-    edits: ['move it'],
-  },
-  {
-    cause:
       "The model refuses deleting a one-column table's column by the engine's own refusal (block-required); the editor's command removes the table",
     owner: 'model',
     codes: 'S',
@@ -544,6 +527,7 @@ export const KNOWN: readonly KnownDifference[] = [
       'type inside',
       'Enter inside',
       'delete it',
+      'move it',
       'delete across',
       'replace across',
       'bold across',

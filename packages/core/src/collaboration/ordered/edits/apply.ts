@@ -288,8 +288,9 @@ function deleteOverRange(
     const { p, start, end } = step;
     const joins = joinsNext(ctx, step);
     if (ctx.direct) {
+      // In one paragraph the editor takes a whole locked control with the text
       if (end > start) {
-        directDelete(ctx, p, start, end);
+        directDelete(ctx, p, start, end, { wholeControls: walk.steps.length === 1 });
       }
 
       if (joins) {

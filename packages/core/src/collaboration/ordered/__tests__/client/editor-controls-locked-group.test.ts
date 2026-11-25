@@ -54,6 +54,9 @@ const fieldOf = (doc: OrderedDocument): string =>
     .map((match) => match[1])
     .join('');
 
+const reopen = (saved: Uint8Array): OrderedDocument =>
+  openOrderedWordFile(saved, { file: 2 }).document;
+
 async function seats() {
   const room = localRoom(FILE);
   const olive = await join(room, 'Olive', { mode: 'edit', login: ORGANISER, wordFile: FILE });
@@ -88,7 +91,7 @@ describe('a field in a Word-saved group in an ordered room', () => {
       expect(fieldOf(room.room.document)).toBe('aQb');
 
       const saved = new Uint8Array(await person.editor.save());
-      expect(fieldOf(openOrderedWordFile(saved, { file: 2 }).document)).toBe('aQb');
+      expect(fieldOf(reopen(saved))).toBe('aQb');
     });
 
     test(`${who}'s edit of the group's own words is refused by name`, async () => {
@@ -123,5 +126,41 @@ describe('a field in a Word-saved group in an ordered room', () => {
     await settle();
     converged(room, olive, bob);
     expect(fieldOf(room.room.document)).not.toContain('Q');
+  });
+});
+
+describe('a deletion over the whole group takes it whole, as the editor alone', () => {
+  test("the organiser's deletion while a party types in the field, an undo, and a reopen", async () => {
+    const { room, olive, bob } = await seats();
+    caretAt(bob, 0, 6);
+    surface(bob).insertPlainText('Q');
+    // "A: G ab end.": the group is 3 to 7; the range " G ab " covers it whole
+    caretAt(olive, 0, 2, 8);
+    surface(olive).deleteSelection();
+    await settle();
+    expect([...olive.refusals, ...bob.refusals]).toEqual([]);
+    converged(room, olive, bob);
+    expect(editorTexts(olive)[0]).toBe('A:end.');
+    expect(fieldOf(room.room.document)).toBe('');
+
+    const saved = new Uint8Array(await olive.editor.save());
+    expect(serializeOoxmlPart(composeOrderedPart(reopen(saved), BODY).part)).not.toContain(
+      'w:sdt>'
+    );
+
+    surface(olive).undo();
+    await settle();
+    converged(room, olive, bob);
+    expect(fieldOf(room.room.document)).toBe('aQb');
+  });
+
+  test("a party's deletion over the whole group is refused, as the editor alone refuses it", async () => {
+    const { room, olive, bob } = await seats();
+    caretAt(bob, 0, 2, 8);
+    surface(bob).deleteSelection();
+    await settle();
+    expect(surface(bob).state().lastRejection).not.toBeNull();
+    expect(room.room.order).toBe(0);
+    converged(room, olive, bob);
   });
 });

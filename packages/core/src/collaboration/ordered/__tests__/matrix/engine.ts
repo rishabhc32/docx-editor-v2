@@ -464,9 +464,16 @@ export function performEngine(
       const words = text(action.p).slice(start, end);
       const at = () => caretOf(text(action.to.p), action.to.at);
       if (action.kind === 'move') {
-        // The engine has no move: a cut, then a paste of the words at the destination
+        // The engine has no move: a cut, then a paste of the words at the destination. A refused
+        // cut refuses the move: the paste's commit would clear the refusal.
+        const before = surface.state().lastRejection;
         select(action.p, start, end);
         surface.deleteSelection();
+        const refusal = surface.state().lastRejection;
+        if (refusal && refusal !== before) {
+          throw new Error(`refused: ${refusal}`);
+        }
+
         select(action.to.p, at());
         surface.insertPlainText(words);
         return;

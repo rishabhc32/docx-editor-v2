@@ -10,7 +10,8 @@ import { applyTreeOp } from '../../../store/store/tree-op-apply.ts';
 import type { TreeDocOp } from '../../../store/store/tree-op-types.ts';
 import { orderedViewParagraph } from '../compose/compose.ts';
 import type { OrderedDocument } from '../model/types.ts';
-import { addressOf, at, BODY, FOOTNOTES, textOf } from './change-apply-fixture.ts';
+import { addressOf, at, BODY, FOOTNOTES, opens, textOf } from './change-apply-fixture.ts';
+import { mount } from './matrix/engine.ts';
 import { bodyFingerprint } from './room-harness.ts';
 import {
   BOB,
@@ -33,6 +34,7 @@ import {
   roomOn,
   sdt,
   type Lock,
+  type Who,
 } from './room-locked-fixture.ts';
 import { docx, M, p, pictureRun, t, W } from './word-fixtures.ts';
 
@@ -304,6 +306,93 @@ describe('objects, notes and links already inside a locked control', () => {
       const want = content(lock) ? 'apply-refused/locked' : 'accepted';
       expect([lock, target, removed]).toEqual([lock, want, want]);
     }
+  });
+});
+
+describe('a deletion over a whole locked control takes it whole, as the editor alone', () => {
+  // "Pay in [USD] now.": the range "in USD n" (4 to 12) covers the control whole
+  const inline = (props: string, inner = t('USD')) =>
+    docx(p(t('Pay in ') + sdt(props, inner) + t(' now.')), EXTRAS);
+  const FILES: readonly (readonly [string, Uint8Array])[] = [
+    ...LOCKS.map((lock) => [lock, fileOf('inline', lock)] as const),
+    ['group', inline('<w:group/>')],
+    ['sdtLocked group', inline('<w:lock w:val="sdtLocked"/><w:group/>')],
+    [
+      'group holding an sdtLocked control',
+      inline('<w:group/>', t('U') + sdt('<w:lock w:val="sdtLocked"/>', t('S')) + t('D')),
+    ],
+  ];
+
+  /** What a deletion of the range gives: refused, or the text and the controls that show. */
+  const editorAlone = (file: Uint8Array, who: Who) => {
+    const { surface, close } = mount(file, 'Bob');
+    try {
+      surface.setEditingMode(who === 'organiser' ? 'edit' : 'suggest');
+      const paragraphId = surface.session.paragraphIds()[0]!;
+      surface.setSelection({
+        anchor: { paragraphId, offset: 4 },
+        head: { paragraphId, offset: 12 },
+      });
+      surface.deleteSelection();
+      if (surface.state().lastRejection !== null) {
+        return 'refused';
+      }
+
+      const controls = surface.layout().contentControls?.length ?? 0;
+      const words = surface.session.bodyText().split('\n')[0];
+      return who === 'organiser' ? `${words} [${controls}]` : 'accepted';
+    } finally {
+      close();
+    }
+  };
+  const room = (file: Uint8Array, who: Who) => {
+    const { doc, send } = roomOn(file);
+    const answer = send(who, {
+      kind: 'delete',
+      ...edit(who),
+      from: at(doc, 0, 4),
+      to: at(doc, 0, 12),
+    });
+    if (answer !== 'accepted') {
+      return answer === 'apply-refused/locked' ? 'refused' : answer;
+    }
+
+    // The words the paragraph holds: an emptied control's prompt is not among them
+    const words = orderedViewParagraph(doc, BODY, 0)
+      ?.chars.filter((c) => !c.item.prompt)
+      .map((c) => c.ch)
+      .join('');
+    return who === 'organiser' ? `${words} [${opens(doc, 'sdt').length}]` : 'accepted';
+  };
+
+  test("the organiser's direct deletion: the control goes whole where only its content is locked", () => {
+    const rows = FILES.map(([name, file]) => [name, room(file, 'organiser')]);
+    expect(rows).toEqual(FILES.map(([name, file]) => [name, editorAlone(file, 'organiser')]));
+    expect(Object.fromEntries(rows)).toMatchObject({
+      contentLocked: 'Pay ow. [0]',
+      sdtContentLocked: 'refused',
+      group: 'Pay ow. [0]',
+      'sdtLocked group': 'refused',
+      'group holding an sdtLocked control': 'refused',
+    });
+  });
+
+  test("a party's tracked deletion of a whole locked control is refused, as the editor alone refuses it", () => {
+    const rows = FILES.map(([name, file]) => [name, room(file, 'party')]);
+    expect(rows).toEqual(FILES.map(([name, file]) => [name, editorAlone(file, 'party')]));
+    expect(Object.fromEntries(rows)).toMatchObject({ contentLocked: 'refused', group: 'refused' });
+  });
+
+  test('a deletion over two paragraphs does not take a locked control whole', () => {
+    const { doc, send } = roomOn(fileOf('inline', 'contentLocked'));
+    expect(
+      send('organiser', {
+        kind: 'delete',
+        ...edit('organiser'),
+        from: at(doc, 0, 4),
+        to: at(doc, 1, 2),
+      })
+    ).toBe('apply-refused/locked');
   });
 });
 

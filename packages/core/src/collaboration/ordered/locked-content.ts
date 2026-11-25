@@ -140,6 +140,49 @@ function controlsOf(ctx: Ctx, segments: readonly string[]): OrderedItem[] {
     .filter((open): open is OrderedItem => open !== null);
 }
 
+/**
+ * The inline controls a deletion of view characters `[start, end)` in one paragraph takes whole,
+ * by their segments, as the editor removes them (`coveredLockedControlOps`): each outermost
+ * control it covers whole whose content the lock in force keeps (a content lock, a group). The
+ * engine's removal of the control then answers for its characters (`strikeControl`).
+ */
+export function controlsTakenWhole(
+  ctx: Ctx,
+  p: OrderedViewParagraph,
+  start: number,
+  end: number
+): Map<string, OrderedItem> {
+  const placesOf = (chars: readonly OrderedViewChar[]) =>
+    new Set(chars.map((char) => char.containers));
+  const outside = new Set(
+    [...placesOf([...p.chars.slice(0, start), ...p.chars.slice(end)])].flatMap((containers) =>
+      segmentsOf(containers)
+    )
+  );
+  const taken = new Map<string, OrderedItem>();
+  for (const containers of placesOf(p.chars.slice(start, end))) {
+    const segments = segmentsOf(containers);
+    for (const [index, segment] of segments.entries()) {
+      if (taken.has(segment)) {
+        break;
+      }
+
+      if (!isControlSegment(segment) || outside.has(segment)) {
+        continue;
+      }
+
+      const line = controlsOf(ctx, segments.slice(0, index + 1));
+      const open = line.at(-1);
+      if (open !== undefined && lockingChain(ctx, [...p.blocks, ...line]) !== null) {
+        taken.set(segment, open);
+        break;
+      }
+    }
+  }
+
+  return taken;
+}
+
 /** The inline controls a view character sits in that `kept` names, by their segments. */
 function keptControls(char: OrderedViewChar | undefined, kept: (segment: string) => boolean) {
   if (!char) {

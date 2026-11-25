@@ -3,6 +3,8 @@
 // its settled record on the units and leaves the pending suggestion as it was.
 
 import type { OrderedViewChar, OrderedViewParagraph } from '../compose/context.ts';
+import { segmentsOf } from '../containers.ts';
+import { controlsTakenWhole } from '../locked-content.ts';
 import {
   innermostNewContainer,
   insertedPending,
@@ -24,7 +26,8 @@ import {
   type OrderedSuggestion,
 } from '../model/types.ts';
 import { coveredMarkers } from '../placement.ts';
-import { asAuthor, type Ctx } from './context.ts';
+import { asAuthor, strikeItems, suggestionFor, type Ctx } from './context.ts';
+import { strikeControl } from './control-structure.ts';
 import { formatMark, joinParagraphs, paragraphOp, splitParagraph } from './marks.ts';
 import { deleteRow } from './tables.ts';
 import { deleteText, formatText, insertText, unitsOf, type InsertOptions } from './text.ts';
@@ -242,10 +245,59 @@ export function directInsert(
   );
 }
 
-export function directDelete(ctx: Ctx, p: OrderedViewParagraph, start: number, end: number): void {
+/** The runs of view characters `[start, end)` outside the controls `taken` names. */
+function runsOutside(
+  p: OrderedViewParagraph,
+  start: number,
+  end: number,
+  taken: ReadonlyMap<string, OrderedItem>
+): [number, number][] {
+  const runs: [number, number][] = [];
+  let from = start;
+  for (let at = start; at < end; at += 1) {
+    if (segmentsOf(p.chars[at]?.containers ?? '').some((segment) => taken.has(segment))) {
+      if (at > from) {
+        runs.push([from, at]);
+      }
+
+      from = at + 1;
+    }
+  }
+
+  if (end > from) {
+    runs.push([from, end]);
+  }
+
+  return runs;
+}
+
+/**
+ * A direct deletion of view characters `[start, end)`. Within one paragraph (`wholeControls`) it
+ * takes a control it covers whole whose content is locked, as the editor removes it.
+ */
+export function directDelete(
+  ctx: Ctx,
+  p: OrderedViewParagraph,
+  start: number,
+  end: number,
+  options: { readonly wholeControls?: boolean } = {}
+): void {
+  const taken = options.wholeControls
+    ? controlsTakenWhole(ctx, p, start, end)
+    : new Map<string, OrderedItem>();
+  let into: OrderedSuggestion | null = null;
+  for (const open of taken.values()) {
+    into ??= suggestionFor(ctx);
+    strikeControl(ctx, open, into.id);
+  }
+
   // Every unit, struck or not, base or another person's pending insertion, break or row, leaves
   // with one settled deletion, as the engine removes it: taken back, each shows again as it was
-  const base = deleteText(ctx, p, start, end, null, { evenStruck: true });
+  let base = into?.id ?? null;
+  for (const [from, to] of runsOutside(p, start, end, taken)) {
+    base = deleteText(ctx, p, from, to, into, { evenStruck: true }) ?? base;
+  }
+
   settle(ctx, base);
   const firstChar = p.chars[start];
   const lastChar = p.chars[end - 1];
@@ -254,9 +306,9 @@ export function directDelete(ctx: Ctx, p: OrderedViewParagraph, start: number, e
   const last = itemAt(ctx.story, lastChar.address);
   if (!first || !last) return;
 
-  // The bookmarks it covers whole go too (rule 12); a comment's range stays
-  for (const marker of coveredMarkers(ctx, first, last))
-    relabel(ctx.doc, ctx.story, marker, { dels: [...marker.dels, base] });
+  // The bookmarks it covers whole go too (rule 12), once where a control it took held them; a
+  // comment's range stays
+  strikeItems(ctx, ctx.story, coveredMarkers(ctx, first, last), base);
 }
 
 /** A format: inside a pending insertion, a settled record over its units, as the engine draws. */
