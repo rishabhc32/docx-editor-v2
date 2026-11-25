@@ -1,0 +1,12 @@
+{
+  "impact": "compatible",
+  "fields": [],
+  "before": "Compose wrote a pending row height's own anchor while the table still held the cells of a column its author took back. Those cells hold no record of the height, so Word's form did not read the row as the height and the live file had no anchor, while the file after a fold had one.",
+  "after": "Compose writes the anchor once the removed cells are gone, live as after a fold.",
+  "reason": "Change messages, the change log, checkpoints and the Yjs format do not change; compose writes the same file on every copy. A room admits only clients of its own code version.",
+  "tests": [
+    "packages/core/src/collaboration/ordered/__tests__/checkpoint-fold-table-records.test.ts"
+  ],
+  "changeset": "ordered-height-anchor-removed-cells",
+  "migration": null
+}
