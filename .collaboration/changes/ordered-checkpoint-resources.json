@@ -1,0 +1,13 @@
+{
+  "impact": "compatible",
+  "fields": [],
+  "before": "A checkpoint wrote each list level, relationship, chart or diagram part and media part a change added as the file's own, and left a pasted list with picture bullets to the file. After a fold, a reject of the suggestion kept them in the file (a list level in numbering.xml, a link's or an object's relationship, a chart part, a picture bullet with its image), where the live room leaves them out.",
+  "after": "The checkpoint manifest has an optional section resources: each list level, relationship, chart or diagram part and media part a change added that the file holds, by its suggestion and key, and the lists section lists pasted lists with picture bullets too. The open checks each entry against the package, takes each out before the load and gives it back to its suggestion, so a decision after a fold writes or leaves it out as the room does live. An entry that does not fit the file refuses the checkpoint as checkpoint-manifest.",
+  "reason": "The section is optional and new; a checkpoint without it reads as before, and the golden checkpoints open to the same prints. Change messages, the change log and the Yjs format do not change. An ordered room admits only clients of its own code version, and the reader refuses a checkpoint it cannot read as checkpoint-manifest.",
+  "tests": [
+    "packages/core/src/collaboration/ordered/__tests__/checkpoint-fold-resources.test.ts",
+    "packages/core/src/collaboration/ordered/__tests__/checkpoint-golden.test.ts"
+  ],
+  "changeset": "ordered-checkpoint-resources",
+  "migration": null
+}
