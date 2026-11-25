@@ -1,0 +1,13 @@
+{
+  "impact": "compatible",
+  "fields": [],
+  "before": "settleNamedPrompts skipped a control with a pending insertion or deletion on it, so the first fill of a pending new control's prompt did not keep the prompt as it showed (keepPrompt): its maker's format on the prompt was left out of the glossary block, which the room named by the plain type prompt while the editor alone named the formatted one. The room took the formatted block only after the control's insertion was accepted, and a fold taken before that kept the plain one.",
+  "after": "A held control (pending insertion or deletion on it) runs the keep step of settleNamedControl as content first fills it, and nothing else of that settle until the suggestion is decided. drawnPrompt draws the kept prompt inside the control's own insertion (coverOf), so the block holds no w:ins, as the engine's.",
+  "reason": "Change messages, the change log and its kinds keep their meaning, and the Yjs document format and the checkpoint format do not change. Only the glossary block the room's Word file keeps for such a prompt changes: it now equals the editor alone's, before and after a fold. An ordered room admits only clients of its own code version.",
+  "tests": [
+    "packages/core/src/collaboration/ordered/__tests__/checkpoint-fold-prompts.test.ts",
+    "packages/core/src/collaboration/ordered/__tests__/client/editor-controls-emptied-more.test.ts"
+  ],
+  "changeset": "ordered-pending-control-kept-prompt",
+  "migration": null
+}

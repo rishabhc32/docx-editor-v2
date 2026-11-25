@@ -12,7 +12,7 @@ import {
 } from '../../../store/store/tree-op-nodes.ts';
 import { isBlockToken } from '../compose/blocks.ts';
 import { ComposeContext } from '../compose/context.ts';
-import { composeInline } from '../compose/inline.ts';
+import { composeInline, coverOf } from '../compose/inline.ts';
 import { ownItems } from '../compose/paragraph.ts';
 import { placeholderNameOf, promptRecords, propertiesReadBack } from '../compose/prompts.ts';
 import {
@@ -133,24 +133,27 @@ export function settleNamedPrompts(doc: OrderedDocument, apply: OrderedApplyCont
       continue;
     }
 
-    // Left as before: a control Enter split, or with a pending insertion or deletion on it
-    if (open.prompt !== true || isHidden(doc, open) || isSplitEdge(open) || pending(doc, open)) {
+    // Left as before: a control Enter split
+    if (open.prompt !== true || isHidden(doc, open) || isSplitEdge(open)) {
       continue;
     }
 
-    settleNamedControl(doc, story, open, apply);
+    settleNamedControl(doc, story, open, apply, pending(doc, open));
   }
 }
 
 /**
  * Show the glossary's prompt in one control once units that filled it went, or give the
- * replaced prompt back when a deletion that went is taken back.
+ * replaced prompt back when a deletion that went is taken back. A control with a pending
+ * insertion or deletion on it (`held`) only keeps its prompt as content fills it, as the engine
+ * keeps it then: the rest waits for that suggestion's decision.
  */
 function settleNamedControl(
   doc: OrderedDocument,
   story: OrderedStory,
   open: OrderedItem,
-  apply: OrderedApplyContext
+  apply: OrderedApplyContext,
+  held: boolean
 ): void {
   const shell = open.node;
   if (!shell || shell.kind === 'textValue') {
@@ -159,7 +162,7 @@ function settleNamedControl(
 
   const name = placeholderNameOf(shell);
   const blocks = name === undefined ? undefined : doc.placeholders.get(name);
-  if (giveBack(doc, story, open)) {
+  if (!held && giveBack(doc, story, open)) {
     return;
   }
 
@@ -179,6 +182,10 @@ function settleNamedControl(
       keepPrompt(doc, story, open, shell, scan);
     }
 
+    return;
+  }
+
+  if (held) {
     return;
   }
 
@@ -336,6 +343,13 @@ function drawnPrompt(
   const prompt = promptItems(story, open);
   const ctx = new ComposeContext(doc, story, {});
   ctx.paragraphKey = scan.mark.space;
+
+  // The prompt is drawn inside its control, which a new control's insertion covers whole
+  const cover = coverOf(ctx, open);
+  if (cover !== null) {
+    ctx.covered.add(cover);
+  }
+
   const drawn =
     open.token === 'sdt'
       ? composeInline(ctx, prompt)

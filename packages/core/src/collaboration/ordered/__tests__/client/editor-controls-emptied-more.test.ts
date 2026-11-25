@@ -7,11 +7,13 @@
 //  - Enter in a prompt that a decision showed, and its undo;
 //  - Enter in a loaded prompt that showed again after a reject of a typing over it;
 //  - a party's new control round words whose copy she deleted, alone and in a struck row;
-//  - a party's pick in a drop-down, then its row struck and accepted: the prompt's glossary block.
+//  - a party's pick in a drop-down, then its row struck and accepted: the prompt's glossary block;
+//  - a format on the prompt of a new control, then another person's typing over it.
 // The room once refused the typing (`text-differs`), drew a prompt over the paragraphs Enter
 // made, or left a control empty where the engine shows its prompt again: in a row another person
 // struck, and with the party's own insertion taken off her control. Its file once lost the
-// glossary block that keeps a filled prompt once the control went with its row.
+// glossary block that keeps a filled prompt once the control went with its row, and kept the
+// prompt of a pending new control without the format on it.
 
 import { afterEach, describe, expect, test } from 'bun:test';
 import { createDocxEditor } from '../../../../editor/docx-editor.ts';
@@ -88,9 +90,11 @@ interface Step {
   readonly act:
     | 'type'
     | 'pick'
+    | 'italic'
     | 'delete'
     | 'enter'
     | 'wrap'
+    | 'wrapList'
     | 'deleteRow'
     | 'accept'
     | 'reject'
@@ -124,15 +128,17 @@ function run(person: Person, { mode, act, line = 0, at = 0, to }: Step): void {
   } else if (act === 'enter') {
     caretAt(person, line, at);
     s.splitParagraph();
+  } else if (act === 'italic') {
+    caretAt(person, line, at, to);
+    expect(person.editor.exec({ type: 'toggleMark', mark: 'italic' }).ok).toBe(true);
   } else if (act === 'pick') {
     caretAt(person, line, at);
     const pick = { type: 'setContentControlValue', value: '60' };
     expect(person.editor.exec(pick as never).ok).toBe(true);
-  } else if (act === 'wrap') {
+  } else if (act === 'wrap' || act === 'wrapList') {
     caretAt(person, line, at, to);
-    expect(person.editor.exec({ type: 'insertContentControl', subtype: 'plainText' }).ok).toBe(
-      true
-    );
+    const subtype = act === 'wrap' ? 'plainText' : 'dropDownList';
+    expect(person.editor.exec({ type: 'insertContentControl', subtype }).ok).toBe(true);
   } else if (act === 'deleteRow') {
     caretAt(person, line, at);
     expect(tableCommand(person, { type: 'deleteRow' }).ok).toBe(true);
@@ -151,8 +157,21 @@ const bodyOf = (xml: string): string =>
     .replace(/ w:(id|date)="[^"]*"/g, '')
     .replace(/<w:id w:val="\d+"\/>/g, '');
 
-/** The body after each step on the editor alone, the organiser's and the party's steps in turn. */
-function aloneSteps(file: Uint8Array, steps: readonly Step[]): string[] {
+/** The names of the glossary's blocks in a Word file. */
+function blocksOf(bytes: Uint8Array): string[] {
+  const read = readOoxmlPackage(bytes, {});
+  if (!read.ok) throw new Error(read.reason);
+  return buildingBlocksOf(read.package).map((block) => block.name);
+}
+
+/**
+ * The body after each step on the editor alone, the organiser's and the party's steps in turn,
+ * and the glossary's blocks in its saved file.
+ */
+async function aloneSteps(
+  file: Uint8Array,
+  steps: readonly Step[]
+): Promise<{ readonly bodies: string[]; readonly blocks: string[] }> {
   const container = document.createElement('div');
   document.body.append(container);
   const editor = createDocxEditor({
@@ -164,22 +183,16 @@ function aloneSteps(file: Uint8Array, steps: readonly Step[]): string[] {
   });
   try {
     const person = { name: 'alone', editor, container, refusals: [] } as unknown as Person;
-    return steps.map((step) => {
+    const bodies = steps.map((step) => {
       editor.setAuthor(step.who === 'ana' ? 'Ana' : 'Olive');
       run(person, step);
       return bodyOf(editorXml(person));
     });
+    return { bodies, blocks: blocksOf(new Uint8Array(await editor.save())) };
   } finally {
     editor.destroy();
     container.remove();
   }
-}
-
-/** The names of the glossary's blocks in a Word file. */
-function blocksOf(bytes: Uint8Array): string[] {
-  const read = readOoxmlPackage(bytes, {});
-  if (!read.ok) throw new Error(read.reason);
-  return buildingBlocksOf(read.package).map((block) => block.name);
 }
 
 async function savedBody(person: Person): Promise<string> {
@@ -188,8 +201,12 @@ async function savedBody(person: Person): Promise<string> {
   return bodyOf(serializeOoxmlPart(composeOrderedPart(again, BODY).part));
 }
 
-async function inRoom(file: Uint8Array, steps: readonly Step[]): Promise<void> {
-  const expected = aloneSteps(file, steps);
+/**
+ * The steps in a room, compared with the editor alone: each person's screen after each step, the
+ * saved file, and the glossary's blocks in the room's own Word file. The editor alone's blocks.
+ */
+async function inRoom(file: Uint8Array, steps: readonly Step[]): Promise<string[]> {
+  const { bodies: expected, blocks } = await aloneSteps(file, steps);
   const review = reviewTestModule();
   const room = localRoom(file);
   const people = {
@@ -214,6 +231,9 @@ async function inRoom(file: Uint8Array, steps: readonly Step[]): Promise<void> {
   }
   expect(shown).toEqual(expected);
   expect(await savedBody(people.ana)).toBe(expected.at(-1) ?? '');
+  const { base } = openOrderedWordFile(file, { file: 1 });
+  expect(blocksOf(orderedPackageBytes(room.room.document, base))).toEqual(blocks);
+  return blocks;
 }
 
 describe('a part of a control that Enter split, emptied, then typed into', () => {
@@ -384,6 +404,18 @@ describe("a party's new control round words, its copy then deleted by her", () =
       ana('type', 0, 10),
     ]));
 
+  // Her format on a drop-down's prompt is part of her insertion: another person's typing over the
+  // prompt keeps it in the glossary with that format, as the engine keeps the prompt as it shows
+  test("her format on a drop-down's prompt, then the organiser types over it", async () => {
+    const steps = [
+      ana('wrapList', 0, 9, 11),
+      ana('delete', 0, 11, 13),
+      ana('italic', 0, 11, 25),
+      suggested(olive('type', 0, 22)),
+    ];
+    expect(await inRoom(docx(p(t('Two per cent')) + p(t('After.'))), steps)).toHaveLength(1);
+  });
+
   test('in a row the organiser struck', () => {
     const cell = `<w:tc><w:tcPr><w:tcW w:w="3000" w:type="dxa"/></w:tcPr>${p(t('Acme Corp'))}</w:tc>`;
     const table =
@@ -414,33 +446,6 @@ describe("a prompt's glossary block, once its control goes with its row", () => 
       `<w:tr>${cell(t('Terms'))}${cell(t('Net: ') + list)}</w:tr></w:tbl>`;
     const file = docx(p(t('Before.')) + table + p(t('After.')));
     const steps = [ana('pick', 2, 7), ana('deleteRow', 2, 0), olive('accept')];
-    await inRoom(file, steps);
-
-    const container = document.createElement('div');
-    document.body.append(container);
-    const review = reviewTestModule();
-    const editor = createDocxEditor({ container, document: file, mode: 'edit', modules: [review] });
-    const alone = { name: 'alone', editor, container, refusals: [] } as unknown as Person;
-    const room = localRoom(file);
-    const people = {
-      olive: await join(room, 'Olive', { mode: 'edit', login: ORGANISER, wordFile: file, review }),
-      ana: await join(room, 'Ana', { wordFile: file, review }),
-    };
-    try {
-      for (const step of steps) {
-        editor.setAuthor(step.who === 'ana' ? 'Ana' : 'Olive');
-        run(alone, step);
-        run(people[step.who], step);
-        await settle();
-      }
-
-      const kept = blocksOf(new Uint8Array(await editor.save()));
-      expect(kept).toHaveLength(1);
-      const { base } = openOrderedWordFile(file, { file: 1 });
-      expect(blocksOf(orderedPackageBytes(room.room.document, base))).toEqual(kept);
-    } finally {
-      editor.destroy();
-      container.remove();
-    }
+    expect(await inRoom(file, steps)).toHaveLength(1);
   });
 });

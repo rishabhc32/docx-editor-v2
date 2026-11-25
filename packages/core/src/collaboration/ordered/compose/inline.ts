@@ -429,7 +429,7 @@ function isValueRecord(record: OrderedPropertyRecord): boolean {
  * control (the engine's tracked control and Word's `w:ins` around `w:sdt`), so a reject takes
  * the control with its words. Not for a control an Enter split: a decision keeps both halves.
  */
-function coverOf(ctx: ComposeContext, open: OrderedItem): string | null {
+export function coverOf(ctx: ComposeContext, open: OrderedItem): string | null {
   if (open.token !== 'sdt' || isSplitEdge(open) || open.by === null) return null;
   if (ctx.covered.has(open.by)) return null;
   return ctx.insertedBy(open);

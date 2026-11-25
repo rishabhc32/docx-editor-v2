@@ -316,6 +316,29 @@ describe("a control's prompt shown again, decided card by card after a fold", ()
     });
   }
 
+  // Ben's italic on his new control's prompt is part of his insertion: Ana's typing over the
+  // prompt keeps it in the glossary with the italic, as the engine keeps the prompt as it shows,
+  // and the accept of his control shows the same block, live and after a fold
+  test("a format on a new control's prompt, then another person's typing over it", async () => {
+    const { document: doc, base } = openOrderedWordFile(docx(p(t('Two per cent'))), { file: 1 });
+    const wrap = {
+      from: at(doc, 0, 9),
+      to: at(doc, 0, 11),
+      control: { type: 'dropDownList' },
+    } as const;
+    apply(doc, 'ben:1', { kind: 'wrap-control', ...EDIT, ...wrap }, 'Ben');
+    apply(
+      doc,
+      'ben:2',
+      { kind: 'delete', ...EDIT, from: at(doc, 0, 11), to: at(doc, 0, 13) },
+      'Ben'
+    );
+    const italic = { from: at(doc, 0, 11), to: at(doc, 0, 25), properties: [{ localName: 'i' }] };
+    apply(doc, 'ben:3', { kind: 'format', ...EDIT, ...italic }, 'Ben');
+    apply(doc, 'ana:1', { kind: 'insert', ...EDIT, place: at(doc, 0, 22), text: 'xy' });
+    await checkFold(doc, base, mediaStore(base), "a format on a new control's prompt");
+  });
+
   // Ana's pick hides the drop-down's prompt, so the glossary keeps it as a block: the block stays
   // once the row goes with the control, as the engine's glossary keeps it, live and after a fold
   for (const who of ['Ana', 'Ben']) {
