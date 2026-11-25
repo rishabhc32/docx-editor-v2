@@ -444,6 +444,7 @@ function checkpointUntracked(
         const kept = changeRecordOf(doc, story, record, labels, list);
         if (kept !== undefined) {
           const { element, untracked, recordUnchanged } = record;
+
           // A direct record goes with a reject of the pending records it was made over, after a
           // fold too
           const over = record.over?.flatMap((id) => {

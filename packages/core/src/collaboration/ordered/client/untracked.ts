@@ -245,6 +245,7 @@ function withProperties(
   let restored = properties;
   if (keys !== undefined && loaded !== undefined && loaded.kind !== 'textValue') {
     const kept = withMergedChildren(target, properties ?? null, keys, loaded.children);
+
     // With no properties of its own, the container's held only what the records give
     restored =
       properties === undefined && kept.length === 0 ? undefined : withChildren(loaded, kept);
