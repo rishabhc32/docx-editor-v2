@@ -312,21 +312,7 @@ export const KNOWN: readonly KnownDifference[] = [
     codes: 'DW',
     sets: ['structures'],
     kinds: ['mergeboth'],
-    edits: [
-      'insert row above',
-      'insert row below',
-      'row height',
-      'table centered',
-      'table style',
-      'delete column',
-      'column widths',
-      'cell fill',
-      'cell vertical alignment',
-      'cell borders',
-      'Ana fills the cell, Ben types inside',
-      'Ana fills the cell, Ben gives it the same fill',
-      'Ana sets the row height, then fills the cell',
-    ],
+    edits: ['insert row above', 'insert row below'],
   },
   // ---- the oracle ----
   {
