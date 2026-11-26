@@ -1,5 +1,6 @@
 // Golden checkpoints (design D14): checkpoints this engine wrote when it shipped version 5 of the
-// format, each from a room of `checkpoint-fixture.ts` over an engine test document, with the fold
+// format (`fixtures/checkpoints`), and version 6 (`fixtures/checkpoints-v6`, the item list as
+// data), each from a room of `checkpoint-fixture.ts` over an engine test document, with the fold
 // print of each one opened. Every later engine must read them to the same print. They were all
 // written again in one step by the final version 5 writer, which numbers a split room run, gives a
 // list and a style back to their change, and keeps a table record's room facts and each
@@ -38,9 +39,18 @@ const GOLDEN: readonly CheckpointRoom[] = [
 
 const WRITE = process.env.ORDERED_GOLDEN_WRITE === '1';
 
+/**
+ * The golden files of each version, by folder: version 5's are never written again; the current
+ * version's are written when missing, by this engine's writer.
+ */
+const VERSIONS = [
+  { folder: 'checkpoints', written: false },
+  { folder: 'checkpoints-v6', written: true },
+] as const;
+
 /** A golden file of a room, by the room's name. */
-const goldenUrl = (room: CheckpointRoom, extension: string): URL =>
-  new URL(`./fixtures/checkpoints/${room.name.replaceAll(' ', '-')}.${extension}`, import.meta.url);
+const goldenUrl = (folder: string, room: CheckpointRoom, extension: string): URL =>
+  new URL(`./fixtures/${folder}/${room.name.replaceAll(' ', '-')}.${extension}`, import.meta.url);
 
 /** A golden checkpoint opened, and its print; the room's Word file gives the media bytes. */
 function printOf(room: CheckpointRoom, bytes: Uint8Array): unknown {
@@ -50,23 +60,25 @@ function printOf(room: CheckpointRoom, bytes: Uint8Array): unknown {
 }
 
 describe('a golden checkpoint', () => {
-  for (const room of GOLDEN) {
-    test.if(WRITE)(`${room.name}: written when missing, with its print`, async () => {
-      const file = goldenUrl(room, 'docx');
-      if (!existsSync(file)) {
-        const { document: doc, base } = openOrderedWordFile(room.source, { file: 1 });
-        room.edit(doc);
-        writeFileSync(file, await checkpointBytes(doc, base, roomBlobs(base)));
-      }
+  for (const { folder, written } of VERSIONS) {
+    for (const room of GOLDEN) {
+      test.if(WRITE && written)(`${folder} ${room.name}: written when missing`, async () => {
+        const file = goldenUrl(folder, room, 'docx');
+        if (!existsSync(file)) {
+          const { document: doc, base } = openOrderedWordFile(room.source, { file: 1 });
+          room.edit(doc);
+          writeFileSync(file, await checkpointBytes(doc, base, roomBlobs(base)));
+        }
 
-      const print = printOf(room, new Uint8Array(readFileSync(file)));
-      writeFileSync(goldenUrl(room, 'print.json'), JSON.stringify(print));
-    });
+        const print = printOf(room, new Uint8Array(readFileSync(file)));
+        writeFileSync(goldenUrl(folder, room, 'print.json'), JSON.stringify(print));
+      });
 
-    test(`${room.name}: opens to its print`, () => {
-      const bytes = new Uint8Array(readFileSync(goldenUrl(room, 'docx')));
-      const print: unknown = JSON.parse(readFileSync(goldenUrl(room, 'print.json'), 'utf8'));
-      expect(printOf(room, bytes)).toEqual(print);
-    });
+      test(`${folder} ${room.name}: opens to its print`, () => {
+        const bytes = new Uint8Array(readFileSync(goldenUrl(folder, room, 'docx')));
+        const json = readFileSync(goldenUrl(folder, room, 'print.json'), 'utf8');
+        expect(printOf(room, bytes)).toEqual(JSON.parse(json));
+      });
+    }
   }
 });
