@@ -15,7 +15,7 @@ import {
   withRetainedPrompts,
 } from '../../../store/store/content-control-prompt-glossary.ts';
 import { withPackageShellOf } from '../../../store/store/tree-package-remote.ts';
-import { composeOrderedPart } from '../compose/compose.ts';
+import { storyPart } from '../compose/compose.ts';
 import type { OrderedRetainedPrompt } from '../compose/context.ts';
 import {
   orderedCommentRoots,
@@ -266,8 +266,8 @@ export class OrderedPublisher {
         continue;
       }
 
-      const { part, composed } = composeOrderedPart(this.#doc, name);
-      for (const prompt of composed.prompts) {
+      const { part, prompts } = storyPart(this.#doc, name);
+      for (const prompt of prompts) {
         this.#prompts.set(prompt.name, prompt);
       }
 

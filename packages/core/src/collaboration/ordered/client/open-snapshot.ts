@@ -3,13 +3,12 @@
 
 import { readOoxmlPackage, type OoxmlPackage } from '../../../store/package/ooxml-package.ts';
 import { DEFAULT_ZIP_LIMITS, readZip, zipHoldsEntry } from '../../../store/package/zip.ts';
-import { composeStoryPart } from '../compose/compose.ts';
+import { composeEveryStory } from '../compose/compose.ts';
 import { recordLoadedPackage } from '../load/load.ts';
 import { holdsCheckpointManifest, mediaFits } from '../model/checkpoint.ts';
 import { recordFileMedia } from '../model/file-media.ts';
 import { readSnapshotJson } from '../model/snapshot-read.ts';
 import { SNAPSHOT_BASE_ENTRY, SNAPSHOT_ENTRY } from '../model/snapshot-write.ts';
-import { isTextBoxStoryName } from '../model/text-boxes.ts';
 import type { OrderedDocument } from '../model/types.ts';
 import {
   normalizedRoomPackage,
@@ -79,24 +78,15 @@ function basePackage(
 }
 
 /**
- * Whether compose draws every story without a refusal. The check leaves the document as it was:
- * compose mints node ids from `composeIds`, which goes back.
+ * Whether compose draws every story without a refusal. The check leaves the document as it was,
+ * and keeps each part for the document's first compose.
  */
 function composesEveryStory(doc: OrderedDocument): boolean {
-  const next = doc.composeIds.next;
   try {
-    for (const name of doc.stories.keys()) {
-      // A text box's story is drawn into its object, in its host's story
-      if (!isTextBoxStoryName(name)) {
-        composeStoryPart(doc, name);
-      }
-    }
-
+    composeEveryStory(doc);
     return true;
   } catch {
     // Any failure: the list came from a file
     return false;
-  } finally {
-    doc.composeIds.next = next;
   }
 }

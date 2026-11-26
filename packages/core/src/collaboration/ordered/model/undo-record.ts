@@ -15,8 +15,26 @@ export interface OrderedUndoRecorded<T> {
   readonly record: OrderedUndoRecord;
 }
 
-/** Record how to take back one write, when an undo record is open. */
+/** Each document's state: a new object after each write. */
+const STATES = new WeakMap<OrderedDocument, object>();
+
+/**
+ * The document's state: the same object until the document's next write (each write records how
+ * to take it back, and a take-back writes). What is kept by a state goes with it.
+ */
+export function stateOf(doc: OrderedDocument): object {
+  let state = STATES.get(doc);
+  if (state === undefined) {
+    state = {};
+    STATES.set(doc, state);
+  }
+
+  return state;
+}
+
+/** Record how to take back one write, when an undo record is open. The document's state moves. */
 export function recordUndo(doc: OrderedDocument, step: OrderedUndoStep): void {
+  STATES.delete(doc);
   doc.undo?.push(step);
 }
 
@@ -52,5 +70,6 @@ export function withUndoRecord<T>(doc: OrderedDocument, edit: () => T): OrderedU
  */
 export function takeBack(doc: OrderedDocument, record: OrderedUndoRecord): void {
   if (doc.undo !== null) throw new Error('An undo record is open.');
+  STATES.delete(doc);
   for (let at = record.steps.length - 1; at >= 0; at -= 1) record.steps[at]?.();
 }
