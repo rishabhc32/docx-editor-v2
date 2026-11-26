@@ -21,6 +21,7 @@ import {
   withRelationshipsPartFor,
 } from '../package/package-edit.ts';
 import type { RelationshipRecord } from '../package/relationships.ts';
+import { normalizedFingerprintAttributes } from '../package/ooxml-serialize.ts';
 import { fnv1a32 } from '../package/para-id.ts';
 import { W14_NAMESPACE_URI, WML_NAMESPACE_URI } from '../package/ooxml-shared.ts';
 import {
@@ -63,7 +64,9 @@ function referencedDocPart(control: OoxmlNode): string | undefined {
 
 /**
  * One entry per node, without ids or paragraph ids, every string quoted: equal prompts give
- * equal text, so they share one block. Null for content past the walk's bounds.
+ * equal text, so they share one block. A text's `xml:space` counts as the oracle counts it
+ * (`normalizedFingerprintAttributes`): only where the text needs it, so a prompt read back from
+ * a save keeps its name. Null for content past the walk's bounds.
  */
 function promptDigestSource(nodes: readonly OoxmlNode[]): string | null {
   const out: string[] = [];
@@ -76,7 +79,7 @@ function promptDigestSource(nodes: readonly OoxmlNode[]): string | null {
       return true;
     }
 
-    const attributes = node.attributes
+    const attributes = normalizedFingerprintAttributes(node)
       .filter((attribute) => attribute.localName !== 'paraId' && attribute.localName !== 'textId')
       .map((attribute) => [attribute.namespaceUri ?? '', attribute.localName, attribute.value]);
     out.push(`<${JSON.stringify([node.namespaceUri ?? '', node.localName, attributes])}`);
