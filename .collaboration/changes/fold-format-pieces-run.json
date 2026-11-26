@@ -1,0 +1,10 @@
+{
+  "impact": "compatible",
+  "fields": [],
+  "before": "An open of a checkpoint joined the pieces of a room run (oc:run) to the format records of the run's first piece only. When a pending deletion split the run inside a pending format and the run's first piece held no format, the format's pieces loaded as two records, and a reject of the deletion after a fold drew the formatted words in two runs where the room draws one.",
+  "after": "Each piece's format record joins the first record read in its room run that says the same (withCheckpointRuns, joinedFormats), so a reject after a fold draws one run, as live.",
+  "reason": "Change messages, the change log and its kinds keep their meaning, and the Yjs document format does not change. The checkpoint format, its writer and its version do not change: only the open joins more records that the checkpoint already writes as one change record. Ordered rooms are not deployed yet, so no room needs a migration.",
+  "tests": ["packages/core/src/collaboration/ordered/__tests__/checkpoint-fold-decide.test.ts"],
+  "changeset": "fold-format-pieces-run",
+  "migration": null
+}
