@@ -83,8 +83,12 @@ function isForbiddenXmlUnit(cu: number): boolean {
 export function isValidXmlText(value: string): boolean {
   // Objects/arrays must never reach serialization: `String({})` is "[object Object]".
   if (typeof value !== 'string') return false;
+
   // Most text holds no control char, non-character or surrogate: one regex scan decides it
-  if (PLAIN_XML_TEXT.test(value)) return true;
+  if (PLAIN_XML_TEXT.test(value)) {
+    return true;
+  }
+
   for (let i = 0; i < value.length; i++) {
     const cu = value.charCodeAt(i);
     if (isForbiddenXmlUnit(cu)) return false;
