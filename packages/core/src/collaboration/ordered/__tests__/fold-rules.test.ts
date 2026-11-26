@@ -1,481 +1,58 @@
-// How a fold keeps each fact of the room's model (design D14). A room writes its document as a
-// checkpoint and the next opening reads it back, so each field of the model needs a rule: read back
-// from the Word file (`file`), kept in the checkpoint's manifest (`manifest`), made again from
-// other facts (`derived`), or not needed after a fold (`dropped`). Each table covers every key of
-// its type, so a new field fails the type check here until it has a rule. `fold-check.ts` and the
-// shape tests compare the room live and after a fold; this file only names the rules and checks the
-// manifest's sections.
+// How a checkpoint keeps each fact of the room's model (design D3): the field table of
+// `model/snapshot-fields.ts` and `model/snapshot-side.ts` gives every field of every type stored,
+// with its codec, or rebuilt by the open, with how. Each table covers every key of its type, so a
+// new field fails the type check there until it has an entry. `fold-check.ts` checks after each
+// step of the shape sessions that an open gives back every stored field.
+//
+// What a fold of version 5 dropped is stored now: a reopened room holds what the live room held
+// (`retracted`, `gone`, `cancelledFmts`, `takenBackLendings`, `taken`, each record's `change`,
+// `acceptedOnly`, a direct edit's object records, `direct`, `composeIds`, `reattributed`, the
+// `insertion` counter, each resource's key and suggestion, `added`). The cleanup of a close decides
+// what goes (design D8).
 
 import { describe, expect, test } from 'bun:test';
-import { strFromU8, unzipSync } from 'fflate';
-import { readOoxmlPackage } from '../../../store/package/ooxml-package.ts';
-import { openOrderedWordFile } from '../client/open.ts';
-import { CHECKPOINT_MANIFEST, readCheckpoint, type CheckpointRead } from '../model/checkpoint.ts';
-import type { OrderedComment, OrderedCommentRange } from '../model/comments.ts';
-import type { OrderedObjectRecord } from '../model/objects.ts';
-import type {
-  OrderedFileMedia,
-  OrderedFileStore,
-  OrderedResource,
-  OrderedResources,
-} from '../model/resources.ts';
-import type { OrderedSectionRecord } from '../model/sections.ts';
-import type {
-  OrderedAttribution,
-  OrderedCounters,
-  OrderedDocument,
-  OrderedElementRecord,
-  OrderedFieldPiece,
-  OrderedFormatRecord,
-  OrderedItem,
-  OrderedParagraphOpRecord,
-  OrderedPartRevision,
-  OrderedRevisionIds,
-  OrderedStory,
-  OrderedSuggestion,
-  OrderedWithin,
-} from '../model/types.ts';
-import { addressOf, apply, APPLY_FILE, at, DIRECT, EDIT, opens } from './change-apply-fixture.ts';
+import type { SnapshotFields } from '../model/snapshot-codec.ts';
 import {
-  PASTED_LIST,
-  ROOM_FACTS,
-  SPLIT_RUN,
-  STYLE_RECORDS,
-  TABLE_RECORDS,
-  TYPED_BARE,
-  TYPED_RUNS,
-  type CheckpointRoom,
-} from './checkpoint-fixture.ts';
-import { RESOURCE_ROOMS, resourceBlobs } from './checkpoint-resources-fixture.ts';
-import { checkpointBytes } from './fold-check.ts';
-
-/** A read checkpoint. */
-type CheckpointOpened = Extract<CheckpointRead, { readonly ok: true }>;
-
-/** The manifest's sections of room facts, each with the number of entries a read gives back. */
-const SECTIONS = {
-  media: (read: CheckpointOpened) => read.media.length,
-  suggestions: (read: CheckpointOpened) => read.facts.suggestions.length,
-  comments: (read: CheckpointOpened) => read.facts.commentPersons.size,
-  takeovers: (read: CheckpointOpened) => read.facts.takeovers.length,
-  namespaces: (read: CheckpointOpened) => read.facts.namespacePersons.size,
-  untracked: (read: CheckpointOpened) => read.facts.untracked.length,
-  changeRecords: (read: CheckpointOpened) => read.facts.changeRecords.length,
-  lists: (read: CheckpointOpened) => read.facts.lists.length,
-  styles: (read: CheckpointOpened) => read.facts.styles.length,
-  resources: (read: CheckpointOpened) => read.facts.resources.length,
-  madeOver: (read: CheckpointOpened) => read.facts.madeOver.length,
-};
-
-type ManifestSection = keyof typeof SECTIONS;
-
-/** The manifest's fields that are no section of room facts. */
-const HEADER: ReadonlySet<string> = new Set(['format', 'version']);
-
-/** How a fold keeps one field. `how` says which load step, section or facts. */
-type FoldRule =
-  | { readonly rule: 'file'; readonly how: string }
-  | {
-      readonly rule: 'manifest';
-      readonly section: ManifestSection;
-      /** The field in the section's entries, dotted for a field of a nested entry. */
-      readonly field: string;
-      readonly how: string;
-    }
-  | { readonly rule: 'derived'; readonly how: string }
-  | { readonly rule: 'dropped'; readonly how: string };
-
-const file = (how: string): FoldRule => ({ rule: 'file', how });
-const manifest = (section: ManifestSection, field: string, how: string): FoldRule => ({
-  rule: 'manifest',
-  section,
-  field,
-  how,
-});
-const derived = (how: string): FoldRule => ({ rule: 'derived', how });
-const dropped = (how: string): FoldRule => ({ rule: 'dropped', how });
-
-/** Every key of `T`, each with its rule. */
-type Rules<T> = Record<keyof T, FoldRule>;
-
-// Rules that many records share
-const SUGGESTION = manifest('suggestions', 'revisions', "the change record's `w:id` names it");
-const RECORD_SEQ = derived('the load numbers records as it reads them, taken ones first');
-const TAKEN = manifest('takeovers', 'taken', 'the change record that took it lists it');
-const TAKEN_EARLIER = manifest('takeovers', 'taken.earlier', 'the links before `replaced`');
-const UNDO_ONLY = dropped(
-  'only the undo of the change that made it reads it; a fold keeps no undo'
-);
-
-const ITEM: Rules<OrderedItem> = {
-  leaf: derived('the tree sets it when `addOrderedStory` builds the story'),
-  space: file('load/state.ts names a loaded space by the node id; addresses are new (D8)'),
-  offset: file('load/state.ts, with the space'),
-  length: file('load/runs.ts: the units of the loaded text'),
-  kind: file('load/paragraph.ts and load/blocks.ts, by the element'),
-  text: file('load/runs.ts'),
-  node: file('load/paragraph.ts and load/blocks.ts: the element or its shell'),
-  textShell: file('load/runs.ts: the text element'),
-  pieces: file('load/runs.ts, load/paragraph.ts and load/equations.ts: a whole field'),
-  face: file("load/runs.ts: the run's `w:rPr`; client/room-runs.ts joins the pieces of a room run"),
-  run: file('load/runs.ts: the run, or the room run of `oc:run` (client/room-runs.ts)'),
-  inRun: file('load/runs.ts'),
-  bare: file('load/paragraph.ts'),
-  block: file('load/blocks.ts and load/sections.ts'),
-  instr: file('load/runs.ts: a field instruction'),
-  rebuilt: file('load/state.ts `withFileLabels`: each item the file labels'),
-  prompt: file('load/paragraph.ts and load/blocks.ts: the control and its prompt'),
-  token: file('load/state.ts: the container element'),
-  pair: file('load/state.ts: the open item of the container'),
-  home: file('load/paragraph.ts; client/room-runs.ts gives a joined piece the first one'),
-  unitCount: file('load/paragraph.ts'),
-  fieldSlot: file('load/paragraph.ts and load/moves.ts'),
-  moveRange: file('load/moves.ts'),
-  by: SUGGESTION,
-  dels: SUGGESTION,
-  fmts: file("load/runs.ts reads the run's `w:rPrChange`; taken records come from `takeovers`"),
-  cancelledFmts: dropped(
-    'they draw nothing and hold no card; only the undo of the press reads them'
-  ),
-  props: file('load/properties.ts and load/sections.ts read each change record of properties'),
-  takenBackLendings: dropped(
-    'only the cells of a column its author took back read them, and a fold keeps no such cell'
-  ),
-  move: file('load/moves.ts: `w:moveFrom`, `w:moveTo` and the range name'),
-  retracted: dropped('taken back by its author: compose writes none of it'),
-  taken: UNDO_ONLY,
-  gone: dropped('its container went: compose writes none of it'),
-  quiet: file('load/notes.ts and load/text-boxes.ts; a new row gives it `within`'),
-  within: file('load/state.ts: the row and cell revision marks around it'),
-};
-
-const WITHIN: Rules<OrderedWithin> = {
-  by: file("load/state.ts: the row's `w:ins` and the cell's `w:cellIns`"),
-  dels: file("load/state.ts: the row's `w:del` and the cell's `w:cellDel`"),
-};
-
-const PIECE: Rules<OrderedFieldPiece> = {
-  node: file('load/runs.ts'),
-  sourceRun: file('load/runs.ts'),
-  recordFaces: file('load/runs.ts; client/takeovers.ts adds the faces under taken records'),
-  recordFiles: file("load/runs.ts: the run's `w:rPrChange`"),
-};
-
-type PropertiesFormat = Extract<OrderedFormatRecord, { readonly kind: 'properties' }>;
-type FaceFormat = Extract<OrderedFormatRecord, { readonly kind: 'face' }>;
-
-const PROPERTIES_FORMAT: Rules<PropertiesFormat> = {
-  kind: file("the run's `w:rPrChange` loads as a `face` record (fold-check.ts)"),
-  id: derived('the load mints one for each change record; only pieces name it'),
-  suggestion: SUGGESTION,
-  seq: RECORD_SEQ,
-  properties: file("load/runs.ts: the run's `w:rPr`"),
-  remove: file("load/runs.ts: the run's `w:rPr` without them"),
-  style: file("load/runs.ts: the run's `w:rStyle`"),
-  replaced: TAKEN,
-  replacedEarlier: TAKEN_EARLIER,
-  over: manifest('madeOver', 'records.over', "by the label on Word's one `w:rPrChange`"),
-  untracked: file("written as its author's new words' own `w:rPr`; a reject takes the words"),
-  change: UNDO_ONLY,
-};
-
-const FACE_FORMAT: Rules<FaceFormat> = {
-  kind: file("load/runs.ts: the run's `w:rPrChange`"),
-  id: derived('the load mints one for each change record; only pieces name it'),
-  suggestion: SUGGESTION,
-  seq: RECORD_SEQ,
-  face: file("load/runs.ts: the `w:rPr` of the run's `w:rPrChange`"),
-  fileRecord: file("load/runs.ts: the run's `w:rPrChange`"),
-  replaced: TAKEN,
-  replacedEarlier: TAKEN_EARLIER,
-};
-
-const ELEMENT_RECORD: Rules<OrderedElementRecord> = {
-  kind: file('load/properties.ts: a change record of properties'),
-  suggestion: SUGGESTION,
-  seq: RECORD_SEQ,
-  target: file('load/properties.ts: the properties element'),
-  element: file("load/properties.ts: the container's properties"),
-  fileRecord: file('load/properties.ts: the change record'),
-  recordUnchanged: manifest('untracked', 'records.recordUnchanged', 'by the container label'),
-  untracked: manifest('untracked', 'records.untracked', 'by the container label'),
-  change: UNDO_ONLY,
-  acceptedOnly: dropped('no write sets it'),
-  settled: file("change/settle-columns.ts: written as the table's own grid and placement"),
-  tableCells: manifest('changeRecords', 'records.tableCells', 'the cells by their labels'),
-  replaced: TAKEN,
-  replacedEarlier: manifest('takeovers', 'taken.earlier', 'or untracked records.replacedEarlier'),
-  over: manifest('untracked', 'records.over', "Word's one change record holds the others"),
-  merge: manifest('changeRecords', 'records.merge', 'by the container label'),
-};
-
-const PARAGRAPH_OP_RECORD: Rules<OrderedParagraphOpRecord> = {
-  kind: file("the paragraph's `w:pPrChange` loads as an `element` record (fold-check.ts)"),
-  suggestion: SUGGESTION,
-  seq: RECORD_SEQ,
-  target: file('load/properties.ts'),
-  op: file("load/properties.ts: the paragraph's `w:pPr` and its `w:pPrChange`"),
-  untracked: file("written as its author's new paragraph's own `w:pPr`; a reject takes it"),
-  replaced: TAKEN,
-  replacedEarlier: TAKEN_EARLIER,
-  over: manifest('madeOver', 'records.over', "by the label on Word's one `w:pPrChange`"),
-};
-
-const SECTION_RECORD: Rules<OrderedSectionRecord> = {
-  kind: file("the section's `w:sectPrChange` loads as an `element` record (fold-check.ts)"),
-  suggestion: SUGGESTION,
-  seq: RECORD_SEQ,
-  target: file('load/sections.ts'),
-  op: file('load/sections.ts: the `w:sectPr` and its `w:sectPrChange`'),
-  untracked: file("written as its author's new mark's own `w:sectPr`; a reject takes the mark"),
-  keptOnReject: file("written as the section's own `w:type`, which every decision keeps"),
-  replaced: TAKEN,
-  replacedEarlier: TAKEN_EARLIER,
-  over: manifest('madeOver', 'records.over', "by the label on Word's one `w:sectPrChange`"),
-};
-
-const OBJECT_RECORD: Rules<OrderedObjectRecord> = {
-  kind: file('a direct edit: written in the drawing, which load/runs.ts reads as the node'),
-  suggestion: dropped("a direct edit, accepted: only its author's undo reads it"),
-  seq: dropped('a direct edit, accepted: written in the drawing'),
-  target: file('load/runs.ts: the drawing'),
-  op: file('load/runs.ts: the drawing as the op left it'),
-  replaced: dropped('never set: a direct edit takes over no record'),
-};
-
-const SUGGESTION_FIELDS: Rules<OrderedSuggestion> = {
-  id: manifest('suggestions', 'id', 'the load makes it under its id'),
-  attribution: manifest('suggestions', 'author', 'with its date, attributes and person'),
-  status: manifest('suggestions', 'status', 'pending when absent'),
-  seq: derived("the load makes the listed suggestions first, in the manifest's order"),
-  version: manifest('suggestions', 'version', 'the open sets it after its other steps'),
-  direct: dropped("accepted when made; only its author's undo turns its status"),
-};
-
-const ATTRIBUTION: Rules<OrderedAttribution> = {
-  author: manifest('suggestions', 'author', "a mark's `w:author` must be the same"),
-  person: manifest('suggestions', 'person', "its Word name must be the mark's author"),
-  date: manifest('suggestions', 'date', "a mark's `w:date` must be the same"),
-  attributes: manifest('suggestions', 'attributes', "the mark's other attributes"),
-};
-
-const STORY: Rules<OrderedStory> = {
-  name: file('load/load.ts `orderedStoryParts`'),
-  part: file('load/load.ts: the story part'),
-  tree: file('load/load.ts `loadStories`, and load/text-boxes.ts'),
-  spaces: derived('`addOrderedStory` indexes the items by space'),
-};
-
-const DOCUMENT: Rules<OrderedDocument> = {
-  file: derived("the open's file number (D8)"),
-  stories: file('load/load.ts `loadStories`, and load/text-boxes.ts'),
-  suggestions: manifest(
-    'suggestions',
-    'id',
-    "listed first; the marks of no listed one are the file's"
-  ),
-  labelled: derived('indexed from the labels as the load makes the items'),
-  ownEdited: UNDO_ONLY,
-  added: UNDO_ONLY,
-  counters: derived('see `OrderedCounters`'),
-  runShells: file('load/runs.ts'),
-  originals: file('load/load.ts `collectOriginals`'),
-  revisionIds: derived('see `OrderedRevisionIds`'),
-  placeholders: file('load/load.ts: the glossary building blocks'),
-  movesWithRanges: file('load/moves.ts: the range markers compose wrote'),
-  composeIds: dropped("every open starts it again; the ids it minted are the file's node ids"),
-  paraIds: file("the stories hold the new paragraphs' `w14:paraId`, which a new id avoids"),
-  commentIds: file('load/load.ts `collectOriginals`'),
-  comments: file('load/comments.ts; see `OrderedComment`'),
-  commentRanges: file('load/state.ts `noteCommentMarker`'),
-  numbering: file('load/load.ts `recordFileLists`'),
-  resources: derived('see `OrderedResources`'),
-  partRevisions: file('load/part-revisions.ts; a listed `record` keeps its suggestion id'),
-  namespaces: manifest('namespaces', 'person', 'each namespace an element names as a typer'),
-  lastCounters: dropped('a fold gives each item a new address, which refuses a late change (D8)'),
-  undo: dropped('set only while an edit runs'),
-};
-
-const COUNTERS: Rules<OrderedCounters> = {
-  suggestion: derived('`newSuggestion` passes over every id the document holds'),
-  insertion: dropped('the model does not read it'),
-  seq: derived('the load counts the suggestions and records it makes'),
-};
-
-const REVISION_IDS: Rules<OrderedRevisionIds> = {
-  byRole: file("load/state.ts: each mark's `w:id`, which compose wrote by role"),
-  attributesByRole: file("load/state.ts: each mark's other attributes"),
-  fileIds: file('load/load.ts `collectOriginals`'),
-  reattributed: dropped('compose wrote the new attribution on every mark'),
-  listed: manifest('suggestions', 'revisions', 'by listed suggestion, in order'),
-};
-
-const PART_REVISION: Rules<OrderedPartRevision> = {
-  part: file('load/part-revisions.ts'),
-  element: file('load/part-revisions.ts'),
-  revision: file('load/part-revisions.ts'),
-  styleId: file('load/part-revisions.ts'),
-};
-
-const COMMENT: Rules<OrderedComment> = {
-  id: file('load/comments.ts'),
-  author: file('load/comments.ts'),
-  initials: file('load/comments.ts'),
-  date: file('load/comments.ts'),
-  paraIds: file('load/comments.ts'),
-  paraId: file('load/comments.ts'),
-  parent: file('load/comments.ts: the thread entries'),
-  done: file('load/comments.ts: the thread entries'),
-  element: file('load/comments.ts'),
-  person: manifest('comments', 'person', "by the comment's `w:id`"),
-};
-
-const COMMENT_RANGE: Rules<OrderedCommentRange> = {
-  story: file('load/state.ts `noteCommentMarker`'),
-  start: file('load/state.ts `noteCommentMarker`'),
-  end: file('load/state.ts `noteCommentMarker`'),
-  reference: file('load/state.ts `noteCommentMarker`'),
-};
-
-const RESOURCES: Rules<OrderedResources> = {
-  fileParts: file('load/load.ts `recordFileNames`'),
-  fileRelationships: file('load/load.ts `recordFileNames`'),
-  fileLists: file('load/load.ts `recordFileLists`'),
-  fileStores: file('load/load.ts `recordFileStores`'),
-  fileMedia: manifest('media', 'part', 'model/file-media.ts `recordFileMedia`'),
-  added: derived('see each kind of resource'),
-};
-
-const FILE_MEDIA: Rules<OrderedFileMedia> = {
-  part: manifest('media', 'part', 'by its part name'),
-  contentType: manifest('media', 'contentType', 'checked against the content types'),
-  sha256: manifest('media', 'sha256', 'the room storage serves the bytes by it'),
-  size: manifest('media', 'size', 'checked when a client reads the bytes'),
-  entry: manifest('media', 'entry', 'its place among the entries'),
-};
-
-const FILE_STORE: Rules<OrderedFileStore> = {
-  storeItemId: file('load/load.ts `recordFileStores`'),
-  root: file('load/load.ts `recordFileStores`'),
-  boundNodes: file('load/load.ts `recordFileStores`'),
-};
-
-/** The rules of one kind of resource. */
-type ResourceRules<K extends OrderedResource['kind']> = Rules<
-  Extract<OrderedResource, { readonly kind: K }>
->;
-
-// What every resource has: one the manifest does not list is the file's after a fold
-const KEY = dropped(
-  'the fold writes the resource under the names its key gave; a load reads those'
-);
-const KIND = file('written as a part, a relationship or a definition of the file');
-
-// What every resource the manifest's `resources` lists has: client/checkpoint-resources.ts gives
-// it back to its suggestion
-const LISTED_KIND = manifest('resources', 'kind', 'by its kind');
-const LISTED_KEY = manifest('resources', 'key', 'its names come from it');
-const LISTED_SUGGESTION = manifest('resources', 'suggestion', 'a decision writes it or not');
-
-const MEDIA: ResourceRules<'media'> = {
-  kind: LISTED_KIND,
-  key: LISTED_KEY,
-  suggestion: LISTED_SUGGESTION,
-  part: derived('from the key and the content type (`orderedMediaPart`)'),
-  contentType: manifest('media', 'contentType', "its reference; ink's from the package"),
-  sha256: manifest('media', 'sha256', "its reference; ink's from the bytes the package holds"),
-  size: manifest('media', 'size', "its reference; ink's from the bytes the package holds"),
-};
-
-const STORY_RESOURCE: ResourceRules<'story'> = {
-  kind: KIND,
-  key: KEY,
-  suggestion: dropped(
-    "a header's or a footer's is a direct edit's; a new notes part stays while the list holds it"
-  ),
-  part: file('load/load.ts: a story part of the file'),
-  role: file("load/load.ts: the part's root and content type"),
-  relationshipsOf: file("the part's own relationships are written"),
-};
-
-const PART_RESOURCE: ResourceRules<'part'> = {
-  kind: LISTED_KIND,
-  key: LISTED_KEY,
-  suggestion: LISTED_SUGGESTION,
-  part: derived('from the key and the type (`orderedObjectPart`)'),
-  type: manifest('resources', 'type', 'checked against the content type'),
-  root: file('client/checkpoint-resources.ts: the part as the file holds it'),
-};
-
-const RELATIONSHIP: ResourceRules<'relationship'> = {
-  kind: LISTED_KIND,
-  key: LISTED_KEY,
-  suggestion: LISTED_SUGGESTION,
-  owner: manifest('resources', 'owner', 'a part the file holds'),
-  id: derived('from the key (`orderedRelationshipId`)'),
-  type: file("client/checkpoint-resources.ts: the relationship's type"),
-  target: file('client/checkpoint-resources.ts: a listed part or media, or a safe address'),
-};
-
-const LIST: ResourceRules<'list'> = {
-  kind: KIND,
-  key: manifest('lists', 'key', 'client/lists.ts gives it back as a resource'),
-  suggestion: manifest('lists', 'suggestion', 'client/lists.ts'),
-  numId: derived('from the key (`orderedListNumber`)'),
-  abstractNumId: derived('from the key (`orderedListNumber`)'),
-  levels: file('client/lists.ts: the definition the numbering part holds'),
-  definition: file('client/lists.ts: the definition the numbering part holds'),
-  bullets: file('client/lists.ts: the bullets its levels name, their images the listed media'),
-};
-
-const LIST_LEVEL: ResourceRules<'list-level'> = {
-  kind: LISTED_KIND,
-  key: LISTED_KEY,
-  suggestion: LISTED_SUGGESTION,
-  numId: manifest('resources', 'numId', 'the list whose definition holds it'),
-  level: manifest('resources', 'level', 'checked against the level the file holds'),
-  format: manifest('resources', 'format', 'the engine declares the same level of it'),
-};
-
-const STYLE: ResourceRules<'style'> = {
-  kind: KIND,
-  key: manifest('styles', 'key', 'client/lists.ts gives it back as a whole style'),
-  suggestion: manifest('styles', 'suggestion', 'client/lists.ts'),
-  styleId: manifest('styles', 'styleId', 'client/lists.ts'),
-  type: file('client/lists.ts: the whole `w:style`'),
-  name: file('client/lists.ts: the whole `w:style`'),
-  basedOn: file('client/lists.ts: the whole `w:style`'),
-  next: file('client/lists.ts: the whole `w:style`'),
-  link: file('client/lists.ts: the whole `w:style`'),
-  uiPriority: file('client/lists.ts: the whole `w:style`'),
-  unhideWhenUsed: file('client/lists.ts: the whole `w:style`'),
-  paragraph: file('client/lists.ts: the whole `w:style`'),
-  run: file('client/lists.ts: the whole `w:style`'),
-  element: file('client/lists.ts: the whole `w:style`'),
-};
-
-const SETTING: ResourceRules<'setting'> = {
-  kind: KIND,
-  key: KEY,
-  suggestion: dropped("a direct edit, accepted: only its author's undo reads it"),
-  op: file('the settings part as the op left it'),
-};
-
-const CUSTOM_XML: ResourceRules<'custom-xml'> = {
-  kind: KIND,
-  key: KEY,
-  suggestion: file("the store's node; compose takes it out once no control binds it"),
-  namespaceUri: file('load/load.ts `recordFileStores`'),
-  root: file('load/load.ts `recordFileStores`'),
-  storeItemId: file('load/load.ts `recordFileStores`'),
-  nodeId: file("the store's node, which the control binds"),
-  label: file("the control's text"),
-  data: file("the store's node"),
-  control: file('load/blocks.ts and load/paragraph.ts: the control'),
-};
+  ADDRESS,
+  ATTRIBUTION,
+  COMMENT,
+  COMMENT_RANGE,
+  COUNTERS,
+  DOCUMENT,
+  ELEMENT_RECORD,
+  FACE_FORMAT,
+  FILE_MEDIA,
+  FILE_STORE,
+  ITEM,
+  LIST_BULLET,
+  LIST_LEVEL_VALUE,
+  NOTE_PROPERTIES,
+  OBJECT_RECORD,
+  PARAGRAPH_OP_RECORD,
+  PART_REVISION,
+  PIECE,
+  PROPERTIES_FORMAT,
+  RESOURCES,
+  RESOURCES_BY_KIND,
+  REVISION_IDS,
+  SECTION_RECORD,
+  STORY,
+  SUGGESTION,
+  UNIT_RANGE,
+  WITHIN,
+} from '../model/snapshot-fields.ts';
+import {
+  NAMED_PROMPT_STATE,
+  PROMPTED_BY_EDIT,
+  SIDE,
+  SWAP,
+  TEXT_BOX_HOST,
+  TYPED_RUN,
+  UNTRACKED,
+} from '../model/snapshot-side.ts';
 
 /** Every table, by the type it covers. */
-const TABLES: Readonly<Record<string, Readonly<Record<string, FoldRule>>>> = {
+const TABLES: Readonly<Record<string, SnapshotFields<object>>> = {
   OrderedItem: ITEM,
   OrderedWithin: WITHIN,
   OrderedFieldPiece: PIECE,
@@ -485,9 +62,12 @@ const TABLES: Readonly<Record<string, Readonly<Record<string, FoldRule>>>> = {
   OrderedParagraphOpRecord: PARAGRAPH_OP_RECORD,
   OrderedSectionRecord: SECTION_RECORD,
   OrderedObjectRecord: OBJECT_RECORD,
-  OrderedSuggestion: SUGGESTION_FIELDS,
+  OrderedNoteProperties: NOTE_PROPERTIES,
+  OrderedSuggestion: SUGGESTION,
   OrderedAttribution: ATTRIBUTION,
   OrderedStory: STORY,
+  OrderedItemAddress: ADDRESS,
+  OrderedUnitRange: UNIT_RANGE,
   OrderedDocument: DOCUMENT,
   OrderedCounters: COUNTERS,
   OrderedRevisionIds: REVISION_IDS,
@@ -497,152 +77,50 @@ const TABLES: Readonly<Record<string, Readonly<Record<string, FoldRule>>>> = {
   OrderedResources: RESOURCES,
   OrderedFileMedia: FILE_MEDIA,
   OrderedFileStore: FILE_STORE,
-  'OrderedResource media': MEDIA,
-  'OrderedResource story': STORY_RESOURCE,
-  'OrderedResource part': PART_RESOURCE,
-  'OrderedResource relationship': RELATIONSHIP,
-  'OrderedResource list': LIST,
-  'OrderedResource list-level': LIST_LEVEL,
-  'OrderedResource style': STYLE,
-  'OrderedResource setting': SETTING,
-  'OrderedResource custom-xml': CUSTOM_XML,
+  OrderedListLevel: LIST_LEVEL_VALUE,
+  OrderedListBullet: LIST_BULLET,
+  ...Object.fromEntries(
+    Object.entries(RESOURCES_BY_KIND).map(([kind, table]) => [`OrderedResource ${kind}`, table])
+  ),
+  OrderedTextBoxHost: TEXT_BOX_HOST,
+  TypedRun: TYPED_RUN,
+  Untracked: UNTRACKED,
+  PromptedByEdit: PROMPTED_BY_EDIT,
+  Swap: SWAP,
+  NamedPromptState: NAMED_PROMPT_STATE,
 };
 
-const RULES: readonly FoldRule[] = Object.values(TABLES).flatMap((table) => Object.values(table));
-
-/** Whether a JSON value holds a field at `path`: in a list, in any of its entries. */
-function holdsPath(value: unknown, path: readonly string[]): boolean {
-  if (Array.isArray(value)) {
-    return value.some((entry) => holdsPath(entry, path));
-  }
-
-  const [key, ...rest] = path;
-  if (key === undefined) {
-    return value !== undefined;
-  }
-
-  if (typeof value !== 'object' || value === null || !Object.hasOwn(value, key)) {
-    return false;
-  }
-
-  return holdsPath((value as Record<string, unknown>)[key], rest);
-}
-
-/**
- * Ana's row height, the organiser's column, a direct row height and a direct column beside the new
- * cell: the direct column is made over Ana's grid record (section `untracked`, `over`).
- */
-const DIRECT_OVER: CheckpointRoom = {
-  name: 'direct column over a row height',
-  source: APPLY_FILE,
-  edit: (doc) => {
-    const height = (row: number) =>
-      ({
-        kind: 'table-property',
-        on: [addressOf(opens(doc, 'tr')[row]!)],
-        op: { op: 'setTableRowHeight', heightTwips: 500 },
-      }) as const;
-    const right = (k: number) =>
-      ({ cell: addressOf(opens(doc, 'tc')[k]!), where: 'right' }) as const;
-    apply(doc, 'ana:1', { ...height(1), ...EDIT }, 'Ana');
-    apply(doc, 'olive:1', { kind: 'insert-column', ...EDIT, ...right(3) }, 'Olive');
-    apply(doc, 'olive:2', { ...height(0), ...DIRECT }, 'Olive');
-    apply(doc, 'olive:3', { kind: 'insert-column', ...DIRECT, ...right(4) }, 'Olive');
-  },
-};
-
-/**
- * Olive's suggested bold over Ana's new words, then Olive's direct italic on them: made over the
- * bold's record (section `madeOver`).
- */
-const FORMAT_OVER: CheckpointRoom = {
-  name: 'direct format over a pending one',
-  source: APPLY_FILE,
-  edit: (doc) => {
-    const format = (mode: typeof EDIT | typeof DIRECT, localName: string) =>
-      ({
-        kind: 'format',
-        ...mode,
-        from: at(doc, 0, 0),
-        to: at(doc, 0, 4),
-        properties: [{ localName }],
-      }) as const;
-    apply(doc, 'olive:1', format(EDIT, 'b'), 'Olive');
-    apply(doc, 'olive:2', format(DIRECT, 'i'), 'Olive');
-  },
-};
-
-/** The rooms whose checkpoints hold a fact of each section. */
-const ROOMS: readonly CheckpointRoom[] = [
-  ROOM_FACTS,
-  STYLE_RECORDS,
-  TYPED_RUNS,
-  TYPED_BARE,
-  SPLIT_RUN,
-  PASTED_LIST,
-  TABLE_RECORDS,
-  DIRECT_OVER,
-  FORMAT_OVER,
-  ...RESOURCE_ROOMS,
+/** The fields an open makes again: each one a reviewed choice. */
+const REBUILT = [
+  'OrderedItem.leaf',
+  'OrderedStory.spaces',
+  'OrderedDocument.file',
+  'OrderedDocument.labelled',
+  'OrderedDocument.ownEdited',
+  'OrderedDocument.undo',
+  'OrderedResources.fileMedia',
 ];
 
-/** The checkpoint of each room: its manifest as JSON, and as the reader reads it. */
-async function roomCheckpoints(): Promise<
-  { readonly json: Record<string, unknown>; readonly read: CheckpointOpened }[]
-> {
-  const out = [];
-  for (const room of ROOMS) {
-    const { document: doc, base } = openOrderedWordFile(room.source, { file: 1 });
-    room.edit(doc);
-    const bytes = await checkpointBytes(doc, base, resourceBlobs(base));
-    const entry = unzipSync(bytes)[CHECKPOINT_MANIFEST.slice(1)];
-    const pkg = readOoxmlPackage(bytes, {});
-    if (entry === undefined || !pkg.ok) {
-      throw new Error(`${room.name}: no checkpoint`);
-    }
-
-    const read = readCheckpoint(pkg.package);
-    if (!read.ok) {
-      throw new Error(`${room.name}: ${read.reason}`);
-    }
-
-    out.push({ json: JSON.parse(strFromU8(entry)) as Record<string, unknown>, read });
-  }
-
-  return out;
-}
-
-const CHECKPOINTS = roomCheckpoints();
-
-describe('every fact of the model has a fold rule', () => {
-  test('each manifest rule names a field the writer writes and the reader reads', async () => {
-    const checkpoints = await CHECKPOINTS;
-    const missing: string[] = [];
-    for (const rule of RULES) {
-      if (rule.rule !== 'manifest') {
-        continue;
-      }
-
-      const path = rule.field.split('.');
-      const written = checkpoints.some(({ json }) => holdsPath(json[rule.section], path));
-      const read = checkpoints.some(({ read }) => SECTIONS[rule.section](read) > 0);
-      if (!written || !read) {
-        missing.push(`${rule.section}.${rule.field}`);
-      }
-    }
-
-    expect(missing).toEqual([]);
+describe('every fact of the model has a checkpoint rule', () => {
+  test('the open makes again only the reviewed fields, each with how', () => {
+    const rebuilt = Object.entries(TABLES).flatMap(([type, table]) =>
+      Object.entries(table).flatMap(([key, field]) =>
+        'rebuilt' in field ? [{ field: `${type}.${key}`, how: field.rebuilt }] : []
+      )
+    );
+    expect(rebuilt.map(({ field }) => field)).toEqual(REBUILT);
+    expect(rebuilt.filter(({ how }) => how.trim().length < 10)).toEqual([]);
   });
 
-  test('each section the writer writes has a rule', async () => {
-    // A section with no entries is left out, so one room's checkpoint may not hold it
-    const checkpoints = await CHECKPOINTS;
-    const written = checkpoints
-      .flatMap(({ json }) => Object.keys(json))
-      .filter((key) => !HEADER.has(key));
-    const named = RULES.flatMap((rule) => (rule.rule === 'manifest' ? [rule.section] : []));
-    const sections = new Set(Object.keys(SECTIONS));
-    expect(new Set(written)).toEqual(sections);
-    expect(new Set<string>(named)).toEqual(sections);
+  test('each side state module keeps beside the document is saved', () => {
+    expect(Object.keys(SIDE)).toEqual([
+      'textBoxes',
+      'typers',
+      'droppedMarks',
+      'filledPrompts',
+      'firstFills',
+      'emptiedControls',
+      'namedPrompts',
+    ]);
   });
 });
