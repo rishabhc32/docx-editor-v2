@@ -5,11 +5,11 @@
 // so the type check does not see it. This guard lists each such map with its class, and a new
 // map fails until it has one:
 //
-//   saved     — the checkpoint saves it and gives it back (`SIDE` in `model/snapshot-side.ts`).
-//   base      — the open makes it again from the base package (`recordLoadedPackage`).
-//   index     — `indexOrderedStory` makes it again from the items.
-//   cache     — made again on the first read after an open.
-//   transient — empty again before a close can see it.
+//   saved:     the checkpoint saves it and gives it back (`SIDE` in `model/snapshot-side.ts`).
+//   base:      the open makes it again from the base package (`recordLoadedPackage`).
+//   index:     `indexOrderedStory` makes it again from the items.
+//   cache:     made again on the first read after an open.
+//   transient: empty again before a close can see it.
 
 import { describe, expect, test } from 'bun:test';
 import { readdirSync, readFileSync } from 'node:fs';
@@ -43,6 +43,7 @@ const DOCUMENT_STATE: Readonly<Record<string, DocumentState>> = {
   'model/prompt-marks.ts promptedOf': { kind: 'index' },
   'client/pictures.ts DRAWING_INDEX': { kind: 'cache' },
   'compose/objects.ts COMPOSED': { kind: 'cache' },
+  'model/undo-record.ts STATES': { kind: 'cache' },
   'model/prompt-marks.ts changedOf': { kind: 'transient' },
 };
 
