@@ -28,6 +28,7 @@ import { readOoxmlPackage, type OoxmlPackage } from '../../../store/package/ooxm
 import { serializeOoxmlPart, type OoxmlElement } from '../../../store/package/ooxml-tree.ts';
 import { CardRead, isCardUnit, isOrderedItemHidden } from '../card-of.ts';
 import { applyOrderedChange } from '../change/apply.ts';
+import { compactOrdered, deadItems } from '../change/compact.ts';
 import { orderedCardSeen } from '../change/apply-decide.ts';
 import { orderedChangeId, orderedIdMinter } from '../change/ids.ts';
 import { settleDecidedTables } from '../change/settle-columns.ts';
@@ -514,6 +515,23 @@ export async function checkFold(
   const live = [...byMaker(doc)].flatMap(([maker, ids]) =>
     DECISIONS.map((status) => ({ maker, status, file: decidedFile(doc, base, blobs, ids, status) }))
   );
+  withCleanup(doc, () => {
+    const fold = 'cleaned';
+    const outside = unitsOutsideParagraphs(doc);
+    expect({ label, fold, outside }).toEqual({ label, fold, outside: [] });
+    expect({ label, fold, print: foldPrint(doc, base, blobs) }).toEqual({ label, fold, print });
+    const cleaned = byMaker(doc);
+    for (const { maker, status, file } of live) {
+      const decided = decidedFile(doc, base, blobs, cleaned.get(maker) ?? [], status);
+      expect({ label, fold, maker, status, file: decided }).toEqual({
+        label,
+        fold,
+        maker,
+        status,
+        file,
+      });
+    }
+  });
   for (const [fold, copy] of [
     ['once', once],
     ['twice', twice],
@@ -605,6 +623,14 @@ export async function checkEveryCard(
         status,
         outside: [],
       });
+      const cleaned = withCleanup(doc, () => cardDecided(doc, base, blobs, seen, status));
+      expect({ label, fold: 'cleaned', card: card.suggestions, status, ...cleaned }).toEqual({
+        label,
+        fold: 'cleaned',
+        card: card.suggestions,
+        status,
+        ...live,
+      });
       for (const [fold, copy] of [
         ['once', once],
         ['twice', twice],
@@ -622,4 +648,46 @@ export async function checkEveryCard(
   }
 
   return cards.length;
+}
+
+/**
+ * Run `read` on the document cleaned as a close cleans it (`compactOrdered`), then take the
+ * cleanup back. Each item it removed throws on any read of its fields meanwhile, so a reader that
+ * still holds one fails by name.
+ */
+export function withCleanup<T>(doc: OrderedDocument, read: () => T): T {
+  const removed = [...doc.stories.values()].flatMap((story) => deadItems(doc, story));
+  const { record } = withUndoRecord(doc, () => compactOrdered(doc));
+  const restore = removed.map(poison);
+  try {
+    return read();
+  } finally {
+    for (const undo of restore) {
+      undo();
+    }
+
+    takeBack(doc, record);
+  }
+}
+
+/** Make each read of an item's fields but its tree leaf throw; returns how to undo it. */
+function poison(item: OrderedItem): () => void {
+  const fields = Object.entries(Object.getOwnPropertyDescriptors(item)).filter(
+    ([key]) => key !== 'leaf'
+  );
+  for (const [key] of fields) {
+    Object.defineProperty(item, key, {
+      configurable: true,
+      enumerable: true,
+      get: () => {
+        throw new Error(`a read of a removed item's ${key}`);
+      },
+    });
+  }
+
+  return () => {
+    for (const [key, descriptor] of fields) {
+      Object.defineProperty(item, key, descriptor);
+    }
+  };
 }
