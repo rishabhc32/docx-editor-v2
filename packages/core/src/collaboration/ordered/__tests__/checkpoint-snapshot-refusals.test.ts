@@ -71,6 +71,15 @@ const firstItem = (body: Json): Json => {
   return (stories[0]![1].tree as Json[])[0]!;
 };
 
+/** The value of a map entry of the document, by its key. */
+const entryOf = (body: Json, map: string, key: string): Json => {
+  const entries = (map.split('.').reduce((o, k) => (o as Json)[k], body.document) ?? []) as [
+    string,
+    Json,
+  ][];
+  return entries.find(([k]) => k === key)![1];
+};
+
 /** A case: its name, how it changes the file, its refusal, and whether its checksum stays. */
 type Case = readonly [string, (header: Json, body: Json) => void, string, boolean?];
 
@@ -144,6 +153,27 @@ describe('a checkpoint of version 6 that is not as written', () => {
         const stories = (body.document as Json).stories as [string, Json][];
         const tree = stories[0]![1].tree as Json[];
         tree.splice(1, 0, { ...tree[0]! });
+      },
+      'checkpoint-manifest',
+    ],
+    // A card never shows one name for another person
+    [
+      "a suggestion under another person's name",
+      (_, body) =>
+        ((entryOf(body, 'suggestions', 'S:quin:1.1').attribution as Json).author = 'Pia'),
+      'checkpoint-manifest',
+    ],
+    [
+      "a comment under another person's name",
+      (_, body) => (entryOf(body, 'comments', '1001645124').author = 'Quin'),
+      'checkpoint-manifest',
+    ],
+    [
+      "an attribution before a change under another person's name",
+      (_, body) => {
+        const { attribution } = entryOf(body, 'suggestions', 'S:quin:1.1');
+        const revisionIds = (body.document as Json).revisionIds as Json;
+        revisionIds.reattributed = [['S:quin:1.1', { ...(attribution as Json), author: 'Pia' }]];
       },
       'checkpoint-manifest',
     ],

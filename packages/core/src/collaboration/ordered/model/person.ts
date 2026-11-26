@@ -3,7 +3,7 @@
 
 import { at, fieldsOf, Invalid, isPlainText, plainText, required } from '../change/read.ts';
 import { ORDERED_CHANGE_LIMITS } from '../change/types.ts';
-import type { OrderedAttribution } from './types.ts';
+import type { OrderedAttribution, OrderedDocument } from './types.ts';
 
 /**
  * A person as the host's login gives them: a stable ID, a display name, and a company (empty
@@ -122,4 +122,20 @@ export function sameMaker(a: OrderedMaker, b: OrderedMaker): boolean {
   }
 
   return a.person.id === b.person.id;
+}
+
+/**
+ * Whether every suggestion and comment that names a person carries that person's Word name, and
+ * so does each attribution a suggestion had before a change gave it another. A room's file is
+ * untrusted: a card must never show one name for another person.
+ */
+export function personsFit(doc: OrderedDocument): boolean {
+  const fits = ({ author, person }: OrderedMaker) =>
+    person === null || author === orderedAuthorName(person);
+  const makers = [
+    ...[...doc.suggestions.values()].map(({ attribution }) => attribution),
+    ...doc.revisionIds.reattributed.values(),
+    ...doc.comments.values(),
+  ];
+  return makers.every(fits);
 }

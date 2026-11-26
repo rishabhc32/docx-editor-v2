@@ -13,6 +13,7 @@ import {
   orderedStoryTree,
   suggestionsOf,
 } from './document.ts';
+import { personsFit } from './person.ts';
 import type { OrderedFileMedia } from './resources.ts';
 import { readXmlString, type SnapshotReadContext } from './snapshot-codec.ts';
 import { SnapshotNodeReader } from './snapshot-nodes.ts';
@@ -189,14 +190,19 @@ function documentOf(
 }
 
 /**
- * What breaks the document's rules (design D6), or null: a story under another name, a space in
- * two stories, two items over one unit, a container edge with no partner, a unit after a story's
- * last paragraph mark, a label of no suggestion, a tree whose sums do not add up.
+ * What breaks the document's rules (design D6), or null: a person under another name, a story
+ * under another name, a space in two stories, two items over one unit, a container edge with no
+ * partner, a unit after a story's last paragraph mark, a label of no suggestion, a tree whose sums
+ * do not add up.
  */
 function documentFault(
   doc: OrderedDocument,
   stories: ReadonlyMap<string, OrderedStory>
 ): string | null {
+  if (!personsFit(doc)) {
+    return "a person under another person's name";
+  }
+
   const spaces = new Set<string>();
   for (const [name, story] of stories) {
     if (story.name !== name) {
