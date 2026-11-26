@@ -2,6 +2,8 @@
 // reads it back under another file number. Everything the room and its pages read must come back
 // the same. A suggestion keeps its id, and the print names each by it; addresses are new after a
 // fold, so items compare by what they show.
+// `checkFold` and `checkEveryCard` also compare the room cleaned as a close cleans it
+// (`withCleanup`), live, with the same checks.
 //
 // Left out, as the same file and the same decisions follow from them:
 //  - internal shapes: format records come back as `face` records with the file's record, paragraph
@@ -28,8 +30,8 @@ import { readOoxmlPackage, type OoxmlPackage } from '../../../store/package/ooxm
 import { serializeOoxmlPart, type OoxmlElement } from '../../../store/package/ooxml-tree.ts';
 import { CardRead, isCardUnit, isOrderedItemHidden } from '../card-of.ts';
 import { applyOrderedChange } from '../change/apply.ts';
-import { compactOrdered, deadItems } from '../change/compact.ts';
 import { orderedCardSeen } from '../change/apply-decide.ts';
+import { compactOrdered } from '../change/compact.ts';
 import { orderedChangeId, orderedIdMinter } from '../change/ids.ts';
 import { settleDecidedTables } from '../change/settle-columns.ts';
 import { settleEmptiedControls } from '../change/settle-emptied.ts';
@@ -676,9 +678,9 @@ export async function checkEveryCard(
  * still holds one fails by name.
  */
 export function withCleanup<T>(doc: OrderedDocument, read: () => T): T {
-  const removed = [...deadItems(doc).values()].flat();
+  const items = [...doc.stories.values()].flatMap((story) => story.tree.toArray());
   const { record } = withUndoRecord(doc, () => compactOrdered(doc));
-  const restore = removed.map(poison);
+  const restore = items.filter((item) => item.leaf === undefined).map(poison);
   try {
     return read();
   } finally {
