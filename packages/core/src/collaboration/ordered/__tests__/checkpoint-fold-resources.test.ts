@@ -11,6 +11,7 @@ import {
   openOrderedWordFile,
   OrderedWordFileError,
 } from '../client/open.ts';
+import { writeOrderedCheckpointVersion5 } from '../compose/checkpoint.ts';
 import type { CheckpointRoom } from './checkpoint-fixture.ts';
 import {
   CHART_ROOM,
@@ -22,11 +23,11 @@ import {
 } from './checkpoint-resources-fixture.ts';
 import { checkFold, checkpointBytes } from './fold-check.ts';
 
-/** A room's checkpoint. */
+/** A room's checkpoint of version 5. */
 async function checkpointOf(room: CheckpointRoom): Promise<Uint8Array> {
   const { document: doc, base } = openOrderedWordFile(room.source, { file: 1 });
   room.edit(doc);
-  return checkpointBytes(doc, base, resourceBlobs(base));
+  return checkpointBytes(doc, base, resourceBlobs(base), writeOrderedCheckpointVersion5);
 }
 
 /** A room's checkpoint with its manifest's text edited. */
@@ -68,7 +69,7 @@ describe('a fold keeps what a change added outside the story text with its sugge
   }
 });
 
-describe("a checkpoint's resources are untrusted", () => {
+describe("a version 5 checkpoint's resources are untrusted", () => {
   // An earlier writer listed no resources, and no list with picture bullets
   test('a checkpoint written before the section opens them as the file holds them', async () => {
     for (const room of RESOURCE_ROOMS) {

@@ -9,7 +9,7 @@ import { orderedPackageBytes } from '../compose/package.ts';
 import { orderedCards } from '../decide.ts';
 import type { OrderedDocument } from '../model/types.ts';
 import { apply, at, DATE, DIRECT, EDIT, refusal } from './change-apply-fixture.ts';
-import { checkFold, checkpointBytes, folded, mediaStore } from './fold-check.ts';
+import { checkFold, folded, mediaStore } from './fold-check.ts';
 import { anas, FOLD_SHAPES } from './fold-shapes.ts';
 import { REVISION_BODIES } from './revision-fixtures.ts';
 import { STYLED } from './style-revision-fixture.ts';
@@ -58,12 +58,12 @@ describe('a new date on a suggestion of the Word file', () => {
     )
   );
 
-  test('the fold writes the new date, and the copy reads the same suggestion', async () => {
+  test('the Word file writes the new date, and a fold reads the same suggestion', async () => {
     const { document: doc, base } = openOrderedWordFile(file, { file: 1 });
     const blobs = mediaStore(base);
     redate(doc);
     const written = strFromU8(
-      unzipSync(await checkpointBytes(doc, base, blobs))['word/document.xml']!
+      unzipSync(orderedPackageBytes(doc, base, { blobs }))['word/document.xml']!
     );
     expect(written.match(/<w:ins\b[^>]*>/g)).toEqual([
       `<w:ins w:author="Ana" w:date="${NEW_DATE}" w:id="7">`,
@@ -108,7 +108,7 @@ describe('a new date on each kind of Word revision', () => {
     }
   };
 
-  // The marks a fold writes with another date
+  // The marks the room's Word file writes with another date (a fold keeps the room: `checkFold`)
   const oldDates = (bytes: Uint8Array) =>
     Object.entries(unzipSync(bytes)).flatMap(([name, data]) =>
       [...strFromU8(data).matchAll(/<w:\w+ [^>]*w:date="([^"]*)"[^>]*>/g)]
@@ -124,7 +124,7 @@ describe('a new date on each kind of Word revision', () => {
       const { document: doc, base } = openOrderedWordFile(file, { file: 1 });
       const blobs = mediaStore(base);
       redateAll(doc);
-      expect(oldDates(await checkpointBytes(doc, base, blobs))).toEqual([]);
+      expect(oldDates(orderedPackageBytes(doc, base, { blobs }))).toEqual([]);
       await checkFold(doc, base, blobs, label);
     });
   }
@@ -150,7 +150,7 @@ describe('a new date on each kind of Word revision', () => {
     const blobs = mediaStore(first.base);
     const { document: doc, base } = await folded(first.document, first.base, 2, blobs);
     redate(doc);
-    expect(oldDates(await checkpointBytes(doc, base, blobs))).toEqual([]);
+    expect(oldDates(orderedPackageBytes(doc, base, { blobs }))).toEqual([]);
     await checkFold(doc, base, blobs, 'a prompt record', (copy) => {
       apply(
         copy,

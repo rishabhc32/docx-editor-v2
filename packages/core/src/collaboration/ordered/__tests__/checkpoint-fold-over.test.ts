@@ -11,6 +11,7 @@ import {
   OrderedWordFileError,
 } from '../client/open.ts';
 import { orderedCardSeen } from '../change/apply-decide.ts';
+import { writeOrderedCheckpointVersion5 } from '../compose/checkpoint.ts';
 import type { OrderedDocument } from '../model/types.ts';
 import {
   addressOf,
@@ -343,8 +344,11 @@ test("a press on its author's own new paragraph, its record rejected alone", asy
   pressOverOwnRecord(doc);
   await checkFold(doc, base, blobs, 'a press on its own new paragraph');
   decideCard(doc, 'S:ben:1.1', 'rejected');
-  const body = unzipSync(await checkpointBytes(doc, base, blobs))['word/document.xml']!;
-  expect(strFromU8(body)).not.toContain('<w:jc ');
+  const once = await folded(doc, base, 2, blobs);
+  expect([doc, once.document].map((copy) => partsOf(copy)[0])).toEqual([
+    expect.not.stringContaining('<w:jc '),
+    expect.not.stringContaining('<w:jc '),
+  ]);
 });
 
 // A reject of Ana's italic takes Olive's color made over it away too, and the room draws the words
@@ -387,12 +391,15 @@ interface Entry {
   readonly records: readonly Record<string, unknown>[];
 }
 
-/** A room's checkpoint with its manifest's text edited. */
+/** A room's checkpoint of version 5 with its manifest's text edited. */
 async function crafted(label: string, edit: (json: string) => string): Promise<Uint8Array> {
   const [, body, change] = ROOMS.find(([name]) => name === label)!;
   const { document: doc, base } = openOrderedWordFile(docx(body), { file: 1 });
   change(doc);
-  const entries = unzipSync(await checkpointBytes(doc, base, mediaStore(base)));
+  const blobs = mediaStore(base);
+  const entries = unzipSync(
+    await checkpointBytes(doc, base, blobs, writeOrderedCheckpointVersion5)
+  );
   entries[MANIFEST] = strToU8(edit(strFromU8(entries[MANIFEST]!)));
   return zipSync(entries);
 }
@@ -422,7 +429,7 @@ function openReason(bytes: Uint8Array): string {
   }
 }
 
-describe("a checkpoint's made-over records are untrusted", () => {
+describe("a version 5 checkpoint's made-over records are untrusted", () => {
   test('a checkpoint with none opens as the file holds it', async () => {
     for (const label of [FORMAT, PARAGRAPH, PAGE]) {
       const bytes = await crafted(label, (json) => {

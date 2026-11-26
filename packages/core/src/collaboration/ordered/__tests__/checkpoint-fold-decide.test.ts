@@ -12,6 +12,7 @@ import {
   openOrderedWordFile,
   type OrderedWordFile,
 } from '../client/open.ts';
+import { writeOrderedCheckpointVersion5 } from '../compose/checkpoint.ts';
 import { orderedPackageBytes } from '../compose/package.ts';
 import type { OrderedDocument } from '../model/types.ts';
 import {
@@ -192,13 +193,18 @@ describe('a decision after a fold, on a suggestion inside a run', () => {
   });
 });
 
-describe("a checkpoint's room run numbers", () => {
+describe("a checkpoint's room run numbers (version 5)", () => {
   /** The room run numbers (`oc:run`) the main document of a checkpoint holds, in order. */
   async function numbersOf(edit: (doc: OrderedDocument) => void) {
     const body = p(run('Cloud and serverless.')) + p(run('Untouched.'));
     const { document: doc, base } = openOrderedWordFile(docx(body), { file: 1 });
     edit(doc);
-    const bytes = await checkpointBytes(doc, base, mediaStore(base));
+    const bytes = await checkpointBytes(
+      doc,
+      base,
+      mediaStore(base),
+      writeOrderedCheckpointVersion5
+    );
     const xml = strFromU8(unzipSync(bytes)['word/document.xml']!);
     return {
       numbers: [...xml.matchAll(/ oc:run="(\d+)"/g)].map((m) => m[1]),
@@ -700,8 +706,10 @@ describe("a fold of a table's records", () => {
       apply(doc, 'olive:1', { kind: 'decide', cards: [{ suggestions }], status }, 'Olive');
       await checkFold(doc, base, mediaStore(base), `a table width over a ${status} row height`);
 
-      // The reader stays strict: without the takeover, the records do not fit the file
-      const entries = unzipSync(await checkpointBytes(doc, base, mediaStore(base)));
+      // The version 5 reader stays strict: without the takeover, the records do not fit the file
+      const blobs = mediaStore(base);
+      const v5 = await checkpointBytes(doc, base, blobs, writeOrderedCheckpointVersion5);
+      const entries = unzipSync(v5);
       const manifest = JSON.parse(strFromU8(entries[MANIFEST]!)) as { takeovers: unknown[] };
       expect(manifest.takeovers).not.toEqual([]);
       entries[MANIFEST] = strToU8(JSON.stringify({ ...manifest, takeovers: [] }));
