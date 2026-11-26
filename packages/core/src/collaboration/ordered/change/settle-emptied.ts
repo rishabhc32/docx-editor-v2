@@ -114,8 +114,8 @@ export function restoreEmptiedControls(
 }
 
 /**
- * Forget the controls direct edits emptied, at a close: the room refuses the revert of an edit
- * made before its file, so none of them is given back again.
+ * Forget the controls direct edits emptied, at a close: the room refuses an undo or a revert of
+ * an edit made before its file, so none of them is given back again.
  */
 export function forgetEmptiedControls(doc: OrderedDocument): void {
   const emptied = promptedByEdit.get(doc);
