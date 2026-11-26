@@ -64,12 +64,36 @@ const firstItem = (body: Json): Json => {
   return (stories[0]![1].tree as Json[])[0]!;
 };
 
+/** A case: its name, how it changes the file, its refusal, and whether its checksum stays. */
+type Case = readonly [string, (header: Json, body: Json) => void, string, boolean?];
+
+/** Last counters that do not read. */
+const LAST_COUNTERS: readonly (readonly [string, [string, number][]])[] = [
+  [
+    'out of namespace order',
+    [
+      ['b', 1],
+      ['a', 2],
+    ],
+  ],
+  [
+    'a repeated namespace',
+    [
+      ['a', 1],
+      ['a', 2],
+    ],
+  ],
+  ['a namespace past its pattern', [['a:b', 1]]],
+  ['a counter of 0', [['a', 0]]],
+  ['a counter past 15 digits', [['a', 10 ** 15]]],
+];
+
 describe('a checkpoint of version 6 that is not as written', () => {
   test('opens when only its checksum was made again', async () => {
     expect(refusal(await changed(() => undefined))).toBe('opens');
   });
 
-  const cases: readonly [string, (header: Json, body: Json) => void, string, boolean?][] = [
+  const cases: readonly Case[] = [
     [
       'a body that does not match its checksum',
       (_, body) => (body.namespaces = []),
@@ -116,33 +140,12 @@ describe('a checkpoint of version 6 that is not as written', () => {
       },
       'checkpoint-manifest',
     ],
-    ...(
-      [
-        [
-          'out of namespace order',
-          [
-            ['b', 1],
-            ['a', 2],
-          ],
-        ],
-        [
-          'a repeated namespace',
-          [
-            ['a', 1],
-            ['a', 2],
-          ],
-        ],
-        ['a namespace past its pattern', [['a:b', 1]]],
-        ['a counter of 0', [['a', 0]]],
-        ['a counter past 15 digits', [['a', 10 ** 15]]],
-      ] as const
-    ).map(
-      ([name, counters]) =>
-        [
-          `last counters ${name}`,
-          (_: Json, body: Json) => ((body.document as Json).lastCounters = counters),
-          'checkpoint-manifest',
-        ] as const
+    ...LAST_COUNTERS.map(
+      ([name, counters]): Case => [
+        `last counters ${name}`,
+        (_, body) => ((body.document as Json).lastCounters = counters),
+        'checkpoint-manifest',
+      ]
     ),
   ];
   for (const [name, change, reason, raw] of cases) {
@@ -152,7 +155,7 @@ describe('a checkpoint of version 6 that is not as written', () => {
   }
 
   test('keeps the last counters of each namespace, in namespace order', async () => {
-    const counters = [
+    const counters: [string, number][] = [
       ['a', 10 ** 15 - 1],
       ['b', 1],
     ];
