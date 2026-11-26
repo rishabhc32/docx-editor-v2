@@ -61,12 +61,9 @@ export function renamed(
   return { ...element, kind, localName } as OoxmlElement;
 }
 
-/** An element with only the children `keep` selects: the shell of a container or a run. */
-export function shellOf(
-  element: OoxmlElement,
-  keep: (child: OoxmlNode) => boolean = () => false
-): OoxmlElement {
-  return withChildren(element, element.children.filter(keep));
+/** An element with no children: the shell of a container or a run. */
+export function shellOf(element: OoxmlElement): OoxmlElement {
+  return withChildren(element, []);
 }
 
 /** The first child that is the element `w:<name>`. */
