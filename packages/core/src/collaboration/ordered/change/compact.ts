@@ -13,7 +13,6 @@ import {
 } from '../model/document.ts';
 import { isNotesStory, noteKeyOf, referenceKeyOf } from '../compose/note-references.ts';
 import { isDroppedMark } from '../model/prompt-marks.ts';
-import { takenFrom } from '../model/takeovers.ts';
 import { recordUndo } from '../model/undo-record.ts';
 import {
   BLOCK_TOKENS,
@@ -31,8 +30,6 @@ import {
 export interface OrderedCompaction {
   /** The items it took out of the stories. */
   readonly items: number;
-  /** The suggestions it took out: decided, and named by nothing that is left. */
-  readonly suggestions: number;
 }
 
 /**
@@ -58,14 +55,15 @@ const HOLDING_TOKENS: ReadonlySet<OrderedContainerToken> = new Set([
  * the cleanup ends the undo of their own edits too (`taken`, a record's `change`, `ownEdited`,
  * `added`) and an undo that names a change from before it changes nothing.
  *
- * It removes an item hidden for good (`hiddenForGood`) that nothing reads: no comment range or
- * field slot names it, no item of its container (`pair`) stays, no container that reads what it
- * held holds it, and it is not the last item of a space that keeps one (a typed item grows into
- * the next offsets of its space, so an address is never used again). A removed address then names
- * no item, and every reader refuses it (`unknown-address`). It removes a decided suggestion that
- * no item, record, resource or part revision names any more. It keeps the suggestions' versions:
- * the cleanup changes nothing that shows. Like every write, it records how to take it back when
- * an undo record is open.
+ * It removes an item hidden for good (`hiddenForGood`) that nothing reads (`deadItems`): no
+ * comment range, field slot or kept note names it, nothing it holds or its container holds stays,
+ * no container that reads what it held holds it, no row keeps it as a removed cell, and it is not
+ * the last item of a space that keeps one (a typed item grows into the next offsets of its space,
+ * so an address is never used again). A removed address then names no item, and every reader
+ * refuses it (`unknown-address`). The paragraph or block that drew a removed item is still drawn
+ * from the items (`rebuilt`). It keeps every suggestion, with its version: a change record in a
+ * part the list does not hold (a prompt in the glossary) names its suggestion by its `w:id`.
+ * Like every write, it records how to take it back when an undo record is open.
  *
  * @public
  */
@@ -83,7 +81,7 @@ export function compactOrdered(doc: OrderedDocument): OrderedCompaction {
     }
   }
 
-  return { items, suggestions: dropUnnamedSuggestions(doc) };
+  return { items };
 }
 
 /**
@@ -543,93 +541,4 @@ function writeLabels(
   };
   write(labels);
   recordUndo(doc, () => write(old));
-}
-
-// ---- suggestions ----
-
-/** The suggestions a record names: its own, those it was taken from, those it was made over. */
-function recordSuggestions(record: OrderedFormatRecord | OrderedPropertyRecord): string[] {
-  const over = 'over' in record ? (record.over ?? []) : [];
-  return [record.suggestion, ...takenFrom(record), ...over];
-}
-
-/** Every suggestion that something but its own items names. */
-function namedSuggestions(doc: OrderedDocument): Set<string> {
-  const named = new Set<string>(doc.partRevisions.keys());
-  for (const resource of doc.resources.added.values()) {
-    named.add(resource.suggestion);
-  }
-
-  for (const story of doc.stories.values()) {
-    for (const item of story.tree.items()) {
-      for (const records of [item.fmts, item.cancelledFmts, item.props, item.takenBackLendings]) {
-        for (const record of records) {
-          for (const id of recordSuggestions(record)) {
-            named.add(id);
-          }
-        }
-      }
-    }
-  }
-
-  return named;
-}
-
-/**
- * Take out each decided suggestion, not a direct edit's, that no item labels and nothing else
- * names, with its entries in the revision ids. Returns how many went.
- */
-function dropUnnamedSuggestions(doc: OrderedDocument): number {
-  const named = namedSuggestions(doc);
-  const gone = new Set<string>();
-  for (const suggestion of doc.suggestions.values()) {
-    const { id } = suggestion;
-    if (
-      suggestion.status !== 'pending' &&
-      suggestion.direct !== true &&
-      !doc.labelled.has(id) &&
-      !named.has(id)
-    ) {
-      gone.add(id);
-    }
-  }
-
-  for (const id of gone) {
-    forget(doc, doc.suggestions, id);
-    forget(doc, doc.revisionIds.listed, id);
-    forget(doc, doc.revisionIds.reattributed, id);
-  }
-
-  // A role's key is `<suggestion>/<role>`
-  const ownedByGone = (key: string) => {
-    for (let slash = key.indexOf('/'); slash >= 0; slash = key.indexOf('/', slash + 1)) {
-      if (gone.has(key.slice(0, slash))) {
-        return true;
-      }
-    }
-
-    return false;
-  };
-  const forgetRoles = <V>(roles: Map<string, V>) => {
-    for (const key of [...roles.keys()]) {
-      if (ownedByGone(key)) {
-        forget(doc, roles, key);
-      }
-    }
-  };
-  forgetRoles(doc.revisionIds.byRole);
-  forgetRoles(doc.revisionIds.attributesByRole);
-
-  return gone.size;
-}
-
-/** Take an entry out of a map (whose values are never undefined). */
-function forget<K, V>(doc: OrderedDocument, map: Map<K, V>, key: K): void {
-  const value = map.get(key);
-  if (value === undefined) {
-    return;
-  }
-
-  map.delete(key);
-  recordUndo(doc, () => map.set(key, value));
 }
