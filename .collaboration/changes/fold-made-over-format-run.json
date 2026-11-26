@@ -1,0 +1,10 @@
+{
+  "impact": "compatible",
+  "fields": [],
+  "before": "A checkpoint numbered a run piece apart from its room run when it held an accepted direct format made over another person's pending format (oc:run). After a fold, a reject of the pending format took the direct format away, as live, but drew the run in pieces where the room draws one run.",
+  "after": "The room run number leaves out an accepted format record made over a pending record (roomRunOf, madeOverWhere): that record goes with the pending record's reject, so it splits the run only while the pending record shows, as a pending record does. The open joins the pieces as before, and a reject after a fold draws one run, as live.",
+  "reason": "Change messages, the change log and its kinds keep their meaning, and the Yjs document format does not change. The checkpoint format and its version do not change: the writer only gives more pieces one oc:run number, which every released reader of version 5 already joins. Ordered rooms are not deployed yet, so no room needs a migration.",
+  "tests": ["packages/core/src/collaboration/ordered/__tests__/checkpoint-fold-over.test.ts"],
+  "changeset": "fold-made-over-format-run",
+  "migration": null
+}
