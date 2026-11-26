@@ -46,6 +46,7 @@ export function printOf(doc: OrderedDocument): string {
   return JSON.stringify({
     model: snapshot(doc, false),
     paraIds: [...doc.paraIds].sort(),
+    lastCounters: [...doc.lastCounters].sort(([a], [b]) => (a < b ? -1 : 1)),
     parts: [...doc.stories.keys()].map((name) =>
       serializeOoxmlPart(composeOrderedPart(doc, name).part)
     ),
