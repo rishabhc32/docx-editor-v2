@@ -1,6 +1,7 @@
 // Rooms whose checkpoints hold what changes added outside the story text, in the manifest's
 // section `resources` (design D14): a list level, a link's address, an embedded object, ink, a
-// chart's part, and a pasted list's picture bullet. Ana makes each one, pending.
+// chart's part, and a pasted list's picture bullet. Ana makes each one, pending; Olive adds a new
+// header beside Ana's link.
 
 import type { OoxmlPackage } from '../../../store/package/ooxml-package.ts';
 import type { OrderedMediaType } from '../model/resources.ts';
