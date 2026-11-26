@@ -1,6 +1,6 @@
 // A suggestion keeps its id across a fold (design D14): the checkpoint lists each suggestion under
 // its id, and the open makes it under that id. An id the engine mints passes over every kept one,
-// a change id the room ordered before the fold is refused by name (design D7), and a session on
+// a change id the room ordered before the fold is refused by name (design D14), and a session on
 // the older file is refused by the file number, as before. A plain Word file gets new ids.
 
 import { describe, expect, test } from 'bun:test';

@@ -110,7 +110,7 @@ export interface OrderedAck {
  * - The target codes (`OrderedTargetErrorCode`): an address, a story or a suggestion is not in
  *   the document, an address names the wrong kind of unit, or a range runs backwards. Also
  *   `other-file` for a change whose counter is at or under the one the room's file holds for its
- *   namespace: it was made before the room's last close (design D7).
+ *   namespace: it was made before the room's last close (design D14).
  * - The policy codes (`OrderedPolicyCode`).
  * - `apply-refused`: the model refused the change; `reason` names why (`OrderedRefusalReason`).
  * - `apply-failed`: applying the change threw something else; it was taken back.
@@ -454,7 +454,7 @@ export class OrderedRoom {
 
   /**
    * The refusal of a change made before the room's file, or of one that undoes a change made
-   * before it (design D7), or null. An editor that opens the file has no undo of such an edit.
+   * before it (design D14), or null. An editor that opens the file has no undo of such an edit.
    */
   #beforeFile(change: OrderedChange): OrderedRoomRefusal | null {
     for (const made of [change.id, ...undoneBy(change)]) {

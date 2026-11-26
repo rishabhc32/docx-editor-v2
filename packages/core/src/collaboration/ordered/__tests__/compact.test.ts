@@ -1,4 +1,4 @@
-// The cleanup at a close (`compactOrdered`, plan D8): what it removes, what it keeps, and how a
+// The cleanup at a close (`compactOrdered`, design D14): what it removes, what it keeps, and how a
 // removed address reads. `fold-check.ts` compares a cleaned room with the live one in every fold
 // session (`withCleanup`).
 

@@ -338,7 +338,7 @@ export function applyOrderedChange(
 
 /**
  * The person of a change's namespace, whom the typer read names, and the namespace's highest
- * counter (design D7). Inside the undo record: a change the room refuses is in no log, so its
+ * counter (design D14). Inside the undo record: a change the room refuses is in no log, so its
  * take-back lowers the counter again and every copy holds the same one.
  */
 function noteSender(

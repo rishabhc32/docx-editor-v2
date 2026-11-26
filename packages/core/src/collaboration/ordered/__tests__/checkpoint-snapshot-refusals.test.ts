@@ -1,4 +1,4 @@
-// A checkpoint of version 6 is untrusted (design D6): a file that is not what the writer wrote is
+// A checkpoint of version 6 is untrusted (design D14): a file that is not what the writer wrote is
 // refused with its code, whatever field is wrong.
 
 import { describe, expect, test } from 'bun:test';

@@ -1,4 +1,4 @@
-// A change after a close (design D7). The room's file keeps the item list with its addresses, so
+// A change after a close (design D14). The room's file keeps the item list with its addresses, so
 // an address no longer tells a late change apart. The document keeps the highest applied counter
 // of each namespace (`lastCounters`), and the room on the next file refuses a change at or under
 // it by name (`other-file`). Here the next room opens the item list the close saved: the same

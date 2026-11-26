@@ -1,4 +1,4 @@
-// The field table of the saved item list (checkpoint version 6, design D3): every field of every
+// The field table of the saved item list (checkpoint version 6, design D14): every field of every
 // type of the model, stored with its codec or rebuilt by the open. Each table covers every key of
 // its type, so a new field fails the type check here until it has an entry. The writer, the reader
 // and the compare all go through this one table.

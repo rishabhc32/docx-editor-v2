@@ -1,4 +1,4 @@
-// The highest applied counter of each namespace (design D7), with real editors and one ordered
+// The highest applied counter of each namespace (design D14), with real editors and one ordered
 // room. Typing, undo and redo each send new changes, so a person's counter only goes up, and
 // every copy holds the room's counters: the room's file keeps them at a close.
 

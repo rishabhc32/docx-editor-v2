@@ -1,4 +1,4 @@
-// The Word XML nodes of a saved item list (checkpoint version 6, design D4). A node of the base
+// The Word XML nodes of a saved item list (checkpoint version 6, design D14). A node of the base
 // package is saved as its id, which names its part and its place there. Any other node is saved
 // once, by value, in the checkpoint's node list, so two items that share one node share it again
 // after an open. A node by value keeps every field: its kind, names, authored prefix, namespace

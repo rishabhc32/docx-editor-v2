@@ -1,4 +1,4 @@
-// A checkpoint of version 6 saves the room's item list (design D2 to D6): an open gives back every
+// A checkpoint of version 6 saves the room's item list (design D14): an open gives back every
 // stored field, the same Word file and the same bytes on the next save.
 
 import { describe, expect, test } from 'bun:test';

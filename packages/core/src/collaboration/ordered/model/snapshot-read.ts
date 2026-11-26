@@ -1,4 +1,4 @@
-// Reads a room's saved item list (checkpoint version 6, design D6) from an untrusted file: strict
+// Reads a room's saved item list (checkpoint version 6, design D14) from an untrusted file: strict
 // JSON with a size limit and no prototype keys, every field through the field table's codec, the
 // Word XML by value through the engine's bounded reader, then the document's own rules.
 
@@ -199,7 +199,7 @@ function documentOf(
 }
 
 /**
- * What breaks the document's rules (design D6), or null: a person under another name, a story
+ * What breaks the document's rules (design D14), or null: a person under another name, a story
  * under another name, a space in two stories, two items over one unit, a container edge with no
  * partner, a unit after a story's last paragraph mark, a label of no suggestion, a tree whose sums
  * do not add up.

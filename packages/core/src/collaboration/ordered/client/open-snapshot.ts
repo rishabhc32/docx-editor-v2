@@ -1,4 +1,4 @@
-// Opens a room checkpoint of version 6 (design D5, D6): the item list as data, and the base
+// Opens a room checkpoint of version 6 (design D14): the item list as data, and the base
 // package its Word XML names. Every value comes from a file.
 
 import { readOoxmlPackage, type OoxmlPackage } from '../../../store/package/ooxml-package.ts';

@@ -1,4 +1,4 @@
-// How a checkpoint keeps each fact of the room's model (design D3): the field table of
+// How a checkpoint keeps each fact of the room's model (design D14): the field table of
 // `model/snapshot-fields.ts` and `model/snapshot-side.ts` gives every field of every type stored,
 // with its codec, or rebuilt by the open, with how. Each table covers every key of its type, so a
 // new field fails the type check there until it has an entry. `fold-check.ts` checks after each
@@ -8,7 +8,7 @@
 // (`retracted`, `gone`, `cancelledFmts`, `takenBackLendings`, `taken`, each record's `change`,
 // `acceptedOnly`, a direct edit's object records, `direct`, `composeIds`, `reattributed`, the
 // `insertion` counter, each resource's key and suggestion, `added`). The cleanup of a close decides
-// what goes (design D8).
+// what goes (design D14).
 
 import { describe, expect, test } from 'bun:test';
 import type { SnapshotFields } from '../model/snapshot-codec.ts';

@@ -1,4 +1,4 @@
-// An open checks that a checkpoint's list composes (design D6) and gives those parts to the
+// An open checks that a checkpoint's list composes (design D14) and gives those parts to the
 // document's first compose: the package a compose of its own gives, and never a part of a state
 // the document has left. A package and a publish draw a story's part without its view.
 

@@ -97,7 +97,7 @@ export class OrderedReplica {
 
   /**
    * A new change id in the person's namespace, past every counter of it the copy holds: a host may
-   * keep a namespace across a reload, and the room refuses a counter it already applied (D7).
+   * keep a namespace across a reload, and the room refuses a counter it applied (design D14).
    */
   nextId(): string {
     this.#counter = Math.max(this.#counter, this.doc.lastCounters.get(this.namespace) ?? 0) + 1;

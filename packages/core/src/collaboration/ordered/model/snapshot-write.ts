@@ -1,4 +1,4 @@
-// Writes a room's saved item list (checkpoint version 6, design D2): `ordered/checkpoint.json`,
+// Writes a room's saved item list (checkpoint version 6, design D14): `ordered/checkpoint.json`,
 // every stored field of the document through the field table, with the Word XML its items hold
 // as references into `ordered/base.docx` or once by value.
 

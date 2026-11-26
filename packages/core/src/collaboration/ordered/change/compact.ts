@@ -1,6 +1,6 @@
-// The cleanup at a close (plan D8): a live room removes nothing (design D1), so the items no state
-// of the room can show again go here, with every reference to them, and the saved list does not
-// grow for the life of the room.
+// The cleanup at a close (design D14): a live room removes nothing (design D1), so the items no
+// state of the room can show again go here, with every reference to them, and the saved list
+// does not grow for the life of the room.
 
 import { isNotesStory, noteKeyOf, referenceKeyOf } from '../compose/note-references.ts';
 import {

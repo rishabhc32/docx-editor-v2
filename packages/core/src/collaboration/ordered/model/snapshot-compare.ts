@@ -1,4 +1,4 @@
-// The first difference between two documents in every field a checkpoint stores (design D3): for
+// The first difference between two documents in every field a checkpoint stores (design D14): for
 // the tests, and for the check a room's close runs on the file it wrote before it deletes the old.
 
 import { sideDifference } from './snapshot-side.ts';
