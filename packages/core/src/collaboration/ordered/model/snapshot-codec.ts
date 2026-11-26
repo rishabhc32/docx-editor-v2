@@ -9,7 +9,7 @@ import type {
   OoxmlPart,
 } from '../../../store/package/ooxml-tree.ts';
 import { isValidXmlText } from '../../../store/package/sinks.ts';
-import { at, fieldsOf, Invalid, oneOf, plainFields, required } from '../change/read.ts';
+import { at, fieldsOf, Invalid, oneOf, plainFields } from '../change/read.ts';
 import { readPerson, type OrderedPerson } from './person.ts';
 import {
   attributesDifference,
@@ -337,21 +337,31 @@ export const person: SnapshotCodec<OrderedPerson> = {
   diff: (a, b, path) => (a.id === b.id && a.name === b.name && a.org === b.org ? null : path),
 };
 
-/** An object whose fields the table gives. Absent and undefined read alike. */
-export function record<T>(fields: SnapshotFields<T>): SnapshotCodec<T> {
+/**
+ * An object whose fields the table gives. Absent and undefined read alike. A field that holds its
+ * value in `defaults` is left out, and an absent one reads as that value.
+ */
+export function record<T>(fields: SnapshotFields<T>, defaults: Partial<T> = {}): SnapshotCodec<T> {
   const entries = Object.entries(fields as Record<string, SnapshotField<unknown>>).flatMap(
     ([key, field]) => ('stored' in field ? [[key, field] as const] : [])
   );
   const known = new Set(entries.map(([key]) => key));
+  const fallback: Readonly<Record<string, unknown>> = defaults;
   return {
     write: (value, w) => {
       const out: Record<string, unknown> = {};
       for (const [key, field] of entries) {
         const v = (value as Record<string, unknown>)[key];
-        if (v !== undefined) {
+        if (v === undefined) {
+          if (!field.optional) {
+            throw new RangeError(`The model has no ${key}.`);
+          }
+
+          continue;
+        }
+
+        if (!Object.hasOwn(fallback, key) || field.stored.diff(v, fallback[key], key) !== null) {
           out[key] = field.stored.write(v, w);
-        } else if (!field.optional) {
-          throw new RangeError(`The model has no ${key}.`);
         }
       }
 
@@ -361,11 +371,13 @@ export function record<T>(fields: SnapshotFields<T>): SnapshotCodec<T> {
       const f = fieldsOf(json, path, known);
       const out: Record<string, unknown> = {};
       for (const [key, field] of entries) {
-        if (field.optional && !f.has(key)) {
-          continue;
+        if (f.has(key)) {
+          out[key] = field.stored.read(f.get(key), at(path, key), r);
+        } else if (Object.hasOwn(fallback, key)) {
+          out[key] = fallback[key];
+        } else if (!field.optional) {
+          throw new Invalid('missing-field', at(path, key));
         }
-
-        out[key] = field.stored.read(required(f, key), at(path, key), r);
       }
 
       return out as T;
