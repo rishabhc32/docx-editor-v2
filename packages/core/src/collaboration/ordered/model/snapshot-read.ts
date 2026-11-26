@@ -145,7 +145,7 @@ function documentOf(
     namespaces.map((uri, k) => readXmlString(uri, at('namespaces', k), 0, 4096))
   );
   const doc = createOrderedDocument(file);
-  const stories: OrderedItem[][] = [];
+  const stories: (readonly OrderedItem[])[] = [];
   const r: SnapshotReadContext = {
     nodes,
     item: (value, path) => {
@@ -165,7 +165,7 @@ function documentOf(
       return doc.suggestions;
     },
     tree: (items) => {
-      stories.push([...items]);
+      stories.push(items);
       return orderedStoryTree(doc, items);
     },
     story: (story) => {

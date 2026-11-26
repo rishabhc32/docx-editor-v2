@@ -32,7 +32,7 @@ import {
   type OrderedStoryRole,
 } from './resources.ts';
 import type { OrderedSectionOp, OrderedSectionRecord } from './sections.ts';
-import { createOrderedItem, NOT_WITHIN } from './document.ts';
+import { createOrderedItem } from './document.ts';
 import {
   after,
   attributes,
@@ -484,14 +484,14 @@ export const SUGGESTION: SnapshotFields<OrderedSuggestion> = {
   direct: maybe(bool),
 };
 
-/** An item: absent fields take the defaults of `createOrderedItem`, as a new item does. */
-const ITEM_CODEC = after(record(ITEM), (read) =>
-  createOrderedItem(
-    read.within.by.length === 0 && read.within.dels.length === 0
-      ? { ...read, within: NOT_WITHIN }
-      : read
-  )
-);
+/**
+ * What a new item holds past its address and kind (`createOrderedItem`): an item's field that
+ * holds it is left out, and an absent one reads as it.
+ */
+const { space: _space, kind: _kind, ...NEW_ITEM } = createOrderedItem({ space: '', kind: 'text' });
+
+/** An item, made as a new item is made. */
+const ITEM_CODEC = after(record(ITEM, NEW_ITEM), createOrderedItem);
 
 const ITEMS = list(ITEM_CODEC);
 

@@ -2,7 +2,8 @@
 // package is saved as its id, which names its part and its place there. Any other node is saved
 // once, by value, in the checkpoint's node list, so two items that share one node share it again
 // after an open. A node by value keeps every field: its kind, names, authored prefix, namespace
-// declarations, attributes, children and ids.
+// declarations, attributes, children and ids. A base element's shell (the element with no
+// children, as load keeps each run and text element) is saved as its id alone.
 
 import type { OoxmlPackage } from '../../../store/package/ooxml-package.ts';
 import { findNode } from '../../../store/package/ooxml-edit.ts';
@@ -22,6 +23,7 @@ import { isXmlNCName } from '../../../store/package/qname.ts';
 import { isValidXmlText } from '../../../store/package/sinks.ts';
 import { MAX_XML_DEPTH, XML_HARD_MAX_BYTES } from '../../../store/package/xml-reader.ts';
 import { at, fieldsOf, Invalid, required } from '../change/read.ts';
+import { shellOf } from '../ooxml-nodes.ts';
 
 /** A node as the checkpoint names it: a base node's id, or its place in the node list. */
 export type SnapshotNodeRef = string | number;
@@ -109,6 +111,11 @@ export class SnapshotNodeWriter {
   #value(node: OoxmlNode): unknown[] {
     if (node.kind === 'textValue') {
       return [node.id, node.value];
+    }
+
+    const base = baseNodeOf(this.#base, node.id);
+    if (base !== null && base.kind !== 'textValue' && isShellOf(node, base)) {
+      return [node.id];
     }
 
     const child = (c: OoxmlNode): unknown =>
@@ -326,6 +333,10 @@ export class SnapshotNodeReader {
     }
 
     const fields = this.#array(value, path);
+    if (fields.length === 1) {
+      return this.#shell(fields[0], at(path, 0));
+    }
+
     if (fields.length === 2) {
       return {
         id: this.#text(fields[0], at(path, 0), 1, ID_MAX),
@@ -355,6 +366,15 @@ export class SnapshotNodeReader {
       attributes: this.attributes(attributes, at(path, 6)),
       children: this.#array(children, at(path, 7)).map(child),
     } as OoxmlElement;
+  }
+
+  /** The shell of the base element `value` names. */
+  #shell(value: unknown, path: string): OoxmlElement {
+    if (typeof value !== 'string') {
+      throw new Invalid('invalid-id', path, 'no base element');
+    }
+
+    return shellOf(this.element(value, path));
   }
 
   #binding(value: unknown, path: string): OoxmlNamespaceBinding {
@@ -448,6 +468,12 @@ function readsInContext(node: OoxmlNode): boolean {
     return shape !== undefined && sameShape(node, shape);
   });
 }
+
+/** Whether `node` is the shell of `base` in every field. */
+const isShellOf = (node: OoxmlNode, base: OoxmlElement): boolean =>
+  node.kind !== 'textValue' &&
+  node.children.length === 0 &&
+  nodeDifference(node, shellOf(base), '') === null;
 
 /** Whether an attribute's kind fits its name: `xml:space` and `w:val` are typed. */
 function attributeFits(a: OoxmlAttribute): boolean {

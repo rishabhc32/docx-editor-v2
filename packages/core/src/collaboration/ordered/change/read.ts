@@ -107,8 +107,15 @@ export function isForbiddenKey(key: string): boolean {
   return FORBIDDEN_KEYS.has(key);
 }
 
+const PRINTABLE = /^[\x20-\x7E]{0,64}$/;
+
 /** A key as it shows in a path: at most 64 characters, printable ASCII only. */
 export function keyLabel(key: string): string {
+  // Most keys are a model's own field names, which show as they are
+  if (PRINTABLE.test(key)) {
+    return key;
+  }
+
   const short = key.length > 64 ? `${key.slice(0, 64)}...` : key;
   return short.replace(/[^\x20-\x7E]/g, '?');
 }

@@ -3,11 +3,13 @@
 
 import { describe, expect, test } from 'bun:test';
 import { strFromU8, strToU8, unzipSync, zipSync } from 'fflate';
+import type { OoxmlNode } from '../../../store/package/ooxml-tree.ts';
 import {
   openOrderedCheckpoint,
   openOrderedWordFile,
   OrderedWordFileError,
 } from '../client/open.ts';
+import { createOrderedItem } from '../model/document.ts';
 import { readSnapshotJson } from '../model/snapshot-read.ts';
 import { headerText, type SnapshotHeader } from '../model/snapshot-write.ts';
 import { orderedBlobHash } from '../protocol/blobs.ts';
@@ -80,6 +82,18 @@ const entryOf = (body: Json, map: string, key: string): Json => {
   return entries.find(([k]) => k === key)![1];
 };
 
+/** The first node the list holds as a base element's shell (its id alone). */
+const firstShell = (body: Json): unknown[] =>
+  (body.nodes as unknown[][]).find((entry) => entry.length === 1)!;
+
+/** The id of a text node of the base's main part. */
+const BASE_TEXT_ID = (() => {
+  const { base } = openOrderedWordFile(ROOM_FACTS.source, { file: 1 });
+  const find = (node: OoxmlNode): string | null =>
+    node.kind === 'textValue' ? node.id : (node.children.map(find).find(Boolean) ?? null);
+  return find(base.parts.get('/word/document.xml')!.root)!;
+})();
+
 /** A case: its name, how it changes the file, its refusal, and whether its checksum stays. */
 type Case = readonly [string, (header: Json, body: Json) => void, string, boolean?];
 
@@ -140,6 +154,17 @@ describe('a checkpoint of version 6 that is not as written', () => {
       'checkpoint-manifest',
     ],
     [
+      'a shell of no base element',
+      (_, body) => (firstShell(body)[0] = '/word/document.xml#9'),
+      'checkpoint-manifest',
+    ],
+    [
+      'a shell of a text node',
+      (_, body) => (firstShell(body)[0] = BASE_TEXT_ID),
+      'checkpoint-manifest',
+    ],
+    ['a shell by a listed node', (_, body) => (firstShell(body)[0] = 0), 'checkpoint-manifest'],
+    [
       'a repeated suggestion',
       (_, body) => {
         const suggestions = (body.document as Json).suggestions as unknown[];
@@ -190,6 +215,20 @@ describe('a checkpoint of version 6 that is not as written', () => {
       expect(refusal(await changed(change, raw))).toBe(reason);
     });
   }
+
+  test("leaves out each item field that holds a new item's value, and reads it given", async () => {
+    const { body } = JSON.parse(strFromU8((await FILE)[ENTRY]!)) as { body: Json };
+    const stories = (body.document as Json).stories as [string, Json][];
+    const items = stories.flatMap(([, story]) => story.tree as Json[]);
+    const fresh = createOrderedItem({ space: 'b:1:x', kind: 'text' }) as unknown as Json;
+    const given = items.flatMap((item) =>
+      Object.keys(item).filter((key) => key !== 'kind' && Bun.deepEquals(item[key], fresh[key]))
+    );
+    expect(given).toEqual([]);
+    expect(refusal(await changed((_, b) => Object.assign(firstItem(b), { dels: [] })))).toBe(
+      'opens'
+    );
+  });
 
   test('keeps the last counters of each namespace, in namespace order', async () => {
     const counters: [string, number][] = [
