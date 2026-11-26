@@ -277,6 +277,7 @@ export function* textboxFallbackExportPackageSteps(
         if (!replaced.ok) return null;
         current = replaced.part;
       }
+
       // Once, and only the copies: the rest is the part as read or as a validated edit left it
       return validateOoxmlPartDelta(part, current).ok ? current : null;
     });

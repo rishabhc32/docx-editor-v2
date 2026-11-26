@@ -496,6 +496,7 @@ export function normalizeParagraphIdentity(part: OoxmlPart): OoxmlPart {
   // Frozen like every part the edit primitives publish — layout memos key on part identity,
   // and the freeze discipline is what makes that identity trustworthy.
   const normalized: OoxmlPart = Object.freeze({ ...part, root });
+
   // The part came from the read or a validated edit, so only what the mint rebuilt needs a walk
   return validateOoxmlPartDelta(part, normalized).ok ? normalized : part;
 }
