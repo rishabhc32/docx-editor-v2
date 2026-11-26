@@ -20,10 +20,7 @@ export interface OrderedWordFileOptions {
   /** Caps on the package read. A caller may lower the engine's defaults. */
   readonly limits?: OoxmlPackageLimits;
   /** Caps on the load. */
-  readonly load?: Omit<
-    OrderedLoadOptions,
-    'file' | 'placeholders' | 'suggestions' | 'commentPersons'
-  >;
+  readonly load?: Omit<OrderedLoadOptions, 'file' | 'placeholders'>;
 }
 
 /**

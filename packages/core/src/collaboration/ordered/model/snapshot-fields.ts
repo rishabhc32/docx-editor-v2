@@ -531,7 +531,6 @@ export const REVISION_IDS: SnapshotFields<OrderedRevisionIds> = {
   attributesByRole: stored(map(id, attributes)),
   fileIds: stored(set(id)),
   reattributed: stored(map(id, record(ATTRIBUTION))),
-  listed: stored(map(id, ids)),
 };
 
 export const PART_REVISION: SnapshotFields<OrderedPartRevision> = {

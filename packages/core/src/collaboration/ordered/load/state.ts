@@ -15,7 +15,7 @@ import {
   NOT_WITHIN,
   type OrderedItemInit,
 } from '../model/document.ts';
-import { newSuggestion, setStatus } from '../model/mutations.ts';
+import { newSuggestion } from '../model/mutations.ts';
 import { isControl } from '../model/prompt-marks.ts';
 import { OrderedRefusal } from '../model/refusal.ts';
 import { REVISION_ROLE, seedRevisionId, suggestionOfRevision } from '../model/revision-ids.ts';
@@ -23,7 +23,6 @@ import { recordUndo } from '../model/undo-record.ts';
 import {
   tokenSpace,
   zeroSpace,
-  type OrderedAttribution,
   type OrderedContainerToken,
   type OrderedDocument,
   type OrderedItem,
@@ -31,7 +30,6 @@ import {
   type OrderedWithin,
 } from '../model/types.ts';
 import { attributeOf, isWml } from '../ooxml-nodes.ts';
-import type { OrderedLoadOptions } from './load.ts';
 
 /** The labels the revision wrappers around a node give it. */
 export interface Labels {
@@ -83,9 +81,8 @@ function bounded(value: number | undefined, ceiling: number): number {
 
 /**
  * File revisions as suggestions: one suggestion for each revision triple (`w:id`, `w:author`,
- * `w:date`), the identity the engine decides a revision by, or for each suggestion a room
- * checkpoint lists, whatever the triples of its marks. Each one keeps the file's `w:id` for the
- * role it was read in, so compose writes it back.
+ * `w:date`), the identity the engine decides a revision by. Each one keeps the file's `w:id` for
+ * the role it was read in, so compose writes it back.
  */
 export class RevisionReader {
   private readonly doc: OrderedDocument;
@@ -93,70 +90,24 @@ export class RevisionReader {
   private readonly byMove = new Map<string, string>();
   /** Every revision is this suggestion (an engine-built template), and no `w:id` is kept. */
   private readonly fixed: string | undefined;
-  /** The suggestions a room checkpoint lists, by the triple of each of their marks. */
-  private readonly listedByTriple = new Map<string, string>();
   /** A prompt the glossary kept: its marks read as `suggestionOfRevision` reads them. */
   private readonly prompt: boolean;
 
-  /**
-   * A reader of a document's revisions. The suggestions a room checkpoint lists are made first,
-   * in its order and under their own ids, and `doc.revisionIds.listed` keeps their ids in that
-   * order.
-   */
-  constructor(
-    doc: OrderedDocument,
-    fixed?: string,
-    listed: OrderedLoadOptions['suggestions'] = [],
-    prompt = false
-  ) {
+  /** A reader of a document's revisions. */
+  constructor(doc: OrderedDocument, fixed?: string, prompt = false) {
     this.doc = doc;
     this.fixed = fixed;
     this.prompt = prompt;
-    for (const { id, attribution, revisions, record, status } of listed) {
-      newSuggestion(doc, attribution, id);
-      if (status !== undefined) {
-        setStatus(doc, id, status);
-      }
-
-      // A record outside the stories is no mark of them (`loadPartRevisions` reads it)
-      doc.revisionIds.listed.set(id, revisions);
-      if (record === undefined) {
-        this.addListed(id, attribution, revisions);
-      }
-    }
   }
 
   /**
-   * A reader of a prompt the glossary kept: a mark a load read, a room checkpoint listed or the
-   * room wrote for a suggestion's role is that suggestion's, as a reopen reads it, also with the
-   * attribution the load read when a change gave the suggestion another (`suggestionOfRevision`),
-   * and every other one is `fixed`.
+   * A reader of a prompt the glossary kept: a mark a load read or the room wrote for a
+   * suggestion's role is that suggestion's, as a reopen reads it, also with the attribution the
+   * load read when a change gave the suggestion another (`suggestionOfRevision`), and every other
+   * one is `fixed`.
    */
   static forPrompt(doc: OrderedDocument, fixed: string): RevisionReader {
-    return new RevisionReader(doc, fixed, [], true);
-  }
-
-  /**
-   * Read the marks a checkpoint listed for a suggestion as that suggestion's: by their triple, and
-   * by their `w:id` alone for a mark that writes nothing else (`CT_Markup`: a `w:tblGridChange`),
-   * so a fold keeps its owner.
-   */
-  private addListed(
-    id: string,
-    { author, date }: OrderedAttribution,
-    revisions: readonly string[]
-  ): void {
-    for (const revision of revisions) {
-      // An id names one suggestion: two share one only when two minted ids meet
-      for (const triple of [
-        revisionTriple(revision, author, date),
-        revisionTriple(revision, '', undefined),
-      ]) {
-        if (!this.listedByTriple.has(triple)) {
-          this.listedByTriple.set(triple, id);
-        }
-      }
-    }
+    return new RevisionReader(doc, fixed, true);
   }
 
   /**
@@ -170,10 +121,8 @@ export class RevisionReader {
     move?: string
   ): string {
     const triple = tripleOf(revision);
-    const listed =
-      this.listedByTriple.get(triple) ??
-      (this.prompt ? suggestionOfRevision(this.doc, revision) : undefined);
-    if (this.fixed !== undefined && listed === undefined) {
+    const known = this.prompt ? suggestionOfRevision(this.doc, revision) : undefined;
+    if (this.fixed !== undefined && known === undefined) {
       return this.fixed;
     }
 
@@ -182,7 +131,7 @@ export class RevisionReader {
     const moveKey = move === undefined ? undefined : `${move}\u0000${author}`;
     let suggestion =
       this.byTriple.get(triple) ??
-      listed ??
+      known ??
       (moveKey === undefined ? undefined : this.byMove.get(moveKey));
     if (suggestion === undefined) {
       const attributes = otherAttributes(revision);

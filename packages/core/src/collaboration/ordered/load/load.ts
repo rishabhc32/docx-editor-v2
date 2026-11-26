@@ -8,16 +8,9 @@ import type { OoxmlPackage } from '../../../store/package/ooxml-package.ts';
 import type { OoxmlElement, OoxmlNode, OoxmlPart } from '../../../store/package/ooxml-tree.ts';
 import { DEFAULT_LIMITS } from '../../../store/runtime/limits.ts';
 import { addOrderedStory, createOrderedDocument } from '../model/document.ts';
-import type { OrderedPerson } from '../model/person.ts';
 import { OrderedRefusal } from '../model/refusal.ts';
 import { PROMPT_RECORD_ROLES, reserveFileRevisionId } from '../model/revision-ids.ts';
-import {
-  BLOCK_TOKENS,
-  type OrderedAttribution,
-  type OrderedDocument,
-  type OrderedItem,
-  type OrderedSuggestionStatus,
-} from '../model/types.ts';
+import { BLOCK_TOKENS, type OrderedDocument, type OrderedItem } from '../model/types.ts';
 import { attributeOf, isWml } from '../ooxml-nodes.ts';
 import { loadBlocks } from './blocks.ts';
 import { loadComments } from './comments.ts';
@@ -53,30 +46,6 @@ export interface OrderedLoadOptions {
    * `w:placeholder`. {@link loadOrderedPackage} reads them from the package.
    */
   readonly placeholders?: ReadonlyMap<string, readonly OoxmlNode[]>;
-  /**
-   * A room's pending suggestions, and the decided ones its other records name, each with the
-   * `w:id`s the file writes for its marks. The load makes them first, in this order, each under its
-   * own id, and reads each mark with one of these ids, the author and the date as that one
-   * suggestion. Default: none, so every suggestion is the file's own, one for each revision
-   * triple, with no person, under a new id.
-   */
-  readonly suggestions?: readonly {
-    readonly id: string;
-    readonly attribution: OrderedAttribution;
-    readonly revisions: readonly string[];
-    /**
-     * The local name of the styles part's change record the suggestion is, whose `w:id` is the
-     * one in `revisions`: the record group it names keeps the suggestion's id.
-     */
-    readonly record?: string;
-    /** Pending when absent. */
-    readonly status?: OrderedSuggestionStatus;
-  }[];
-  /**
-   * The persons of a room's comments by comment `w:id`: a comment with one of these ids is that
-   * person's. Default: none, so every comment is the file's own, with no person.
-   */
-  readonly commentPersons?: ReadonlyMap<string, OrderedPerson>;
 }
 
 const STORY_ROOTS = new Set(['document', 'hdr', 'ftr', 'footnotes', 'endnotes']);
@@ -170,7 +139,7 @@ export function loadOrderedPackage(
   recordLoadedPackage(doc, pkg);
 
   // After the stories, so their suggestion ids stay as they were
-  loadPartRevisions(doc, pkg, options.suggestions);
+  loadPartRevisions(doc, pkg);
   for (const part of pkg.parts.values()) {
     // The comments part is no story: only its comment and revision ids
     if (isWml(part.root, 'comments')) {
@@ -178,7 +147,7 @@ export function loadOrderedPackage(
     }
   }
 
-  loadComments(doc, pkg, stories.values(), budget, options.commentPersons);
+  loadComments(doc, pkg, stories.values(), budget);
   return doc;
 }
 
@@ -281,8 +250,8 @@ function loadStories(
     doc.placeholders.set(name, blocks);
   }
 
-  // No fixed suggestion: each file revision is its own, or the suggestion a checkpoint lists
-  const revisions = new RevisionReader(doc, undefined, options.suggestions);
+  // No fixed suggestion: each file revision is its own
+  const revisions = new RevisionReader(doc);
 
   // Every part's revision ids first, so an id the load mints (a move's range markers that the
   // file did not write) never repeats one a later part holds

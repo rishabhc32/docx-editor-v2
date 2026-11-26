@@ -200,8 +200,7 @@ export function fileMark(
 
 /**
  * The suggestion a file's revision mark was read for, by its `w:id`, author and date: the mark a
- * load kept for one of the suggestion's roles, or one a room checkpoint listed for it; or, for a
- * prompt's record, the one the room wrote for its suggestion's role (`revisionIdFor`). Its date
+ * load kept for one of the suggestion's roles; or, for a prompt's record, the one the room wrote for its suggestion's role (`revisionIdFor`). Its date
  * is the suggestion's, or the one the load read when a change gave the suggestion another.
  * Undefined for a mark no load read and the room did not write.
  */
@@ -246,8 +245,8 @@ function stampedAs(doc: OrderedDocument, suggestion: string, revision: OoxmlElem
 
 /**
  * Whether a prompt's record is `suggestion`'s, as `suggestionOfRevision` reads it, for one known
- * suggestion and without a scan: the `w:id` of its role, the file's or the room's, or one a room
- * checkpoint listed for it. Each `w:id`, author and date names one suggestion.
+ * suggestion and without a scan: the `w:id` of its role, the file's or the room's. Each `w:id`,
+ * author and date names one suggestion.
  */
 export function isPromptRecordOf(
   doc: OrderedDocument,
@@ -260,23 +259,14 @@ export function isPromptRecordOf(
     return false;
   }
 
-  return (
-    revisionIdFor(doc, suggestion, role) === id ||
-    doc.revisionIds.listed.get(suggestion)?.includes(id) === true
-  );
+  return revisionIdFor(doc, suggestion, role) === id;
 }
 
-/** Each `w:id` a load kept for a suggestion's role, or a room checkpoint listed for it. */
+/** Each `w:id` a load kept for a suggestion's role. */
 function* keptRevisionIds(doc: OrderedDocument): Generator<[string, string]> {
   for (const [k, id] of doc.revisionIds.byRole) {
     // A role may name a story part, with its slashes; a suggestion id has none
     yield [k.slice(0, k.indexOf('/')), id];
-  }
-
-  for (const [suggestion, ids] of doc.revisionIds.listed) {
-    for (const id of ids) {
-      yield [suggestion, id];
-    }
   }
 }
 
@@ -360,14 +350,10 @@ export function fileRecordIdsOf(doc: OrderedDocument, suggestion: string): strin
   return ids;
 }
 
-/**
- * Every `w:id` compose writes for a suggestion's marks, its file records' own, and those a room
- * checkpoint listed for it.
- */
+/** Every `w:id` compose writes for a suggestion's marks, and its file records' own. */
 export function revisionIdsOf(doc: OrderedDocument, suggestion: string): Set<string> {
   const ids = new Set(WHOLE_ROLES.map((role) => revisionIdFor(doc, suggestion, role)));
-  const listed = doc.revisionIds.listed.get(suggestion) ?? [];
-  for (const id of [...fileRecordIdsOf(doc, suggestion), ...listed]) {
+  for (const id of fileRecordIdsOf(doc, suggestion)) {
     ids.add(id);
   }
 

@@ -545,11 +545,6 @@ export interface OrderedRevisionIds {
    * had before, which the file's own marks carry: compose writes the new one on them.
    */
   readonly reattributed: Map<string, OrderedAttribution>;
-  /**
-   * The `w:id`s a room checkpoint lists for each suggestion it makes, those of a part the room
-   * does not load among them (a prompt's records in the glossary), in the checkpoint's order.
-   */
-  readonly listed: Map<string, readonly string[]>;
 }
 
 /** One step of an undo record: how to take back one write. @public */

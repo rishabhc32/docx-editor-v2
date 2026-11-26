@@ -17,23 +17,20 @@ import {
 } from '../../../store/store/comment-writes.ts';
 import { commentItemsOf } from '../../../store/store/review-reads.ts';
 import type { ReviewCommentItem } from '../../../store/store/review-items.ts';
-import type { OrderedPerson } from '../model/person.ts';
 import type { OrderedDocument } from '../model/types.ts';
 import { attributeOf, isWml } from '../ooxml-nodes.ts';
 import { chargeItem, type LoadBudget } from './state.ts';
 
 /**
  * Record the comments of the main document's comments part in `doc.comments`, each `w:comment`
- * of the part's root by its `w:id` (the first one when the file repeats an id), with the person
- * `persons` gives its id. Each comment's nodes count against the load's item limit. A thread
+ * of the part's root by its `w:id` (the first one when the file repeats an id), with no person. Each comment's nodes count against the load's item limit. A thread
  * entry the editor ignores is ignored here.
  */
 export function loadComments(
   doc: OrderedDocument,
   pkg: OoxmlPackage,
   stories: Iterable<OoxmlPart>,
-  budget: LoadBudget,
-  persons?: ReadonlyMap<string, OrderedPerson>
+  budget: LoadBudget
 ): void {
   const main = pkg.mainDocumentPart;
   const part = pkg.parts.get(commentPartNameOf(pkg, main));
@@ -59,7 +56,7 @@ export function loadComments(
       parent: parent !== undefined && elements.has(parent) ? parent : null,
       done: item?.resolved ?? false,
       element,
-      person: persons?.get(id) ?? null,
+      person: null,
     });
   }
 }
