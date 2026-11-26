@@ -64,26 +64,25 @@ describe('a cleanup at a close', () => {
     expect(compactOrdered(doc)).toEqual({ items: 0 });
   });
 
-  test('keeps what can show again: pending suggestions and a direct edit, which a revert undoes', () => {
+  test('keeps a pending suggestion; removes what a direct edit hid, as the room refuses its revert', () => {
     const doc = load();
     apply(doc, 'ana:1', { kind: 'insert', ...EDIT, place: at(doc, 0, 4), text: 'new ' });
-    apply(
-      doc,
-      'olive:1',
-      { kind: 'delete', ...DIRECT, from: at(doc, 8, 0), to: at(doc, 8, 4) },
-      'Olive'
-    );
+    const pending = labelledBy(doc, 'S:ana:1.1');
+    const deletion = { kind: 'delete', ...DIRECT, from: at(doc, 8, 0), to: at(doc, 8, 4) } as const;
+    apply(doc, 'olive:1', deletion, 'Olive');
+    const insertion = { kind: 'insert', ...DIRECT, place: at(doc, 8, 8), text: 'more ' } as const;
+    apply(doc, 'olive:2', insertion, 'Olive');
+    const revert = { kind: 'revert', suggestions: ['S:olive:2.1'], status: 'rejected' } as const;
+    apply(doc, 'olive:3', revert, 'Olive');
+    const went = [...labelledBy(doc, 'S:olive:1.1'), ...labelledBy(doc, 'S:olive:2.1')];
     const parts = partsOf(doc);
+    const text = textOf(doc, 8);
 
-    expect(compactOrdered(doc)).toEqual({ items: 0 });
+    expect(compactOrdered(doc)).toEqual({ items: went.length });
+    expect(went.filter(inTree)).toEqual([]);
+    expect(pending.every(inTree)).toBe(true);
     expect(partsOf(doc)).toEqual(parts);
-    apply(
-      doc,
-      'olive:2',
-      { kind: 'revert', suggestions: ['S:olive:1.1'], status: 'rejected' },
-      'Olive'
-    );
-    expect(textOf(doc, 8)).toBe('Due in 30 days.');
+    expect(textOf(doc, 8)).toBe(text);
   });
 
   test('a removed address names no item: a change there is refused by name', () => {

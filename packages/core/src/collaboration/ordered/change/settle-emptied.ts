@@ -113,6 +113,20 @@ export function restoreEmptiedControls(
   promptedByEdit.set(doc, new Map(emptied));
 }
 
+/**
+ * Forget the controls direct edits emptied, at a close: the room refuses the revert of an edit
+ * made before its file, so none of them is given back again.
+ */
+export function forgetEmptiedControls(doc: OrderedDocument): void {
+  const emptied = promptedByEdit.get(doc);
+  if (emptied === undefined || emptied.size === 0) {
+    return;
+  }
+
+  promptedByEdit.delete(doc);
+  recordUndo(doc, () => promptedByEdit.set(doc, emptied));
+}
+
 function promptedOf(doc: OrderedDocument): Map<OrderedItem, PromptedByEdit> {
   let found = promptedByEdit.get(doc);
   if (!found) {

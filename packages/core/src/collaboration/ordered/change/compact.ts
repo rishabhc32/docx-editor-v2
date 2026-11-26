@@ -5,6 +5,7 @@
 import { isNotesStory, noteKeyOf, referenceKeyOf } from '../compose/note-references.ts';
 import {
   indexItem,
+  insertionTakenBack,
   isHidden,
   isSplitEdge,
   labelIndex,
@@ -12,7 +13,6 @@ import {
   statusOf,
   unindexItem,
 } from '../model/document.ts';
-import { isDroppedMark } from '../model/prompt-marks.ts';
 import { recordUndo } from '../model/undo-record.ts';
 import {
   BLOCK_TOKENS,
@@ -23,8 +23,8 @@ import {
   type OrderedItemLabels,
   type OrderedPropertyRecord,
   type OrderedStory,
-  type OrderedSuggestionStatus,
 } from '../model/types.ts';
+import { forgetEmptiedControls } from './settle-emptied.ts';
 
 /** What a cleanup removed. @public */
 export interface OrderedCompaction {
@@ -51,9 +51,11 @@ const HOLDING_TOKENS: ReadonlySet<OrderedContainerToken> = new Set([
 
 /**
  * Remove what no state of the room can show again, at a close, before the save. Run it only when
- * no client is connected: a close sends every client `reload`, which forgets its undo history, so
- * the cleanup ends the undo of their own edits too (`taken`, a record's `change`, `ownEdited`,
- * `added`) and an undo that names a change from before it changes nothing.
+ * no client is connected: a close sends every client `reload`, which forgets its undo history, and
+ * the room on the next file refuses an undo or a revert of a change made before it (`other-file`).
+ * So the cleanup ends the undo of own edits (`taken`, a record's `change`, `ownEdited`, `added`),
+ * and a direct edit is as final as a decision: what it hid goes, and the controls it emptied keep
+ * their prompts (`forgetEmptiedControls`).
  *
  * It removes an item hidden for good (`hiddenForGood`) that nothing reads (`deadItems`): no
  * comment range, field slot or kept note names it, nothing it holds or its container holds stays,
@@ -69,6 +71,7 @@ const HOLDING_TOKENS: ReadonlySet<OrderedContainerToken> = new Set([
  */
 export function compactOrdered(doc: OrderedDocument): OrderedCompaction {
   endOwnEditUndo(doc);
+  forgetEmptiedControls(doc);
   let items = 0;
   for (const [story, dead] of deadItems(doc)) {
     for (const item of drawnAgain(doc, story, new Set(dead))) {
@@ -160,45 +163,28 @@ function removeItem(doc: OrderedDocument, story: OrderedStory, item: OrderedItem
 }
 
 /**
- * A suggestion's status where no change can turn it any more: a decision is final, and only a
- * direct edit's status turns again (`revert`). Null for a direct edit or no suggestion.
- */
-function finalStatus(doc: OrderedDocument, id: string | null): OrderedSuggestionStatus | null {
-  const found = id === null ? undefined : doc.suggestions.get(id);
-  if (found === undefined || found.direct === true) {
-    return null;
-  }
-
-  return found.status;
-}
-
-/**
- * Whether no change after the close can show the item again (`isHidden` with final reasons only).
- * A prompt's units and marks show again when the content over them goes, and a block control's
- * dropped paragraph comes back with the revert of the edit that emptied it.
+ * Whether no change after the close can show the item again (`isHidden`). Every status is final
+ * then: a decision is, and the room refuses the revert of a direct edit made before its file
+ * (`other-file`). Only a prompt's units and marks show again, when the content over them goes.
  */
 function hiddenForGood(doc: OrderedDocument, item: OrderedItem): boolean {
   if (item.prompt === true) {
     return false;
   }
 
-  if (item.retracted) {
+  if (item.gone || item.retracted) {
     return true;
   }
 
-  if (item.gone) {
-    return !isDroppedMark(doc, item);
-  }
-
-  const rejected = (id: string | null) => finalStatus(doc, id) === 'rejected';
-  const accepted = (id: string | null) => finalStatus(doc, id) === 'accepted';
+  const rejected = (id: string | null) => statusOf(doc, id) === 'rejected';
+  const accepted = (id: string | null) => statusOf(doc, id) === 'accepted';
   if (item.within.by.some(rejected) || item.within.dels.some(accepted)) {
     return true;
   }
 
-  // A split's edge goes with the container it split, and never with its own Enter's decision
+  // A split's edge goes with the container it split, or with its Enter taken back
   if (isSplitEdge(item)) {
-    return splitContainerGone(doc, item);
+    return insertionTakenBack(doc, item) || splitContainerGone(doc, item);
   }
 
   return rejected(item.by) || item.dels.some(accepted);
