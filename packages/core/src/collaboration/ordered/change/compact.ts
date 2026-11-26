@@ -11,6 +11,7 @@ import {
   statusOf,
   unindexItem,
 } from '../model/document.ts';
+import { isNotesStory, noteKeyOf, referenceKeyOf } from '../compose/note-references.ts';
 import { isDroppedMark } from '../model/prompt-marks.ts';
 import { takenFrom } from '../model/takeovers.ts';
 import { recordUndo } from '../model/undo-record.ts';
@@ -71,8 +72,7 @@ const HOLDING_TOKENS: ReadonlySet<OrderedContainerToken> = new Set([
 export function compactOrdered(doc: OrderedDocument): OrderedCompaction {
   endOwnEditUndo(doc);
   let items = 0;
-  for (const story of doc.stories.values()) {
-    const dead = deadItems(doc, story);
+  for (const [story, dead] of deadItems(doc)) {
     for (const item of drawnAgain(doc, story, new Set(dead))) {
       markRebuilt(doc, item);
     }
@@ -100,9 +100,12 @@ function drawnAgain(
   const out = new Set<OrderedItem>();
   const blocks: OrderedItem[] = [];
   const touchBlock = () => {
-    const kept = blocks.findLast((open) => !dead.has(open));
-    if (kept !== undefined) {
-      out.add(kept);
+    for (let k = blocks.length - 1; k >= 0; k -= 1) {
+      const open = blocks[k];
+      if (open !== undefined && !dead.has(open)) {
+        out.add(open);
+        return;
+      }
     }
   };
   let touched = false;
@@ -222,13 +225,50 @@ function splitContainerGone(doc: OrderedDocument, item: OrderedItem): boolean {
 /** A unit's address as a comment range or a field slot names it. */
 const addressKey = (space: string, offset: number): string => `${space}|${offset}`;
 
+/**
+ * The items the cleanup removes, by story, in story order. The notes stories go first: a note
+ * whose every reference is hidden is left out by those references (`notesWithHiddenReferences`),
+ * so a hidden reference stays while an item of its note stays.
+ */
+export function deadItems(doc: OrderedDocument): Map<OrderedStory, OrderedItem[]> {
+  const out = new Map<OrderedStory, OrderedItem[]>();
+  const stories = [...doc.stories.values()];
+  const keptNotes = new Set<string>();
+  for (const story of stories.filter(isNotesStory)) {
+    const dead = storyDeadItems(doc, story, keptNotes);
+    out.set(story, dead);
+    const gone = new Set(dead);
+    for (const item of story.tree.items()) {
+      const key = noteKeyOf(item);
+      if (key !== undefined && item.kind === 'open' && !gone.has(item)) {
+        keptNotes.add(key);
+      }
+    }
+  }
+
+  for (const story of stories) {
+    if (!isNotesStory(story)) {
+      out.set(story, storyDeadItems(doc, story, keptNotes));
+    }
+  }
+
+  return out;
+}
+
 /** The items of a story that the cleanup removes, in story order. */
-export function deadItems(doc: OrderedDocument, story: OrderedStory): OrderedItem[] {
+function storyDeadItems(
+  doc: OrderedDocument,
+  story: OrderedStory,
+  keptNotes: ReadonlySet<string>
+): OrderedItem[] {
   const all = story.tree.toArray();
   const named = namedAddresses(doc, story, all);
   const dead = new Set(
     all.filter(
-      (item) => hiddenForGood(doc, item) && !named.has(addressKey(item.space, item.offset))
+      (item) =>
+        hiddenForGood(doc, item) &&
+        !named.has(addressKey(item.space, item.offset)) &&
+        !keptNotes.has(referenceKeyOf(item) ?? '')
     )
   );
   const containers = new Map<string, OrderedItem[]>();
@@ -250,6 +290,7 @@ export function deadItems(doc: OrderedDocument, story: OrderedStory): OrderedIte
     kept = [
       keepContainers(containers, dead),
       keepHeld(all, dead),
+      keepAround(all, dead),
       keepRemovedCells(all, dead),
       keepSpaceEnds(story, dead),
     ].includes(true);
@@ -331,6 +372,39 @@ function keepHeld(all: readonly OrderedItem[], dead: Set<OrderedItem>): boolean 
       if (stays) {
         holding += 1;
       }
+    }
+  }
+
+  return changed;
+}
+
+/**
+ * Keep the edges of every container around an item that stays: without them, the item would draw
+ * outside the container, where a note or a row compose leaves out kept it from showing.
+ */
+function keepAround(all: readonly OrderedItem[], dead: Set<OrderedItem>): boolean {
+  const opens: OrderedItem[] = [];
+  let changed = false;
+  for (const item of all) {
+    if (item.kind === 'close') {
+      opens.pop();
+    }
+
+    if (!dead.has(item)) {
+      // A container that stays already kept every container around it
+      for (let k = opens.length - 1; k >= 0; k -= 1) {
+        const open = opens[k];
+        if (open === undefined || !dead.has(open)) {
+          break;
+        }
+
+        dead.delete(open);
+        changed = true;
+      }
+    }
+
+    if (item.kind === 'open') {
+      opens.push(item);
     }
   }
 
@@ -536,13 +610,15 @@ function dropUnnamedSuggestions(doc: OrderedDocument): number {
 
     return false;
   };
-  for (const roles of [doc.revisionIds.byRole, doc.revisionIds.attributesByRole]) {
+  const forgetRoles = <V>(roles: Map<string, V>) => {
     for (const key of [...roles.keys()]) {
       if (ownedByGone(key)) {
         forget(doc, roles, key);
       }
     }
-  }
+  };
+  forgetRoles(doc.revisionIds.byRole);
+  forgetRoles(doc.revisionIds.attributesByRole);
 
   return gone.size;
 }

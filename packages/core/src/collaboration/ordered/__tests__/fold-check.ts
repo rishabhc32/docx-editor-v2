@@ -656,7 +656,7 @@ export async function checkEveryCard(
  * still holds one fails by name.
  */
 export function withCleanup<T>(doc: OrderedDocument, read: () => T): T {
-  const removed = [...doc.stories.values()].flatMap((story) => deadItems(doc, story));
+  const removed = [...deadItems(doc).values()].flat();
   const { record } = withUndoRecord(doc, () => compactOrdered(doc));
   const restore = removed.map(poison);
   try {
