@@ -36,6 +36,7 @@ import { FRAGMENT_PART_CONTENT_TYPES } from '../change/fragment-names-objects.ts
 import { customNodeBindingTarget } from '../../../store/package/custom-node-payloads.ts';
 import { OrderedRefusal } from '../model/refusal.ts';
 import {
+  orderedRelationshipKey,
   orderedResourceShows,
   type OrderedListBullet,
   type OrderedListResource,
@@ -461,7 +462,7 @@ function writeRelationships(
     }));
   const written = withPart(next, {
     ...rels,
-    root: withChildren(rels.root, [...rels.root.children, ...records]),
+    root: withChildren(rels.root, inKeyOrder(rels.root.children, rows, records)),
   });
   const relationships = new Map(written.relationships);
   relationships.set(owner, [...(written.relationships.get(owner) ?? []), ...internal]);
@@ -470,6 +471,32 @@ function writeRelationships(
     relationships,
     externalTargets: [...written.externalTargets, ...external],
   });
+}
+
+/**
+ * An owner's relationships with the new ones (`records`, in the key order of `rows`), each before
+ * the first one the owner holds under a later key the room minted. A fold keeps the room's
+ * relationships to a story in the file and gives the others back, so those go to their places.
+ */
+function inKeyOrder(
+  children: readonly OoxmlNode[],
+  rows: readonly RelationshipRow[],
+  records: readonly OoxmlElement[]
+): OoxmlNode[] {
+  const out: OoxmlNode[] = [];
+  let next = 0;
+  for (const child of children) {
+    const id = child.kind === 'textValue' ? undefined : attributeOf(child, 'Id');
+    const key = id === undefined ? undefined : orderedRelationshipKey(id);
+    while (key !== undefined && next < rows.length && rows[next]!.key < key) {
+      out.push(records[next]!);
+      next += 1;
+    }
+
+    out.push(child);
+  }
+
+  return [...out, ...records.slice(next)];
 }
 
 /** The relationships that are written, in their owners' relationship parts. */

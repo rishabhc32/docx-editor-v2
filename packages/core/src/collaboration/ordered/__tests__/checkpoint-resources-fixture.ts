@@ -6,7 +6,7 @@ import type { OoxmlPackage } from '../../../store/package/ooxml-package.ts';
 import type { OrderedMediaType } from '../model/resources.ts';
 import type { OrderedDocument } from '../model/types.ts';
 import { orderedBlobHash } from '../protocol/blobs.ts';
-import { apply, at, EDIT, markOf } from './change-apply-fixture.ts';
+import { addressOf, apply, at, BODY, DIRECT, EDIT, markOf } from './change-apply-fixture.ts';
 import type { CheckpointRoom } from './checkpoint-fixture.ts';
 import { mediaStore } from './fold-check.ts';
 import { docx, p, R, RED_PNG, t, W, WML_CT } from './word-fixtures.ts';
@@ -84,6 +84,26 @@ export const LINK_ROOM: CheckpointRoom = {
     apply(doc, 'ana:1', { kind: 'insert', ...EDIT, place: at(doc, 0, 6), text: 'net ' });
     const link = { from: at(doc, 0, 6), to: at(doc, 0, 9), href: 'https://a.example/' };
     apply(doc, 'ana:2', { kind: 'insert-link', ...EDIT, ...link });
+  },
+};
+
+/**
+ * Ana's link, then Olive's new header: the room writes both relationships in key order, and a fold
+ * keeps the header's in the file while it gives the link's back to Ana's suggestion.
+ */
+export const LINK_AND_HEADER_ROOM: CheckpointRoom = {
+  name: "a link's address and a new header",
+  source: LINK_ROOM.source,
+  edit: (doc) => {
+    LINK_ROOM.edit(doc);
+    const body = [...doc.stories.get(BODY)!.tree.items()].find((item) => item.block === true)!;
+    const header = { action: 'create', section: addressOf(body), story: 'header' } as const;
+    apply(
+      doc,
+      'olive:1',
+      { kind: 'header-footer', ...DIRECT, ...header, variant: 'default' },
+      'Olive'
+    );
   },
 };
 
@@ -174,6 +194,7 @@ export const BULLET_ROOM: CheckpointRoom = {
 export const RESOURCE_ROOMS: readonly CheckpointRoom[] = [
   LIST_LEVEL_ROOM,
   LINK_ROOM,
+  LINK_AND_HEADER_ROOM,
   OBJECT_ROOM,
   INK_ROOM,
   CHART_ROOM,

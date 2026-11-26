@@ -532,6 +532,19 @@ export function orderedResourceToken(key: string): string {
 export const orderedRelationshipId = (key: string): string => `rO${orderedResourceToken(key)}`;
 
 /**
+ * The resource key a relationship id gives (`orderedRelationshipId`), or undefined for an id the
+ * room did not mint. Counter and k are digits, so the last two `_` of the token part them.
+ */
+export function orderedRelationshipKey(id: string): string | undefined {
+  const match = /^rO([A-Za-z0-9_-]{1,64})_([0-9]{1,15})_([0-9]{1,9})$/.exec(id);
+  if (!match) {
+    return undefined;
+  }
+
+  return `p:${match[1]}:${match[2]}.${match[3]}`;
+}
+
+/**
  * A media part name for a resource key, in the folder Word uses: an embedded object's part and
  * a chart's workbook in `embeddings`, ink in `ink`, an image in `media`.
  */
