@@ -1,0 +1,10 @@
+{
+  "impact": "compatible",
+  "fields": [],
+  "before": "Compose wrote the room's new relationships after every relationship the owner part held. A checkpoint keeps the room's relationship to a new header or footer in the file and gives a link's back to its suggestion, so after a fold the link's relationship came after the header's, where the live room writes them in key order.",
+  "after": "Compose writes each new relationship before the first one the owner part holds under a later key the room minted (the key its id gives). Live, after one fold and after two, the relationships parts hold the same order. A file with no relationship the room minted writes as before.",
+  "reason": "Change messages, the change log and its kinds keep their meaning, and the Yjs document format does not change. The checkpoint format and its version do not change: only the place of a relationship in a written relationships part changes. Ordered rooms are not deployed yet, so no room needs a migration.",
+  "tests": ["packages/core/src/collaboration/ordered/__tests__/checkpoint-fold-resources.test.ts"],
+  "changeset": "fold-relationship-order",
+  "migration": null
+}
