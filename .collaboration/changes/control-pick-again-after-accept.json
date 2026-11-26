@@ -1,0 +1,12 @@
+{
+  "impact": "compatible",
+  "fields": [],
+  "before": "A room edit read a list or date control's value record from the composed blocks alone, without the record an accept reads back from the words (withControlRecords). A pick of the item an accepted pick shows then changed that record, so the room made a suggestion where the editor alone makes none, and after a fold its strike hid the read-back, so the control showed the stored value.",
+  "after": "The view a room edit reads (viewPart) follows each control's value record as the room shows it. The same pick changes nothing and makes no suggestion, as in the editor alone, and the control keeps the accepted value live and after a fold.",
+  "reason": "Change messages, the change log and its kinds keep their meaning, and the Yjs document format and the checkpoint format and its version do not change. Only the room's reading of an edit changes: a change that made a suggestion with no effect now makes none. Ordered rooms are not deployed yet, so no room needs a migration.",
+  "tests": [
+    "packages/core/src/collaboration/ordered/__tests__/client/editor-controls-value-fold.test.ts"
+  ],
+  "changeset": "control-pick-again-after-accept",
+  "migration": null
+}
