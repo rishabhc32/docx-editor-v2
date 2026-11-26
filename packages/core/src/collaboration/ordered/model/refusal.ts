@@ -12,8 +12,7 @@ import type { OrderedItemAddress } from './types.ts';
  * - `not-text`: a split asked of an item that is not text.
  * - `splits-surrogate-pair`: a place between the two UTF-16 units of one character.
  * - `item-in-tree`: an item that is already in a story.
- * - `too-deep`, `too-many-items`: a part past the load limits, or a checkpoint's manifest past the
- *   engine's limit of one part.
+ * - `too-deep`, `too-many-items`: a part past the load limits.
  * - `malformed-story`: a part or story the model cannot read: a document part with no body, a
  *   part that is not a story, a container without its other edge, inline content after the last
  *   paragraph mark, a block without its shell, or a paragraph that went during the edit.

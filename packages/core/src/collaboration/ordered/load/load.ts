@@ -54,14 +54,13 @@ export interface OrderedLoadOptions {
    */
   readonly placeholders?: ReadonlyMap<string, readonly OoxmlNode[]>;
   /**
-   * A room checkpoint's pending suggestions, and the decided ones its other records name, each
-   * with the `w:id`s the file writes for its marks (`openOrderedCheckpoint` reads them). The load
-   * makes them first, in this order, each under its own id, and reads each mark with one of these
-   * ids, the author and the date as that one suggestion. Default: none, so every suggestion is the
-   * file's own, one for each revision triple, with no person, under a new id.
+   * A room's pending suggestions, and the decided ones its other records name, each with the
+   * `w:id`s the file writes for its marks. The load makes them first, in this order, each under its
+   * own id, and reads each mark with one of these ids, the author and the date as that one
+   * suggestion. Default: none, so every suggestion is the file's own, one for each revision
+   * triple, with no person, under a new id.
    */
   readonly suggestions?: readonly {
-    // Spelled out: the manifest's own type is not public
     readonly id: string;
     readonly attribution: OrderedAttribution;
     readonly revisions: readonly string[];
@@ -74,9 +73,8 @@ export interface OrderedLoadOptions {
     readonly status?: OrderedSuggestionStatus;
   }[];
   /**
-   * The persons of a room checkpoint's comments by comment `w:id` (`openOrderedCheckpoint` reads
-   * them): a comment with one of these ids is that person's. Default: none, so every comment is
-   * the file's own, with no person.
+   * The persons of a room's comments by comment `w:id`: a comment with one of these ids is that
+   * person's. Default: none, so every comment is the file's own, with no person.
    */
   readonly commentPersons?: ReadonlyMap<string, OrderedPerson>;
 }

@@ -1,7 +1,6 @@
-// Rooms whose checkpoints hold what changes added outside the story text, in the manifest's
-// section `resources` (design D14): a list level, a link's address, an embedded object, ink, a
-// chart's part, and a pasted list's picture bullet. Ana makes each one, pending; Olive adds a new
-// header beside Ana's link.
+// Rooms whose checkpoints hold what changes added outside the story text (design D14): a list
+// level, a link's address, an embedded object, ink, a chart's part, and a pasted list's picture
+// bullet. Ana makes each one, pending; Olive adds a new header beside Ana's link.
 
 import type { OoxmlPackage } from '../../../store/package/ooxml-package.ts';
 import type { OrderedMediaType } from '../model/resources.ts';
@@ -68,7 +67,7 @@ const paste = (doc: OrderedDocument, runs: readonly object[], more: object) =>
   }) as unknown as Parameters<typeof apply>[2];
 
 /** Increase Indent to a level the list does not declare (`list-level`). */
-export const LIST_LEVEL_ROOM: CheckpointRoom = {
+const LIST_LEVEL_ROOM: CheckpointRoom = {
   name: 'a list level',
   source: LIST_FILE,
   edit: (doc) => {
@@ -78,7 +77,7 @@ export const LIST_LEVEL_ROOM: CheckpointRoom = {
 };
 
 /** A link on Ana's own new words: its address is a relationship to outside. */
-export const LINK_ROOM: CheckpointRoom = {
+const LINK_ROOM: CheckpointRoom = {
   name: "a link's address",
   source: docx(p(t('Cloud and serverless.'))),
   edit: (doc) => {
@@ -92,7 +91,7 @@ export const LINK_ROOM: CheckpointRoom = {
  * Ana's link, then Olive's new header: the room writes both relationships in key order, and a fold
  * keeps the header's in the file while it gives the link's back to Ana's suggestion.
  */
-export const LINK_AND_HEADER_ROOM: CheckpointRoom = {
+const LINK_AND_HEADER_ROOM: CheckpointRoom = {
   name: "a link's address and a new header",
   source: LINK_ROOM.source,
   edit: (doc) => {
@@ -109,7 +108,7 @@ export const LINK_AND_HEADER_ROOM: CheckpointRoom = {
 };
 
 /** A pasted embedded object: its part is media, named by a relationship. */
-export const OBJECT_ROOM: CheckpointRoom = {
+const OBJECT_ROOM: CheckpointRoom = {
   name: 'an embedded object',
   source: docx(p(t('Fees.'))),
   edit: (doc) => {
@@ -122,7 +121,7 @@ export const OBJECT_ROOM: CheckpointRoom = {
 };
 
 /** Pasted ink: its part stays inside a checkpoint, named by a relationship. */
-export const INK_ROOM: CheckpointRoom = {
+const INK_ROOM: CheckpointRoom = {
   name: 'ink',
   source: docx(p(t('Fees.'))),
   edit: (doc) => {
@@ -132,7 +131,7 @@ export const INK_ROOM: CheckpointRoom = {
 };
 
 /** A pasted chart: its part, and the relationship to it. */
-export const CHART_ROOM: CheckpointRoom = {
+const CHART_ROOM: CheckpointRoom = {
   name: "a chart's part",
   source: docx(p(t('Fees.'))),
   edit: (doc) => {
@@ -156,7 +155,7 @@ export const CHART_ROOM: CheckpointRoom = {
 };
 
 /** A pasted list with a picture bullet: its image is media of the numbering part. */
-export const BULLET_ROOM: CheckpointRoom = {
+const BULLET_ROOM: CheckpointRoom = {
   name: 'a picture bullet',
   source: docx(p(t('Fees.'))),
   edit: (doc) => {

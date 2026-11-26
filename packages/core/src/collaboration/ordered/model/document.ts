@@ -365,15 +365,6 @@ export function storyNamed(doc: OrderedDocument, name: string): OrderedStory {
   return story;
 }
 
-/** The story that holds an address's space, or null. */
-export function storyOfAddress(
-  doc: OrderedDocument,
-  address: OrderedItemAddress
-): OrderedStory | null {
-  for (const story of doc.stories.values()) if (story.spaces.has(address.space)) return story;
-  return null;
-}
-
 /** The main document's story, or null when the list has none. */
 export function mainStory(doc: OrderedDocument): OrderedStory | null {
   for (const story of doc.stories.values()) {

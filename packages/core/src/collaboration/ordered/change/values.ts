@@ -3,7 +3,7 @@
 // `Invalid`; each returns a new value with its known fields only.
 
 import { sanitizeHref } from '../../../store/package/sinks.ts';
-import { isOrderedSuggestionId } from './ids.ts';
+import { isOrderedSuggestionId, ORDERED_NAMESPACE_PATTERN } from './ids.ts';
 import { allowedChildren, type OrderedPropertyScope } from './properties.ts';
 import {
   at,
@@ -62,6 +62,20 @@ export function place(value: unknown, path: string): OrderedChangePlace {
 
 export function addresses(value: unknown, path: string): OrderedChangeAddress[] {
   return list(value, path, 1, LIMITS.targets).map((item, k) => address(item, at(path, k)));
+}
+
+/**
+ * A namespace of room changes.
+ *
+ * @throws Invalid when it is not one.
+ */
+export function readNamespace(value: unknown, path: string): string {
+  const namespace = str(value, path, 64);
+  if (!ORDERED_NAMESPACE_PATTERN.test(namespace)) {
+    throw new Invalid('invalid-namespace', path);
+  }
+
+  return namespace;
 }
 
 export function suggestionId(value: unknown, path: string): string {

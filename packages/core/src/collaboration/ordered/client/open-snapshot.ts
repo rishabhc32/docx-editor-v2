@@ -74,7 +74,7 @@ function basePackage(
     return null;
   }
 
-  return normalizedRoomPackage(read.package).pkg;
+  return normalizedRoomPackage(read.package);
 }
 
 /**

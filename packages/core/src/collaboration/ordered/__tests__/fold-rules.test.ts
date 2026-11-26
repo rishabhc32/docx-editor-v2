@@ -4,11 +4,10 @@
 // new field fails the type check there until it has an entry. `fold-check.ts` checks after each
 // step of the shape sessions that an open gives back every stored field.
 //
-// What a fold of version 5 dropped is stored now: a reopened room holds what the live room held
-// (`retracted`, `gone`, `cancelledFmts`, `takenBackLendings`, `taken`, each record's `change`,
-// `acceptedOnly`, a direct edit's object records, `direct`, `composeIds`, `reattributed`, the
-// `insertion` counter, each resource's key and suggestion, `added`). The cleanup of a close decides
-// what goes (design D14).
+// A reopened room holds what the live room held (`retracted`, `gone`, `cancelledFmts`,
+// `takenBackLendings`, `taken`, each record's `change`, `acceptedOnly`, a direct edit's object
+// records, `direct`, `composeIds`, `reattributed`, the `insertion` counter, each resource's key and
+// suggestion, `added`). The cleanup of a close decides what goes (design D14).
 
 import { describe, expect, test } from 'bun:test';
 import type { SnapshotFields } from '../model/snapshot-codec.ts';

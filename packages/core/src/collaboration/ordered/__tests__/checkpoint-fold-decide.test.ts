@@ -5,13 +5,9 @@
 // suggestion keeps its version, so a decision that names what the room showed applies.
 
 import { describe, expect, test } from 'bun:test';
-import { strFromU8, strToU8, unzipSync, zipSync } from 'fflate';
+import { strFromU8, unzipSync } from 'fflate';
 import { orderedCardSeen } from '../change/apply-decide.ts';
-import {
-  openOrderedCheckpoint,
-  openOrderedWordFile,
-  type OrderedWordFile,
-} from '../client/open.ts';
+import { openOrderedWordFile, type OrderedWordFile } from '../client/open.ts';
 import { orderedPackageBytes } from '../compose/package.ts';
 import type { OrderedDocument } from '../model/types.ts';
 import {
@@ -26,7 +22,6 @@ import {
   opens,
   partsOf,
 } from './change-apply-fixture.ts';
-import { versionFiveCase } from './checkpoint-fixture.ts';
 import { checkFold, folded, mediaStore } from './fold-check.ts';
 import {
   alphaOmega,
@@ -38,8 +33,6 @@ import {
   t,
   type PackageExtras,
 } from './word-fixtures.ts';
-
-const MANIFEST = 'ordered-checkpoint.json';
 
 /** A run as Word writes it, with its revision session and its own properties. */
 const run = (text: string, rPr = '') =>
@@ -668,15 +661,6 @@ describe("a fold of a table's records", () => {
       const suggestions = orderedCardSeen(doc, 'S:bob:1.1')!;
       apply(doc, 'olive:1', { kind: 'decide', cards: [{ suggestions }], status }, 'Olive');
       await checkFold(doc, base, mediaStore(base), `a table width over a ${status} row height`);
-
-      // The version 5 reader stays strict: without the takeover, the records do not fit the file
-      const entries = unzipSync(versionFiveCase(`table-width-over-${status}-row-height`));
-      const manifest = JSON.parse(strFromU8(entries[MANIFEST]!)) as { takeovers: unknown[] };
-      expect(manifest.takeovers).not.toEqual([]);
-      entries[MANIFEST] = strToU8(JSON.stringify({ ...manifest, takeovers: [] }));
-      expect(() => openOrderedCheckpoint(zipSync(entries), { file: 2 })).toThrow(
-        'checkpoint-manifest'
-      );
     });
   }
 

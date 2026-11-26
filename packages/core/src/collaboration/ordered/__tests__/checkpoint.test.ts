@@ -1,8 +1,7 @@
 // Room checkpoints (design D14): a checkpoint holds no bytes of the media the room's storage holds,
 // and names them by reference. It loads with no media bytes, and a document loaded from it
-// composes and saves as one loaded from the Word file does, byte for byte. Version 5 is the Word
-// file without its media parts and a manifest, read only (`versionFiveCase`); version 6 the item
-// list (`checkpoint-snapshot`).
+// composes and saves as one loaded from the Word file does, byte for byte. A room file of version 5
+// or older is refused by name.
 
 import { describe, expect, test } from 'bun:test';
 import { readFileSync } from 'node:fs';
@@ -33,12 +32,11 @@ import type { OrderedChange } from '../change/types.ts';
 import { allowWritersPolicy } from '../room/policy.ts';
 import { OrderedRoom } from '../room/room.ts';
 import { apply, at, BODY, EDIT } from './change-apply-fixture.ts';
-import { versionFiveCase } from './checkpoint-fixture.ts';
 import { folded, heldEntries } from './fold-check.ts';
 import { actor } from './room-harness.ts';
 import { EMBEDDED_SOURCE, EMBEDDED_WORKBOOK, INK } from './client/paste-embedded-harness.ts';
 import { OBJECT_SOURCE } from './client/paste-objects-harness.ts';
-import { docx, MATRIX_EXTRAS, p, pictureRun, R, RED_PNG, t, W } from './word-fixtures.ts';
+import { docx, MATRIX_EXTRAS, p, pictureRun, R, RED_PNG, t } from './word-fixtures.ts';
 import { testPerson } from './test-persons.ts';
 
 const FIXTURES = join(import.meta.dir, '../../../../../../e2e/fixtures');
@@ -53,15 +51,6 @@ const ROOM_FILES: ReadonlyArray<readonly [string, () => Uint8Array]> = [
     (name) => [name, () => new Uint8Array(readFileSync(join(FIXTURES, name)))] as const
   ),
 ];
-
-/**
- * The room files with a version 5 case: each kind of media. demo.docx's case would hold its fonts
- * (1.2 MB), and its media are kinds the others hold.
- */
-const VERSION_FIVE_FILES = ROOM_FILES.filter(([name]) => name !== 'demo.docx');
-
-/** The name of a room file's version 5 case. */
-const caseName = (name: string): string => name.replace(/\.docx$/, '').replaceAll(' ', '-');
 
 /** PNG bytes of `size`, different for each `seed`. */
 function pictureBytes(seed: number, size = 2048): Uint8Array {
@@ -110,31 +99,9 @@ function checkpointOf(file: OrderedWordFile, store = storeOf([])): Promise<Uint8
   );
 }
 
-/** Each version a room opens. */
-const VERSIONS = [5, 6] as const;
-
-/** The version 5 case of the Word file with its own embedded workbook and ink. */
-const EMBEDDED_CASE = 'an-embedded-workbook-and-ink';
-
-/**
- * A document's checkpoint of `version`, written with media read from `store`; of version 5, the
- * case `name` that the last version 5 writer wrote of the same document.
- */
-const checkpointIn = async (
-  version: (typeof VERSIONS)[number],
-  name: string,
-  file: OrderedWordFile,
-  store = storeOf([])
-): Promise<Uint8Array> => (version === 5 ? versionFiveCase(name) : checkpointOf(file, store));
-
 /** The Word file `writeOrderedPackage` writes. */
 const streamed = (file: OrderedWordFile, store: ReturnType<typeof storeOf>) =>
   collected((write) => writeOrderedPackage(file.document, file.base, { media: store.read, write }));
-
-const ANA = { id: 'ana', name: 'Ana', org: '' };
-
-/** A listed suggestion of Ana's that the file writes no mark for. */
-const ANA_SUGGESTION = { author: 'Ana', attributes: [], person: ANA, revisions: [] };
 
 function expectSameBytes(actual: Uint8Array, expected: Uint8Array): void {
   expect(actual.length).toBe(expected.length);
@@ -235,324 +202,210 @@ function withRootRelationship(bytes: Uint8Array, relationship: string): Uint8Arr
   return zipSync(entries);
 }
 
-for (const version of VERSIONS) {
-  describe(`a document loaded from a checkpoint of version ${version}`, () => {
-    for (const [name, source] of version === 5 ? VERSION_FIVE_FILES : ROOM_FILES) {
-      test(`${name}: loads with no bytes, and saves as the Word file does`, async () => {
-        const file = openOrderedWordFile(source(), { file: 1 });
-        const store = storeOf(orderedPackageMedia(file.base).map((media) => media.bytes));
-        const word = orderedPackageBytes(file.document, file.base);
-        const checkpoint = await checkpointIn(version, caseName(name), file);
-        const fromCheckpoint = openOrderedCheckpoint(checkpoint, { file: 2 });
-        const fromWord = openOrderedWordFile(word, { file: 2 });
-        const fileMedia = [...fromCheckpoint.document.resources.fileMedia.values()];
-        expect(fileMedia.map((media) => media.part)).toEqual(
-          orderedPackageMedia(fromWord.base).map((media) => media.part)
-        );
-
-        // The same Word file through either writer, and the media read once each, one at a time
-        const expected = orderedPackageBytes(fromWord.document, fromWord.base);
-        expectSameBytes(
-          orderedPackageBytes(fromCheckpoint.document, fromCheckpoint.base, { blobs: store.blobs }),
-          expected
-        );
-        expectSameBytes(await streamed(fromCheckpoint, store), expected);
-        expect(store.reads).toEqual(fileMedia.map((media) => media.sha256));
-
-        // The next close writes version 6, which opens to the same document
-        await folded(fromCheckpoint.document, fromCheckpoint.base, 3, store.blobs);
-      });
-    }
-
-    test('edits and added pictures compose alike, and added pictures are referenced', async () => {
-      const source = docx(
-        p(t('Alpha ') + pictureRun(5) + t(' Omega')) + p(t('Plain.')),
-        MATRIX_EXTRAS
-      );
-      const file = openOrderedWordFile(source, { file: 1 });
-      const added = [pictureBytes(7), pictureBytes(8)];
-      const store = storeOf([RED_PNG, ...added]);
-      added.forEach((bytes, k) => {
-        const media = {
-          sha256: orderedBlobHash(bytes),
-          contentType: 'image/png' as const,
-          size: bytes.length,
-        };
-        const object = { type: 'picture', media, extent: { cx: 914_400, cy: 457_200 } } as const;
-        apply(file.document, `ben-1:${k + 1}`, {
-          ...EDIT,
-          kind: 'insert-object',
-          place: at(file.document, 1, 0),
-          object,
-        });
-      });
-      apply(file.document, 'ben-1:3', {
-        ...EDIT,
-        kind: 'insert',
-        place: at(file.document, 0, 2),
-        text: 'xy',
-      });
-      const checkpoint = await checkpointIn(version, 'added-pictures', file, store);
-      expect(store.reads).toEqual([]);
-      const held = new Set(Object.values(heldEntries(checkpoint)).map(orderedBlobHash));
-      expect([...store.bytes.keys()].filter((sha256) => held.has(sha256))).toEqual([]);
-
+describe('a document loaded from a checkpoint', () => {
+  for (const [name, source] of ROOM_FILES) {
+    test(`${name}: loads with no bytes, and saves as the Word file does`, async () => {
+      const file = openOrderedWordFile(source(), { file: 1 });
+      const store = storeOf(orderedPackageMedia(file.base).map((media) => media.bytes));
+      const word = orderedPackageBytes(file.document, file.base);
+      const checkpoint = await checkpointOf(file);
       const fromCheckpoint = openOrderedCheckpoint(checkpoint, { file: 2 });
-      const fromWord = openOrderedWordFile(
-        orderedPackageBytes(file.document, file.base, { blobs: store.blobs }),
-        { file: 2 }
+      const fromWord = openOrderedWordFile(word, { file: 2 });
+      const fileMedia = [...fromCheckpoint.document.resources.fileMedia.values()];
+      expect(fileMedia.map((media) => media.part)).toEqual(
+        orderedPackageMedia(fromWord.base).map((media) => media.part)
       );
+
+      // The same Word file through either writer, and the media read once each, one at a time
+      const expected = orderedPackageBytes(fromWord.document, fromWord.base);
       expectSameBytes(
-        await streamed(fromCheckpoint, store),
-        orderedPackageBytes(fromWord.document, fromWord.base, { blobs: store.blobs })
+        orderedPackageBytes(fromCheckpoint.document, fromCheckpoint.base, { blobs: store.blobs }),
+        expected
       );
+      expectSameBytes(await streamed(fromCheckpoint, store), expected);
+      expect(store.reads).toEqual(fileMedia.map((media) => media.sha256));
+
+      // Its next close writes the same checkpoint
+      await folded(fromCheckpoint.document, fromCheckpoint.base, 3, store.blobs);
     });
-
-    test('with no bytes, a save refuses missing-blob and a screen leaves the picture out', async () => {
-      const checkpoint = await checkpointIn(
-        version,
-        EMBEDDED_CASE,
-        openOrderedWordFile(EMBEDDED_SOURCE, { file: 1 })
-      );
-      const file = openOrderedCheckpoint(checkpoint, { file: 2 });
-      expect(reasonOf(() => orderedPackageBytes(file.document, file.base))).toBe('missing-blob');
-      const screen = unzipSync(orderedPackageBytes(file.document, file.base, { missing: 'skip' }));
-      expect(Object.keys(screen)).not.toContain('word/media/preview.png');
-      expect(strFromU8(screen['word/_rels/document.xml.rels'] ?? new Uint8Array())).toContain(
-        'media/preview.png'
-      );
-    });
-
-    test('a change may name the media a checkpoint references: the room storage holds it', async () => {
-      const file = openOrderedWordFile(docx(p(t('Alpha ') + pictureRun(5)), MATRIX_EXTRAS), {
-        file: 1,
-      });
-      const checkpoint = await checkpointIn(version, 'a-picture-alone', file);
-      const { document } = openOrderedCheckpoint(checkpoint, { file: 2 });
-      const room = new OrderedRoom({
-        document,
-        applyChange: applyOrderedChange,
-        policy: allowWritersPolicy,
-        now: () => Date.UTC(2026, 10, 6),
-        blobs: new Set<string>(),
-      });
-      const media = {
-        sha256: orderedBlobHash(RED_PNG),
-        contentType: 'image/png' as const,
-        size: RED_PNG.length,
-      };
-      const ana = actor('Ana', 'ana-1', 'organiser');
-      const picture = (id: string, sha256: string): OrderedChange => ({
-        v: 1,
-        id,
-        ...EDIT,
-        kind: 'insert-object',
-        place: at(document, 0, 0),
-        object: {
-          type: 'picture',
-          media: { ...media, sha256 },
-          extent: { cx: 457_200, cy: 457_200 },
-        },
-      });
-      expect(room.submit(ana, [picture('ana-1:1', media.sha256)]).refused).toEqual([]);
-      const other = orderedBlobHash(pictureBytes(9));
-      const refused = room.submit(ana, [picture('ana-1:2', other)]).refused;
-      expect(refused.map((refusal) => refusal.code)).toEqual(['missing-blob']);
-    });
-  });
-
-  describe(`a copy of the file's media names its reference, version ${version}`, () => {
-    /** A checkpoint's document, and an `insertDrawing` of the file's picture into its second line. */
-    async function copied(screenBytes: Uint8Array | undefined) {
-      const source = docx(p(t('Alpha ') + pictureRun(5)) + p(t('Plain.')), MATRIX_EXTRAS);
-      const word = openOrderedWordFile(source, { file: 1 });
-      const checkpoint = await checkpointIn(version, 'a-picture-and-a-line', word);
-      const { document: doc, base } = openOrderedCheckpoint(checkpoint, { file: 2 });
-      const screen = composeOrderedPackage(doc, base, {
-        blobs: () => screenBytes,
-        missing: 'skip',
-      });
-      const line = orderedViewParagraph(doc, BODY, 1);
-      if (!line) {
-        throw new Error('no line');
-      }
-
-      const drawing = buildInlinePictureDrawing({
-        docPrId: 900,
-        relationshipId: 'rIdImg1',
-        extentEmu: { cx: 457_200, cy: 457_200 },
-      }) as OoxmlDrawingNode;
-      const held: string[] = [];
-      const batch = translateOps(
-        [{ op: 'insertDrawing', paragraphId: line.id, offset: 0, drawing }],
-        {
-          doc,
-          person: testPerson('Ana'),
-          editorText: (nodeId) => (nodeId === line.id ? 'Plain.' : null),
-          defaultParagraphStyle: null,
-          gated: () => screen,
-          hold: (bytes) => {
-            held.push(orderedBlobHash(bytes));
-            return { sha256: orderedBlobHash(bytes), contentType: 'image/png', size: bytes.length };
-          },
-        }
-      );
-      const [body] = batch.steps.flatMap((step): unknown[] => [...step()]);
-      const object = (body as { object?: { media?: OrderedChangeMedia } } | undefined)?.object;
-      return { media: object?.media ?? null, held };
-    }
-
-    const reference: OrderedChangeMedia = {
-      sha256: orderedBlobHash(RED_PNG),
-      contentType: 'image/png',
-      size: RED_PNG.length,
-    };
-
-    test('before the page reads it, and after, with nothing held for an upload', async () => {
-      expect(await copied(undefined)).toEqual({ media: reference, held: [] });
-      expect(await copied(RED_PNG)).toEqual({ media: reference, held: [] });
-    });
-
-    test('other bytes under its part name are new media, held for an upload', async () => {
-      const other = pictureBytes(5, RED_PNG.length);
-      const { media, held } = await copied(other);
-      expect(held).toEqual([orderedBlobHash(other)]);
-      expect(media?.sha256).toBe(orderedBlobHash(other));
-    });
-  });
-}
-
-describe('a file of another kind is refused by name: version 5', () => {
-  const embedded = () => openOrderedWordFile(EMBEDDED_SOURCE, { file: 1 });
-
-  /** The checkpoint with its manifest replaced. */
-  function withManifest(change: (manifest: Record<string, unknown>) => unknown): Uint8Array {
-    const entries = unzipSync(versionFiveCase(EMBEDDED_CASE));
-    const manifest = JSON.parse(strFromU8(entries[MANIFEST] ?? new Uint8Array())) as Record<
-      string,
-      unknown
-    >;
-    entries[MANIFEST] = strToU8(JSON.stringify(change(manifest)));
-    return zipSync(entries);
   }
 
-  const open = (bytes: Uint8Array) => () => openOrderedCheckpoint(bytes, { file: 2 });
-
-  test('a checkpoint of another format or version', () => {
-    expect(reasonOf(open(withManifest((m) => ({ ...m, format: 'other' }))))).toBe(
-      'checkpoint-format'
+  test('edits and added pictures compose alike, and added pictures are referenced', async () => {
+    const source = docx(
+      p(t('Alpha ') + pictureRun(5) + t(' Omega')) + p(t('Plain.')),
+      MATRIX_EXTRAS
     );
-    for (const version of [1, 2, 3, 4, 6]) {
-      expect(reasonOf(open(withManifest((m) => ({ ...m, version }))))).toBe('checkpoint-version');
-    }
+    const file = openOrderedWordFile(source, { file: 1 });
+    const added = [pictureBytes(7), pictureBytes(8)];
+    const store = storeOf([RED_PNG, ...added]);
+    added.forEach((bytes, k) => {
+      const media = {
+        sha256: orderedBlobHash(bytes),
+        contentType: 'image/png' as const,
+        size: bytes.length,
+      };
+      const object = { type: 'picture', media, extent: { cx: 914_400, cy: 457_200 } } as const;
+      apply(file.document, `ben-1:${k + 1}`, {
+        ...EDIT,
+        kind: 'insert-object',
+        place: at(file.document, 1, 0),
+        object,
+      });
+    });
+    apply(file.document, 'ben-1:3', {
+      ...EDIT,
+      kind: 'insert',
+      place: at(file.document, 0, 2),
+      text: 'xy',
+    });
+    const checkpoint = await checkpointOf(file, store);
+    expect(store.reads).toEqual([]);
+    const held = new Set(Object.values(heldEntries(checkpoint)).map(orderedBlobHash));
+    expect([...store.bytes.keys()].filter((sha256) => held.has(sha256))).toEqual([]);
+
+    const fromCheckpoint = openOrderedCheckpoint(checkpoint, { file: 2 });
+    const fromWord = openOrderedWordFile(
+      orderedPackageBytes(file.document, file.base, { blobs: store.blobs }),
+      { file: 2 }
+    );
+    expectSameBytes(
+      await streamed(fromCheckpoint, store),
+      orderedPackageBytes(fromWord.document, fromWord.base, { blobs: store.blobs })
+    );
   });
 
-  test('a manifest that does not read or does not fit the file', () => {
-    const media = (m: Record<string, unknown>) => m.media as Record<string, unknown>[];
-    const cases: ((m: Record<string, unknown>) => unknown)[] = [
-      () => [1, 2],
-      (m) => ({ ...m, media: 'all' }),
-      (m) => ({ ...m, media: media(m).map((x) => ({ ...x, sha256: 'ABC' })) }),
-      (m) => ({ ...m, media: media(m).map((x) => ({ ...x, size: 0 })) }),
-      (m) => ({ ...m, media: media(m).map((x) => ({ ...x, part: '/word/../x.png' })) }),
-      (m) => ({ ...m, media: media(m).map((x) => ({ ...x, part: '/word/document.xml' })) }),
-      (m) => ({ ...m, media: media(m).map((x) => ({ ...x, contentType: 'image/gif' })) }),
-      (m) => ({ ...m, media: media(m).map((x) => ({ ...x, entry: 0 })) }),
-      (m) => ({ ...m, media: media(m).map((x) => ({ ...x, entry: 10_000 })) }),
-      (m) => ({ ...m, media: [...media(m), ...media(m)] }),
-      ({ suggestions: _, ...m }) => m,
-      (m) => ({ ...m, suggestions: 'all' }),
-      (m) => ({ ...m, suggestions: [{ ...ANA_SUGGESTION, person: { id: 'ana', name: 'Ana' } }] }),
-      (m) => ({ ...m, suggestions: [{ ...ANA_SUGGESTION, revisions: 1 }] }),
-      (m) => ({ ...m, suggestions: [{ ...ANA_SUGGESTION, revisions: [1] }] }),
-      (m) => ({ ...m, suggestions: [{ ...ANA_SUGGESTION, author: 'Ben' }] }),
-      (m) => ({ ...m, suggestions: [{ ...ANA_SUGGESTION, person: { ...ANA, org: 'Acme' } }] }),
-      ({ comments: _, ...m }) => m,
-      (m) => ({
-        ...m,
-        comments: [
-          { id: '7', person: ANA },
-          { id: '7', person: ANA },
-        ],
-      }),
-      (m) => ({ ...m, takeovers: [{ label: 0 }] }),
-      // A label on no element of the file
-      (m) => ({
-        ...m,
-        suggestions: [ANA_SUGGESTION, ANA_SUGGESTION],
-        takeovers: [
-          { label: 0, taken: [{ suggestion: 1, properties: `<w:rPr xmlns:w="${W}"/>` }] },
-        ],
-      }),
-      ({ namespaces: _, ...m }) => m,
-      // A namespace twice, and no namespace
-      (m) => ({
-        ...m,
-        namespaces: [
-          { namespace: 'ana', person: ANA },
-          { namespace: 'ana', person: ANA },
-        ],
-      }),
-      (m) => ({ ...m, namespaces: [{ namespace: 'a b', person: ANA }] }),
-      (m) => ({ ...m, untracked: [{ label: 0, target: 'p' }] }),
-      (m) => ({
-        ...m,
-        suggestions: [ANA_SUGGESTION],
-        untracked: [{ label: 0, target: 'tcPr', records: [{ suggestion: 0 }] }],
-      }),
-      (m) => ({ ...m, suggestions: [{ ...ANA_SUGGESTION, version: -1 }] }),
-      (m) => ({ ...m, suggestions: [{ ...ANA_SUGGESTION, version: '2' }] }),
-      // A direct edit is decided: never a pending suggestion, and the mark is a boolean
-      (m) => ({ ...m, suggestions: [{ ...ANA_SUGGESTION, direct: true }] }),
-      (m) => ({ ...m, suggestions: [{ ...ANA_SUGGESTION, status: 'accepted', direct: 1 }] }),
-      (m) => ({ ...m, changeRecords: [{ label: 0, target: 'tcPr', records: [] }] }),
-      // A label on no element of the file
-      (m) => ({
-        ...m,
-        suggestions: [ANA_SUGGESTION],
-        changeRecords: [{ label: 0, target: 'tcPr', records: [{ suggestion: 0, merge: [] }] }],
-      }),
-      // A key that reaches a prototype, in a known section or in one a reader skips
-      (m) => ({ ...m, comments: [JSON.parse('{"__proto__": {"id": "7"}}')] }),
-      (m) => ({ ...m, later: { constructor: 1 } }),
-    ];
-    for (const change of cases) {
-      expect(reasonOf(open(withManifest(change)))).toBe('checkpoint-manifest');
-    }
-
-    // A namespace's person opens with no run that names it
-    const named = withManifest((m) => ({
-      ...m,
-      namespaces: [{ namespace: 'ana', person: ANA }],
-    }));
-    expect(reasonOf(open(named))).toBe('opened');
-
-    const entries = unzipSync(versionFiveCase(EMBEDDED_CASE));
-    entries[MANIFEST] = strToU8('{"format":');
-    expect(reasonOf(open(zipSync(entries)))).toBe('checkpoint-manifest');
+  test('with no bytes, a save refuses missing-blob and a screen leaves the picture out', async () => {
+    const checkpoint = await checkpointOf(openOrderedWordFile(EMBEDDED_SOURCE, { file: 1 }));
+    const file = openOrderedCheckpoint(checkpoint, { file: 2 });
+    expect(reasonOf(() => orderedPackageBytes(file.document, file.base))).toBe('missing-blob');
+    const screen = unzipSync(orderedPackageBytes(file.document, file.base, { missing: 'skip' }));
+    expect(Object.keys(screen)).not.toContain('word/media/preview.png');
+    expect(strFromU8(screen['word/_rels/document.xml.rels'] ?? new Uint8Array())).toContain(
+      'media/preview.png'
+    );
   });
 
-  test('a Word file is not a checkpoint, and a checkpoint is not a Word file', async () => {
-    expect(reasonOf(open(EMBEDDED_SOURCE))).toBe('not-checkpoint');
-    for (const version of VERSIONS) {
-      const bytes = await checkpointIn(version, EMBEDDED_CASE, embedded());
-      expect(reasonOf(() => openOrderedWordFile(bytes, { file: 2 }))).toBe('checkpoint');
-    }
+  test('a change may name the media a checkpoint references: the room storage holds it', async () => {
+    const file = openOrderedWordFile(docx(p(t('Alpha ') + pictureRun(5)), MATRIX_EXTRAS), {
+      file: 1,
+    });
+    const checkpoint = await checkpointOf(file);
+    const { document } = openOrderedCheckpoint(checkpoint, { file: 2 });
+    const room = new OrderedRoom({
+      document,
+      applyChange: applyOrderedChange,
+      policy: allowWritersPolicy,
+      now: () => Date.UTC(2026, 10, 6),
+      blobs: new Set<string>(),
+    });
+    const media = {
+      sha256: orderedBlobHash(RED_PNG),
+      contentType: 'image/png' as const,
+      size: RED_PNG.length,
+    };
+    const ana = actor('Ana', 'ana-1', 'organiser');
+    const picture = (id: string, sha256: string): OrderedChange => ({
+      v: 1,
+      id,
+      ...EDIT,
+      kind: 'insert-object',
+      place: at(document, 0, 0),
+      object: {
+        type: 'picture',
+        media: { ...media, sha256 },
+        extent: { cx: 457_200, cy: 457_200 },
+      },
+    });
+    expect(room.submit(ana, [picture('ana-1:1', media.sha256)]).refused).toEqual([]);
+    const other = orderedBlobHash(pictureBytes(9));
+    const refused = room.submit(ana, [picture('ana-1:2', other)]).refused;
+    expect(refused.map((refusal) => refusal.code)).toEqual(['missing-blob']);
   });
 });
 
-describe("the version 5 manifest's name in another case", () => {
-  test('opens as a checkpoint: OPC part names compare without case', () => {
-    const bytes = versionFiveCase(EMBEDDED_CASE);
-    const entries = unzipSync(bytes);
-    entries[MANIFEST.toUpperCase()] = entries[MANIFEST]!;
-    delete entries[MANIFEST];
-    const renamed = zipSync(entries);
-    const expected = openOrderedCheckpoint(bytes, { file: 2 });
-    for (const open of [openOrderedCheckpoint, openOrderedRoomFile]) {
-      const opened = open(renamed, { file: 2 });
-      expect([...opened.base.partBytes.keys()]).toEqual([...expected.base.partBytes.keys()]);
-      expect(opened.document.resources.fileMedia).toEqual(expected.document.resources.fileMedia);
+describe("a copy of the file's media names its reference", () => {
+  /** A checkpoint's document, and an `insertDrawing` of the file's picture into its second line. */
+  async function copied(screenBytes: Uint8Array | undefined) {
+    const source = docx(p(t('Alpha ') + pictureRun(5)) + p(t('Plain.')), MATRIX_EXTRAS);
+    const word = openOrderedWordFile(source, { file: 1 });
+    const checkpoint = await checkpointOf(word);
+    const { document: doc, base } = openOrderedCheckpoint(checkpoint, { file: 2 });
+    const screen = composeOrderedPackage(doc, base, {
+      blobs: () => screenBytes,
+      missing: 'skip',
+    });
+    const line = orderedViewParagraph(doc, BODY, 1);
+    if (!line) {
+      throw new Error('no line');
+    }
+
+    const drawing = buildInlinePictureDrawing({
+      docPrId: 900,
+      relationshipId: 'rIdImg1',
+      extentEmu: { cx: 457_200, cy: 457_200 },
+    }) as OoxmlDrawingNode;
+    const held: string[] = [];
+    const batch = translateOps(
+      [{ op: 'insertDrawing', paragraphId: line.id, offset: 0, drawing }],
+      {
+        doc,
+        person: testPerson('Ana'),
+        editorText: (nodeId) => (nodeId === line.id ? 'Plain.' : null),
+        defaultParagraphStyle: null,
+        gated: () => screen,
+        hold: (bytes) => {
+          held.push(orderedBlobHash(bytes));
+          return { sha256: orderedBlobHash(bytes), contentType: 'image/png', size: bytes.length };
+        },
+      }
+    );
+    const [body] = batch.steps.flatMap((step): unknown[] => [...step()]);
+    const object = (body as { object?: { media?: OrderedChangeMedia } } | undefined)?.object;
+    return { media: object?.media ?? null, held };
+  }
+
+  const reference: OrderedChangeMedia = {
+    sha256: orderedBlobHash(RED_PNG),
+    contentType: 'image/png',
+    size: RED_PNG.length,
+  };
+
+  test('before the page reads it, and after, with nothing held for an upload', async () => {
+    expect(await copied(undefined)).toEqual({ media: reference, held: [] });
+    expect(await copied(RED_PNG)).toEqual({ media: reference, held: [] });
+  });
+
+  test('other bytes under its part name are new media, held for an upload', async () => {
+    const other = pictureBytes(5, RED_PNG.length);
+    const { media, held } = await copied(other);
+    expect(held).toEqual([orderedBlobHash(other)]);
+    expect(media?.sha256).toBe(orderedBlobHash(other));
+  });
+});
+
+describe('a file of another kind is refused by name', () => {
+  test('a Word file is not a checkpoint, and a checkpoint is not a Word file', async () => {
+    expect(reasonOf(() => openOrderedCheckpoint(EMBEDDED_SOURCE, { file: 2 }))).toBe(
+      'not-checkpoint'
+    );
+    const bytes = await checkpointOf(openOrderedWordFile(EMBEDDED_SOURCE, { file: 1 }));
+    expect(reasonOf(() => openOrderedWordFile(bytes, { file: 2 }))).toBe('checkpoint');
+  });
+
+  /** A Word file with a manifest of `version`, under the manifest's name in `name`'s case. */
+  const versionFive = (version: number, name = MANIFEST): Uint8Array => {
+    const entries = unzipSync(docx(p(t('Cloud.'))));
+    const manifest = { format: 'docx-editor.dev/ordered-checkpoint', version, media: [] };
+    entries[name] = strToU8(JSON.stringify(manifest));
+    return zipSync(entries);
+  };
+
+  test('a room file of version 5 or older, by every open, its manifest named in any case', () => {
+    const opens = [openOrderedCheckpoint, openOrderedRoomFile, openOrderedWordFile];
+    for (const bytes of [versionFive(5), versionFive(4), versionFive(5, MANIFEST.toUpperCase())]) {
+      for (const open of opens) {
+        expect(reasonOf(() => open(bytes, { file: 2 }))).toBe('checkpoint-version');
+      }
     }
   });
 });

@@ -1,23 +1,16 @@
-// A checkpoint of version 5 names the places of its facts by label, and who typed a run on the run
-// (design D14): a later engine that reads one more element than this one, before a labelled place,
-// reads every fact at its place. A room's next close writes version 6, with no labels or marks.
+// What a checkpoint keeps of who typed and of a control's last value (design D14): live, after one
+// fold and after two.
 
 import { describe, expect, test } from 'bun:test';
-import { strFromU8, strToU8, unzipSync, zipSync } from 'fflate';
-import {
-  openOrderedCheckpoint,
-  openOrderedWordFile,
-  OrderedWordFileError,
-} from '../client/open.ts';
+import { strFromU8, unzipSync } from 'fflate';
+import { openOrderedWordFile } from '../client/open.ts';
 import { orderedPackageBytes } from '../compose/package.ts';
-import { CHECKPOINT_NAMESPACE } from '../model/checkpoint.ts';
 import { isTextBoxStoryName } from '../model/text-boxes.ts';
 import type { OrderedDocument } from '../model/types.ts';
 import { orderedUnitTyper } from '../model/typers.ts';
 import {
   addressOf,
   apply,
-  APPLY_FILE,
   at,
   BODY,
   DIRECT,
@@ -25,168 +18,9 @@ import {
   FOOTNOTES,
   opens,
 } from './change-apply-fixture.ts';
-import {
-  roomBlobs,
-  TYPED_BARE,
-  TYPED_RUNS,
-  versionFiveCase,
-  withRoomFacts,
-} from './checkpoint-fixture.ts';
-import { checkFold, folded, foldPrint, mediaStore } from './fold-check.ts';
+import { roomBlobs, TYPED_BARE, TYPED_RUNS } from './checkpoint-fixture.ts';
+import { checkFold, folded, mediaStore } from './fold-check.ts';
 import { docx, p, t } from './word-fixtures.ts';
-
-/** A package with one of its entries edited as text. */
-function crafted(bytes: Uint8Array, entry: string, edit: (text: string) => string): Uint8Array {
-  const entries = unzipSync(bytes);
-  entries[entry] = strToU8(edit(strFromU8(entries[entry]!)));
-  return zipSync(entries);
-}
-
-/**
- * A package's main document with a control and a unit at the end of its first paragraph, and a
- * table at the end of its first cell: what a later preparation or unit rule might add before the
- * labelled places. No node before them moves.
- */
-function withAdded(bytes: Uint8Array): Uint8Array {
-  const control =
-    '<w:sdt><w:sdtPr><w:id w:val="9"/><w:text/></w:sdtPr>' +
-    `<w:sdtContent>${t('Z')}</w:sdtContent></w:sdt>${t('Z')}`;
-  const cell = `<w:tc>${p(t('Z'))}</w:tc>`;
-  const table = `<w:tbl><w:tblGrid><w:gridCol w:w="1000"/></w:tblGrid><w:tr>${cell}</w:tr></w:tbl>`;
-  return crafted(bytes, 'word/document.xml', (xml) =>
-    xml.replace('</w:p>', `${control}</w:p>`).replace('</w:tc>', `${table}${p('')}</w:tc>`)
-  );
-}
-
-/**
- * The room of `withRoomFacts` over APPLY_FILE, its checkpoint of version 5 as the last version 5
- * writer wrote it, and its storage.
- */
-function roomFacts() {
-  const room = openOrderedWordFile(APPLY_FILE, { file: 1 });
-  const doc = withRoomFacts(room.document);
-  const checkpoint = versionFiveCase('room-facts');
-  return { doc, base: room.base, blobs: mediaStore(room.base), checkpoint };
-}
-
-/** Whether any part of a Word file holds the checkpoint's namespace. */
-const holdsNamespace = (bytes: Uint8Array): boolean =>
-  Object.values(unzipSync(bytes)).some((entry) => strFromU8(entry).includes(CHECKPOINT_NAMESPACE));
-
-/** The reason a checkpoint does not open, or `opens`. */
-function openReason(bytes: Uint8Array): string {
-  try {
-    openOrderedCheckpoint(bytes, { file: 2 });
-    return 'opens';
-  } catch (error) {
-    return error instanceof OrderedWordFileError ? error.reason : String(error);
-  }
-}
-
-describe('an element a later engine reads before a labelled place', () => {
-  test('moves no fact: the reopened print is the room with that element', () => {
-    const { checkpoint, blobs } = roomFacts();
-    const opened = openOrderedCheckpoint(withAdded(checkpoint), { file: 2 });
-
-    // The same room over the Word file with the same elements
-    const added = openOrderedWordFile(withAdded(APPLY_FILE), { file: 1 });
-    expect(foldPrint(opened.document, opened.base, blobs)).toEqual(
-      foldPrint(withRoomFacts(added.document), added.base, blobs)
-    );
-  });
-});
-
-describe("a checkpoint's namespace", () => {
-  test('no Word file holds it: after a fold, after a reopen, and after a further edit', async () => {
-    const { checkpoint, blobs } = roomFacts();
-    expect(holdsNamespace(checkpoint)).toBe(true);
-    const once = openOrderedCheckpoint(checkpoint, { file: 2 });
-    const twice = await folded(once.document, once.base, 3, blobs);
-    for (const copy of [once, twice]) {
-      expect(holdsNamespace(orderedPackageBytes(copy.document, copy.base, { blobs }))).toBe(false);
-      apply(
-        copy.document,
-        'olive:9',
-        { kind: 'insert', ...EDIT, place: at(copy.document, 0, 3), text: 'Q' },
-        'Olive'
-      );
-      expect(holdsNamespace(orderedPackageBytes(copy.document, copy.base, { blobs }))).toBe(false);
-    }
-  });
-
-  test('a Word file that holds it opens as the same file without it, and folds again', async () => {
-    const { doc, base, blobs } = roomFacts();
-    const plain = orderedPackageBytes(doc, base, { blobs });
-    const marked = crafted(plain, 'word/document.xml', (xml) =>
-      xml
-        .replace('<w:document ', `<w:document xmlns:oc="${CHECKPOINT_NAMESPACE}" `)
-        .replaceAll('<w:p ', '<w:p oc:label="0" ')
-        .replaceAll('<w:r>', '<w:r oc:typer="zed">')
-    );
-    expect(holdsNamespace(marked)).toBe(true);
-    const upload = openOrderedWordFile(marked, { file: 1 });
-    const same = openOrderedWordFile(plain, { file: 1 });
-    expect(upload.document.namespaces.size).toBe(0);
-    expect(foldPrint(upload.document, upload.base, blobs)).toEqual(
-      foldPrint(same.document, same.base, blobs)
-    );
-    await checkFold(upload.document, upload.base, blobs, 'an upload with marks');
-  });
-
-  test('a label twice, missing, misplaced or on another container, and an unknown typer, are refused', () => {
-    const { checkpoint } = roomFacts();
-    const inDocument = (edit: (xml: string) => string) =>
-      openReason(crafted(checkpoint, 'word/document.xml', edit));
-    expect(openReason(checkpoint)).toBe('opens');
-    expect({
-      // A cell of the new table's label on a cell of the file's table too
-      twice: inDocument((xml) => xml.replace('<w:tc>', '<w:tc oc:label="1">')),
-      missing: inDocument((xml) => xml.replace(' oc:label="4"', '')),
-      misplaced: inDocument((xml) =>
-        xml.replace(' oc:label="4"', '').replace('<w:p ', '<w:p oc:label="4" ')
-      ),
-      container: inDocument((xml) =>
-        xml
-          .replace('oc:label="0"', 'oc:label="x"')
-          .replace('oc:label="3"', 'oc:label="0"')
-          .replace('oc:label="x"', 'oc:label="3"')
-      ),
-      typer: inDocument((xml) => xml.replace('oc:typer="olive"', 'oc:typer="zed"')),
-    }).toEqual({
-      twice: 'checkpoint-manifest',
-      missing: 'checkpoint-manifest',
-      misplaced: 'checkpoint-manifest',
-      container: 'checkpoint-manifest',
-      typer: 'checkpoint-manifest',
-    });
-  });
-
-  test('a manifest with a section and a field this engine does not know opens to the same print', () => {
-    const { checkpoint, blobs } = roomFacts();
-    const print = (bytes: Uint8Array) => {
-      const opened = openOrderedCheckpoint(bytes, { file: 2 });
-      return foldPrint(opened.document, opened.base, blobs);
-    };
-    const inManifest = (edit: (json: string) => string) =>
-      crafted(checkpoint, 'ordered-checkpoint.json', edit);
-    const added = inManifest((json) =>
-      json
-        .replace('"suggestions":[{', '"later":{"rows":[1,2]},"suggestions":[{"later":true,')
-        .replace('"takeovers":[{', '"takeovers":[{"later":"x",')
-        .replace('"untracked":[{', '"untracked":[{"later":[],')
-    );
-    expect(print(added)).toEqual(print(checkpoint));
-    for (const key of ['__proto__', 'constructor', 'prototype']) {
-      const forbidden = inManifest((json) =>
-        json.replace('"suggestions":[', `"later":{"${key}":{}},"suggestions":[`)
-      );
-      expect({ key, reason: openReason(forbidden) }).toEqual({
-        key,
-        reason: 'checkpoint-manifest',
-      });
-    }
-  });
-});
 
 describe("a combo box's last value", () => {
   // Found by the fold audit (run-2, quick-short-1): an edit after compose (a list control's last

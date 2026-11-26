@@ -163,8 +163,7 @@ export function fieldsOf(
 }
 
 /**
- * The fields of a plain object, every key allowed: for a checkpoint's manifest, whose reader skips
- * a field a newer engine added and refuses a key that reaches a prototype as it parses.
+ * The fields of a plain object, every key allowed: the caller reads only the keys it knows.
  */
 export function plainFields(value: unknown, path: string): Fields {
   if (!isPlainObject(value)) {

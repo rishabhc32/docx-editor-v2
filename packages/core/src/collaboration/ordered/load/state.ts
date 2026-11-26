@@ -8,7 +8,6 @@ import {
 } from '../../../store/package/ooxml-tree.ts';
 import { DEFAULT_LIMITS } from '../../../store/runtime/limits.ts';
 import { MAX_XML_DEPTH } from '../../../store/package/xml-reader.ts';
-import type { CheckpointSuggestion } from '../model/checkpoint-suggestions.ts';
 import { noteCommentMarker } from '../model/comments.ts';
 import {
   createOrderedItem,
@@ -32,6 +31,7 @@ import {
   type OrderedWithin,
 } from '../model/types.ts';
 import { attributeOf, isWml } from '../ooxml-nodes.ts';
+import type { OrderedLoadOptions } from './load.ts';
 
 /** The labels the revision wrappers around a node give it. */
 export interface Labels {
@@ -106,7 +106,7 @@ export class RevisionReader {
   constructor(
     doc: OrderedDocument,
     fixed?: string,
-    listed: readonly CheckpointSuggestion[] = [],
+    listed: OrderedLoadOptions['suggestions'] = [],
     prompt = false
   ) {
     this.doc = doc;
@@ -243,11 +243,11 @@ const revisionTriple = (id: string, author: string, date: string | undefined): s
   `${id}\u0000${author}\u0000${date ?? '\u0001'}`;
 
 /** Most other attributes kept from one revision mark. */
-export const MAX_OTHER_ATTRIBUTES = 8;
+const MAX_OTHER_ATTRIBUTES = 8;
 const TRIPLE = new Set(['id', 'author', 'date']);
 
 /** Whether an attribute is of a revision mark's triple: `w:id`, `w:author` or `w:date`. */
-export const isTripleAttribute = ({ namespaceUri, localName }: OoxmlAttribute): boolean =>
+const isTripleAttribute = ({ namespaceUri, localName }: OoxmlAttribute): boolean =>
   namespaceUri === WML_NAMESPACE_URI && TRIPLE.has(localName);
 
 /** A revision mark's attributes past its triple, such as `w16du:dateUtc`. */

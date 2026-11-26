@@ -15,7 +15,7 @@ const A = 'http://schemas.openxmlformats.org/drawingml/2006/main';
 
 /**
  * An embedded workbook: a zip that nothing opens. Its time is fixed, so its bytes and their hash
- * are the same in each run (a version 5 case names the hash).
+ * are the same in each run.
  */
 export const EMBEDDED_WORKBOOK: Uint8Array = zipSync(
   { 'xl/workbook.xml': strToU8('<workbook/>') },

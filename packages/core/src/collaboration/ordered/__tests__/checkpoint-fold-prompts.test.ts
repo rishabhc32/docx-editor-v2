@@ -2,13 +2,10 @@
 // record read back from the prompt, its format records, and its place among a comment's markers.
 
 import { describe, expect, test } from 'bun:test';
-import { strFromU8, strToU8, unzipSync, zipSync } from 'fflate';
-import { readOoxmlPackage } from '../../../store/package/ooxml-package.ts';
 import { orderedCardSeen } from '../change/apply-decide.ts';
 import { applyOrderedChange } from '../change/apply.ts';
 import { orderedIdMinter } from '../change/ids.ts';
-import { openOrderedCheckpoint, openOrderedWordFile } from '../client/open.ts';
-import { orderedPackageBytes } from '../compose/package.ts';
+import { openOrderedWordFile } from '../client/open.ts';
 import type { OrderedDocument } from '../model/types.ts';
 import { takeBack, withUndoRecord } from '../model/undo-record.ts';
 import {
@@ -23,7 +20,6 @@ import {
   partsOf,
   textOf,
 } from './change-apply-fixture.ts';
-import { versionFiveCase } from './checkpoint-fixture.ts';
 import { checkEveryCard, checkFold, folded, mediaStore } from './fold-check.ts';
 import { testPerson } from './test-persons.ts';
 import { docx, p, t } from './word-fixtures.ts';
@@ -492,8 +488,7 @@ describe("a control's prompt shown again, decided card by card after a fold", ()
 
   // Seed 83 of the fold shapes: Ben's comment ends inside the prompt. A reject of Ana's typing over
   // the prompt shows the prompt with the comment's end and reference after it again, as the
-  // engine's restore does, live as after a fold. A version 5 checkpoint kept them in the glossary:
-  // a marker whose comment that file does not hold never comes back
+  // engine's restore does, live as after a fold
   describe("a comment's end inside a prompt kept in the glossary", () => {
     const terms = () => {
       const list =
@@ -536,21 +531,6 @@ describe("a control's prompt shown again, decided card by card after a fold", ()
       takeBack(again, withUndoRecord(again, () => applyOrderedChange(again, first, by)).record);
       apply(again, 'olive:2', reject(again), 'Olive');
       expect(partsOf(again)[0]).toMatch(/item\.<\/w:t><\/w:r><w:commentRangeEnd /);
-    });
-
-    // The case is the room `typed` makes, as the last version 5 writer wrote it
-    test('of a comment the file does not hold never comes back', () => {
-      const blobs = mediaStore(openOrderedWordFile(terms(), { file: 1 }).base);
-      const files = unzipSync(versionFiveCase('comment-end-in-a-kept-prompt'));
-      const glossary = 'word/glossary/document.xml';
-      files[glossary] = strToU8(
-        strFromU8(files[glossary]!).replace(/(comment\w+ w:id=")\d+/g, '$1999')
-      );
-      const forged = openOrderedCheckpoint(zipSync(files), { file: 3 });
-      apply(forged.document, 'olive:1', reject(forged.document), 'Olive');
-      const bytes = orderedPackageBytes(forged.document, forged.base, { blobs });
-      expect(readOoxmlPackage(bytes, {}).ok).toBe(true);
-      expect(strFromU8(unzipSync(bytes)['word/document.xml']!)).not.toContain('w:id="999"');
     });
   });
 });

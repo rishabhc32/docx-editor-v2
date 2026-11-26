@@ -85,7 +85,7 @@ describe('a room opened from a Word file', () => {
       throw new Error(read.reason);
     }
 
-    const normalized = normalizedRoomPackage(read.package).pkg;
+    const normalized = normalizedRoomPackage(read.package);
     expect(
       [...normalized.parts].filter(([name, part]) => read.package.parts.get(name) !== part)
     ).toEqual([]);

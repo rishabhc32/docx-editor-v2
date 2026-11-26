@@ -1,7 +1,6 @@
-// Rooms whose checkpoints hold a fact in every section of the manifest (design D14), and who
-// typed each kind of unit: the checkpoint tests and the golden checkpoints use them.
+// Rooms whose checkpoints hold the room's facts Word has no place for (design D14), and who typed
+// each kind of unit: the checkpoint tests and the golden checkpoints use them.
 
-import { readFileSync } from 'node:fs';
 import type { OoxmlPackage } from '../../../store/package/ooxml-package.ts';
 import { orderedSeenCards } from '../change/apply-decide.ts';
 import { isTextBoxStoryName } from '../model/text-boxes.ts';
@@ -22,16 +21,6 @@ import {
 import { mediaStore } from './fold-check.ts';
 import { STYLED } from './style-revision-fixture.ts';
 import { docx, M, p, RED_PNG, t } from './word-fixtures.ts';
-
-/**
- * A checkpoint of version 5 that a test of the version 5 reader opens or forges, by its name
- * (`fixtures/checkpoints/cases`): each was written once by the last version 5 writer, from the
- * room its test makes. No engine writes version 5 now.
- */
-export const versionFiveCase = (name: string): Uint8Array =>
-  new Uint8Array(
-    readFileSync(new URL(`./fixtures/checkpoints/cases/${name}.docx`, import.meta.url))
-  );
 
 /** The index of the shown body paragraph that starts with `text`. */
 export function paragraph(doc: OrderedDocument, text: string): number {

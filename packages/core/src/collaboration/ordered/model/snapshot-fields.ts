@@ -13,9 +13,8 @@ import type { OoxmlProperty, TabStopWrite } from '../../../store/store/tree-op-t
 import { at, Invalid, isForbiddenKey, plainFields } from '../change/read.ts';
 import { sha256 } from '../change/resources.ts';
 import { FRAMES_H, FRAMES_V } from '../change/kinds/pictures-read.ts';
-import { href } from '../change/values.ts';
+import { href, readNamespace } from '../change/values.ts';
 import type { OrderedFragmentPartType } from '../change/fragment-names-objects.ts';
-import { readNamespace } from './checkpoint-suggestions.ts';
 import type { OrderedComment, OrderedCommentRange } from './comments.ts';
 import type { OrderedObjectOp, OrderedObjectRecord } from './objects.ts';
 import {

@@ -85,7 +85,7 @@ export function resourceFor(ctx: Ctx, key: string, suggestion: string): OrderedR
 }
 
 /** Whether a link's address is one `sanitizeHref` keeps as it is. */
-export function isSafeLinkAddress(href: string): boolean {
+function isSafeLinkAddress(href: string): boolean {
   const projection = sanitizeHref(href);
   return projection.ok && projection.href === href;
 }
@@ -362,7 +362,7 @@ export function addStyleElement(
 }
 
 /** A whole `w:style` as a style resource; null with no id or no known type. */
-export function styleElementResource(
+function styleElementResource(
   key: string,
   suggestion: string,
   element: OoxmlElement

@@ -21,7 +21,7 @@ const CX1 = 'http://schemas.microsoft.com/office/drawing/2015/9/8/chartex';
 
 /**
  * A chart's embedded workbook: a zip the room keeps as it is and never opens. Its time is fixed,
- * so its bytes and their hash are the same in each run (a version 5 case names the hash).
+ * so its bytes and their hash are the same in each run.
  */
 export const WORKBOOK: Uint8Array = zipSync(
   {

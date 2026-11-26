@@ -1,6 +1,6 @@
 // The suggestions another took records from, in the review queue's terms (design D5, policy 2).
 
-import type { OoxmlNode } from '../../../store/package/ooxml-tree.ts';
+import type { OoxmlElement, OoxmlNode } from '../../../store/package/ooxml-tree.ts';
 import {
   changedFormatting,
   FORMATTING_PROPERTIES,
@@ -9,7 +9,6 @@ import {
 import type { ReviewRevisionItem } from '../../../store/store/review-items.ts';
 import { build } from '../../../store/store/tree-op-tracked.ts';
 import { isOrderedItemHidden } from '../card-of.ts';
-import { takenProperties } from '../model/checkpoint-takeovers.ts';
 import { isPending } from '../model/document.ts';
 import type { OrderedPerson } from '../model/person.ts';
 import type { OrderedDocument, OrderedFormatRecord, OrderedItem } from '../model/types.ts';
@@ -211,6 +210,13 @@ function drawnTakeovers(ctx: ComposeContext, item: OrderedItem): Iterable<HeldTa
 
   return ctx.takeovers.values();
 }
+
+/**
+ * A record's properties as an element of their own: `properties` under the element the change
+ * record names (`w:rPr` for `w:rPrChange`). It is never placed in a part.
+ */
+const takenProperties = (record: string, properties: readonly OoxmlNode[]): OoxmlElement =>
+  build('taken-properties', 'generic', record.slice(0, -'Change'.length), [], properties);
 
 /** What properties a record gave over the ones before it, as the review queue names them. */
 function formattingChanges(

@@ -7,7 +7,6 @@
 // `other-authors-row-change`), so no table record is taken over.
 
 import { afterEach, describe, expect, test } from 'bun:test';
-import { strFromU8, unzipSync, zipSync } from 'fflate';
 import { openOrderedCheckpoint, openOrderedRoomFile } from '../../client/open.ts';
 import type { OrderedLocalRoom } from '../../client/local-room.ts';
 import { writeOrderedCheckpoint } from '../../compose/checkpoint.ts';
@@ -20,7 +19,6 @@ import { OrderedRefusal } from '../../model/refusal.ts';
 import type { OrderedDocument } from '../../model/types.ts';
 import { OrderedRoom } from '../../room/room.ts';
 import { suggestionsOnlyPolicy } from '../../room/suggestions-only.ts';
-import { versionFiveCase } from '../checkpoint-fixture.ts';
 import { realApply } from '../room-harness.ts';
 import {
   closeAll,
@@ -42,7 +40,6 @@ afterEach(closeAll);
 const review = reviewTestModule();
 const ANA: OrderedPerson = { id: 'id-ana-7f3c', name: 'Ana', org: 'Acme' };
 const OLGA: OrderedPerson = { id: 'id-olga-2b9e', name: 'Olga', org: 'Lexcorp' };
-const MANIFEST = 'ordered-checkpoint.json';
 
 /** Two paragraphs and the body's own section, as Word writes a new document's. */
 const SOURCE = docx(
@@ -327,14 +324,10 @@ describe('the records of a takeover', () => {
     ]);
 
     // Olga's one `w:id` marks the paragraph mark first, then "The", " fees ", "are" and " below.":
-    // the second and the fourth record hold a takeover. The version 5 case is this room as the
-    // last version 5 writer wrote it, which named each by its label
-    const v5 = versionFiveCase('one-change-record-in-several-places');
-    for (const checkpoint of [await checkpointOf(room), v5]) {
-      const reopened = openOrderedCheckpoint(checkpoint, { file: 1 }).document;
-      expect(held(reopened)).toEqual(held(live));
-      expect(replacedBy(reopened)).toEqual(replacedBy(live));
-    }
+    // the second and the fourth record hold a takeover
+    const reopened = openOrderedCheckpoint(await checkpointOf(room), { file: 1 }).document;
+    expect(held(reopened)).toEqual(held(live));
+    expect(replacedBy(reopened)).toEqual(replacedBy(live));
   });
 
   test('a reopen names the party’s suggestions in the order the live read does', async () => {
@@ -451,51 +444,6 @@ describe('the records of a takeover', () => {
       const reopened = openOrderedCheckpoint(checkpoint, { file }).document;
       expect(held(reopened)).toEqual(held(live));
       expect(replacedBy(reopened)).toEqual(replacedBy(live));
-    }
-  });
-
-  // The case is the room of Ana's bold and Olga's italic over it, as the last version 5 writer
-  // wrote it
-  test('a version 5 manifest whose takeovers do not read or do not fit the file is refused', () => {
-    const entries = unzipSync(versionFiveCase('italic-over-bold'));
-    const manifest = JSON.parse(strFromU8(entries[MANIFEST] ?? new Uint8Array()));
-    const [takeover] = manifest.takeovers;
-    const cases = [
-      { ...manifest, takeovers: [{ ...takeover, label: takeover.label + 1 }] },
-      { ...manifest, takeovers: [{ ...takeover, label: -1 }] },
-      { ...manifest, takeovers: [{ ...takeover, label: String(takeover.label) }] },
-      { ...manifest, takeovers: [takeover, takeover] },
-      { ...manifest, takeovers: [{ ...takeover, taken: [] }] },
-      {
-        ...manifest,
-        takeovers: [{ ...takeover, taken: [{ ...takeover.taken[0], suggestion: 1 }] }],
-      },
-      {
-        ...manifest,
-        takeovers: [{ ...takeover, taken: [{ ...takeover.taken[0], properties: '<w:pPr/>' }] }],
-      },
-      {
-        ...manifest,
-        takeovers: [{ ...takeover, taken: [{ ...takeover.taken[0], properties: '<!DOCTYPE x>' }] }],
-      },
-      { ...manifest, suggestions: [{ ...manifest.suggestions[0], person: { id: 'x' } }] },
-      { ...manifest, suggestions: [{ ...manifest.suggestions[0], author: 'Other' }] },
-      {
-        ...manifest,
-        suggestions: [
-          {
-            ...manifest.suggestions[0],
-            attributes: [{ namespace: 'urn:x', name: 'a b', value: '1' }],
-          },
-        ],
-      },
-      { ...manifest, suggestions: [] },
-    ];
-    for (const changed of cases) {
-      entries[MANIFEST] = new TextEncoder().encode(JSON.stringify(changed));
-      expect(() => openOrderedCheckpoint(zipSync(entries), { file: 1 })).toThrow(
-        'checkpoint-manifest'
-      );
     }
   });
 });

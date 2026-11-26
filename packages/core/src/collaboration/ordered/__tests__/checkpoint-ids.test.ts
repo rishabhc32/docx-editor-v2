@@ -4,8 +4,6 @@
 // the older file is refused by the file number, as before. A plain Word file gets new ids.
 
 import { describe, expect, test } from 'bun:test';
-import { readFileSync } from 'node:fs';
-import { strFromU8, strToU8, unzipSync, zipSync } from 'fflate';
 import { orderedSeenCards } from '../change/apply-decide.ts';
 import { applyOrderedChange } from '../change/apply.ts';
 import type { OrderedChange } from '../change/types.ts';
@@ -18,12 +16,11 @@ import { decodeOrderedServerMessage, encodeOrderedClientMessage } from '../proto
 import { ORDERED_PROTOCOL_VERSION, type OrderedServerMessage } from '../protocol/messages.ts';
 import { allowWritersPolicy } from '../room/policy.ts';
 import { OrderedRoom } from '../room/room.ts';
-import { apply, APPLY_FILE, at, BODY, DATE } from './change-apply-fixture.ts';
+import { apply, APPLY_FILE, at, BODY } from './change-apply-fixture.ts';
 import { STYLE_RECORDS, withRoomFacts } from './checkpoint-fixture.ts';
 import { checkFold, checkpointBytes, folded, mediaStore } from './fold-check.ts';
 import { actor, snapshot } from './room-harness.ts';
 import { STYLED } from './style-revision-fixture.ts';
-import { t } from './word-fixtures.ts';
 
 const ANA = actor('Ana', 'ana-1', 'organiser');
 const T0 = Date.UTC(2026, 9, 28, 9, 30, 0);
@@ -84,22 +81,6 @@ describe('a suggestion id across a fold', () => {
 });
 
 describe('an id the engine mints', () => {
-  // The golden checkpoint of version 5 of the same room (`checkpoint-golden.test.ts`)
-  test('at the open, for a mark a version 5 manifest does not list, passes over every kept id', () => {
-    const golden = new URL('./fixtures/checkpoints/style-records.docx', import.meta.url);
-
-    // Zed's insertion, which the room never read
-    const entries = unzipSync(new Uint8Array(readFileSync(golden)));
-    const mark = `<w:ins w:id="90" w:author="Zed" w:date="${DATE}">${t('late ')}</w:ins>`;
-    const xml = strFromU8(entries['word/document.xml']!).replace(/<w:r[ >]/, (run) => mark + run);
-    entries['word/document.xml'] = strToU8(xml);
-    const opened = openOrderedCheckpoint(zipSync(entries), { file: 2 });
-    const byAuthor = [...opened.document.suggestions.values()].map(
-      (s) => `${s.id} ${s.attribution.author}`
-    );
-    expect(byAuthor).toEqual(['S2 Ana', 'S3 Bo', 'S4 Ana', 'S5 Ana', 'S6 Bo', 'S7 Bo', 'S8 Zed']);
-  });
-
   test('after the open passes over every kept id', async () => {
     const room = styledWithS1Accepted();
     const once = await folded(room.document, room.base, 2, mediaStore(room.base));

@@ -1,5 +1,5 @@
 // What the section kinds share (task 9.8): a section's holder as a target, and the readers of a
-// section's writes, which a checkpoint's manifest reads too.
+// section's writes.
 
 import { NOTE_ID_MAX } from '../../../../../store/package/note-nodes.ts';
 import type { OrderedNoteProperties, OrderedNotePropertiesOp } from '../../../model/types.ts';

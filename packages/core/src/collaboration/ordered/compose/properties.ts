@@ -393,7 +393,7 @@ function inSequence(
 /**
  * The children of `element` that `merge` names over the ones before them, in the schema's order.
  */
-export function withMergedChildren(
+function withMergedChildren(
   target: OrderedPropertyTarget,
   element: OoxmlElement | null,
   merge: readonly string[],

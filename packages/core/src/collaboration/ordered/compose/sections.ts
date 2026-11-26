@@ -64,10 +64,7 @@ export function sectionRecordsOf(item: OrderedItem): SectionRecord[] {
 const newSection = (mint: () => string): OoxmlElement => build(mint(), 'generic', 'sectPr', [], []);
 
 /** `section`'s references, then the properties `element` gives (a file's `w:sectPrChange`). */
-export function withRecordedElement(
-  section: OoxmlElement,
-  element: OoxmlElement | null
-): OoxmlElement {
+function withRecordedElement(section: OoxmlElement, element: OoxmlElement | null): OoxmlElement {
   const given = (element?.children ?? []).filter(
     (c) => !isReference(c) && !isWml(c, 'sectPrChange')
   );
