@@ -28,6 +28,8 @@ import {
 } from './paragraph.ts';
 import { withControlRecords, withRestoredPrompts } from './prompts.ts';
 import { withCheckpointNamespace } from '../model/checkpoint-labels.ts';
+import { isTextBoxStoryName } from '../model/text-boxes.ts';
+import { stateOf } from '../model/undo-record.ts';
 
 /** A composed story. @public */
 export interface OrderedComposedStory {
@@ -143,6 +145,82 @@ export function composeStoryPart(
   part = withControlRecords(part, composed.reached, stale);
   return { part, composed, takeovers };
 }
+
+/** What a package and a publish take of a story's compose. */
+export interface OrderedStoryPart {
+  readonly part: OoxmlPart;
+  /** Placeholder blocks the caller writes to the glossary. */
+  readonly prompts: readonly OrderedRetainedPrompt[];
+  /** The takeovers each change record holds, by the record's node id. */
+  readonly takeovers: ReadonlyMap<string, HeldTakeovers>;
+}
+
+/** A story part an open's check composed, and the next node id before and after it. */
+interface CheckedStoryPart extends OrderedStoryPart {
+  readonly from: number;
+  readonly to: number;
+}
+
+/**
+ * The story parts an open's check composed, by the document's state, then by story: each is
+ * given once, to the next compose of its story with no option, then dropped. The document's next
+ * write gives it a new state and drops the rest. Kept without the view, which is the large part.
+ */
+const CHECKED = new WeakMap<object, Map<string, CheckedStoryPart>>();
+
+/**
+ * Compose every story as a package does, and keep each part for the next compose of its story:
+ * an open checks that a file's list composes, and its first document then costs no compose more.
+ * The node ids go back, as when nothing was composed.
+ *
+ * @throws as compose does.
+ */
+export function composeEveryStory(doc: OrderedDocument): void {
+  const next = doc.composeIds.next;
+  const checked = new Map<string, CheckedStoryPart>();
+  try {
+    for (const name of doc.stories.keys()) {
+      // A text box's story is drawn into its object, in its host's story
+      if (isTextBoxStoryName(name)) {
+        continue;
+      }
+
+      const from = doc.composeIds.next;
+      const { part, composed, takeovers } = composeStoryPart(doc, name);
+      const to = doc.composeIds.next;
+      checked.set(name, { part, prompts: composed.prompts, takeovers, from, to });
+    }
+  } finally {
+    doc.composeIds.next = next;
+  }
+
+  CHECKED.set(stateOf(doc), checked);
+}
+
+/**
+ * A story's part as {@link composeStoryPart} gives it. With no option, the part an open's check
+ * composed when the document and its next node id are as they were then: the same part.
+ */
+export function storyPart(
+  doc: OrderedDocument,
+  name: string,
+  options: ComposeOptions = {}
+): OrderedStoryPart {
+  const checked = CHECKED.get(stateOf(doc));
+  const kept = isPlain(options) ? checked?.get(name) : undefined;
+  if (kept !== undefined && kept.from === doc.composeIds.next) {
+    checked?.delete(name);
+    doc.composeIds.next = kept.to;
+    return kept;
+  }
+
+  const { part, composed, takeovers } = composeStoryPart(doc, name, options);
+  return { part, prompts: composed.prompts, takeovers };
+}
+
+/** Whether a compose takes no option: what a package and a publish draw. */
+const isPlain = (options: ComposeOptions): boolean =>
+  Object.values(options).every((value) => value === undefined);
 
 /** Shown paragraphs in a story: the tree's mark count. O(1). @public */
 export function orderedParagraphCount(doc: OrderedDocument, name: string): number {

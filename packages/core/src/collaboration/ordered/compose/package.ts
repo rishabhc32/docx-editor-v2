@@ -20,7 +20,7 @@ import type { OrderedMediaReference } from '../model/resources.ts';
 import type { OrderedDocument } from '../model/types.ts';
 import { withoutUnusedLoadedMedia } from './unused-media.ts';
 import { withOrderedComments } from './comments.ts';
-import { composeStoryPart } from './compose.ts';
+import { storyPart } from './compose.ts';
 import { withoutDroppedFurniture } from './furniture.ts';
 import { withDecidedPartRevisions } from './part-revisions.ts';
 import { withDecidedPrompts } from './prompts.ts';
@@ -99,13 +99,12 @@ function composeWithMedia(
   for (const name of doc.stories.keys()) {
     // A text box's story is drawn into its object, in its host's part
     if (isTextBoxStoryName(name)) continue;
-    const drawn = composeStoryPart(doc, name, { typers: options.typers, runs: options.runs });
-    const { part: composedPart, composed, takeovers: held } = drawn;
-    takeovers.set(name, held);
+    const drawn = storyPart(doc, name, { typers: options.typers, runs: options.runs });
+    takeovers.set(name, drawn.takeovers);
 
     // Each node id once in a part: the package writer finds nodes by id
-    const part = withUniqueIds(composedPart);
-    prompts.push(...composed.prompts);
+    const part = withUniqueIds(drawn.part);
+    prompts.push(...drawn.prompts);
 
     // A story a change added is written only while something uses it
     if (isAddedStory(doc, name)) {
