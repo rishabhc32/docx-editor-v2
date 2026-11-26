@@ -112,7 +112,7 @@ export function openOrderedWordFile(
     throw new OrderedWordFileError('checkpoint');
   }
 
-  return openRead(pkg, [], options).opened;
+  return openWordPackage(pkg, options);
 }
 
 /**
@@ -158,7 +158,7 @@ export function openOrderedRoomFile(
   const pkg = readPackage(bytes, options);
   return holdsCheckpointManifest(pkg)
     ? openCheckpointRead(pkg, options)
-    : openRead(pkg, [], options).opened;
+    : openWordPackage(pkg, options);
 }
 
 /** The engine's bounded read of a room's file. */
@@ -166,6 +166,21 @@ function readPackage(bytes: Uint8Array, options: OrderedWordFileOptions): OoxmlP
   const read = readOoxmlPackage(bytes, options.limits ?? {});
   if (!read.ok) throw new OrderedWordFileError(read.reason);
   return read.package;
+}
+
+/**
+ * A read Word file, opened from its normalized package as written and read back. A checkpoint keeps
+ * these bytes as its base, so every later open reads the trees the room loaded, with the same node
+ * ids, and finds nothing left to normalize.
+ */
+function openWordPackage(pkg: OoxmlPackage, options: OrderedWordFileOptions): OrderedWordFile {
+  const normalized = normalizedRoomPackage(pkg).pkg;
+  const written = readOoxmlPackage(writeOoxmlPackage(normalized), options.limits ?? {});
+  if (!written.ok) {
+    throw new OrderedWordFileError(written.reason);
+  }
+
+  return openRead(written.package, [], options).opened;
 }
 
 /**
