@@ -57,7 +57,6 @@ import {
   rebuilt,
   record,
   set,
-  space,
   stored,
   text,
   variants,
@@ -236,7 +235,7 @@ export const ELEMENT_RECORD: SnapshotFields<OrderedElementRecord> = {
   change: maybe(id),
   acceptedOnly: maybe(bool),
   settled: maybe(bool),
-  tableCells: maybe(list(space)),
+  tableCells: maybe(ids),
   replaced: maybe(id),
   replacedEarlier: maybe(ids),
   over: maybe(ids),
@@ -411,7 +410,7 @@ export const PIECE: SnapshotFields<OrderedFieldPiece> = {
 
 export const ITEM: SnapshotFields<OrderedItem> = {
   leaf: rebuilt('`addOrderedStory` puts the item in its story tree'),
-  space: stored(space),
+  space: stored(id),
   offset: stored(count),
   length: stored(int(1)),
   kind: stored(choice(KINDS)),
@@ -428,10 +427,10 @@ export const ITEM: SnapshotFields<OrderedItem> = {
   rebuilt: maybe(bool),
   prompt: maybe(bool),
   token: maybe(choice(TOKENS)),
-  pair: maybe(space),
+  pair: maybe(id),
   home: maybe(id),
   unitCount: maybe(count),
-  fieldSlot: maybe(record({ field: stored(space), before: stored(count) })),
+  fieldSlot: maybe(record({ field: stored(id), before: stored(count) })),
   moveRange: maybe(bool),
   by: stored(nullable(id)),
   dels: stored(ids),
@@ -480,7 +479,7 @@ const ITEMS = list(ITEM_CODEC);
 const TREE: SnapshotCodec<OrderedStory['tree']> = {
   write: (tree, w) => ITEMS.write(tree.toArray(), w),
   read: (json, path, r) => r.tree(ITEMS.read(json, path, r)),
-  diff: (a, b, path, c) => ITEMS.diff(a.toArray(), b.toArray(), path, c),
+  diff: (a, b, path) => ITEMS.diff(a.toArray(), b.toArray(), path),
 };
 
 export const STORY: SnapshotFields<OrderedStory> = {
@@ -491,13 +490,13 @@ export const STORY: SnapshotFields<OrderedStory> = {
 };
 
 export const ADDRESS: SnapshotFields<OrderedItemAddress> = {
-  space: stored(space),
+  space: stored(id),
   offset: stored(count),
 };
 
 export const UNIT_RANGE: SnapshotFields<OrderedUnitRange> = {
   story: stored(id),
-  space: stored(space),
+  space: stored(id),
   from: stored(count),
   to: stored(count),
 };
@@ -746,14 +745,14 @@ export const RESOURCES: SnapshotFields<OrderedResources> = {
 };
 
 /** The person of each namespace that typed, by its namespace. */
-const NAMESPACE: SnapshotCodec<string> = {
+export const NAMESPACE: SnapshotCodec<string> = {
   write: (value) => value,
   read: (json, path) => readNamespace(json, path),
   diff: (a, b, path) => (a === b ? null : path),
 };
 
 export const DOCUMENT: SnapshotFields<OrderedDocument> = {
-  file: rebuilt("the open's file number: the saved file's loaded spaces take it"),
+  file: rebuilt("the checkpoint's `file`: the number its loaded spaces hold, kept at every save"),
   // Read first: the trees sum by the suggestions' status, and later fields name the items
   suggestions: stored(after(map(id, record(SUGGESTION)), (read, r) => r.suggestions(read))),
   stories: stored(

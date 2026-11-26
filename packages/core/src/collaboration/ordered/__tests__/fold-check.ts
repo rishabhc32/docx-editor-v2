@@ -468,7 +468,7 @@ function decidedFile(
 }
 
 /** A decided Word file's XML parts, each by what it says (as a reopen compares decisions). */
-export function semanticParts(bytes: Uint8Array): Record<string, string> {
+function semanticParts(bytes: Uint8Array): Record<string, string> {
   const read = readOoxmlPackage(bytes, {});
   if (!read.ok) {
     throw new Error(`the decided file does not read: ${read.reason}`);

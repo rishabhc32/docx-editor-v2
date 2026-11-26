@@ -59,6 +59,11 @@ export function orderedUnitTyper(
   return { namespace, person };
 }
 
+/** The typers a checkpoint named for the units of a document loaded from it, by space. */
+export function loadedTypersOf(doc: OrderedDocument): ReadonlyMap<string, readonly TypedRun[]> {
+  return LOADED.get(doc) ?? new Map();
+}
+
 /** Keep the typers a checkpoint names for the units of a document loaded from it, by space. */
 export function keepLoadedTypers(
   doc: OrderedDocument,

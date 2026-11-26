@@ -73,6 +73,11 @@ export function registerTextBox(
   });
 }
 
+/** Every text box story's host, by its name, in the order they were recorded. */
+export function textBoxHostsOf(doc: OrderedDocument): ReadonlyMap<string, OrderedTextBoxHost> {
+  return INDEXES.get(doc)?.byName ?? new Map();
+}
+
 /** The host of a text box story, or null for any other story. */
 export function textBoxHostOf(doc: OrderedDocument, name: string): OrderedTextBoxHost | null {
   return INDEXES.get(doc)?.byName.get(name) ?? null;

@@ -84,7 +84,7 @@ interface Went {
 }
 
 /** A control a direct edit emptied, as it was before its prompt: given back if its words are. */
-interface PromptedByEdit {
+export interface PromptedByEdit {
   readonly node: OoxmlNode | null;
   readonly original: OoxmlNode | undefined;
   /** The block control's later paragraph marks the prompt dropped. */
@@ -99,6 +99,19 @@ interface PromptedByEdit {
 
 /** Per document, the open items of controls a direct edit emptied, by what they were before. */
 const promptedByEdit = new WeakMap<OrderedDocument, Map<OrderedItem, PromptedByEdit>>();
+
+/** The controls direct edits emptied, by their open items, as a checkpoint saves them. */
+export function emptiedControlsOf(doc: OrderedDocument): ReadonlyMap<OrderedItem, PromptedByEdit> {
+  return promptedByEdit.get(doc) ?? new Map();
+}
+
+/** Give back the controls direct edits emptied, as a checkpoint saved them. */
+export function restoreEmptiedControls(
+  doc: OrderedDocument,
+  emptied: ReadonlyMap<OrderedItem, PromptedByEdit>
+): void {
+  promptedByEdit.set(doc, new Map(emptied));
+}
 
 function promptedOf(doc: OrderedDocument): Map<OrderedItem, PromptedByEdit> {
   let found = promptedByEdit.get(doc);
@@ -185,7 +198,7 @@ function insertedPending(doc: OrderedDocument, open: OrderedItem): boolean {
 }
 
 /** A pending insertion a direct edit took off a control: the suggestion, its units that went. */
-interface Untracked {
+export interface Untracked {
   readonly by: string;
   readonly units: readonly OrderedItem[];
 }

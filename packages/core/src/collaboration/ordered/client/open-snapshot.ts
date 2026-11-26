@@ -4,6 +4,7 @@
 import { readOoxmlPackage, type OoxmlPackage } from '../../../store/package/ooxml-package.ts';
 import { DEFAULT_ZIP_LIMITS, readZip, zipHoldsEntry } from '../../../store/package/zip.ts';
 import { composeStoryPart } from '../compose/compose.ts';
+import { recordLoadedPackage } from '../load/load.ts';
 import { holdsCheckpointManifest, mediaFits } from '../model/checkpoint.ts';
 import { recordFileMedia } from '../model/file-media.ts';
 import { readSnapshotJson } from '../model/snapshot-read.ts';
@@ -16,9 +17,11 @@ import { OrderedWordFileError, type OrderedWordFile, type OrderedWordFileOptions
 export const holdsSnapshot = (bytes: Uint8Array): boolean => zipHoldsEntry(bytes, SNAPSHOT_ENTRY);
 
 /**
- * A checkpoint of version 6 opened as Word file `options.file`: its base package, read by the
- * engine's bounded reader, and the document its item list holds, checked field by field and
- * composed once. The document's `resources.fileMedia` lists the media the base names by reference.
+ * A checkpoint of version 6: its base package, read by the engine's bounded reader, and the
+ * document its item list holds, checked field by field and composed once. The document keeps the
+ * Word file number its list was loaded under (`file`), so every address stays as it was; the
+ * room's own number of the file (`options.file`) moves at each close. The document's
+ * `resources.fileMedia` lists the media the base names by reference.
  *
  * @throws OrderedWordFileError as `openOrderedCheckpoint` does.
  */
@@ -34,7 +37,7 @@ export function openSnapshot(bytes: Uint8Array, options: OrderedWordFileOptions)
     throw new OrderedWordFileError('checkpoint-manifest');
   }
 
-  const read = readSnapshotJson(json, base, options.file);
+  const read = readSnapshotJson(json, base);
   if (!read.ok) {
     throw new OrderedWordFileError(read.reason);
   }
@@ -45,6 +48,7 @@ export function openSnapshot(bytes: Uint8Array, options: OrderedWordFileOptions)
   }
 
   recordFileMedia(document, media);
+  recordLoadedPackage(document, base);
   if (!composesEveryStory(document)) {
     throw new OrderedWordFileError('checkpoint-manifest');
   }

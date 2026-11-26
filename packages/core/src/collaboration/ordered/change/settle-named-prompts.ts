@@ -68,7 +68,7 @@ interface Scan {
 }
 
 /** A replacement a deletion that is not a decision made: given back if that deletion is. */
-interface Swap {
+export interface Swap {
   readonly replaced: readonly OrderedItem[];
   readonly units: readonly OrderedItem[];
   readonly went: readonly OrderedItem[];
@@ -86,6 +86,36 @@ interface State {
 }
 
 const states = new WeakMap<OrderedDocument, State>();
+
+/** The named prompts' state as a checkpoint saves it: its item sets as lists, in story order. */
+export interface NamedPromptState {
+  readonly swaps: ReadonlyMap<OrderedItem, Swap>;
+  readonly settled: readonly OrderedItem[];
+  readonly replaced: readonly OrderedItem[];
+  readonly kept: ReadonlySet<string>;
+}
+
+/** The named prompts' state of a document. */
+export function namedPromptStateOf(doc: OrderedDocument): NamedPromptState {
+  const state = stateOf(doc);
+  const items = [...doc.stories.values()].flatMap((story) => story.tree.toArray());
+  return {
+    swaps: state.swaps,
+    settled: items.filter((item) => state.settled.has(item)),
+    replaced: items.filter((item) => state.replaced.has(item)),
+    kept: state.kept,
+  };
+}
+
+/** Give back the named prompts' state a checkpoint saved. */
+export function restoreNamedPromptState(doc: OrderedDocument, saved: NamedPromptState): void {
+  states.set(doc, {
+    swaps: new Map(saved.swaps),
+    settled: new WeakSet(saved.settled),
+    replaced: new WeakSet(saved.replaced),
+    kept: new Set(saved.kept),
+  });
+}
 
 function stateOf(doc: OrderedDocument): State {
   let found = states.get(doc);

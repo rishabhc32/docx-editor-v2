@@ -117,6 +117,18 @@ export function recordDroppedMark(doc: OrderedDocument, mark: OrderedItem, drop:
   });
 }
 
+/** The paragraph marks emptyings dropped, in story order. */
+export function droppedMarksOf(doc: OrderedDocument): OrderedItem[] {
+  const dropped = droppedOf.get(doc);
+  if (dropped === undefined) {
+    return [];
+  }
+
+  return [...doc.stories.values()].flatMap((story) =>
+    story.tree.toArray().filter((item) => dropped.has(item))
+  );
+}
+
 /** Whether an emptying dropped the mark's paragraph: compose draws nothing of it, no join. */
 export function isDroppedMark(doc: OrderedDocument, mark: OrderedItem): boolean {
   return droppedOf.get(doc)?.has(mark) === true;
@@ -135,6 +147,11 @@ export function recordFilledPrompt(doc: OrderedDocument, space: string): void {
   if (filled.has(space)) return;
   filled.add(space);
   recordUndo(doc, () => filled.delete(space));
+}
+
+/** The controls (by their open item's space) whose prompt a suggestion once filled. */
+export function filledPromptsOf(doc: OrderedDocument): ReadonlySet<string> {
+  return filledOf.get(doc) ?? new Set();
 }
 
 /** Whether a suggestion once filled the prompt of the control whose open item is `space`. */
@@ -174,6 +191,11 @@ export function noteFirstFill(doc: OrderedDocument, space: string, own: boolean 
       notes.set(space, before);
     }
   });
+}
+
+/** Each control's first fill (by its open item's space): whether its own insertion made it. */
+export function firstFillsOf(doc: OrderedDocument): ReadonlyMap<string, boolean> {
+  return firstFillOf.get(doc) ?? new Map();
 }
 
 /** Whether the control's own insertion first hid its prompt, which still does not show. */

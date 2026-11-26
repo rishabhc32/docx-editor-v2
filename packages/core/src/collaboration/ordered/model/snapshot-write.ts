@@ -10,6 +10,7 @@ import type { OrderedFileMedia } from './resources.ts';
 import { list, record, type SnapshotWriteContext } from './snapshot-codec.ts';
 import { DOCUMENT, FILE_MEDIA } from './snapshot-fields.ts';
 import { SnapshotNodeWriter } from './snapshot-nodes.ts';
+import { sideJson } from './snapshot-side.ts';
 import type { OrderedDocument, OrderedItem } from './types.ts';
 
 /** The entries of a room checkpoint of version 6, in its zip: the item list and the base. */
@@ -81,11 +82,13 @@ export function snapshotJsonBytes(
     },
   };
   const document = DOCUMENT_CODEC.write(doc, w);
+  const side = sideJson(doc, w);
   const body = JSON.stringify({
     media: MEDIA_CODEC.write(media, w),
     namespaces: nodes.namespaces,
     nodes: nodes.list,
     document,
+    side,
   });
   const encoder = new TextEncoder();
   const bodyBytes = encoder.encode(body);

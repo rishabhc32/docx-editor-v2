@@ -16,6 +16,7 @@ import {
 import type { OrderedFileMedia } from './resources.ts';
 import { readXmlString, type SnapshotReadContext } from './snapshot-codec.ts';
 import { SnapshotNodeReader } from './snapshot-nodes.ts';
+import { restoreSide } from './snapshot-side.ts';
 import {
   DOCUMENT_CODEC,
   headerText,
@@ -23,13 +24,7 @@ import {
   SNAPSHOT_FORMAT,
   SNAPSHOT_VERSION,
 } from './snapshot-write.ts';
-import {
-  isUnit,
-  loadedSpace,
-  type OrderedDocument,
-  type OrderedItem,
-  type OrderedStory,
-} from './types.ts';
+import { isUnit, type OrderedDocument, type OrderedItem, type OrderedStory } from './types.ts';
 
 /** Why a saved item list does not read: as a checkpoint's refusals name it. */
 export type SnapshotRefusal = 'checkpoint-format' | 'checkpoint-version' | 'checkpoint-manifest';
@@ -43,17 +38,13 @@ export type SnapshotRead =
     }
   | { readonly ok: false; readonly reason: SnapshotRefusal };
 
-const BODY_FIELDS = new Set(['media', 'namespaces', 'nodes', 'document']);
+const BODY_FIELDS = new Set(['media', 'namespaces', 'nodes', 'document', 'side']);
 
 /**
- * The document `checkpoint.json` holds, opened as Word file `file`: its loaded spaces take that
- * number. `base` is the package `ordered/base.docx` holds, which the saved nodes name.
+ * The document `checkpoint.json` holds, under the Word file number its loaded spaces hold. `base`
+ * is the package `ordered/base.docx` holds, which the saved nodes name.
  */
-export function readSnapshotJson(
-  bytes: Uint8Array,
-  base: OoxmlPackage,
-  file: number
-): SnapshotRead {
+export function readSnapshotJson(bytes: Uint8Array, base: OoxmlPackage): SnapshotRead {
   if (bytes.byteLength > XML_HARD_MAX_BYTES) {
     return { ok: false, reason: 'checkpoint-manifest' };
   }
@@ -76,7 +67,7 @@ export function readSnapshotJson(
     return { ok: false, reason: 'checkpoint-manifest' };
   }
 
-  const { format, version, reads, file: saved } = header.value;
+  const { format, version, reads, file } = header.value;
   if (format !== SNAPSHOT_FORMAT) {
     return { ok: false, reason: 'checkpoint-format' };
   }
@@ -91,7 +82,7 @@ export function readSnapshotJson(
 
   const read = attempt(() => {
     const body = fieldsOf((value as { body: unknown }).body, 'body', BODY_FIELDS);
-    return documentOf(body, base, saved, file);
+    return documentOf(body, base, file);
   });
   return read.ok ? { ok: true, ...read.value } : { ok: false, reason: 'checkpoint-manifest' };
 }
@@ -143,7 +134,6 @@ function bodyFits(bytes: Uint8Array, header: ReturnType<typeof headerOf>): boole
 function documentOf(
   body: ReturnType<typeof fieldsOf>,
   base: OoxmlPackage,
-  saved: number,
   file: number
 ): { readonly document: OrderedDocument; readonly media: readonly OrderedFileMedia[] } {
   const namespaces = required(body, 'namespaces');
@@ -161,7 +151,6 @@ function documentOf(
   const stories: OrderedItem[][] = [];
   const r: SnapshotReadContext = {
     nodes,
-    space: (space) => renamed(space, saved, file),
     item: (value, path) => {
       const [s, k] = Array.isArray(value) && value.length === 2 ? value : [];
       const found = typeof s === 'number' && typeof k === 'number' ? stories[s]?.[k] : undefined;
@@ -193,6 +182,7 @@ function documentOf(
   const media = MEDIA_CODEC.read(required(body, 'media'), 'media', r);
   const read = DOCUMENT_CODEC.read(required(body, 'document'), 'document', r);
   Object.assign(doc, read, { stories: doc.stories, suggestions: doc.suggestions });
+  restoreSide(doc, required(body, 'side'), r);
   nodes.check();
   const fault = documentFault(doc, read.stories);
   if (fault !== null) {
@@ -200,12 +190,6 @@ function documentOf(
   }
 
   return { document: doc, media };
-}
-
-/** A saved space as file `file` names it: the saved file's loaded spaces take its number. */
-function renamed(space: string, saved: number, file: number): string {
-  const loaded = loadedSpace(space);
-  return loaded === null || loaded.file !== saved ? space : `${loaded.kind}:${file}:${loaded.node}`;
 }
 
 /**

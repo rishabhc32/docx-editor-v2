@@ -143,6 +143,15 @@ export function loadedPackageOf(doc: OrderedDocument): OoxmlPackage | null {
 }
 
 /**
+ * Record the package a document's stories came from, and what it says about headers and footers
+ * outside them: a load, and the open of a checkpoint over its base package.
+ */
+export function recordLoadedPackage(doc: OrderedDocument, pkg: OoxmlPackage): void {
+  recordFurniture(doc, pkg);
+  LOADED.set(doc, pkg);
+}
+
+/**
  * Load a package's stories as one ordered document, with the prompts its glossary holds.
  *
  * @public
@@ -160,8 +169,7 @@ export function loadOrderedPackage(
   recordFileNames(doc, pkg);
   recordFileLists(doc, pkg);
   recordFileStores(doc, pkg);
-  recordFurniture(doc, pkg);
-  LOADED.set(doc, pkg);
+  recordLoadedPackage(doc, pkg);
 
   // After the stories, so their suggestion ids stay as they were
   loadPartRevisions(doc, pkg, options.suggestions);

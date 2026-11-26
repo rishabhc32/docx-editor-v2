@@ -31,8 +31,6 @@ export interface SnapshotReadContext {
   readonly nodes: SnapshotNodeReader;
   /** The item a story and place name. */
   item(value: unknown, path: string): OrderedItem;
-  /** A saved space as the opened document names it (its loaded spaces take the open's file). */
-  space(space: string): string;
   /** The suggestions, put in the document before its stories: a tree sums by their status. */
   suggestions(suggestions: Map<string, OrderedSuggestion>): Map<string, OrderedSuggestion>;
   /** A story's tree of `items`, in order. */
@@ -41,18 +39,13 @@ export interface SnapshotReadContext {
   story(story: Omit<OrderedStory, 'spaces'>): OrderedStory;
 }
 
-/** What a comparison maps: a space of the first document as the second names it. */
-export interface SnapshotCompareContext {
-  space(space: string): string;
-}
-
 /** How a checkpoint holds one value. Methods, so a codec of a type serves its readonly forms. */
 export interface SnapshotCodec<T> {
   write(value: T, w: SnapshotWriteContext): unknown;
   /** @throws Invalid when the value does not read. */
   read(json: unknown, path: string, r: SnapshotReadContext): T;
   /** The path of the first difference, or null. */
-  diff(a: T, b: T, path: string, c: SnapshotCompareContext): string | null;
+  diff(a: T, b: T, path: string): string | null;
 }
 
 /** A field the checkpoint stores, with its codec. */
@@ -164,12 +157,12 @@ export function nullable<T>(codec: SnapshotCodec<T>): SnapshotCodec<T | null> {
   return {
     write: (value, w) => (value === null ? null : codec.write(value, w)),
     read: (json, path, r) => (json === null ? null : codec.read(json, path, r)),
-    diff: (a, b, path, c) => {
+    diff: (a, b, path) => {
       if (a === null || b === null) {
         return a === b ? null : path;
       }
 
-      return codec.diff(a, b, path, c);
+      return codec.diff(a, b, path);
     },
   };
 }
@@ -214,7 +207,7 @@ export function list<T>(codec: SnapshotCodec<T>): SnapshotCodec<readonly T[]> {
       const entries = arrayOf(json, path);
       return entries.length === 0 ? NONE : entries.map((e, k) => codec.read(e, at(path, k), r));
     },
-    diff: (a, b, path, c) => listDifference(a, b, path, (x, y, p) => codec.diff(x, y, p, c)),
+    diff: (a, b, path) => listDifference(a, b, path, (x, y, p) => codec.diff(x, y, p)),
   };
 }
 
@@ -234,8 +227,7 @@ export function set(codec: SnapshotCodec<string>): SnapshotCodec<Set<string>> {
       });
       return out;
     },
-    diff: (a, b, path, c) =>
-      listDifference([...a], [...b], path, (x, y, p) => codec.diff(x, y, p, c)),
+    diff: (a, b, path) => listDifference([...a], [...b], path, (x, y, p) => codec.diff(x, y, p)),
   };
 }
 
@@ -263,9 +255,9 @@ export function map<K, V>(
       });
       return out;
     },
-    diff: (a, b, path, c) =>
+    diff: (a, b, path) =>
       listDifference([...a], [...b], path, ([ka, va], [kb, vb], p) => {
-        return key.diff(ka, kb, at(p, 0), c) ?? value.diff(va, vb, at(p, 1), c);
+        return key.diff(ka, kb, at(p, 0)) ?? value.diff(va, vb, at(p, 1));
       }),
   };
 }
@@ -301,21 +293,12 @@ export const attributes: SnapshotCodec<readonly OoxmlAttribute[]> = {
   diff: (a, b, path) => attributesDifference(a, b, path),
 };
 
-/** A space, or a string that starts with one (`space|offset`). */
-export const space: SnapshotCodec<string> = {
-  write: (value) => value,
-  read: (json, path, r) => r.space(id.read(json, path, r)),
-  diff: (a, b, path, c) => (c.space(a) === b ? null : path),
-};
-
 /** An item of a story, by its story and place. */
 export const item: SnapshotCodec<OrderedItem> = {
   write: (value, w) => w.item(value),
   read: (json, path, r) => r.item(json, path),
-  diff: (a, b, path, c) => {
-    const same = c.space(a.space) === b.space && a.offset === b.offset && a.kind === b.kind;
-    return same ? null : path;
-  },
+  diff: (a, b, path) =>
+    a.space === b.space && a.offset === b.offset && a.kind === b.kind ? null : path,
 };
 
 /** A person the room stamped. */
@@ -358,7 +341,7 @@ export function record<T>(fields: SnapshotFields<T>): SnapshotCodec<T> {
 
       return out as T;
     },
-    diff: (a, b, path, c) => {
+    diff: (a, b, path) => {
       for (const [key, field] of entries) {
         const va = (a as Record<string, unknown>)[key];
         const vb = (b as Record<string, unknown>)[key];
@@ -370,7 +353,7 @@ export function record<T>(fields: SnapshotFields<T>): SnapshotCodec<T> {
           continue;
         }
 
-        const found = field.stored.diff(va, vb, at(path, key), c);
+        const found = field.stored.diff(va, vb, at(path, key));
         if (found !== null) {
           return found;
         }
@@ -405,7 +388,7 @@ export function variants<T extends object, K extends keyof T & string>(
       const name = oneOf(plainFields(json, path).get(key), at(path, key), names);
       return codecs.get(name)!.read(json, path, r);
     },
-    diff: (a, b, path, c) => (a[key] === b[key] ? codecOf(a).diff(a, b, path, c) : at(path, key)),
+    diff: (a, b, path) => (a[key] === b[key] ? codecOf(a).diff(a, b, path) : at(path, key)),
   };
 }
 

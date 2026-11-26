@@ -116,7 +116,8 @@ export function openOrderedWordFile(
 
 /**
  * Open a room checkpoint (`writeOrderedCheckpoint`): the document the room saved, field by field,
- * with its loaded addresses under file number `options.file` and every other address as saved.
+ * with every address as saved. Its `file` stays the number its loaded spaces hold; the room's own
+ * number of the file (`options.file`) moves at each close.
  * No media bytes are read. The document's `resources.fileMedia` lists the media the checkpoint
  * names by reference; a client reads each one through its `media` reader, and
  * `composeOrderedPackage` and `writeOrderedPackage` put the bytes back in their places. A
