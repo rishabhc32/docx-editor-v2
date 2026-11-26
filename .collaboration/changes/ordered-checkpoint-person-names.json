@@ -1,0 +1,13 @@
+{
+  "impact": "compatible",
+  "fields": [],
+  "before": "A checkpoint of version 6 opened with a suggestion, a comment or an earlier attribution whose Word name was not its person's, so a card could show one name for another person. The version 5 reader refused such a file.",
+  "after": "The version 6 reader refuses such a file as checkpoint-manifest, with the same rule as the version 5 reader.",
+  "reason": "A room writes each person's Word name from the person, so every checkpoint a room writes still opens. Only a changed file is refused. Change messages, the change log and the Yjs document format do not change.",
+  "tests": [
+    "packages/core/src/collaboration/ordered/__tests__/checkpoint-snapshot-refusals.test.ts",
+    "packages/core/src/collaboration/ordered/__tests__/checkpoint.test.ts"
+  ],
+  "changeset": "ordered-checkpoint-person-names",
+  "migration": null
+}
