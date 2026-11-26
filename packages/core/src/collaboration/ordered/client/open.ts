@@ -1,7 +1,6 @@
 import {
   readOoxmlPackage,
   withPart,
-  writeOoxmlPackage,
   type OoxmlPackage,
   type OoxmlPackageLimits,
 } from '../../../store/package/ooxml-package.ts';
@@ -143,20 +142,12 @@ function readPackage(bytes: Uint8Array, options: OrderedWordFileOptions): OoxmlP
 }
 
 /**
- * A read Word file, opened from its normalized package as written and read back. A checkpoint keeps
- * these bytes as its base, so every later open reads the trees the room loaded, with the same node
- * ids, and finds nothing left to normalize.
+ * A read Word file, opened from its normalized package. Its bytes stay the file's own: a checkpoint
+ * keeps them as its base, and every later open normalizes them to the trees the room loaded, with
+ * the same node ids. So the room, each reopen and the editor alone read one form of the file.
  */
 function openWordPackage(pkg: OoxmlPackage, options: OrderedWordFileOptions): OrderedWordFile {
-  const written = readOoxmlPackage(
-    writeOoxmlPackage(normalizedRoomPackage(pkg)),
-    options.limits ?? {}
-  );
-  if (!written.ok) {
-    throw new OrderedWordFileError(written.reason);
-  }
-
-  const base = normalizedRoomPackage(written.package);
+  const base = normalizedRoomPackage(pkg);
   return { base, document: loadOrderedPackage(base, { ...options.load, file: options.file }) };
 }
 

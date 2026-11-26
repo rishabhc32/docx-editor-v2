@@ -1,14 +1,15 @@
 {
   "impact": "compatible",
   "fields": [],
-  "before": "A room opened from a Word file loaded the package the open normalized in memory, and a checkpoint of version 6 kept the uploaded bytes as its base, so every later open normalized them again. Nodes the normalization made (an empty control's prompt, a text box's fallback copy) had ids that no read of the file gives.",
-  "after": "The open writes the normalized package and reads it back, and the room loads from those trees. A checkpoint keeps the same bytes as its base, so a later open finds nothing to normalize, and the live room and every reopen hold the same node ids. The first export holds the same parts by the fingerprint and digest oracles; a namespace the room writes takes the prefix the base declares.",
-  "reason": "Change messages, the change log and its kinds, the checkpoint layout and the Yjs document format do not change. Item addresses stay the same except in a unit that the open's normalization made, such as an empty control's prompt; on four contracts no address of 34,509 items changed. A room admits only clients of its own code version, so every copy opens the file the same way. Migration: start fresh rooms; ordered rooms are not deployed yet.",
+  "before": "A room opened from a Word file wrote the normalized package and read it back, and loaded from those trees; a checkpoint of version 6 kept the written bytes as its base. Code that depends on the written form (attribute order, a text's xml:space, prefixes, the part bytes that seed a custom XML part's id) then gave the room other results than the editor alone, which reads the file as uploaded.",
+  "after": "The room loads from the uploaded package as every open normalizes it, and a checkpoint keeps the uploaded bytes as its base. Every later open normalizes them to the same trees and node ids, so the live room, every reopen and the editor alone read one form of the file. The normalization validates only what it changed.",
+  "reason": "Change messages, the change log and its kinds, the checkpoint layout and the Yjs document format do not change. Item addresses come from the same normalized trees as before the written base, and a checkpoint with a written base still opens: the normalization of written bytes changes nothing. A room admits only clients of its own code version, so every copy opens the file the same way. Migration: start fresh rooms; ordered rooms are not deployed yet.",
   "tests": [
     "packages/core/src/collaboration/ordered/__tests__/checkpoint-snapshot.test.ts",
     "packages/core/src/collaboration/ordered/__tests__/checkpoint-golden.test.ts",
-    "packages/core/src/collaboration/ordered/__tests__/checkpoint-fold-prompts.test.ts",
-    "packages/core/src/collaboration/ordered/__tests__/client/editor-restart.test.ts"
+    "packages/core/src/collaboration/ordered/__tests__/client/editor-custom-nodes.test.ts",
+    "packages/core/src/collaboration/ordered/__tests__/client/editor-table-lone-grid.test.ts",
+    "packages/pro/src/__tests__/custom-nodes-ordered-room.test.ts"
   ],
   "changeset": "ordered-word-open-base",
   "migration": null

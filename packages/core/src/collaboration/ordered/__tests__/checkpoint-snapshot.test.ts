@@ -73,23 +73,24 @@ const treesOf = (pkg: OoxmlPackage) =>
 describe('a room opened from a Word file', () => {
   // The open mints paragraph ids, puts a text box's fallback copy in step and gives an empty
   // control its prompt; a filled control names its prompt's glossary block
-  test('loads the base its checkpoints keep: the same trees and node ids, nothing to normalize', async () => {
+  test('keeps the bytes as uploaded, which every open normalizes to the same trees and node ids', async () => {
     const textBox = MATRIX_ITEMS.find(({ key }) => key === 'textbox')!;
     const control = p(t('Fee: ') + sdt('<w:id w:val="5"/><w:text/>', '') + t(' due.'));
     const file = docx(bodyOf(textBox) + control, MATRIX_EXTRAS);
     const { document: doc, base } = openOrderedWordFile(file, { file: 1 });
+    const uploaded = readOoxmlPackage(file, {});
+    if (!uploaded.ok) {
+      throw new Error(uploaded.reason);
+    }
 
-    // The base's own bytes read back to its trees, which every open normalizes to themselves
+    // The editor alone reads these bytes too
+    expect(base.partBytes).toEqual(uploaded.package.partBytes);
     const read = readOoxmlPackage(writeZip(base.partBytes), {});
     if (!read.ok) {
       throw new Error(read.reason);
     }
 
-    const normalized = normalizedRoomPackage(read.package);
-    expect(
-      [...normalized.parts].filter(([name, part]) => read.package.parts.get(name) !== part)
-    ).toEqual([]);
-    expect(treesOf(normalized)).toEqual(treesOf(base));
+    expect(treesOf(normalizedRoomPackage(read.package))).toEqual(treesOf(base));
 
     // Live and after a close: the same item list, node ids and glossary block names
     const sdtItem = opens(doc, 'sdt')[0]!;
