@@ -250,6 +250,7 @@ export function deadItems(doc: OrderedDocument, story: OrderedStory): OrderedIte
     kept = [
       keepContainers(containers, dead),
       keepHeld(all, dead),
+      keepRemovedCells(all, dead),
       keepSpaceEnds(story, dead),
     ].includes(true);
   }
@@ -331,6 +332,35 @@ function keepHeld(all: readonly OrderedItem[], dead: Set<OrderedItem>): boolean 
         holding += 1;
       }
     }
+  }
+
+  return changed;
+}
+
+/**
+ * Keep the edges of a cell that went while its row stays: compose draws it as a removed cell, and
+ * its table fits the grid to the cells as the engine does (`removedColumnCell`). What it held goes.
+ */
+function keepRemovedCells(all: readonly OrderedItem[], dead: Set<OrderedItem>): boolean {
+  const blocks: OrderedItem[] = [];
+  let changed = false;
+  for (const item of all) {
+    if (item.token === undefined || !BLOCK_TOKENS.has(item.token)) {
+      continue;
+    }
+
+    if (item.kind === 'close') {
+      blocks.pop();
+      continue;
+    }
+
+    const row = blocks.at(-1);
+    if (item.token === 'tc' && dead.has(item) && row?.token === 'tr' && !dead.has(row)) {
+      dead.delete(item);
+      changed = true;
+    }
+
+    blocks.push(item);
   }
 
   return changed;
