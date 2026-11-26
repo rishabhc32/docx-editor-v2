@@ -49,12 +49,19 @@ const textOf = (doc: OrderedDocument): string =>
     .map((item) => item.text)
     .join('');
 
+/** The changes of a client's frame, as the room reads them. */
+function changesOf(frame: string | null, namespace: string): readonly OrderedChange[] {
+  const decoded = decodeOrderedClientMessage(frame ?? '', { namespace });
+  if (!decoded.ok || decoded.value.type !== 'changes') {
+    throw new Error('not a changes frame');
+  }
+
+  return decoded.value.changes;
+}
+
 /** The client's frame through the room; the room's answers back to the client. */
 function deliver(room: OrderedRoom, client: TestClient, frame: string | null) {
-  if (frame === null) throw new Error('the client has nothing to send');
-  const decoded = decodeOrderedClientMessage(frame, { namespace: client.actor.namespace });
-  if (!decoded.ok || decoded.value.type !== 'changes') throw new Error('not a changes frame');
-  const result = room.submit(client.actor, decoded.value.changes);
+  const result = room.submit(client.actor, changesOf(frame, client.actor.namespace));
   if (result.accepted.length > 0) {
     const changes = result.accepted;
     client.receive(encodeOrderedServerMessage({ v: 3, type: 'changes', changes }));
@@ -117,9 +124,7 @@ describe('a change after a close', () => {
     const frame = ana.flush();
 
     // The room applies both and closes before the client hears of them
-    const decoded = decodeOrderedClientMessage(frame ?? '', { namespace: 'ana-1' });
-    if (!decoded.ok || decoded.value.type !== 'changes') throw new Error('not a changes frame');
-    expect(first.submit(ANA, decoded.value.changes).refused).toEqual([]);
+    expect(first.submit(ANA, changesOf(frame, 'ana-1')).refused).toEqual([]);
     const shown = textOf(first.document);
     expect(shown.match(/Late/g)).toHaveLength(2);
 
