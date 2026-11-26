@@ -229,17 +229,11 @@ describe('a page that keeps its namespace across a close', () => {
     expect(first.submit(PAGE, typed(before)).refused).toEqual([]);
     expect(first.submit(PAGE, typed(before)).refused).toEqual([]);
 
-    // The close: today's fold, with the counters the room held, as the saved item list holds them
+    // The close: the saved item list holds the counters the room held
     const { base } = opened();
     const bytes = await checkpointBytes(first.document, base, mediaStore(base));
-    const reopened = () => {
-      const { document } = openOrderedRoomFile(bytes, { file: 2 });
-      for (const [namespace, counter] of first.document.lastCounters) {
-        document.lastCounters.set(namespace, counter);
-      }
-
-      return document;
-    };
+    const reopened = () => openOrderedRoomFile(bytes, { file: 2 }).document;
+    expect(reopened().lastCounters).toEqual(first.document.lastCounters);
     const next = roomOver(reopened());
 
     // The page loads again with the same namespace, and types
