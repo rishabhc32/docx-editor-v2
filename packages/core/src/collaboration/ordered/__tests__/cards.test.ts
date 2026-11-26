@@ -200,7 +200,7 @@ describe('the card of one suggestion', () => {
     expectSameCards(fresh, 'new table');
   });
   test("a deletion of a person's own new words joins no card by how those words split", async () => {
-    // Olive's new address for the link, kept by a fold; her second one strikes her first copy
+    // Olive's new address for the link, kept by a fold; her second one changes her own new copy
     const opened = openOrderedWordFile(APPLY_FILE, { file: 1 });
     const blobs = mediaStore(opened.base);
     const href = 'https://example.com/new';
@@ -209,14 +209,14 @@ describe('the card of one suggestion', () => {
     apply(opened.document, 'olive:1', first, 'Olive');
     const { document: doc, base } = await folded(opened.document, opened.base, 2, blobs);
     apply(doc, 'olive:2', { kind: 'link-target', ...EDIT, link: linkAt(doc, 1), href }, 'Olive');
-    expect(textOf(doc, 1)).toBe('See the termsthe termsthe terms.');
-    // Her direct deletion of "term" in the struck copy leaves two units, which a fold joins:
-    // neither is an insertion beside the deletion that strikes both
+    expect(textOf(doc, 1)).toBe('See the termsthe terms.');
+    // Her direct deletion of "term" in her new copy leaves it in two units: neither is an
+    // insertion beside the deletion, so her suggestion stays one card
     const term = { kind: 'delete', ...DIRECT, from: at(doc, 1, 17), to: at(doc, 1, 21) } as const;
     apply(doc, 'olive:3', term, 'Olive');
-    expect(textOf(doc, 1)).toBe('See the termsthe sthe terms.');
-    expect(orderedCardOf(doc, 'S:olive:2.1')?.suggestions).toEqual(['S:olive:2.1']);
-    expectSameCards(doc, 'a struck copy in two units');
-    await checkFold(doc, base, blobs, 'a struck copy in two units');
+    expect(textOf(doc, 1)).toBe('See the termsthe s.');
+    expect(orderedCardOf(doc, 'S:olive:1.1')?.suggestions).toEqual(['S:olive:1.1']);
+    expectSameCards(doc, 'a new copy in two units');
+    await checkFold(doc, base, blobs, 'a new copy in two units');
   });
 });
