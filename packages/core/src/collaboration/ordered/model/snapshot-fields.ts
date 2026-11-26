@@ -99,6 +99,19 @@ const name = xmlString(0, ID_MAX);
 /** A coordinate, a twips value or an offset in a write: any safe integer. */
 const signed = int(Number.MIN_SAFE_INTEGER);
 
+/** An item's model text: characters, or the one character that stands for an atom. */
+const unitText: SnapshotCodec<string> = {
+  write: (value) => value,
+  read: (json, path) => {
+    if (typeof json !== 'string') {
+      throw new Invalid('invalid-type', path, 'not a string');
+    }
+
+    return json;
+  },
+  diff: (a, b, path) => (a === b ? null : path),
+};
+
 /** A list level, 0 to 8. */
 const level = int(0, 8);
 
@@ -414,7 +427,7 @@ export const ITEM: SnapshotFields<OrderedItem> = {
   offset: stored(count),
   length: stored(int(1)),
   kind: stored(choice(KINDS)),
-  text: stored(text),
+  text: stored(unitText),
   node: stored(nullable(node)),
   textShell: maybe(element),
   pieces: maybe(list(record(PIECE))),
@@ -451,7 +464,7 @@ export const ITEM: SnapshotFields<OrderedItem> = {
 export const ATTRIBUTION: SnapshotFields<OrderedAttribution> = {
   author: stored(name),
   person: stored(nullable(person)),
-  date: maybe(id),
+  date: maybe(name),
   attributes: maybe(attributes),
 };
 

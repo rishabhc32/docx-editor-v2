@@ -68,7 +68,7 @@ export async function writeOrderedCheckpoint(
   base: OoxmlPackage,
   options: OrderedPackageWriteOptions
 ): Promise<void> {
-  const { bytes, media } = await baseFileBytes(doc, base);
+  const { bytes, media } = baseFileBytes(doc, base);
   const entries = new Map([
     [SNAPSHOT_ENTRY, snapshotJsonBytes(doc, base, media)],
     [SNAPSHOT_BASE_ENTRY, bytes],
@@ -77,48 +77,34 @@ export async function writeOrderedCheckpoint(
 }
 
 /**
- * `ordered/base.docx`: the base package, each media part of a type the room stores by reference,
- * at its place among the entries: the file's own that the package holds no bytes for (from a
- * checkpoint), and those whose bytes it holds (from a Word file), which the host stored when it
- * made the room.
+ * `ordered/base.docx`: the base package's entries as the bytes it was read from (the open of a room
+ * file normalizes them again to the same trees), each media part of a type the room stores by
+ * reference, at its place among the entries: the file's own that the package holds no bytes for
+ * (from a checkpoint), and those whose bytes it holds (from a Word file), which the host stored
+ * when it made the room.
  */
-async function baseFileBytes(
+function baseFileBytes(
   doc: OrderedDocument,
   base: OoxmlPackage
-): Promise<{ readonly bytes: Uint8Array; readonly media: readonly OrderedFileMedia[] }> {
+): { readonly bytes: Uint8Array; readonly media: readonly OrderedFileMedia[] } {
   const pkg = withFileMediaPlaces(base, doc);
   const referenceOf = partReferences(pkg);
   const media: OrderedFileMedia[] = [];
-  const chunks: Uint8Array[] = [];
-  await writeComposedEntries(
-    pkg,
-    async (name, data, entry) => {
-      const reference = fileMediaAt(doc, name) ?? referenceOf(name, data);
-      if (reference === null) {
-        return data;
-      }
-
+  const entries = new Map<string, Uint8Array>();
+  let entry = 0;
+  for (const [name, data] of pkg.partBytes) {
+    const reference = fileMediaAt(doc, name) ?? referenceOf(name, data);
+    if (reference === null) {
+      entries.set(name, data);
+    } else {
       const { part, contentType, sha256, size } = reference;
       media.push({ part, contentType, sha256, size, entry });
-      return null;
-    },
-    async (chunk) => {
-      chunks.push(chunk);
     }
-  );
-  return { bytes: concatBytes(chunks), media };
-}
 
-/** Bytes one after another. */
-function concatBytes(chunks: readonly Uint8Array[]): Uint8Array {
-  const out = new Uint8Array(chunks.reduce((n, chunk) => n + chunk.byteLength, 0));
-  let at = 0;
-  for (const chunk of chunks) {
-    out.set(chunk, at);
-    at += chunk.byteLength;
+    entry += 1;
   }
 
-  return out;
+  return { bytes: writeZip(entries), media };
 }
 
 /**

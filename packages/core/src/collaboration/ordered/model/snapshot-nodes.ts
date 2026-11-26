@@ -6,7 +6,6 @@
 
 import type { OoxmlPackage } from '../../../store/package/ooxml-package.ts';
 import { findNode } from '../../../store/package/ooxml-edit.ts';
-import { canonicalOoxmlFingerprintWithBindings } from '../../../store/package/ooxml-serialize.ts';
 import {
   deepFreezeNode,
   readOoxmlPart,
@@ -88,7 +87,7 @@ export class SnapshotNodeWriter {
   /** Attributes as the checkpoint writes them. */
   attributes(attributes: readonly OoxmlAttribute[]): unknown[] {
     return attributes.map((a) => [
-      a.kind,
+      a.kind ?? null,
       this.#namespace(a.namespaceUri),
       a.localName,
       a.prefix ?? null,
@@ -129,7 +128,11 @@ export class SnapshotNodeWriter {
 
 const PART_FIELDS = new Set(['id', 'name', 'contentType', 'root']);
 
-const ATTRIBUTE_KINDS = new Set(['xmlSpace', 'wmlVal', 'genericExtension']);
+/**
+ * The attribute kinds the engine writes: the typed ones, and `generic`, which some edits give an
+ * attribute they make (its readers treat it as `genericExtension`).
+ */
+const ATTRIBUTE_KINDS = new Set(['xmlSpace', 'wmlVal', 'genericExtension', 'generic']);
 
 /** Reads nodes against the base package, each listed node once, and checks those by value. */
 export class SnapshotNodeReader {
@@ -286,12 +289,14 @@ export class SnapshotNodeReader {
 
   #attribute(value: unknown, path: string): OoxmlAttribute {
     const [kind, ns, localName, prefix, text, ...rest] = this.#array(value, path);
-    if (rest.length > 0 || typeof kind !== 'string' || !ATTRIBUTE_KINDS.has(kind)) {
+    const known = typeof kind === 'string' && ATTRIBUTE_KINDS.has(kind);
+    if (rest.length > 0 || !(known || kind === null)) {
       throw new Invalid('invalid-value', path, 'not an attribute');
     }
 
+    // An attribute an edit made may have no kind
     const attribute = {
-      kind,
+      ...(kind === null ? {} : { kind }),
       namespaceUri: this.#namespace(ns, at(path, 1)),
       localName: this.#name(localName, at(path, 2)),
       ...(prefix === null ? {} : { prefix: this.#name(prefix, at(path, 3)) }),
@@ -408,7 +413,7 @@ function attributeFits(a: OoxmlAttribute): boolean {
       );
     case 'wmlVal':
       return a.namespaceUri === WML_NAMESPACE_URI && a.localName === 'val';
-    case 'genericExtension':
+    default:
       return true;
   }
 }
@@ -438,31 +443,35 @@ function sameShape(node: OoxmlNode, read: OoxmlNode): boolean {
   return node.children.every((child, k) => sameShape(child, read.children[k]!));
 }
 
-/**
- * The first difference between two nodes, or null: in what the XML says, by the engine's semantic
- * oracle (design D9: expanded names, attributes as a set, text as Word reads it; not prefixes or
- * where namespaces are declared, which the package writer chooses), and in each node's id and kind.
- */
+/** The first difference between two nodes in any field, or null. */
 export function nodeDifference(a: OoxmlNode, b: OoxmlNode, path: string): string | null {
   if (a === b) {
     return null;
   }
 
-  if (canonicalOoxmlFingerprintWithBindings(a) !== canonicalOoxmlFingerprintWithBindings(b)) {
-    return path;
-  }
-
-  return idDifference(a, b, path);
-}
-
-/** The first node whose id or kind differs, or null, in two trees that say the same. */
-function idDifference(a: OoxmlNode, b: OoxmlNode, path: string): string | null {
   if (a.id !== b.id || a.kind !== b.kind) {
     return at(path, 'id');
   }
 
   if (a.kind === 'textValue' || b.kind === 'textValue') {
-    return null;
+    const same = a.kind === 'textValue' && b.kind === 'textValue' && a.value === b.value;
+    return same ? null : at(path, 'value');
+  }
+
+  const bindings = (node: OoxmlElement) =>
+    node.namespaceBindings.map((x) => `${x.prefix} ${x.namespaceUri}`).join('\n');
+  if (
+    a.namespaceUri !== b.namespaceUri ||
+    a.localName !== b.localName ||
+    a.prefix !== b.prefix ||
+    bindings(a) !== bindings(b)
+  ) {
+    return at(path, a.localName);
+  }
+
+  const attributes = attributesDifference(a.attributes, b.attributes, at(path, 'attributes'));
+  if (attributes !== null) {
+    return attributes;
   }
 
   if (a.children.length !== b.children.length) {
@@ -470,7 +479,7 @@ function idDifference(a: OoxmlNode, b: OoxmlNode, path: string): string | null {
   }
 
   for (let k = 0; k < a.children.length; k += 1) {
-    const found = idDifference(a.children[k]!, b.children[k]!, at(at(path, 'children'), k));
+    const found = nodeDifference(a.children[k]!, b.children[k]!, at(at(path, 'children'), k));
     if (found !== null) {
       return found;
     }
@@ -479,25 +488,26 @@ function idDifference(a: OoxmlNode, b: OoxmlNode, path: string): string | null {
   return null;
 }
 
-/**
- * The first difference between two attribute lists, or null. They compare as a set, by name: XML
- * gives attribute order no meaning, and the package writer orders a part's.
- */
+/** The first difference between two attribute lists, in order, or null. */
 export function attributesDifference(
   a: readonly OoxmlAttribute[],
   b: readonly OoxmlAttribute[],
   path: string
 ): string | null {
-  const key = (x: OoxmlAttribute) => `${x.namespaceUri} ${x.localName}`;
-  const byName = new Map(b.map((y) => [key(y), y]));
-  if (a.length !== b.length || byName.size !== b.length) {
+  if (a.length !== b.length) {
     return path;
   }
 
   for (let k = 0; k < a.length; k += 1) {
     const x = a[k]!;
-    const y = byName.get(key(x));
-    if (y === undefined || x.kind !== y.kind || x.value !== y.value) {
+    const y = b[k]!;
+    if (
+      x.kind !== y.kind ||
+      x.namespaceUri !== y.namespaceUri ||
+      x.localName !== y.localName ||
+      x.prefix !== y.prefix ||
+      x.value !== y.value
+    ) {
       return at(path, k);
     }
   }

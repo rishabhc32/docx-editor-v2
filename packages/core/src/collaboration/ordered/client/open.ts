@@ -1,6 +1,7 @@
 import {
   readOoxmlPackage,
   withPart,
+  writeOoxmlPackage,
   type OoxmlPackage,
   type OoxmlPackageLimits,
 } from '../../../store/package/ooxml-package.ts';
@@ -190,7 +191,14 @@ function openCheckpointRead(pkg: OoxmlPackage, options: OrderedWordFileOptions):
     throw new OrderedWordFileError('checkpoint-manifest');
   }
 
-  const { opened, marks } = openRead(objects.pkg, objects.media, options, facts);
+  // Written and read back: a checkpoint of version 6 keeps the base as its entries' bytes, which
+  // must give these trees again (the steps above changed parts the bytes still hold as they were)
+  const written = readOoxmlPackage(writeOoxmlPackage(objects.pkg), options.limits ?? {});
+  if (!written.ok) {
+    throw new OrderedWordFileError('checkpoint-manifest');
+  }
+
+  const { opened, marks } = openRead(written.package, objects.media, options, facts);
   const doc = opened.document;
   const listedIds = [...doc.revisionIds.listed.keys()];
   if (
@@ -248,16 +256,14 @@ function personsFit(doc: OrderedDocument): boolean {
 }
 
 /**
- * A read package, normalized and loaded, with the file's media, and the suggestions and comment
- * persons a checkpoint names; and what its parts held of a checkpoint's labels, typers and room
- * runs, which the load never reads: a Word file's are dropped, so an upload brings none into a room.
+ * A read package as every open of a room's file normalizes it, the same bytes to the same trees:
+ * the editor's normalization when it opens a document (a valid `w14:paraId` on every paragraph, an
+ * empty control's glossary prompt) and when it saves one (a text box's VML fallback copy in step
+ * with its DrawingML copy), and a checkpoint's attributes off, with what they held.
+ *
+ * @throws OrderedWordFileError `no-main-document`.
  */
-function openRead(
-  pkg: OoxmlPackage,
-  fileMedia: readonly OrderedFileMedia[],
-  options: OrderedWordFileOptions,
-  facts?: CheckpointFacts
-): { readonly opened: OrderedWordFile; readonly marks: CheckpointMarks } {
+export function normalizedRoomPackage(pkg: OoxmlPackage): CheckpointMarks {
   let base = pkg;
   const main = base.parts.get(base.mainDocumentPart);
   if (!main) throw new OrderedWordFileError('no-main-document');
@@ -269,8 +275,22 @@ function openRead(
   base = textboxFallbackExportPackage(base);
 
   // A checkpoint's attributes off: the load reads the parts as the Word file holds them
-  const marks = withoutCheckpointMarks(base);
-  base = marks.pkg;
+  return withoutCheckpointMarks(base);
+}
+
+/**
+ * A read package, normalized and loaded, with the file's media, and the suggestions and comment
+ * persons a checkpoint names; and what its parts held of a checkpoint's labels, typers and room
+ * runs, which the load never reads: a Word file's are dropped, so an upload brings none into a room.
+ */
+function openRead(
+  pkg: OoxmlPackage,
+  fileMedia: readonly OrderedFileMedia[],
+  options: OrderedWordFileOptions,
+  facts?: CheckpointFacts
+): { readonly opened: OrderedWordFile; readonly marks: CheckpointMarks } {
+  const marks = normalizedRoomPackage(pkg);
+  const base = marks.pkg;
   const document = loadOrderedPackage(base, {
     ...options.load,
     file: options.file,

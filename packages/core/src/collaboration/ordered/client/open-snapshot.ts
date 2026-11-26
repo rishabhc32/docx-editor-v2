@@ -11,7 +11,12 @@ import { readSnapshotJson } from '../model/snapshot-read.ts';
 import { SNAPSHOT_BASE_ENTRY, SNAPSHOT_ENTRY } from '../model/snapshot-write.ts';
 import { isTextBoxStoryName } from '../model/text-boxes.ts';
 import type { OrderedDocument } from '../model/types.ts';
-import { OrderedWordFileError, type OrderedWordFile, type OrderedWordFileOptions } from './open.ts';
+import {
+  normalizedRoomPackage,
+  OrderedWordFileError,
+  type OrderedWordFile,
+  type OrderedWordFileOptions,
+} from './open.ts';
 
 /** Whether a room's file is a checkpoint of version 6: its zip holds the item list. */
 export const holdsSnapshot = (bytes: Uint8Array): boolean => zipHoldsEntry(bytes, SNAPSHOT_ENTRY);
@@ -56,13 +61,21 @@ export function openSnapshot(bytes: Uint8Array, options: OrderedWordFileOptions)
   return { base, document };
 }
 
-/** The base package: a Word package, which holds no checkpoint of its own. */
+/**
+ * The base package: a Word package, which holds no checkpoint of its own, normalized as the open
+ * of a room's file normalizes it. Its entries are the bytes the base was read from, so these are
+ * the trees the room held.
+ */
 function basePackage(
   bytes: Uint8Array | undefined,
   options: OrderedWordFileOptions
 ): OoxmlPackage | null {
   const read = bytes === undefined ? null : readOoxmlPackage(bytes, options.limits ?? {});
-  return read?.ok === true && !holdsCheckpointManifest(read.package) ? read.package : null;
+  if (read?.ok !== true || holdsCheckpointManifest(read.package)) {
+    return null;
+  }
+
+  return normalizedRoomPackage(read.package).pkg;
 }
 
 /**

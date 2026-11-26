@@ -52,6 +52,7 @@ import { MOVE_RANGE } from '../load/moves.ts';
 import { oneChangeRecord } from '../model/checkpoint-untracked.ts';
 import { isHidden, movedAwayBy } from '../model/document.ts';
 import { setStatus } from '../model/mutations.ts';
+import { snapshotDifference } from '../model/snapshot-compare.ts';
 import { takenFrom } from '../model/takeovers.ts';
 import { OrderedRefusal } from '../model/refusal.ts';
 import { isTextBoxStoryName } from '../model/text-boxes.ts';
@@ -74,14 +75,26 @@ export function mediaStore(base: OoxmlPackage): (sha256: string) => Uint8Array |
   return (sha256) => bytes.get(sha256);
 }
 
-/** The document folded: its checkpoint written, and opened as file `file`. */
+/**
+ * The document folded: its checkpoint written, and opened as file `file`. The opened copy holds
+ * every stored field as `doc` does, and saves to the same bytes.
+ */
 export async function folded(
   doc: OrderedDocument,
   base: OoxmlPackage,
   file: number,
   blobs: FoldBlobs
 ): Promise<OrderedWordFile> {
-  return openOrderedCheckpoint(await checkpointBytes(doc, base, blobs), { file });
+  const bytes = await checkpointBytes(doc, base, blobs);
+  const opened = openOrderedCheckpoint(bytes, { file });
+  expect({ file, difference: snapshotDifference(doc, opened.document) }).toEqual({
+    file,
+    difference: null,
+  });
+
+  // Before any compose: each one moves the counter of the node ids it mints
+  expect(await checkpointBytes(opened.document, opened.base, blobs)).toEqual(bytes);
+  return opened;
 }
 
 /** The bytes of the document's checkpoint. */
