@@ -38,6 +38,8 @@ export interface SnapshotHeader {
   readonly reads: number;
   /** The Word file number the saved loaded spaces hold. */
   readonly file: number;
+  /** The room's last order number the file holds: the room's log after it starts at 1. */
+  readonly order: number;
   /** SHA-256 of the body's JSON text, lower-case hex. */
   readonly sha256: string;
 }
@@ -47,23 +49,25 @@ export interface SnapshotHeader {
  * reader finds the body's exact text after it.
  */
 export function headerText(header: SnapshotHeader): string {
-  const { format, version, reads, file, sha256 } = header;
+  const { format, version, reads, file, order, sha256 } = header;
   return (
     `{"format":${JSON.stringify(format)},"version":${version},"reads":${reads},` +
-    `"file":${file},"sha256":${JSON.stringify(sha256)},"body":`
+    `"file":${file},"order":${order},"sha256":${JSON.stringify(sha256)},"body":`
   );
 }
 
 /**
  * `checkpoint.json` of `doc`: its stored fields, `media` (the file media of `ordered/base.docx`),
- * and the nodes and namespaces they name. `base` is the package `ordered/base.docx` holds.
+ * and the nodes and namespaces they name, with the room's last order number `order`. `base` is
+ * the package `ordered/base.docx` holds.
  *
  * @throws OrderedRefusal `too-many-items` when it is past the engine's limit of one part (64 MiB).
  */
 export function snapshotJsonBytes(
   doc: OrderedDocument,
   base: OoxmlPackage,
-  media: readonly OrderedFileMedia[]
+  media: readonly OrderedFileMedia[],
+  order: number
 ): Uint8Array {
   const places = new Map<OrderedItem, readonly [number, number]>();
   [...doc.stories.values()].forEach((story, s) => {
@@ -98,6 +102,7 @@ export function snapshotJsonBytes(
       version: SNAPSHOT_VERSION,
       reads: SNAPSHOT_READS,
       file: doc.file,
+      order,
       sha256: orderedBlobHash(bodyBytes),
     })
   );

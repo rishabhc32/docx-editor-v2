@@ -47,7 +47,7 @@ export function openSnapshot(bytes: Uint8Array, options: OrderedWordFileOptions)
     throw new OrderedWordFileError(read.reason);
   }
 
-  const { document, media } = read;
+  const { document, media, order } = read;
   if (!mediaFits(base, media)) {
     throw new OrderedWordFileError('checkpoint-manifest');
   }
@@ -58,7 +58,7 @@ export function openSnapshot(bytes: Uint8Array, options: OrderedWordFileOptions)
     throw new OrderedWordFileError('checkpoint-manifest');
   }
 
-  return { base, document };
+  return { base, document, order };
 }
 
 /**

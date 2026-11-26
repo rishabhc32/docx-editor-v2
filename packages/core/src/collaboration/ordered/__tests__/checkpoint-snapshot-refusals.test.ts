@@ -118,6 +118,8 @@ describe('a checkpoint of version 6 that is not as written', () => {
     ],
     ['another format', (header) => (header.format = 'other'), 'checkpoint-format'],
     ['a version a later reader needs', (header) => (header.reads = 7), 'checkpoint-version'],
+    ['a negative order number', (header) => (header.order = -1), 'checkpoint-manifest'],
+    ['an order number in parts', (header) => (header.order = 1.5), 'checkpoint-manifest'],
     [
       'a missing field',
       (_, body) => delete (body.document as Json).counters,
