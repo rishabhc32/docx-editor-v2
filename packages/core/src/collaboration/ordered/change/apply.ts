@@ -10,7 +10,12 @@ import { orderedPlaceAt, shownItemAt, type OrderedPlace } from '../edits/places.
 import { retractSuggestion, undoOwnEdits } from '../edits/retract.ts';
 import { revertDirect } from '../edits/revert.ts';
 import { isHidden, itemAt, madeBy, storyNamed } from '../model/document.ts';
-import { makerOf, personAttribution, type OrderedMaker } from '../model/person.ts';
+import {
+  makerOf,
+  personAttribution,
+  type OrderedMaker,
+  type OrderedPerson,
+} from '../model/person.ts';
 import { OrderedRefusal } from '../model/refusal.ts';
 import { recordUndo } from '../model/undo-record.ts';
 import {
@@ -309,11 +314,9 @@ export function applyOrderedChange(
 ): OrderedChangeOutcome {
   if (doc.undo === null) throw new Error('A change applies inside an undo record.');
 
-  // The person of the change's namespace, whom the typer read names
-  const namespace = parseOrderedChangeId(change.id)?.namespace;
-  if (namespace !== undefined && !doc.namespaces.has(namespace)) {
-    doc.namespaces.set(namespace, ctx.person);
-    recordUndo(doc, () => doc.namespaces.delete(namespace));
+  const parsed = parseOrderedChangeId(change.id);
+  if (parsed !== null) {
+    noteSender(doc, parsed.namespace, parsed.counter, ctx.person);
   }
 
   const done = applyChange(doc, change, ctx);
@@ -331,6 +334,37 @@ export function applyOrderedChange(
   settlePromptMarks(doc);
   ctx.onApplied?.(done);
   return done;
+}
+
+/**
+ * The person of a change's namespace, whom the typer read names, and the namespace's highest
+ * counter (design D7). Inside the undo record: a change the room refuses is in no log, so its
+ * take-back lowers the counter again and every copy holds the same one.
+ */
+function noteSender(
+  doc: OrderedDocument,
+  namespace: string,
+  counter: number,
+  person: OrderedPerson
+): void {
+  if (!doc.namespaces.has(namespace)) {
+    doc.namespaces.set(namespace, person);
+    recordUndo(doc, () => doc.namespaces.delete(namespace));
+  }
+
+  const last = doc.lastCounters.get(namespace);
+  if (last !== undefined && last >= counter) {
+    return;
+  }
+
+  doc.lastCounters.set(namespace, counter);
+  recordUndo(doc, () => {
+    if (last === undefined) {
+      doc.lastCounters.delete(namespace);
+    } else {
+      doc.lastCounters.set(namespace, last);
+    }
+  });
 }
 
 /**

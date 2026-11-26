@@ -107,7 +107,9 @@ export interface OrderedAck {
  * - `stamp`: the sender's namespace belongs to another person (another person ID).
  * - `missing-blob`: the change names media the room's storage does not hold (design D14).
  * - The target codes (`OrderedTargetErrorCode`): an address, a story or a suggestion is not in
- *   the document, an address names the wrong kind of unit, or a range runs backwards.
+ *   the document, an address names the wrong kind of unit, or a range runs backwards. Also
+ *   `other-file` for a change whose counter is at or under the one the room's file holds for its
+ *   namespace: it was made before the room's last close (design D7).
  * - The policy codes (`OrderedPolicyCode`).
  * - `apply-refused`: the model refused the change; `reason` names why (`OrderedRefusalReason`).
  * - `apply-failed`: applying the change threw something else; it was taken back.
@@ -151,7 +153,8 @@ export interface OrderedSubmitResult {
  * - `log-gap`: an order number is missing or out of order.
  * - `log-repeated-id`: one change id twice.
  * - `log-stamp`: one namespace under two person IDs.
- * - `log-apply`: an entry does not apply to the document.
+ * - `log-apply`: an entry does not apply to the document, or it was made before the room's file
+ *   (`other-file`).
  *
  * @public
  */
@@ -218,6 +221,11 @@ export class OrderedRoom {
    * person of each namespace that typed), then rebuilt from the log.
    */
   readonly #namespaces = new Map<string, string>();
+  /**
+   * The highest counter of each namespace the room's file holds (`lastCounters` as it opened): a
+   * change at or under it was made before the file.
+   */
+  readonly #fileCounters: ReadonlyMap<string, number>;
 
   constructor(options: OrderedRoomOptions) {
     this.#doc = options.document;
@@ -232,6 +240,7 @@ export class OrderedRoom {
       this.#namespaces.set(namespace, person.id);
     }
 
+    this.#fileCounters = new Map(this.#doc.lastCounters);
     for (const [k, entry] of (options.log ?? []).entries()) this.#replay(entry, k);
   }
 
@@ -347,6 +356,11 @@ export class OrderedRoom {
   }
 
   #take(actor: OrderedActor, change: OrderedChange, at: string): Outcome {
+    const late = this.#beforeFile(change.id);
+    if (late !== null) {
+      return { ok: false, refusal: late };
+    }
+
     const targets = orderedChangeTargets(this.#doc, change);
     if (!targets.ok)
       return {
@@ -437,6 +451,17 @@ export class OrderedRoom {
     }
   }
 
+  /** The refusal of a change made before the room's file (design D7), or null. */
+  #beforeFile(id: string): OrderedRoomRefusal | null {
+    const parsed = parseOrderedChangeId(id);
+    const saved = parsed === null ? undefined : this.#fileCounters.get(parsed.namespace);
+    if (parsed === null || saved === undefined || parsed.counter > saved) {
+      return null;
+    }
+
+    return { id, code: 'other-file', detail: `the room's file holds ${parsed.namespace}:${saved}` };
+  }
+
   #record(change: OrderedStampedChange, namespace: string): void {
     this.#log.push(change);
     this.#ids.set(change.id, change.n);
@@ -468,7 +493,7 @@ export class OrderedRoom {
       throw new OrderedRoomOpenError('log-stamp', change.n, namespace);
     }
 
-    const refusal = this.#applyOne(change);
+    const refusal = this.#beforeFile(change.id) ?? this.#applyOne(change);
     if (refusal !== null) {
       throw new OrderedRoomOpenError(
         'log-apply',

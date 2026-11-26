@@ -57,6 +57,7 @@ export function createOrderedDocument(file = 0): OrderedDocument {
     resources: createOrderedResources(),
     partRevisions: new Map(),
     namespaces: new Map(),
+    lastCounters: new Map(),
     undo: null,
   };
 }

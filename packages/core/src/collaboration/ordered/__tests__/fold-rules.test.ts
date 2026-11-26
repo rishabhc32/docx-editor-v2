@@ -292,6 +292,7 @@ const DOCUMENT: Rules<OrderedDocument> = {
   resources: derived('see `OrderedResources`'),
   partRevisions: file('load/part-revisions.ts; a listed `record` keeps its suggestion id'),
   namespaces: manifest('namespaces', 'person', 'each namespace an element names as a typer'),
+  lastCounters: dropped('a fold gives each item a new address, which refuses a late change (D8)'),
   undo: dropped('set only while an edit runs'),
 };
 

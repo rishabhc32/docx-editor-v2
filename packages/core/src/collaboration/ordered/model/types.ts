@@ -643,6 +643,12 @@ export interface OrderedDocument {
    * typed.
    */
   readonly namespaces: Map<string, OrderedPerson>;
+  /**
+   * The highest counter of each namespace whose changes the document applied (a change id is
+   * `<namespace>:<counter>`). A sender never uses a counter twice, so the room refuses a change
+   * at or under the counter its file holds (design D7). The apply raises it inside an undo record.
+   */
+  readonly lastCounters: Map<string, number>;
   /** While an edit runs inside an undo record: how to take back each write, in order. */
   undo: OrderedUndoStep[] | null;
 }
