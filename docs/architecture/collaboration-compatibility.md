@@ -51,12 +51,12 @@ Test the fixed writer against released readers. Also test ordinary editing with 
 
 ### Ordered room checkpoints
 
-An ordered room saves its document as a _checkpoint_: the room's Word file with a manifest part, `/ordered-checkpoint.json`. The manifest keeps the room facts that Word has no place for. A checkpoint that one release writes must open in every later release, so its format follows these rules:
+An ordered room saves its document as a _checkpoint_. Version 6 holds the room's item list as data in `ordered/checkpoint.json`, beside `ordered/base.docx`, the Word package that the room first opened. Version 5 held the room's Word file with a manifest part, `/ordered-checkpoint.json`. A checkpoint that one release writes must open in every later release, so its format follows these rules:
 
-- **Add, never change.** A later version can add a manifest section or a field. It never changes the meaning, the type, or the values of a section or field that a released reader knows. A reader skips a section and a field that it does not know, and stays strict on every field that it knows.
-- **Name places by label, not by count.** A fact names an element of the file by a label attribute of the checkpoint's own namespace, and who typed a run by an attribute on the run. A count of elements or units depends on the engine's rules of the day. A later engine that reads one more element must still find every fact.
-- **Move the version only for a break.** The manifest `version` changes only when an older reader would misread a checkpoint. A reader refuses any other version as `checkpoint-version`.
-- **Keep the golden checkpoints.** `packages/core/src/collaboration/ordered/__tests__/fixtures/checkpoints/` holds checkpoints of version 5, each with its fold print. `checkpoint-golden.test.ts` opens each one and compares the print. Never write a golden checkpoint again. If a release changes what a print shows, write the print again and explain why in the pull request.
+- **Move the version for every format change.** The version 6 reader is strict: it refuses a field that it does not know. A change that adds, removes, or changes a field moves `version`. `reads` names the lowest reader version that reads the file, and a reader refuses a file whose `reads` is past its own version as `checkpoint-version`.
+- **Keep a reader for every version.** A room's file stays in storage until the room's next close, and the room's log is deleted after the close. Keep the reader of each version that a release wrote. The engine writes only the current version, and the version 5 reader stays read only.
+- **Give a new meaning a new version.** If a field keeps its name but gets another meaning, move the version, and give the reader one upgrade step from the earlier version.
+- **Keep the golden checkpoints.** `packages/core/src/collaboration/ordered/__tests__/fixtures/checkpoints/` holds checkpoints of version 5, and `fixtures/checkpoints-v6/` holds checkpoints of version 6, each with its fold print. `checkpoint-golden.test.ts` opens each one and compares the print. Never write a golden checkpoint of a released version again. If a release changes what a print shows, write the print again and explain why in the pull request.
 
 The checkpoint format is separate from the Yjs collaboration format. A checkpoint change still needs a decision from `bun run collaboration:change`.
 

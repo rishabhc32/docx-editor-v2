@@ -99,7 +99,7 @@ The room writes each participant's changes under the Word name `Name (Org)`, or 
 
 The `wordFile` and `media` callbacks read from the locations that the room server names in `welcome`. The client checks each picture against its SHA-256 hash and content type before it shows the picture. Without `media`, pictures that other participants add show no image.
 
-The room's file can be a Word file or a checkpoint. The client tells them apart by the checkpoint's manifest part. For a checkpoint, the client reads each picture of the file through your `media` callback, as it reads the pictures that participants add, and waits for those reads before the editor's first document. A copy of a picture of the file needs no upload.
+The room's file can be a Word file or a checkpoint. The client tells them apart by their content. For a checkpoint, the client reads each picture of the file through your `media` callback, as it reads the pictures that participants add, and waits for those reads before the editor's first document. A copy of a picture of the file needs no upload.
 
 The `upload` callback stores a picture that a participant adds, at the location that `welcome` names for media, before any change that shows the picture goes to the room. Return `{ stored: true }` when your storage holds the bytes, or `{ stored: false, code }` when it refuses them. The codes are `blob-too-large`, `blob-hash`, `blob-type`, and `blob-quota`. The client takes back the edits that use a refused picture and reports them with the reason `blob-refused`. If the callback throws or rejects, the client tries again after the reconnect delays and when it connects again. The client aborts `signal` when the session ends.
 
@@ -274,33 +274,52 @@ In this example, `wordFileBytes`, `storedChanges`, `mediaStore`, `appendToLog`, 
 
 To restart a room, open its file and create `OrderedRoom` with the stored log. If the log does not rebuild the document, the constructor throws `OrderedRoomOpenError` with one of these codes: `log-invalid`, `log-gap`, `log-repeated-id`, `log-stamp`, or `log-apply`.
 
-To close a room, write the document to a checkpoint with `writeOrderedCheckpoint`. A checkpoint holds the parts of the Word file, but names each picture, workbook, and embedded file by its SHA-256 in a manifest part instead of holding its bytes, so a close never writes the pictures again. Give the checkpoint the next file number, and start a new log. A client that joins with an earlier file number receives `reload` with the reason `file`.
+To close a room, call `closeOrderedRoom(room, base, { media, backup })` when no participant is connected. It does these steps:
 
-The checkpoint's manifest also keeps what the room uses that a Word file has no place for. A room that opens its checkpoint, under any file number, has the same suggestions, cards, and decisions as the room that wrote it, so a checkpoint of one room can be file 1 of a new room:
+1. It removes the items that no change can show again, such as the words of a rejected insertion, so the room's file does not grow for the life of the room.
+1. It writes the room's next file: a checkpoint that holds the room's document as data, with the room's last order number. A checkpoint names each picture, workbook, and embedded file by its SHA-256 instead of holding its bytes, so a close never writes the pictures again.
+1. It opens the new file as the next room opens it, and compares the result with the room, field by field.
+1. It writes a backup through your `backup` function: the room's document as a Word file. It reads each picture through `media`, one at a time.
 
-- Each pending suggestion stays one suggestion, with its person and its ID, even when Word writes it as several changes, such as a replacement or an insertion with a new paragraph. Cards, decisions, and `orderedSuggestionsOfRevision` name the same suggestion IDs before and after a close. A Word file without a manifest gets new suggestion IDs.
+`closeOrderedRoom` returns the file's `bytes`, their SHA-256 (`sha256`), the room's last order number (`order`), and what the cleanup removed (`compaction`). The room in memory stays as it was, whatever the result. Then store the file:
+
+1. Upload `bytes` under the next file number, and check that the stored object has the SHA-256 `sha256`.
+1. Store the backup beside the file.
+1. Point the room's record to the new file.
+1. Delete the old file and the old log, and start a new log. The log of the new file starts at order number 1.
+
+Until the room's record points to the new file, the old file and the log are the room's truth. If a step fails, keep both, report the error, and close the room again later. If the new file does not open to the room, `closeOrderedRoom` throws `OrderedRoomCloseError`. Its `code` is `unreadable` when the open refuses the file, or `different` when the file opens to another document, and its `detail` names the reason or the first field that differs.
+
+A client that joins with an earlier file number receives `reload` with the reason `file`. The room on the new file refuses a change that a participant made before the close with the code `other-file`, and refuses the organiser's `revert` of a direct edit made before the close the same way. After a close, an undo of a participant's own edits from before the close changes nothing.
+
+A room that opens its checkpoint, under any file number, has the same document as the room that wrote it, so a checkpoint of one room can be file 1 of a new room:
+
+- Each suggestion keeps its ID and its person. Cards, decisions, and `orderedSuggestionsOfRevision` name the same suggestion IDs before and after a close. A Word file gets new suggestion IDs.
 - Who typed inside another participant's pending insertion, new row, new note, or new text box stays known. To read it, call `orderedUnitTyper(document, item, offset)`. It returns an `OrderedTyper` for the unit at `offset` of an item that a pending suggestion inserted: the namespace of the change that typed it and that namespace's person, the same before and after a close, or `null`. A room that opens the checkpoint knows the person of each of those namespaces, so `namespaceOwner` answers for them and refuses them to another person.
 - A change that Word shows with no change record, such as a control's value or the width a new column takes from its neighbour, keeps its earlier value, so a rejection after a close gives the same file as before it.
 
-An exported Word file holds names only: `writeOrderedPackage`, `orderedPackageBytes`, and `composeOrderedPackage` never write a person ID or any other part of the manifest.
+If a later open refuses the room's file, the room does not open. You can start a new room from the backup. That room has no history: its suggestions get new IDs, and every participant opens the room again.
 
-The checkpoint marks the elements that its facts name with attributes of its own namespace, `https://docx-editor.dev/ordered-checkpoint`. Every open removes them before it reads the file, and an uploaded Word file that carries them opens as the same file without them. Each later release opens the checkpoints that an earlier release wrote: a newer manifest only adds sections and fields, and a reader skips the ones it does not know.
+An exported Word file holds names only: `writeOrderedPackage`, `orderedPackageBytes`, and `composeOrderedPackage` never write a person ID or any other room fact of a checkpoint.
 
-When the organiser's suggestion changes formatting or properties that a participant's pending suggestion changed, Word keeps one change record, under the later author. The checkpoint's manifest keeps each record that the later suggestion took over, so the earlier suggestion stays in a reopened room: when the organiser takes the later suggestion back, the earlier change shows again. To name the earlier suggestion on the later suggestion's card, call `orderedReplacedSuggestions(document, suggestion)`. It returns each suggestion whose records the given suggestion holds, with its author, person, date, `formattingKind`, and `formattingChanges`, in the terms of the review queue's items.
+A checkpoint of version 5, which an earlier release wrote, still opens, and the room writes version 6 at its next close. A version 5 checkpoint marks elements with attributes of its own namespace, `https://docx-editor.dev/ordered-checkpoint`. An uploaded Word file that carries them opens as the same file without them.
+
+When the organiser's suggestion changes formatting or properties that a participant's pending suggestion changed, Word keeps one change record, under the later author. The checkpoint keeps each record that the later suggestion took over, so the earlier suggestion stays in a reopened room: when the organiser takes the later suggestion back, the earlier change shows again. To name the earlier suggestion on the later suggestion's card, call `orderedReplacedSuggestions(document, suggestion)`. It returns each suggestion whose records the given suggestion holds, with its author, person, date, `formattingKind`, and `formattingChanges`, in the terms of the review queue's items.
 
 To export a Word file, write it with `writeOrderedPackage`. It gives the same bytes as `orderedPackageBytes`. It reads each picture that the checkpoint names, and each picture that the session added, through your `media` function, one at a time, so the server holds at most one picture during the write.
 
-Both writers hand the bytes to your `write` function front to back and wait for each call. If `media` rejects, or gives bytes of another size than the change or the checkpoint named, the writer stops with `OrderedRefusal` and the reason `missing-blob`. Discard the partial file in that case. If the checkpoint's manifest is larger than the engine's limit of one part, 64 MiB, `writeOrderedCheckpoint` stops with the reason `too-many-items`. Discard the partial file, and keep the room's last checkpoint and its log.
+`writeOrderedPackage` hands the bytes to your `write` function, and `closeOrderedRoom` hands the backup to your `backup` function, front to back, and both wait for each call. If `media` rejects, or gives bytes of another size than the change or the checkpoint named, the writer stops with `OrderedRefusal` and the reason `missing-blob`. Discard the partial file in that case. If the checkpoint's document is larger than the engine's limit of one part, 64 MiB, `closeOrderedRoom` and `writeOrderedCheckpoint` stop with the reason `too-many-items`. Keep the room's last checkpoint and its log.
 
-The following example writes the room's next file and a Word file to download:
+The following example closes the room, stores its next file, and writes a Word file to download:
 
 ```ts
-// The room's next file: no picture bytes are read.
-await writeOrderedCheckpoint(room.document, base, {
+// The room's next file, checked, and its backup.
+const closed = await closeOrderedRoom(room, base, {
   media: (sha256) => mediaStore.read(sha256),
-  // Send the next bytes to storage, for example one part of a multipart upload.
-  write: (chunk) => checkpointUpload.write(chunk),
+  // Send the next bytes of the backup to storage.
+  backup: (chunk) => backupUpload.write(chunk),
 });
+await fileStore.put(nextFile, closed.bytes, { sha256: closed.sha256 });
 
 // A Word file to download: every picture is read from storage.
 await writeOrderedPackage(room.document, base, {
@@ -309,7 +328,7 @@ await writeOrderedPackage(room.document, base, {
 });
 ```
 
-In this example, `base` is the package that `openOrderedWordFile` or `openOrderedCheckpoint` returned, and `mediaStore`, `checkpointUpload`, and `exportUpload` are your server's own objects. `writeOrderedCheckpoint` reads `media` only for an ink part that the session added.
+In this example, `base` is the package that `openOrderedWordFile` or `openOrderedCheckpoint` returned, `nextFile` is the room's next file number, and `mediaStore`, `backupUpload`, `fileStore`, and `exportUpload` are your server's own objects.
 
 To write a Word file without comments, for example a final copy that keeps only the document and its tracked changes, pass `comments: 'remove'` to `writeOrderedPackage`, `orderedPackageBytes`, or `composeOrderedPackage`. The file then has no comment in any part. The body, headers, footers, notes, and text boxes lose their comment ranges and references. The comments part, the parts that hold comment threads and IDs, and any part that only those parts name, in turn, leave the file with their relationships and content types. For example, a picture that only a comment shows leaves the file, and so does the workbook of a chart in a comment. The room's comments are not written either. Tracked changes, the people part, and every other part stay as the default, `comments: 'keep'`, writes them.
 
@@ -412,7 +431,7 @@ The room sends `reload` when a client must open the room again. The reason is on
 
 After a reload, `onReload` receives the reason and the participant's unsent changes. Open the room again with a new session. Show the unsent changes to the participant, because the new session does not send them for you.
 
-If a room's file is not a checkpoint of this engine's format and version, `openOrderedCheckpoint` throws `OrderedWordFileError` with the reason `not-checkpoint`, `checkpoint-format`, `checkpoint-version`, or `checkpoint-manifest`. A manifest whose suggestions, persons, takeovers, typers, labels, or kept values do not match the file gives `checkpoint-manifest`. `openOrderedWordFile` refuses a checkpoint with the reason `checkpoint`.
+If a room's file is not a checkpoint of this engine's format and version, `openOrderedCheckpoint` throws `OrderedWordFileError` with the reason `not-checkpoint`, `checkpoint-format`, `checkpoint-version`, or `checkpoint-manifest`. A checkpoint whose fields do not read, or do not fit the document's rules, gives `checkpoint-manifest`. For a checkpoint of version 5, so does a manifest whose suggestions, persons, takeovers, typers, labels, or kept values do not match the file. `openOrderedWordFile` refuses a checkpoint with the reason `checkpoint`.
 
 ## Limits
 
