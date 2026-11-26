@@ -64,6 +64,11 @@ export interface ComposeOptions extends OrderedComposeOptions {
    * suggestions decided now, whose decision joins a table's grid (`decisionOn`).
    */
   readonly settling?: ReadonlySet<string>;
+  /**
+   * Set when the caller takes only the part (a package, a publish, an open's check): the view's
+   * paragraphs list no units, which are most of what a drawing makes.
+   */
+  readonly partOnly?: boolean;
 }
 
 /** The number of a room run or text element in a checkpoint's drawing, and its elements. */

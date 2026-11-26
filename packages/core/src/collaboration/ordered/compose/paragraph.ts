@@ -117,6 +117,10 @@ export function viewOfParagraph(
 
     if (ctx.gone(item)) continue;
     drawn = true;
+    if (ctx.options.partOnly === true) {
+      continue;
+    }
+
     const deleted = ctx.struckBy(item) !== null;
 
     const within = containers.join('>');

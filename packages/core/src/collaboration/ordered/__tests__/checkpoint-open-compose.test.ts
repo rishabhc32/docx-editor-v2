@@ -1,14 +1,17 @@
 // An open checks that a checkpoint's list composes (design D6) and gives those parts to the
 // document's first compose: the package a compose of its own gives, and never a part of a state
-// the document has left.
+// the document has left. A package and a publish draw a story's part without its view.
 
 import { describe, expect, test } from 'bun:test';
 import { strFromU8, unzipSync } from 'fflate';
+import { serializeOoxmlPart } from '../../../store/package/ooxml-tree.ts';
 import { orderedIdMinter } from '../change/ids.ts';
 import { applyOrderedChange } from '../change/apply.ts';
 import type { OrderedChange } from '../change/types.ts';
 import { openOrderedRoomFile, openOrderedWordFile } from '../client/open.ts';
+import { composeOrderedPart, storyPart } from '../compose/compose.ts';
 import { orderedPackageBytes } from '../compose/package.ts';
+import { isTextBoxStoryName } from '../model/text-boxes.ts';
 import type { OrderedDocument } from '../model/types.ts';
 import { takeBack, withUndoRecord, type OrderedUndoRecord } from '../model/undo-record.ts';
 import { BODY } from './change-apply-fixture.ts';
@@ -55,6 +58,23 @@ describe("an open's compose check", () => {
       const own = openOrderedRoomFile(bytes, { file: 2 });
       takeBack(own.document, typed(own.document, 'Zq'));
       expect(orderedPackageBytes(own.document, own.base, { blobs })).toEqual(first);
+    });
+  }
+
+  for (const room of [ROOM_FACTS, TABLE_RECORDS]) {
+    test(`${room.name}: draws each part without its view as with it`, () => {
+      const { document: doc } = openOrderedWordFile(room.source, { file: 1 });
+      room.edit(doc);
+      for (const name of [...doc.stories.keys()].filter((story) => !isTextBoxStoryName(story))) {
+        const next = doc.composeIds.next;
+        const { part, composed } = composeOrderedPart(doc, name);
+        const after = doc.composeIds.next;
+        doc.composeIds.next = next;
+        const drawn = storyPart(doc, name);
+        expect(serializeOoxmlPart(drawn.part)).toBe(serializeOoxmlPart(part));
+        expect(drawn.prompts).toEqual(composed.prompts);
+        expect(doc.composeIds.next).toBe(after);
+      }
     });
   }
 

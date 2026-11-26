@@ -186,7 +186,7 @@ export function composeEveryStory(doc: OrderedDocument): void {
       }
 
       const from = doc.composeIds.next;
-      const { part, composed, takeovers } = composeStoryPart(doc, name);
+      const { part, composed, takeovers } = composeStoryPart(doc, name, PART_ONLY);
       const to = doc.composeIds.next;
       checked.set(name, { part, prompts: composed.prompts, takeovers, from, to });
     }
@@ -198,8 +198,9 @@ export function composeEveryStory(doc: OrderedDocument): void {
 }
 
 /**
- * A story's part as {@link composeStoryPart} gives it. With no option, the part an open's check
- * composed when the document and its next node id are as they were then: the same part.
+ * A story's part as {@link composeStoryPart} gives it, drawn without the view. With no option,
+ * the part an open's check composed when the document and its next node id are as they were
+ * then: the same part.
  */
 export function storyPart(
   doc: OrderedDocument,
@@ -214,9 +215,12 @@ export function storyPart(
     return kept;
   }
 
-  const { part, composed, takeovers } = composeStoryPart(doc, name, options);
+  const { part, composed, takeovers } = composeStoryPart(doc, name, { ...options, ...PART_ONLY });
   return { part, prompts: composed.prompts, takeovers };
 }
+
+/** A drawing whose view lists no units: the caller takes only the part. */
+const PART_ONLY: ComposeOptions = { partOnly: true };
 
 /** Whether a compose takes no option: what a package and a publish draw. */
 const isPlain = (options: ComposeOptions): boolean =>
