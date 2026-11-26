@@ -212,6 +212,33 @@ describe("the organiser's revert after a close", () => {
   });
 });
 
+describe("an author's undo of own edits after a close", () => {
+  const undo = (id: string, change: string) =>
+    ({ v: 1, id, kind: 'retract', suggestions: [], undo: [change] }) as const;
+
+  test('of a change made before the file is refused by name; of a later one it applies', () => {
+    const first = roomOver(loadRoom());
+    const doc = first.document;
+    const into = { into: 'S:ana-1:1.1' };
+    expect(first.submit(ANA, [insert(doc, 'ana-1:1', 0)]).refused).toEqual([]);
+    expect(first.submit(ANA, [insert(doc, 'ana-1:2', 0, into)]).refused).toEqual([]);
+
+    // An editor that opens the next file has no undo of it
+    const next = roomOver(doc);
+    const before = snapshot(doc);
+    expect(next.submit(ANA, [undo('ana-1:3', 'ana-1:2')]).refused).toEqual([
+      { id: 'ana-1:3', code: 'other-file', detail: "the room's file holds ana-1:2" },
+    ]);
+    expect(snapshot(doc)).toEqual(before);
+    expect(textOf(doc).match(/Late/g)).toHaveLength(2);
+
+    expect(next.submit(ANA, [insert(doc, 'ana-1:4', 0, into)]).refused).toEqual([]);
+    expect(textOf(doc).match(/Late/g)).toHaveLength(3);
+    expect(next.submit(ANA, [undo('ana-1:5', 'ana-1:4')]).refused).toEqual([]);
+    expect(textOf(doc).match(/Late/g)).toHaveLength(2);
+  });
+});
+
 describe('a page that keeps its namespace across a close', () => {
   const opened = () => openOrderedWordFile(ROOM_FILE, { file: 1 });
   const page = (doc: OrderedDocument) =>

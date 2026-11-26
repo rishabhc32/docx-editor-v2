@@ -356,7 +356,8 @@ export interface OrderedRetractChange extends OrderedChangeBase {
   /**
    * Earlier changes of the sender (its own namespace) whose edits of the sender's own pending
    * words are taken back exactly, as the editor's undo of them: the words they took back show
-   * again, the words they typed into those suggestions go, and their formats come off.
+   * again, the words they typed into those suggestions go, and their formats come off. Never
+   * a change made before the room's file (`other-file`).
    */
   readonly undo?: readonly string[];
 }

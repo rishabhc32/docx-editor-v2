@@ -453,15 +453,11 @@ export class OrderedRoom {
   }
 
   /**
-   * The refusal of a change made before the room's file, or of a revert of a direct edit made
+   * The refusal of a change made before the room's file, or of one that undoes a change made
    * before it (design D7), or null. An editor that opens the file has no undo of such an edit.
    */
   #beforeFile(change: OrderedChange): OrderedRoomRefusal | null {
-    const reverted =
-      change.kind === 'revert'
-        ? change.suggestions.flatMap((id) => mintedChange(id, 'S') ?? [])
-        : [];
-    for (const made of [change.id, ...reverted]) {
+    for (const made of [change.id, ...undoneBy(change)]) {
       const parsed = parseOrderedChangeId(made);
       const saved = parsed === null ? undefined : this.#fileCounters.get(parsed.namespace);
       if (parsed !== null && saved !== undefined && parsed.counter <= saved) {
@@ -515,6 +511,19 @@ export class OrderedRoom {
 
     this.#record(change, namespace);
   }
+}
+
+/** The earlier changes a change undoes: a revert's direct edits, a take-back's own edits. */
+function undoneBy(change: OrderedChange): readonly string[] {
+  if (change.kind === 'revert') {
+    return change.suggestions.flatMap((id) => mintedChange(id, 'S') ?? []);
+  }
+
+  if (change.kind === 'retract') {
+    return change.undo ?? [];
+  }
+
+  return [];
 }
 
 /** The media a change names, by SHA-256: a group's kind says so in its spec. */
