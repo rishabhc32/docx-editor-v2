@@ -1,0 +1,12 @@
+{
+  "impact": "compatible",
+  "fields": [],
+  "before": "A checkpoint wrote a table record that holds a removed column from only the cells the record held, so a row made after the record went too and the grid lost a column that row still uses. A checkpoint's drawing also made the engine refuse the column removal, so the cell before the removed column lost the width and the span it takes.",
+  "after": "A checkpoint leaves out only the cells of later columns when it writes such a record, and draws the removal as live, so the table is the same live and after a fold.",
+  "reason": "Change messages, the change log, the manifest fields and the Yjs format do not change: only the properties a checkpoint writes for those tables change, and every reader reads them as before. A room admits only clients of its own code version.",
+  "tests": [
+    "packages/core/src/collaboration/ordered/__tests__/checkpoint-fold-table-records.test.ts"
+  ],
+  "changeset": "ordered-fold-later-row-column",
+  "migration": null
+}
