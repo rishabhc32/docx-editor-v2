@@ -83,6 +83,14 @@ const KNOWN: readonly KnownPaste[] = [
   },
   {
     cause:
+      "A group control's own content: both refuse an edit of it (`locked`), as Word does; the controls nested in a group take edits",
+    owner: 'both',
+    kinds: ['group'],
+    party: ['locked'],
+    organiser: ['locked'],
+  },
+  {
+    cause:
       "A party's paste inside another person's pending insertion: the nesting rule (`nested`), reported once for the paste; its later changes name the refused suggestion and go with it",
     owner: 'host',
     kinds: ['ins', 'rowins'],
