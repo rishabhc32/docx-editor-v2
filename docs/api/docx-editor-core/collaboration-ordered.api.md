@@ -944,6 +944,7 @@ export interface OrderedDocument {
     readonly counters: OrderedCounters;
     readonly file: number;
     readonly labelled: Map<string, Set<OrderedItem>>;
+    readonly lastCounters: Map<string, number>;
     readonly movesWithRanges: Set<string>;
     readonly namespaces: Map<string, OrderedPerson>;
     numbering: ReadonlySet<string> | null;
