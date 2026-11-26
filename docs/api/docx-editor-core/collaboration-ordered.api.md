@@ -1784,18 +1784,10 @@ export interface OrderedListResource extends OrderedResourceBase {
 
 // @public
 export interface OrderedLoadOptions {
-    readonly commentPersons?: ReadonlyMap<string, OrderedPerson>;
     readonly file?: number;
     readonly maxDepth?: number;
     readonly maxItems?: number;
     readonly placeholders?: ReadonlyMap<string, readonly OoxmlNode[]>;
-    readonly suggestions?: readonly {
-        readonly attribution: OrderedAttribution;
-        readonly id: string;
-        readonly record?: string;
-        readonly revisions: readonly string[];
-        readonly status?: OrderedSuggestionStatus;
-    }[];
 }
 
 // @public
@@ -2482,7 +2474,6 @@ export interface OrderedRevisionIds {
     readonly attributesByRole: Map<string, readonly OoxmlAttribute[]>;
     readonly byRole: Map<string, string>;
     readonly fileIds: Set<string>;
-    readonly listed: Map<string, readonly string[]>;
     readonly reattributed: Map<string, OrderedAttribution>;
 }
 
@@ -3108,7 +3099,7 @@ export class OrderedWordFileError extends Error {
 export interface OrderedWordFileOptions {
     readonly file: number;
     readonly limits?: OoxmlPackageLimits;
-    readonly load?: Omit<OrderedLoadOptions, 'file' | 'placeholders' | 'suggestions' | 'commentPersons'>;
+    readonly load?: Omit<OrderedLoadOptions, 'file' | 'placeholders'>;
 }
 
 // @public
