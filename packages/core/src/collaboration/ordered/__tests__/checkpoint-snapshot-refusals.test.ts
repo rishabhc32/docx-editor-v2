@@ -28,8 +28,15 @@ const FILE = entries();
 
 type Json = Record<string, unknown>;
 
-/** The checkpoint with its JSON changed by `change`, the checksum made again unless `raw`. */
-async function changed(change: (header: Json, body: Json) => void, raw = false) {
+/**
+ * The checkpoint with its JSON changed by `change` and its body's text by `edit`, the checksum
+ * made again unless `raw`.
+ */
+async function changed(
+  change: (header: Json, body: Json) => void,
+  raw = false,
+  edit = (text: string) => text
+) {
   const files = { ...(await FILE) };
   const text = strFromU8(files[ENTRY]!);
   const value = JSON.parse(text) as Json;
@@ -37,7 +44,7 @@ async function changed(change: (header: Json, body: Json) => void, raw = false) 
   const header = { ...value };
   delete header.body;
   change(header, body);
-  const bodyText = JSON.stringify(body);
+  const bodyText = edit(JSON.stringify(body));
   const sha256 = raw ? header.sha256 : orderedBlobHash(strToU8(bodyText));
   const head = headerText({ ...(header as unknown as SnapshotHeader), sha256: String(sha256) });
   files[ENTRY] = strToU8(`${head}${bodyText}}`);
@@ -165,10 +172,18 @@ describe('a checkpoint of version 6 that is not as written', () => {
   });
 
   test('refuses a prototype key anywhere', async () => {
-    const files = { ...(await FILE) };
-    const text = strFromU8(files[ENTRY]!).replace('"document":{', '"document":{"__proto__":{},');
-    files[ENTRY] = strToU8(text);
-    expect(refusal(zipSync(files))).toBe('checkpoint-manifest');
+    for (const key of ['__proto__', 'constructor', 'prototype']) {
+      // A record, and a property's attributes, whose reader takes any other key
+      for (const place of ['"document":{', '"attributes":{']) {
+        const edit = (text: string) => text.replace(place, `${place}"${key}":"",`);
+        const bytes = await changed(() => undefined, false, edit);
+        expect({ key, place, reason: refusal(bytes) }).toEqual({
+          key,
+          place,
+          reason: 'checkpoint-manifest',
+        });
+      }
+    }
   });
 
   test('refuses a list past the limit of one part before it reads it', async () => {

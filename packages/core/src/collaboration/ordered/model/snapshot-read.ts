@@ -4,7 +4,7 @@
 
 import type { OoxmlPackage } from '../../../store/package/ooxml-package.ts';
 import { XML_HARD_MAX_BYTES } from '../../../store/package/xml-reader.ts';
-import { at, attempt, fieldsOf, Invalid, isForbiddenKey, required } from '../change/read.ts';
+import { at, attempt, fieldsOf, Invalid, required } from '../change/read.ts';
 import { orderedBlobHash } from '../protocol/blobs.ts';
 import {
   createOrderedDocument,
@@ -49,15 +49,11 @@ export function readSnapshotJson(bytes: Uint8Array, base: OoxmlPackage): Snapsho
     return { ok: false, reason: 'checkpoint-manifest' };
   }
 
+  // No reviver: every object goes through a strict reader, which refuses a key that reaches a
+  // prototype
   let value: unknown;
   try {
-    value = JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(bytes), (key, read) => {
-      if (isForbiddenKey(key)) {
-        throw new Invalid('forbidden-key', key);
-      }
-
-      return read;
-    });
+    value = JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(bytes));
   } catch {
     return { ok: false, reason: 'checkpoint-manifest' };
   }

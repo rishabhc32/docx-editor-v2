@@ -10,7 +10,7 @@ import {
   type SourceCrop,
 } from '../../../store/package/drawing-projection.ts';
 import type { OoxmlProperty, TabStopWrite } from '../../../store/store/tree-op-types.ts';
-import { at, Invalid, plainFields } from '../change/read.ts';
+import { at, Invalid, isForbiddenKey, plainFields } from '../change/read.ts';
 import { sha256 } from '../change/resources.ts';
 import { FRAMES_H, FRAMES_V } from '../change/kinds/pictures-read.ts';
 import { href } from '../change/values.ts';
@@ -124,10 +124,16 @@ const strings: SnapshotCodec<Readonly<Record<string, string>>> = {
   read: (json, path) => {
     const f = plainFields(json, path);
     return Object.fromEntries(
-      Object.keys(json as object).map((key) => [
-        readXmlString(key, path, 1, ID_MAX),
-        readXmlString(f.get(key), at(path, key), 0, ID_MAX),
-      ])
+      Object.keys(json as object).map((key) => {
+        if (isForbiddenKey(key)) {
+          throw new Invalid('forbidden-key', at(path, key));
+        }
+
+        return [
+          readXmlString(key, path, 1, ID_MAX),
+          readXmlString(f.get(key), at(path, key), 0, ID_MAX),
+        ];
+      })
     );
   },
   diff: (a, b, path) => {
