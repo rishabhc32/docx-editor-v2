@@ -1,0 +1,12 @@
+{
+  "impact": "compatible",
+  "fields": [],
+  "before": "A pick judged whether to keep a date or list control's stored value record on the words the control showed, with the author's own pending words in them, though the pick takes those words back. A date picked over the author's typing in a date then kept the old record in the editor alone and after a fold. The room's live read-back of an accepted value (filled) also counted accepted words that a later suggestion struck, so live read the record from that suggestion's words while a fold kept the stored one.",
+  "after": "A pick judges the words a reject gives back, without the author's own pending words (proposedProperties). The room's live read-back counts only accepted words that show unstruck (noteValueSigns). Live, after a fold and in the editor alone, the control keeps the same record.",
+  "reason": "Change messages, the change log and its kinds keep their meaning, and the Yjs document format and the checkpoint format and its version do not change. Only the value record a pick writes, and the record the room composes while accepted words are struck, change. Ordered rooms are not deployed yet, so no room needs a migration.",
+  "tests": [
+    "packages/core/src/collaboration/ordered/__tests__/client/editor-controls-value-fold.test.ts"
+  ],
+  "changeset": "control-date-over-own-typing",
+  "migration": null
+}
