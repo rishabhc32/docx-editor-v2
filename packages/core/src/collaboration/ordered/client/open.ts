@@ -66,6 +66,11 @@ export interface OrderedWordFile {
    */
   readonly base: OoxmlPackage;
   readonly document: OrderedDocument;
+  /**
+   * The room's last order number a checkpoint of version 6 holds: the room's log after it starts
+   * at 1. None for a Word file or a checkpoint of version 5.
+   */
+  readonly order?: number;
 }
 
 /** Why a Word file or a room checkpoint did not open. @public */

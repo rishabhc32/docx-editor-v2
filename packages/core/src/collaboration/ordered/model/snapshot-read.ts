@@ -33,6 +33,8 @@ export type SnapshotRead =
   | {
       readonly ok: true;
       readonly document: OrderedDocument;
+      /** The room's last order number the file holds. */
+      readonly order: number;
       /** The file media `ordered/base.docx` names by reference, not yet checked against it. */
       readonly media: readonly OrderedFileMedia[];
     }
@@ -63,7 +65,7 @@ export function readSnapshotJson(bytes: Uint8Array, base: OoxmlPackage): Snapsho
     return { ok: false, reason: 'checkpoint-manifest' };
   }
 
-  const { format, version, reads, file } = header.value;
+  const { format, version, reads, file, order } = header.value;
   if (format !== SNAPSHOT_FORMAT) {
     return { ok: false, reason: 'checkpoint-format' };
   }
@@ -80,12 +82,18 @@ export function readSnapshotJson(bytes: Uint8Array, base: OoxmlPackage): Snapsho
     const body = fieldsOf((value as { body: unknown }).body, 'body', BODY_FIELDS);
     return documentOf(body, base, file);
   });
-  return read.ok ? { ok: true, ...read.value } : { ok: false, reason: 'checkpoint-manifest' };
+  return read.ok
+    ? { ok: true, ...read.value, order }
+    : { ok: false, reason: 'checkpoint-manifest' };
 }
 
 /** The header's fields. */
 function headerOf(value: unknown) {
-  const f = fieldsOf(value, '', new Set(['format', 'version', 'reads', 'file', 'sha256', 'body']));
+  const f = fieldsOf(
+    value,
+    '',
+    new Set(['format', 'version', 'reads', 'file', 'order', 'sha256', 'body'])
+  );
   const count = (key: string) => {
     const read = required(f, key);
     if (typeof read !== 'number' || !Number.isSafeInteger(read) || read < 0) {
@@ -99,6 +107,7 @@ function headerOf(value: unknown) {
     version: count('version'),
     reads: count('reads'),
     file: count('file'),
+    order: count('order'),
     sha256: readXmlString(required(f, 'sha256'), 'sha256', 64, 64),
   };
 }

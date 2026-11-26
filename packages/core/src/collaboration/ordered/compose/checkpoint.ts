@@ -48,6 +48,15 @@ export function orderedPackageMedia(pkg: OoxmlPackage): OrderedPackageMedia[] {
   return out;
 }
 
+/** How {@link writeOrderedCheckpoint} writes a checkpoint. @public */
+export interface OrderedCheckpointWriteOptions extends OrderedPackageWriteOptions {
+  /**
+   * The room's last order number, which the checkpoint holds: the room's log after it starts at
+   * 1 again. Default 0, as for a room's first file, which no change came before.
+   */
+  readonly order?: number;
+}
+
 /**
  * The whole document as a room checkpoint, handed to `options.write` front to back: one zip that
  * holds the room's item list as data (`ordered/checkpoint.json`, every stored field of the
@@ -56,24 +65,40 @@ export function orderedPackageMedia(pkg: OoxmlPackage): OrderedPackageMedia[] {
  * room stores: `checkpoint.json` names each of them by reference (part name, SHA-256, content
  * type, size, place), and the room's storage holds the bytes, as it holds those of media a change
  * added. So the file carries no media bytes, and `options.media` is not read. Word does not open
- * a checkpoint; {@link openOrderedCheckpoint} does, to the same document.
+ * a checkpoint; {@link openOrderedCheckpoint} does, to the same document. A room's close writes
+ * one with {@link closeOrderedRoom}, which checks it too.
  *
  * @throws OrderedRefusal `too-many-items` when `checkpoint.json` is past the engine's limit of
  *   one part (64 MiB), which no open reads. The bytes written before a refusal are not a whole
  *   file: the host keeps its last checkpoint and the room's log.
+ * @throws RangeError when `options.order` is not a whole number from 0.
  * @public
  */
 export async function writeOrderedCheckpoint(
   doc: OrderedDocument,
   base: OoxmlPackage,
-  options: OrderedPackageWriteOptions
+  options: OrderedCheckpointWriteOptions
 ): Promise<void> {
+  await options.write(orderedCheckpointBytes(doc, base, options.order ?? 0));
+}
+
+/** The bytes of `writeOrderedCheckpoint`, at once: a checkpoint holds no media bytes. */
+export function orderedCheckpointBytes(
+  doc: OrderedDocument,
+  base: OoxmlPackage,
+  order: number
+): Uint8Array {
+  if (!Number.isSafeInteger(order) || order < 0) {
+    throw new RangeError('A checkpoint needs an order number from 0.');
+  }
+
   const { bytes, media } = baseFileBytes(doc, base);
-  const entries = new Map([
-    [SNAPSHOT_ENTRY, snapshotJsonBytes(doc, base, media)],
-    [SNAPSHOT_BASE_ENTRY, bytes],
-  ]);
-  await options.write(writeZip(entries));
+  return writeZip(
+    new Map([
+      [SNAPSHOT_ENTRY, snapshotJsonBytes(doc, base, media, order)],
+      [SNAPSHOT_BASE_ENTRY, bytes],
+    ])
+  );
 }
 
 /**
