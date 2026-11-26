@@ -87,7 +87,8 @@ export function setControlValue(
   // direct value, and one in the author's own pending control, are written as they are
   const shown = viewNode(view, id);
   const before = childNamed(shown, 'sdtPr');
-  const after = ctx.direct || own ? sdtPr : proposedProperties(shown, sdtPr);
+  const after =
+    ctx.direct || own ? sdtPr : proposedProperties(shown, sdtPr, ctx.attribution.author);
   const made =
     controlPropertiesRecord(ctx, suggestion.id, before, after, result.part) ??
     sdtPrRecord(ctx, suggestion.id, after, []);

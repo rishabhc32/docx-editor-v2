@@ -34,6 +34,9 @@
 // date picker once showed English names: it shows the names of the control's language, as Word.
 // The item an accepted pick shows, picked again, once made a card the editor alone does not make,
 // and a fold showed the stored value under it: the room's edits read the value before the accept.
+// A date picked over the party's own typing in his accepted date once kept the stored date in the
+// editor alone and after a fold, where the live room moved it: the pick takes his typing back, so a
+// reject gives back words that state the stored date, and the date moves, as Word moves it.
 
 import { afterEach, describe, expect, test } from 'bun:test';
 import { createDocxEditor } from '../../../../editor/docx-editor.ts';
@@ -307,15 +310,29 @@ const CASES = [
   ],
 ] as const;
 
-/** The control as a reader of the file sees it: its properties and content, no ids or dates. */
-const controlOf = (xml: string): string =>
-  (/<w:sdt>.*?<\/w:sdt>/s.exec(xml)?.[0] ?? 'no control')
+/** Two adjacent deletions of one author, each of one run, as one deletion's words. */
+const ADJACENT_DELETIONS =
+  /(<w:del w:author="([^"]*)"><w:r><w:delText>[^<]*)<\/w:delText><\/w:r><\/w:del><w:del w:author="\2"><w:r><w:delText>/g;
+
+/**
+ * The control as a reader of the file sees it: its properties and content, no ids or dates, and
+ * adjacent runs and one author's adjacent deletions joined.
+ */
+const controlOf = (xml: string): string => {
+  let control = (/<w:sdt>.*?<\/w:sdt>/s.exec(xml)?.[0] ?? 'no control')
     .replace(/ w:(id|date|rsidR|rsidRPr|rsidDel)="[^"]*"/g, '')
     .replace(/<w:id w:val="\d+"\/>/g, '')
     .replace(/<w:placeholder>.*?<\/w:placeholder>/g, '')
     .replace(/ xml:space="preserve"|<w:rPr>.*?<\/w:rPr>/g, '')
     .replace(/<\/w:r><w:r>/g, '')
     .replace(/<\/w:t><w:t>/g, '');
+  for (let joined = ''; joined !== control; ) {
+    joined = control;
+    control = control.replace(ADJACENT_DELETIONS, '$1');
+  }
+
+  return control;
+};
 
 type Decision = 'accept' | 'reject';
 
@@ -338,6 +355,13 @@ const roomCards = (doc: OrderedDocument): string[] =>
       [...new Set(card.suggestions.map((id) => doc.suggestions.get(id)?.attribution.author))].join()
     )
     .sort();
+
+/** Accept each of Ben's cards, as `person`. */
+const acceptBens = (person: Person) => {
+  for (let card = bensCard(person); card; card = bensCard(person)) {
+    expect(person.editor.acceptReviewItem(card.key).ok).toBe(true);
+  }
+};
 
 /** Decide the party's card as the organiser. */
 async function decide(olive: Person, decision: Decision): Promise<void> {
@@ -705,13 +729,6 @@ describe('the item an accepted pick shows, picked again', () => {
     pick('30')(person);
   };
 
-  /** Accept each of Ben's cards, as `person`. */
-  const acceptBens = (person: Person) => {
-    for (let card = bensCard(person); card; card = bensCard(person)) {
-      expect(person.editor.acceptReviewItem(card.key).ok).toBe(true);
-    }
-  };
-
   for (const [label, file, first, again] of [
     ["over a drop-down list's prompt beside a stored value", prompt, pick('60'), '60'],
     ['over his own words that name no item', listed, overOwnWords, '30'],
@@ -748,6 +765,59 @@ describe('the item an accepted pick shows, picked again', () => {
         live: { cards: roomCards(seated.room.room.document), control: roomControl(seated) },
         folded: { cards: roomCards(reopened.room.room.document), control: roomControl(reopened) },
       }).toEqual({ live: expected, folded: expected });
+    });
+  }
+});
+
+describe('a date picked over his own typing in his accepted date', () => {
+  // Ben's date was accepted, then he typed in its words and picked another date. The pick takes
+  // his typing back, so a reject gives back words that state the stored date: the date moves to
+  // the picked one, as Word moves it, live, folded and in the editor alone
+  const file = line(
+    '<w:date w:fullDate="2026-07-11T00:00:00Z"><w:dateFormat w:val="d MMMM yyyy"/>' +
+      '<w:lid w:val="en-GB"/></w:date>',
+    t('11 July 2026')
+  );
+
+  /** Ben's typing in the words of the accepted date, and his pick over them. */
+  const overOwnTyping = (person: Person) => {
+    caretAt(person, 0, 9);
+    typing('x ')(person);
+    pick('2026-01-14')(person);
+  };
+
+  for (const decision of ['accept', 'reject'] as const) {
+    test(`${decision}ed`, async () => {
+      const expected = alone(
+        file,
+        [6, 6],
+        (person) => {
+          pick('2026-02-11')(person);
+          acceptBens(person);
+          overOwnTyping(person);
+        },
+        decision
+      );
+      expect(expected.edited).toContain('<w:date w:fullDate="2026-01-14T00:00:00Z">');
+
+      const seated = await seats(file, 1);
+      pick('2026-02-11')(seated.ben);
+      await settle();
+      acceptBens(seated.olive);
+      await settle();
+      overOwnTyping(seated.ben);
+      await settle();
+      const reopened = await seats(await foldedBytes(seated.room.room.document, file, 1), 2);
+      expect({ live: roomControl(seated), folded: roomControl(reopened) }).toEqual({
+        live: expected.edited,
+        folded: expected.edited,
+      });
+      await decide(seated.olive, decision);
+      await decide(reopened.olive, decision);
+      expect({ live: roomControl(seated), folded: roomControl(reopened) }).toEqual({
+        live: expected.decided,
+        folded: expected.decided,
+      });
     });
   }
 });

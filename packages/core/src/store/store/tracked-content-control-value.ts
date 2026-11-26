@@ -70,12 +70,12 @@ import { resolveRevisionOperation, type RevisionResolveResult } from './tree-op-
 import { paragraphLength, paragraphOffsetIndex } from './tree-op-segments.ts';
 import { applyDeleteTracked } from './tree-op-tracked-delete.ts';
 import { build, copy, revisionAttributes } from './tree-op-tracked.ts';
-import { insideOwnInsertion } from './tree-op-tracked-properties.ts';
+import { insideOwnInsertion, ownedBy } from './tree-op-tracked-properties.ts';
 import type { TreeDocOp, TreeOpResult } from './tree-op-types.ts';
 
 type SetValue = Extract<TreeDocOp, { op: 'setContentControlValue' }>;
 
-/** Bound on the walk over a checkbox's content, which comes from the file. */
+/** Bound on a walk over a control's content, which comes from the file. */
 const MAX_DEPTH = 32;
 
 /** Where a control's value lives: the paragraph whose offsets address it, and its holder. */
@@ -293,7 +293,14 @@ export function applyTrackedContentControlValue(
   const inserted = withInsertedValue(struck.part, before.container.id, runs, revision, options);
   if (!inserted) return { ok: false, reason: 'tree-invariant' };
   if (!inserted.ok) return fromEdit(inserted, contentControlEffect(control.id, 'text-local'));
-  return withWrittenProperties(inserted.part, control, after, before.paragraph.id, options);
+  return withWrittenProperties(
+    inserted.part,
+    control,
+    after,
+    before.paragraph.id,
+    revision.author,
+    options
+  );
 }
 
 /**
@@ -328,8 +335,8 @@ function withInsertedValue(
 }
 
 /**
- * `part` with the properties a value proposed in `control` leaves (`proposedProperties`): as the
- * untracked write left them in `after`. Their ids are kept, not copied: the write edits
+ * `part` with the properties a value `author` proposed in `control` leaves (`proposedProperties`):
+ * as the untracked write left them in `after`. Their ids are kept, not copied: the write edits
  * `w:sdtPr` in place, and a collaboration replica addresses its children by those ids. Ids the
  * write minted come from the same lineage as the strike's, so none collides.
  */
@@ -338,11 +345,12 @@ function withWrittenProperties(
   control: OoxmlElement,
   after: OoxmlElement,
   paragraphId: string,
+  author: string,
   options: EditOptions | undefined
 ): TreeOpResult {
   const target = findContentControl(part, control.id);
   const written = contentControlPropertiesOf(after);
-  const properties = written ? proposedProperties(control, written) : undefined;
+  const properties = written ? proposedProperties(control, written, author) : undefined;
   if (!target || !properties) {
     return { ok: false, reason: 'tree-invariant' };
   }
@@ -395,7 +403,9 @@ export function proposedOverPrompt(
     replaceChildren(written.part, site.container.id, children, options),
     written.effect
   );
-  const stored = proposed.ok ? keepingStoredValue(control, proposed, options) : proposed;
+  const stored = proposed.ok
+    ? keepingStoredValue(control, proposed, revision.author, options)
+    : proposed;
   return stored.ok ? keepingPrompt(part, control, stored, options) : stored;
 }
 
@@ -407,15 +417,20 @@ const VALUE_RECORDS = [
 ] as const;
 
 /**
- * The properties a value proposed in `control` leaves: `written`, those of the untracked write,
- * but with a value record the control stores (`w:lastValue`, `w:fullDate`) as it was where its
- * words do not read back to it: a prompt, or a date in a format that does not show all of it. A
- * reject could not read that record back from them, and a file holds one record only: an
- * accept reads the new one from the words.
+ * The properties a value `author` proposed in `control` leaves: `written`, those of the untracked
+ * write, but with a value record the control stores (`w:lastValue`, `w:fullDate`) as it was where
+ * the words a reject gives back do not read back to it: a prompt, or a date in a format that does
+ * not show all of it. A reject could not read that record back from them, and a file holds one
+ * record only: an accept reads the new one from the words. The author's own pending words are not
+ * among them: the value takes them back.
  */
-export function proposedProperties(control: OoxmlNode, written: OoxmlElement): OoxmlElement {
+export function proposedProperties(
+  control: OoxmlNode,
+  written: OoxmlElement,
+  author: string
+): OoxmlElement {
   const stored = contentControlPropertiesOf(control);
-  if (!stored || control.kind === 'textValue' || readsBackRecord(control)) {
+  if (!stored || control.kind === 'textValue' || readsBackRecord(control, author)) {
     return written;
   }
 
@@ -436,15 +451,16 @@ export function proposedProperties(control: OoxmlNode, written: OoxmlElement): O
     : ({ ...written, children } as OoxmlElement);
 }
 
-/** A proposal over `control`'s prompt with the value record the control stores kept. */
+/** A proposal by `author` over `control`'s prompt with the value record the control stores kept. */
 function keepingStoredValue(
   control: OoxmlNode,
   proposed: Extract<TreeOpResult, { readonly ok: true }>,
+  author: string,
   options: EditOptions | undefined
 ): TreeOpResult {
   const target = findContentControl(proposed.part, control.id);
   const written = target ? contentControlPropertiesOf(target) : undefined;
-  const kept = written ? proposedProperties(control, written) : written;
+  const kept = written ? proposedProperties(control, written, author) : written;
   if (!written || !kept || kept === written) {
     return proposed;
   }
@@ -696,8 +712,32 @@ function readBack(summary: ContentControlProperties, text: string): string | und
   return shown ? fullDateOf(shown) : undefined;
 }
 
-/** Whether the words a control shows read back to the value record it stores, exactly. */
-function readsBackRecord(control: OoxmlElement): boolean {
+/** `node` without `author`'s own pending insertions, walked to a bounded depth. */
+function withoutOwnInsertions(node: OoxmlElement, author: string, depth: number): OoxmlElement {
+  if (depth > MAX_DEPTH) {
+    return node;
+  }
+
+  const children = node.children.flatMap((child): OoxmlNode[] => {
+    if (child.kind === 'textValue') {
+      return [child];
+    }
+
+    if (child.kind === 'revisionInsert' && ownedBy(child, author)) {
+      return [];
+    }
+
+    return [withoutOwnInsertions(child, author, depth + 1)];
+  });
+  return { ...node, children } as OoxmlElement;
+}
+
+/**
+ * Whether the words a reject of `author`'s value gives back read back to the value record the
+ * control stores, exactly: the words it shows but the author's own pending ones, which the value
+ * takes back.
+ */
+function readsBackRecord(control: OoxmlElement, author: string): boolean {
   if (isShowingPlaceholder(control)) {
     return false;
   }
@@ -706,7 +746,7 @@ function readsBackRecord(control: OoxmlElement): boolean {
   const list = summary.type === 'dropDownList' || summary.type === 'comboBox';
   const record = list ? summary.lastValue : summary.date?.fullDate;
   const date = !list && record !== undefined ? controlDateOf(record) : null;
-  const value = readBack(summary, contentControlTextOf(control));
+  const value = readBack(summary, contentControlTextOf(withoutOwnInsertions(control, author, 0)));
   return value !== undefined && value === (date ? fullDateOf(date) : record);
 }
 

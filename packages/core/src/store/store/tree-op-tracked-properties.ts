@@ -237,7 +237,7 @@ export function withPropertyChangeRecord(options: {
 }
 
 /** Whether a `CT_TrackChange` element names this author. An absent `@w:author` is nobody's. */
-function ownedBy(node: OoxmlNode, author: string): boolean {
+export function ownedBy(node: OoxmlNode, author: string): boolean {
   return attributeValueOf(node, 'author', WML_NAMESPACE_URI) === author;
 }
 
