@@ -237,12 +237,23 @@ export class SnapshotNodeReader {
    * @throws Invalid when one does not.
    */
   check(): void {
-    if (this.#byValue.length === 0) {
+    // The reader reads equal XML alike, so each shape is checked once
+    const shapes = new ShapeKeys();
+    const byShape = new Map<number, OoxmlNode>();
+    for (const node of this.#byValue) {
+      const key = shapes.of(node);
+      if (!byShape.has(key)) {
+        byShape.set(key, node);
+      }
+    }
+
+    const nodes = [...byShape.values()];
+    if (nodes.length === 0) {
       return;
     }
 
-    const read = readHeld(this.#byValue);
-    this.#byValue.forEach((node, k) => {
+    const read = readHeld(nodes);
+    nodes.forEach((node, k) => {
       const shape = read?.children[k];
       if (!(shape !== undefined && sameShape(node, shape)) && !readsInContext(node)) {
         throw new Invalid('invalid-value', 'nodes', 'not as the XML reader reads it');
@@ -353,6 +364,43 @@ export class SnapshotNodeReader {
     }
 
     return { prefix, namespaceUri: this.#namespace(ns, at(path, 1)) };
+  }
+}
+
+/**
+ * A number for each shape of a node: every field the serializer writes or `sameShape` compares,
+ * which is every field but the ids and the attributes' kinds. Equal shapes have equal numbers.
+ */
+class ShapeKeys {
+  readonly #numbers = new Map<string, number>();
+  readonly #ofNode = new WeakMap<OoxmlNode, number>();
+
+  of(node: OoxmlNode): number {
+    const known = this.#ofNode.get(node);
+    if (known !== undefined) {
+      return known;
+    }
+
+    const text =
+      node.kind === 'textValue'
+        ? JSON.stringify([node.value])
+        : JSON.stringify([
+            node.kind,
+            node.namespaceUri,
+            node.localName,
+            node.prefix ?? null,
+            node.namespaceBindings.map((b) => [b.prefix, b.namespaceUri]),
+            node.attributes.map((a) => [a.namespaceUri, a.localName, a.prefix ?? null, a.value]),
+            node.children.map((child) => this.of(child)),
+          ]);
+    let key = this.#numbers.get(text);
+    if (key === undefined) {
+      key = this.#numbers.size;
+      this.#numbers.set(text, key);
+    }
+
+    this.#ofNode.set(node, key);
+    return key;
   }
 }
 
