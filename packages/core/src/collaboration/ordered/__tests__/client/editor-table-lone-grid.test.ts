@@ -105,6 +105,22 @@ function dragOntoCells(s: Surface): void {
 }
 
 describe('a drag that changes no cell width (a lone grid record), as the editor alone', () => {
+  test('the editor alone records the grid alone on a file in the order a save writes', () => {
+    const cellAsSaved = (text: string, width: number) =>
+      `<w:tc><w:tcPr><w:tcW w:type="dxa" w:w="${width}"/></w:tcPr>${p(t(text))}</w:tc>`;
+    const saved = docx(
+      p(t('The fees are below.')) +
+        '<w:tbl><w:tblPr><w:tblW w:type="dxa" w:w="6000"/><w:tblLayout w:type="fixed"/></w:tblPr>' +
+        '<w:tblGrid><w:gridCol w:w="3000"/><w:gridCol w:w="3000"/></w:tblGrid>' +
+        `<w:tr>${cellAsSaved('Fee', 4000)}${cellAsSaved('Rate', 2000)}</w:tr>` +
+        '</w:tbl>' +
+        p(t('Signed here.'))
+    );
+    const body = alone({ author: 'Ana', mode: 'suggesting', review, file: saved }, dragOntoCells);
+    expect(body).toContain('tblGridChange');
+    expect(body).not.toContain('tcPrChange');
+  });
+
   for (const via of ['the editor', 'the host'] as const)
     for (const action of ['accept', 'reject'] as const)
       test(`a party's drag, ${action}ed by ${via}, live and on the saved file`, async () => {
