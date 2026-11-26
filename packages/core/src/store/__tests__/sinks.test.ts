@@ -8,6 +8,7 @@ import {
   escapeXml,
   escapeCssString,
   containsCssFetch,
+  isValidXmlText,
   isInertExecutable,
   isEvaluableField,
   scrubExport,
@@ -60,6 +61,27 @@ describe('string escaping', () => {
     expect(containsCssFetch('background: url(http://x)')).toBe(true);
     expect(containsCssFetch('@import "x.css"')).toBe(true);
     expect(containsCssFetch('color: red')).toBe(false);
+  });
+});
+
+describe('isValidXmlText', () => {
+  test('takes XML 1.0 characters and refuses every other unit, at each edge', () => {
+    const cases: [string, boolean][] = [
+      ['', true],
+      ['a\tb\nc\rd', true],
+      ['\u0000', false],
+      ['\u001F', false],
+      ['\u0020\uD7FF\uE000\uFFFD', true],
+      ['\uFFFE', false],
+      ['\uFFFF', false],
+      ['\uD83D\uDE00', true],
+      ['\uD83D', false],
+      ['\uDE00', false],
+      ['a\uD83Db', false],
+      ['\uD83D\uDE00\u0001', false],
+    ];
+    expect(cases.map(([text]) => isValidXmlText(text))).toEqual(cases.map(([, valid]) => valid));
+    expect(isValidXmlText({} as unknown as string)).toBe(false);
   });
 });
 

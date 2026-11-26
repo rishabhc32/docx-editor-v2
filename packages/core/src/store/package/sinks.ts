@@ -62,6 +62,9 @@ export function escapeXmlAttribute(value: string): string {
   return value.replace(/[&<>"'\r\n\t]/g, (c) => XML_ATTRIBUTE_ESCAPES[c]);
 }
 
+/** Text of only tab, LF, CR and the units from U+0020 to U+FFFD outside the surrogates. */
+const PLAIN_XML_TEXT = /^[\t\n\r\x20-\uD7FF\uE000-\uFFFD]*$/;
+
 /** True for a UTF-16 code unit forbidden in XML 1.0 character data: a control char other than
  *  tab/LF/CR, or the non-characters U+FFFE/U+FFFF. (Surrogates are validated as pairs below.) */
 function isForbiddenXmlUnit(cu: number): boolean {
@@ -80,6 +83,8 @@ function isForbiddenXmlUnit(cu: number): boolean {
 export function isValidXmlText(value: string): boolean {
   // Objects/arrays must never reach serialization: `String({})` is "[object Object]".
   if (typeof value !== 'string') return false;
+  // Most text holds no control char, non-character or surrogate: one regex scan decides it
+  if (PLAIN_XML_TEXT.test(value)) return true;
   for (let i = 0; i < value.length; i++) {
     const cu = value.charCodeAt(i);
     if (isForbiddenXmlUnit(cu)) return false;
