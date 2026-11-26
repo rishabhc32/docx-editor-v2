@@ -7,6 +7,8 @@ import { createBrowserAutomationHost } from '../../../../editor/automation-host.
 import { readCustomXmlNode } from '../../../../store/package/custom-xml-nodes.ts';
 import { findCustomXmlDataPart } from '../../../../store/package/custom-xml-part.ts';
 import type { OoxmlPackage } from '../../../../store/package/ooxml-package.ts';
+import { openOrderedWordFile } from '../../client/open.ts';
+import { folded, mediaStore } from '../fold-check.ts';
 import { closeAll, FILE, join, localRoom, ORGANISER, settle, surface } from './editor-harness.ts';
 import { alone, converged, roomFile, storyAsRead, type Act } from './links-harness.ts';
 
@@ -70,4 +72,13 @@ test("the editing API's custom node reaches the other copy and the room's file",
   const saved = roomFile(room.room.document, FILE);
   expect(bodyAsRead(saved)).toBe(bodyAsRead(editorAlone));
   expect(storedNode(saved)).toEqual(storedNode(editorAlone));
+
+  // A close and a reopen save the same file
+  const { base } = openOrderedWordFile(FILE, { file: 1 });
+  const reopened = roomFile(
+    (await folded(room.room.document, base, 2, mediaStore(base))).document,
+    FILE
+  );
+  expect(bodyAsRead(reopened)).toBe(bodyAsRead(editorAlone));
+  expect(storedNode(reopened)).toEqual(storedNode(editorAlone));
 });
