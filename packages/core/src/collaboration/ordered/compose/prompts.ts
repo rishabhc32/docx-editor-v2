@@ -25,6 +25,7 @@ import { editedProperties, wmlElement } from '../../../store/store/tree-op-conte
 import {
   contentControlPropertiesOf,
   findContentControl,
+  isContentControlNode,
 } from '../../../store/store/tree-op-nodes.ts';
 import { statusOf } from '../model/document.ts';
 import { fileMark, PROMPT_RECORD_ROLES, suggestionOfRevision } from '../model/revision-ids.ts';
@@ -234,7 +235,9 @@ export function promptRecords(node: OoxmlNode): OoxmlElement[] {
 
 /**
  * `part` with each control's value record (`w:lastValue`, `w:fullDate`, `w14:checked`) following
- * its text; a `stale` one (`ComposeContext.stale`) goes where its text states no value.
+ * its text; a `stale` one (`ComposeContext.stale`) goes where its text states no value. Compose
+ * runs it on every publish, so a control is found by a walk and the part's node index is built
+ * only for a record that changes.
  */
 export function withControlRecords(
   part: OoxmlPart,
@@ -242,10 +245,11 @@ export function withControlRecords(
   stale: ReadonlySet<string> = new Set()
 ): OoxmlPart {
   for (const id of controls) {
-    const control = findContentControl(part, id);
-    const edited = control
-      ? propertiesReadBack(control, stale.has(id), createNodeIdAllocator(part))
-      : undefined;
+    const control = contentControlIn(part.root, id);
+    const current = part;
+    let allocator: (() => string) | undefined;
+    const nextId = () => (allocator ??= createNodeIdAllocator(current))();
+    const edited = control ? propertiesReadBack(control, stale.has(id), nextId) : undefined;
     const written = edited ? replaceNode(part, edited.id, edited) : undefined;
     if (written?.ok) {
       part = written.part;
@@ -253,6 +257,26 @@ export function withControlRecords(
   }
 
   return part;
+}
+
+/** The content control with this node id under `node`, found by a walk. */
+function contentControlIn(node: OoxmlNode, id: string): OoxmlElement | null {
+  if (node.kind === 'textValue') {
+    return null;
+  }
+
+  if (node.id === id) {
+    return isContentControlNode(node) ? node : null;
+  }
+
+  for (const child of node.children) {
+    const found = contentControlIn(child, id);
+    if (found !== null) {
+      return found;
+    }
+  }
+
+  return null;
 }
 
 /**
