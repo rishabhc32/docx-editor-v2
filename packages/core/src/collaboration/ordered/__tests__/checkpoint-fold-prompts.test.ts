@@ -8,6 +8,7 @@ import { orderedCardSeen } from '../change/apply-decide.ts';
 import { applyOrderedChange } from '../change/apply.ts';
 import { orderedIdMinter } from '../change/ids.ts';
 import { openOrderedCheckpoint, openOrderedWordFile } from '../client/open.ts';
+import { writeOrderedCheckpointVersion5 } from '../compose/checkpoint.ts';
 import { orderedPackageBytes } from '../compose/package.ts';
 import type { OrderedDocument } from '../model/types.ts';
 import { takeBack, withUndoRecord } from '../model/undo-record.ts';
@@ -164,8 +165,8 @@ describe("a control's prompt shown again, decided card by card after a fold", ()
 
   // After a fold the control names the glossary block Ben's value kept: a reject of Ana's value
   // over the prompt shows that block, as the engine does. A link on the prompt goes; a comment's
-  // range made before the fold is the prompt's and goes with it; one made after the fold keeps its
-  // range round the block
+  // range keeps its range round the block, made before the fold or after it (a checkpoint keeps
+  // the room as it is)
   const signed = () => {
     const prompt = t('Click here to enter text.', '<w:rStyle w:val="PlaceholderText"/>');
     const control =
@@ -193,7 +194,7 @@ describe("a control's prompt shown again, decided card by card after a fold", ()
   const around = new RegExp(`^<w:commentRangeStart w:id="\\d+"/>${block}<w:commentRangeEnd `);
   for (const [name, mark, early, content] of [
     ['a link', link, false, new RegExp(`^${block}$`)],
-    ["a comment's range made before the fold", comment, true, new RegExp(`^${block}$`)],
+    ["a comment's range made before the fold", comment, true, around],
     ["a comment's range made after the fold", comment, false, around],
   ] as const) {
     test(`${name} on a prompt that names a block, under a value rejected`, async () => {
@@ -489,10 +490,10 @@ describe("a control's prompt shown again, decided card by card after a fold", ()
     await checkEveryCard(doc, base, blobs, 'a link round prompt words');
   });
 
-  // Seed 83 of the fold shapes: Ben's comment ends inside the prompt, which a fold keeps in the
-  // glossary with the comment's end and reference. A reject of Ana's typing over the prompt shows
-  // the prompt with them again, as the engine's restore does, live as after a fold. A marker whose
-  // comment the file does not hold never comes back: the block is the file's content
+  // Seed 83 of the fold shapes: Ben's comment ends inside the prompt. A reject of Ana's typing over
+  // the prompt shows the prompt with the comment's end and reference after it again, as the
+  // engine's restore does, live as after a fold. A version 5 checkpoint kept them in the glossary:
+  // a marker whose comment that file does not hold never comes back
   describe("a comment's end inside a prompt kept in the glossary", () => {
     const terms = () => {
       const list =
@@ -527,19 +528,21 @@ describe("a control's prompt shown again, decided card by card after a fold", ()
       const { document: room, base, blobs } = await typed();
       await checkFold(room, base, blobs, "a comment's end in a kept prompt");
 
-      // Folded again, the markers are in the glossary only. A reject taken back, as a refused
-      // batch is, and made again under another id shows them, as the first does
+      // Folded again: a reject taken back, as a refused batch is, and made again under another id
+      // shows them, as the first does
       const { document: again } = await folded(room, base, 3, blobs);
       const first = { v: 1, id: 'olive:1', ...reject(again) } as const;
       const by = { person: testPerson('Olive'), date: DATE, ids: orderedIdMinter('olive:1') };
       takeBack(again, withUndoRecord(again, () => applyOrderedChange(again, first, by)).record);
       apply(again, 'olive:2', reject(again), 'Olive');
-      expect(partsOf(again)[0]).toMatch(/<w:t>C<\/w:t><\/w:r><w:commentRangeEnd /);
+      expect(partsOf(again)[0]).toMatch(/item\.<\/w:t><\/w:r><w:commentRangeEnd /);
     });
 
     test('of a comment the file does not hold never comes back', async () => {
       const { document: room, base, blobs } = await typed();
-      const files = unzipSync(await checkpointBytes(room, base, blobs));
+      const files = unzipSync(
+        await checkpointBytes(room, base, blobs, writeOrderedCheckpointVersion5)
+      );
       const glossary = 'word/glossary/document.xml';
       files[glossary] = strToU8(
         strFromU8(files[glossary]!).replace(/(comment\w+ w:id=")\d+/g, '$1999')

@@ -97,14 +97,15 @@ export async function folded(
   return opened;
 }
 
-/** The bytes of the document's checkpoint. */
+/** The bytes of the document's checkpoint, by `write` (this engine's version by default). */
 export async function checkpointBytes(
   doc: OrderedDocument,
   base: OoxmlPackage,
-  blobs: FoldBlobs
+  blobs: FoldBlobs,
+  write: typeof writeOrderedCheckpoint = writeOrderedCheckpoint
 ): Promise<Uint8Array> {
   const chunks: Uint8Array[] = [];
-  await writeOrderedCheckpoint(doc, base, {
+  await write(doc, base, {
     media: async (sha256) => {
       const bytes = blobs(sha256);
       if (bytes === undefined) {
