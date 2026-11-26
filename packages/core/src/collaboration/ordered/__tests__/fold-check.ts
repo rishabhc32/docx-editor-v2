@@ -27,6 +27,7 @@
 import { expect } from 'bun:test';
 import { strFromU8, unzipSync } from 'fflate';
 import { readOoxmlPackage, type OoxmlPackage } from '../../../store/package/ooxml-package.ts';
+import { canonicalOoxmlFingerprint } from '../../../store/package/ooxml-serialize.ts';
 import { serializeOoxmlPart, type OoxmlElement } from '../../../store/package/ooxml-tree.ts';
 import { CardRead, isCardUnit, isOrderedItemHidden } from '../card-of.ts';
 import { applyOrderedChange } from '../change/apply.ts';
@@ -69,6 +70,7 @@ import type {
 } from '../model/types.ts';
 import { takeBack, withUndoRecord } from '../model/undo-record.ts';
 import { attributeOf, eachElement } from '../ooxml-nodes.ts';
+import { orderedBlobHash } from '../protocol/blobs.ts';
 import { normalizedBody, semanticBody } from './matrix/compare.ts';
 import { testPerson } from './test-persons.ts';
 
@@ -128,6 +130,25 @@ export async function checkpointBytes(
 export function heldEntries(checkpoint: Uint8Array): Record<string, Uint8Array> {
   const { 'ordered/base.docx': base, ...entries } = unzipSync(checkpoint);
   return base === undefined ? entries : { ...entries, ...unzipSync(base) };
+}
+
+/**
+ * A Word file by what it says: each XML part by the engine's semantic oracle (prefixes and where
+ * namespaces are declared are the writer's choice), each other part by its bytes.
+ */
+export function wordMeaning(bytes: Uint8Array): Record<string, string> {
+  const read = readOoxmlPackage(bytes, {});
+  if (!read.ok) {
+    throw new Error(read.reason);
+  }
+
+  const { parts, partBytes } = read.package;
+  return Object.fromEntries(
+    [...partBytes].map(([name, data]) => {
+      const part = parts.get(name);
+      return [name, part === undefined ? orderedBlobHash(data) : canonicalOoxmlFingerprint(part)];
+    })
+  );
 }
 
 /** Who made a suggestion, and when. */

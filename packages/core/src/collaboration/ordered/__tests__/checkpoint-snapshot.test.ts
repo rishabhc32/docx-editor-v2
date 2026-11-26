@@ -9,7 +9,6 @@ import { writeZip } from '../../../store/package/zip.ts';
 import { normalizedRoomPackage, openOrderedRoomFile, openOrderedWordFile } from '../client/open.ts';
 import { orderedPackageBytes } from '../compose/package.ts';
 import { snapshotDifference } from '../model/snapshot-compare.ts';
-import { orderedBlobHash } from '../protocol/blobs.ts';
 import {
   PASTED_LIST,
   ROOM_FACTS,
@@ -22,7 +21,7 @@ import {
 } from './checkpoint-fixture.ts';
 import { addressOf, apply, EDIT, opens } from './change-apply-fixture.ts';
 import { RESOURCE_ROOMS, resourceBlobs } from './checkpoint-resources-fixture.ts';
-import { checkpointBytes } from './fold-check.ts';
+import { checkpointBytes, folded, wordMeaning } from './fold-check.ts';
 import { bodyOf, docx, MATRIX_EXTRAS, MATRIX_ITEMS, p, sdt, t } from './word-fixtures.ts';
 
 const ROOMS: readonly CheckpointRoom[] = [
@@ -36,42 +35,18 @@ const ROOMS: readonly CheckpointRoom[] = [
   ...RESOURCE_ROOMS,
 ];
 
-/**
- * A Word file by what it says: each XML part by the engine's semantic oracle (prefixes and where
- * namespaces are declared are the writer's choice), each other part by its bytes.
- */
-function meaning(bytes: Uint8Array): Record<string, string> {
-  const read = readOoxmlPackage(bytes, {});
-  if (!read.ok) {
-    throw new Error(read.reason);
-  }
-
-  const { parts, partBytes } = read.package;
-  return Object.fromEntries(
-    [...partBytes].map(([name, data]) => {
-      const part = parts.get(name);
-      return [name, part === undefined ? orderedBlobHash(data) : canonicalOoxmlFingerprint(part)];
-    })
-  );
-}
-
 describe('a checkpoint of version 6', () => {
   for (const room of ROOMS) {
     test(`${room.name}: an open gives back every stored field and the same file`, async () => {
       const { document: doc, base } = openOrderedWordFile(room.source, { file: 1 });
       room.edit(doc);
       const blobs = resourceBlobs(base);
-      const bytes = await checkpointBytes(doc, base, blobs);
-      const same = openOrderedRoomFile(bytes, { file: 1 });
-      expect(snapshotDifference(doc, same.document)).toBeNull();
 
-      // Before any compose: each one moves the counter of the node ids it mints
-      expect(await checkpointBytes(same.document, same.base, blobs)).toEqual(bytes);
-      const next = openOrderedRoomFile(bytes, { file: 2 });
-      expect(snapshotDifference(doc, next.document)).toBeNull();
+      // Under the room's next file number: the document keeps the number of its addresses
+      const next = await folded(doc, base, 2, blobs);
       const live = orderedPackageBytes(doc, base, { blobs });
       const opened = orderedPackageBytes(next.document, next.base, { blobs });
-      expect(meaning(opened)).toEqual(meaning(live));
+      expect(wordMeaning(opened)).toEqual(wordMeaning(live));
 
       // The first save writes the base as the package writer writes it; from then on, the same
       const again = openOrderedRoomFile(await checkpointBytes(next.document, next.base, blobs), {
@@ -125,7 +100,7 @@ describe('a room opened from a Word file', () => {
     expect(snapshotDifference(doc, opened.document)).toBeNull();
     expect(treesOf(opened.base)).toEqual(treesOf(base));
     const live = orderedPackageBytes(doc, base, { blobs });
-    expect(meaning(live)).toHaveProperty(['/word/glossary/document.xml']);
+    expect(wordMeaning(live)).toHaveProperty(['/word/glossary/document.xml']);
     expect(orderedPackageBytes(opened.document, opened.base, { blobs })).toEqual(live);
   });
 });

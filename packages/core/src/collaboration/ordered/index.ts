@@ -109,6 +109,7 @@ export {
 export {
   orderedPackageMedia,
   writeOrderedCheckpoint,
+  type OrderedCheckpointWriteOptions,
   type OrderedPackageMedia,
 } from './compose/checkpoint.ts';
 export type { OrderedResourceOptions } from './compose/resources.ts';
@@ -435,6 +436,13 @@ export {
   type OrderedWordFile,
   type OrderedWordFileOptions,
 } from './client/open.ts';
+export {
+  closeOrderedRoom,
+  OrderedRoomCloseError,
+  type OrderedRoomClose,
+  type OrderedRoomCloseCode,
+  type OrderedRoomCloseOptions,
+} from './client/close.ts';
 export {
   orderedWebSocketTransport,
   type OrderedConnection,
