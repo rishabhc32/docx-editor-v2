@@ -20,6 +20,7 @@ import { actor, BODY, loadRoom, paragraphOf, ROOM_FILE, snapshot } from './room-
 
 const ANA = actor('Ana', 'ana-1', 'organiser');
 const BEN = actor('Ben', 'ben-1', 'organiser');
+
 /** A page whose host keeps one namespace across its reloads. */
 const PAGE = actor('Ana', 'ana-page', 'organiser');
 const T0 = Date.UTC(2026, 10, 26, 9, 30, 0);
