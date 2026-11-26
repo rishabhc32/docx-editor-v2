@@ -35,8 +35,10 @@
 // The item an accepted pick shows, picked again, once made a card the editor alone does not make,
 // and a fold showed the stored value under it: the room's edits read the value before the accept.
 // A date picked over the party's own typing in his accepted date once kept the stored date in the
-// editor alone and after a fold, where the live room moved it: the pick takes his typing back, so a
-// reject gives back words that state the stored date, and the date moves, as Word moves it.
+// editor alone and after a fold, where the live room moved it: the pick takes his typing back, so
+// a reject gives back words that state the stored date, and the date moves, as Word moves it. A
+// date picked over his accepted date's words that a pending edit struck once took its date live,
+// where a fold and the editor alone keep the stored one: struck, those words fill it no more.
 
 import { afterEach, describe, expect, test } from 'bun:test';
 import { createDocxEditor } from '../../../../editor/docx-editor.ts';
@@ -783,7 +785,6 @@ describe('a date picked over his own typing in his accepted date', () => {
   // Ben's date was accepted, then he typed in its words and picked another date. The pick takes
   // his typing back, so a reject gives back words that state the stored date: the date moves to
   // the picked one, as Word moves it, live, folded and in the editor alone
-  const file = FULL_DATE;
 
   /** Ben's typing in the words of the accepted date, and his pick over them. */
   const overOwnTyping = (person: Person) => {
@@ -795,7 +796,7 @@ describe('a date picked over his own typing in his accepted date', () => {
   for (const decision of ['accept', 'reject'] as const) {
     test(`${decision}ed`, async () => {
       const expected = alone(
-        file,
+        FULL_DATE,
         [6, 6],
         (person) => {
           pick('2026-02-11')(person);
@@ -806,14 +807,14 @@ describe('a date picked over his own typing in his accepted date', () => {
       );
       expect(expected.edited).toContain('<w:date w:fullDate="2026-01-14T00:00:00Z">');
 
-      const seated = await seats(file, 1);
+      const seated = await seats(FULL_DATE, 1);
       pick('2026-02-11')(seated.ben);
       await settle();
       acceptBens(seated.olive);
       await settle();
       overOwnTyping(seated.ben);
       await settle();
-      const reopened = await seats(await foldedBytes(seated.room.room.document, file, 1), 2);
+      const reopened = await seats(await foldedBytes(seated.room.room.document, FULL_DATE, 1), 2);
       expect({ live: roomControl(seated), folded: roomControl(reopened) }).toEqual({
         live: expected.edited,
         folded: expected.edited,
