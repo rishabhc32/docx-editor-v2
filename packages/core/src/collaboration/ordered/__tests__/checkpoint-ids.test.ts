@@ -1,7 +1,7 @@
-// A suggestion keeps its id across a fold (design D14): the manifest lists each suggestion under
-// its id, and the load makes it under that id. An id the engine mints passes over every kept one,
-// a change id the room ordered before the fold is refused by name, and a session on the older
-// file is refused by the file number, as before. A plain Word file gets new ids.
+// A suggestion keeps its id across a fold (design D14): the checkpoint lists each suggestion under
+// its id, and the open makes it under that id. An id the engine mints passes over every kept one,
+// a change id the room ordered before the fold is refused by name (design D7), and a session on
+// the older file is refused by the file number, as before. A plain Word file gets new ids.
 
 import { describe, expect, test } from 'bun:test';
 import { strFromU8, strToU8, unzipSync, zipSync } from 'fflate';
@@ -10,6 +10,7 @@ import { applyOrderedChange } from '../change/apply.ts';
 import type { OrderedChange } from '../change/types.ts';
 import { OrderedLocalRoom } from '../client/local-room.ts';
 import { openOrderedCheckpoint, openOrderedWordFile } from '../client/open.ts';
+import { writeOrderedCheckpointVersion5 } from '../compose/checkpoint.ts';
 import { orderedPackageBytes } from '../compose/package.ts';
 import { newSuggestion } from '../model/mutations.ts';
 import type { OrderedDocument } from '../model/types.ts';
@@ -83,9 +84,15 @@ describe('a suggestion id across a fold', () => {
 });
 
 describe('an id the engine mints', () => {
-  test('at the open, for a mark the manifest does not list, passes over every kept id', async () => {
+  test('at the open, for a mark a version 5 manifest does not list, passes over every kept id', async () => {
     const room = styledWithS1Accepted();
-    const bytes = await checkpointBytes(room.document, room.base, mediaStore(room.base));
+    const blobs = mediaStore(room.base);
+    const bytes = await checkpointBytes(
+      room.document,
+      room.base,
+      blobs,
+      writeOrderedCheckpointVersion5
+    );
 
     // Zed's insertion, which the room never read
     const entries = unzipSync(bytes);
@@ -142,15 +149,14 @@ describe('a change after a fold', () => {
     const before = snapshot(once.document);
     const result = next.submit(ANA, [insertAt(once.document, 'ana-1:1', 1)]);
     expect(result.refused).toEqual([
-      { id: 'ana-1:1', code: 'apply-refused', reason: 'name-taken', detail: 'S:ana-1:1.1' },
+      { id: 'ana-1:1', code: 'other-file', detail: "the room's file holds ana-1:1" },
     ]);
     expect(errors).toEqual([]);
     expect(snapshot(once.document)).toEqual(before);
 
-    // A change made against the older file stays refused by its addresses, as before
-    expect(next.submit(ANA, [insertAt(doc, 'ana-1:2', 1)]).refused).toEqual([
-      { id: 'ana-1:2', code: 'other-file', detail: expect.stringContaining('b:1:') },
-    ]);
+    // The addresses stay: a later change made against the older file applies at its place
+    expect(next.submit(ANA, [insertAt(doc, 'ana-1:2', 1)]).refused).toEqual([]);
+    expect(once.document.suggestions.has('S:ana-1:2.1')).toBe(true);
   });
 
   test('a session on the older file must reload, and its decision on a kept id never applies', async () => {
