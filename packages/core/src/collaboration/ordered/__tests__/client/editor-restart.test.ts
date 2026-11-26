@@ -25,6 +25,8 @@ import {
   type Person,
 } from './editor-harness.ts';
 import { createOrderedCollaboration } from '../../client/create.ts';
+import { openOrderedRoomFile } from '../../client/open.ts';
+import { checkpointBytes } from '../fold-check.ts';
 import { testPerson } from '../test-persons.ts';
 
 afterEach(closeAll);
@@ -265,5 +267,31 @@ describe('connection and storage', () => {
     await expect(attempt(async () => new Uint8Array([1, 2, 3]))).rejects.toThrow(
       'cannot be opened'
     );
+  });
+
+  // A room's file keeps the spaces of its first Word file, so its own number is not the room's
+  test('a room past two closes: a page types and reconnects, and the room asks for no reload', async () => {
+    let file = FILE;
+    for (const number of [1, 2]) {
+      const room = localRoom(file, { file: number });
+      const ana = await join(room, 'Ana', { wordFile: file });
+      await key(ana, 0, ` Close ${number}.`);
+      converged(room, ana);
+      const { base } = openOrderedRoomFile(file, { file: number });
+      file = await checkpointBytes(room.room.document, base, () => undefined);
+      closeAll();
+    }
+
+    const room = localRoom(file, { file: 3 });
+    const ana = await join(room, 'Ana', { wordFile: file });
+    await key(ana, 0, ' Typed.');
+    room.disconnect();
+    await settle();
+    ana.handle.session.reconnect();
+    await settle();
+    await key(ana, 0, ' Again.');
+    await settle();
+    converged(room, ana);
+    expect(editorTexts(ana)[0]).toBe('The fee is 100 USD. Close 1. Close 2. Typed. Again.');
   });
 });

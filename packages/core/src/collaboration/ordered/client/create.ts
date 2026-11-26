@@ -240,6 +240,12 @@ class OrderedClientSession extends OrderedSessionBase implements OrderedCollabor
   #presence: OrderedPresenceState | null = null;
   #presenceQueued = false;
   #joinTarget = 0;
+  /**
+   * The room's file number the copy opened. Not the document's own `file`: a room's file keeps
+   * the spaces of the first Word file it came from. Before the first join, file 1: the room then
+   * sends its current file.
+   */
+  #file = 1;
   readonly #reads: OrderedMediaReads;
   readonly #uploads: OrderedMediaUploads;
   #joined: { resolve: () => void; reject: (error: unknown) => void } | null = null;
@@ -282,8 +288,7 @@ class OrderedClientSession extends OrderedSessionBase implements OrderedCollabor
           v: ORDERED_PROTOCOL_VERSION,
           type: 'hello',
           room: options.room,
-          // A copy with nothing applied yet names file 1: the room sends its current file
-          file: Math.max(1, this.core?.replica.doc.file ?? 1),
+          file: this.#file,
           last: this.core?.replica.saved ?? 0,
           code: options.code,
           namespace,
@@ -404,6 +409,7 @@ class OrderedClientSession extends OrderedSessionBase implements OrderedCollabor
       file: message.file,
       ...(this.#options.limits === undefined ? {} : { limits: this.#options.limits }),
     });
+    this.#file = message.file;
     const replica = new OrderedReplica({
       doc: opened.document,
       person: this.#person,
@@ -442,7 +448,7 @@ class OrderedClientSession extends OrderedSessionBase implements OrderedCollabor
   /** A join after a dropped link: check the file, go back to the save, take the room's order. */
   #rejoin(message: OrderedWelcomeMessage, core: OrderedSessionCore): void {
     const replica = core.replica;
-    if (message.file !== replica.doc.file) {
+    if (message.file !== this.#file) {
       this.#reload('file');
       return;
     }

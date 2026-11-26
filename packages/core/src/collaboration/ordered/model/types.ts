@@ -571,7 +571,8 @@ export interface OrderedUnitRange {
 export interface OrderedDocument {
   /**
    * The room's Word file number the document was loaded from. Every space a load makes holds
-   * it, so an address from another Word file of the room never resolves here (design D8).
+   * it, so an address from another Word file of the room never resolves here (design D8). A
+   * checkpoint of version 6 keeps it, so after a close it is not the room's current file number.
    */
   readonly file: number;
   readonly stories: Map<string, OrderedStory>;
