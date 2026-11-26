@@ -121,6 +121,7 @@ describe('every fact of the model has a checkpoint rule', () => {
       'firstFills',
       'emptiedControls',
       'namedPrompts',
+      'splitParts',
     ]);
   });
 });
