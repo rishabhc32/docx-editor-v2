@@ -1,6 +1,6 @@
 // A decision after a fold gives the Word file the same decision gives in the room (design D14).
-// A pending suggestion splits the run it sits in, and a fold writes each piece as a run of its
-// own; a decision that takes the suggestion away draws the room's run whole again. A new list's
+// A pending suggestion splits the run it sits in; a decision that takes the suggestion away draws
+// the room's run whole again, after a fold too. A new list's
 // definition or style goes with its suggestion. A table record keeps what it took from another. A
 // suggestion keeps its version, so a decision that names what the room showed applies.
 
@@ -12,7 +12,6 @@ import {
   openOrderedWordFile,
   type OrderedWordFile,
 } from '../client/open.ts';
-import { writeOrderedCheckpointVersion5 } from '../compose/checkpoint.ts';
 import { orderedPackageBytes } from '../compose/package.ts';
 import type { OrderedDocument } from '../model/types.ts';
 import {
@@ -27,7 +26,8 @@ import {
   opens,
   partsOf,
 } from './change-apply-fixture.ts';
-import { checkFold, checkpointBytes, folded, mediaStore } from './fold-check.ts';
+import { versionFiveCase } from './checkpoint-fixture.ts';
+import { checkFold, folded, mediaStore } from './fold-check.ts';
 import {
   alphaOmega,
   bodyOf,
@@ -193,36 +193,7 @@ describe('a decision after a fold, on a suggestion inside a run', () => {
   });
 });
 
-describe("a checkpoint's room run numbers (version 5)", () => {
-  /** The room run numbers (`oc:run`) the main document of a checkpoint holds, in order. */
-  async function numbersOf(edit: (doc: OrderedDocument) => void) {
-    const body = p(run('Cloud and serverless.')) + p(run('Untouched.'));
-    const { document: doc, base } = openOrderedWordFile(docx(body), { file: 1 });
-    edit(doc);
-    const bytes = await checkpointBytes(
-      doc,
-      base,
-      mediaStore(base),
-      writeOrderedCheckpointVersion5
-    );
-    const xml = strFromU8(unzipSync(bytes)['word/document.xml']!);
-    return {
-      numbers: [...xml.matchAll(/ oc:run="(\d+)"/g)].map((m) => m[1]),
-      declared: xml.includes('xmlns:oc='),
-    };
-  }
-
-  test('only on the pieces of a run a suggestion splits: each run and its text', async () => {
-    const { numbers, declared } = await numbersOf((doc) => {
-      apply(doc, 'ana:1', { kind: 'insert', ...EDIT, place: at(doc, 0, 6), text: 'net ' });
-    });
-    expect({ numbers, declared }).toEqual({
-      numbers: [numbers[0], numbers[1], numbers[0], numbers[1]],
-      declared: true,
-    });
-    expect(numbers[0]).not.toBe(numbers[1]);
-  });
-
+describe('a run a suggestion splits', () => {
   // The piece after the break is drawn in another paragraph than its own while the break is
   // pending; a reject draws both pieces in one text element again, live and after a fold
   test('a paragraph break inside a run, rejected: one text element', async () => {
@@ -243,14 +214,6 @@ describe("a checkpoint's room run numbers (version 5)", () => {
     });
     const one = ['Cloud and serverless.'];
     expect(texts).toEqual([one, one, one]);
-  });
-
-  test('none, and no namespace, where no suggestion splits a run', async () => {
-    const drawn = await numbersOf((doc) => {
-      const text = ' Yes.';
-      apply(doc, 'olive:1', { kind: 'insert', ...DIRECT, place: at(doc, 0, 21), text }, 'Olive');
-    });
-    expect(drawn).toEqual({ numbers: [], declared: false });
   });
 });
 
@@ -707,9 +670,7 @@ describe("a fold of a table's records", () => {
       await checkFold(doc, base, mediaStore(base), `a table width over a ${status} row height`);
 
       // The version 5 reader stays strict: without the takeover, the records do not fit the file
-      const blobs = mediaStore(base);
-      const v5 = await checkpointBytes(doc, base, blobs, writeOrderedCheckpointVersion5);
-      const entries = unzipSync(v5);
+      const entries = unzipSync(versionFiveCase(`table-width-over-${status}-row-height`));
       const manifest = JSON.parse(strFromU8(entries[MANIFEST]!)) as { takeovers: unknown[] };
       expect(manifest.takeovers).not.toEqual([]);
       entries[MANIFEST] = strToU8(JSON.stringify({ ...manifest, takeovers: [] }));

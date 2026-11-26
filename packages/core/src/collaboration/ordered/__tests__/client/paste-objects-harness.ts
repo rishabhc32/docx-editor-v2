@@ -19,13 +19,19 @@ const DML = 'application/vnd.openxmlformats-officedocument.drawingml';
 const CX = 'http://schemas.microsoft.com/office/drawing/2014/chartex';
 const CX1 = 'http://schemas.microsoft.com/office/drawing/2015/9/8/chartex';
 
-/** A chart's embedded workbook: a zip the room keeps as it is and never opens. */
-export const WORKBOOK: Uint8Array = zipSync({
-  '[Content_Types].xml': strToU8(
-    '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"/>'
-  ),
-  'xl/workbook.xml': strToU8('<workbook/>'),
-});
+/**
+ * A chart's embedded workbook: a zip the room keeps as it is and never opens. Its time is fixed,
+ * so its bytes and their hash are the same in each run (a version 5 case names the hash).
+ */
+export const WORKBOOK: Uint8Array = zipSync(
+  {
+    '[Content_Types].xml': strToU8(
+      '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"/>'
+    ),
+    'xl/workbook.xml': strToU8('<workbook/>'),
+  },
+  { mtime: Date.UTC(2026, 0, 1) }
+);
 
 const frame = (id: number, name: string, uri: string, data: string): string =>
   '<w:r><w:drawing><wp:inline distT="0" distB="0" distL="0" distR="0">' +

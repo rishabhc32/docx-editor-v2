@@ -10,11 +10,7 @@ import { afterEach, describe, expect, test } from 'bun:test';
 import { strFromU8, unzipSync, zipSync } from 'fflate';
 import { openOrderedCheckpoint, openOrderedRoomFile } from '../../client/open.ts';
 import type { OrderedLocalRoom } from '../../client/local-room.ts';
-import {
-  writeOrderedCheckpoint,
-  writeOrderedCheckpointVersion5,
-} from '../../compose/checkpoint.ts';
-import { orderedPackageBytes } from '../../compose/package.ts';
+import { writeOrderedCheckpoint } from '../../compose/checkpoint.ts';
 import { orderedReplacedSuggestions } from '../../compose/replaced.ts';
 import { decideOrdered } from '../../decide.ts';
 import { retractSuggestion } from '../../edits/retract.ts';
@@ -24,6 +20,7 @@ import { OrderedRefusal } from '../../model/refusal.ts';
 import type { OrderedDocument } from '../../model/types.ts';
 import { OrderedRoom } from '../../room/room.ts';
 import { suggestionsOnlyPolicy } from '../../room/suggestions-only.ts';
+import { versionFiveCase } from '../checkpoint-fixture.ts';
 import { realApply } from '../room-harness.ts';
 import {
   closeAll,
@@ -128,14 +125,10 @@ async function steps(room: OrderedLocalRoom, ...turns: [Person, Step][]): Promis
 }
 
 /** The room's document as a checkpoint. */
-async function checkpointOf(
-  room: OrderedLocalRoom,
-  file = SOURCE,
-  writer = writeOrderedCheckpoint
-): Promise<Uint8Array> {
+async function checkpointOf(room: OrderedLocalRoom, file = SOURCE): Promise<Uint8Array> {
   const { base } = openOrderedRoomFile(file, { file: FILE });
   const chunks: Uint8Array[] = [];
-  await writer(room.room.document, base, {
+  await writeOrderedCheckpoint(room.room.document, base, {
     media: async (sha256) => {
       throw new Error(`no media is read: ${sha256}`);
     },
@@ -332,20 +325,16 @@ describe('the records of a takeover', () => {
       [{ property: 'bold', value: 'true' }],
       [{ property: 'underline', value: 'single' }],
     ]);
-    const checkpoint = await checkpointOf(room, SOURCE, writeOrderedCheckpointVersion5);
-    const manifest = JSON.parse(strFromU8(unzipSync(checkpoint)[MANIFEST] ?? new Uint8Array()));
 
-    // In version 5, Olga's one `w:id` marks the paragraph mark first, then "The", " fees ", "are" and " below.":
-    // the second and the fourth record hold a takeover, each by its label
-    const body = strFromU8(unzipSync(checkpoint)['word/document.xml'] ?? new Uint8Array());
-    const records = [...body.matchAll(/<w:[a-zA-Z]+Change [^>]*>/g)].map(([record]) => record);
-    expect(records.flatMap((record, k) => (record.includes(' oc:label=') ? [k] : []))).toEqual([
-      1, 3,
-    ]);
-    expect(manifest.takeovers).toHaveLength(2);
-    const reopened = openOrderedCheckpoint(checkpoint, { file: 1 }).document;
-    expect(held(reopened)).toEqual(held(live));
-    expect(replacedBy(reopened)).toEqual(replacedBy(live));
+    // Olga's one `w:id` marks the paragraph mark first, then "The", " fees ", "are" and " below.":
+    // the second and the fourth record hold a takeover. The version 5 case is this room as the
+    // last version 5 writer wrote it, which named each by its label
+    const v5 = versionFiveCase('one-change-record-in-several-places');
+    for (const checkpoint of [await checkpointOf(room), v5]) {
+      const reopened = openOrderedCheckpoint(checkpoint, { file: 1 }).document;
+      expect(held(reopened)).toEqual(held(live));
+      expect(replacedBy(reopened)).toEqual(replacedBy(live));
+    }
   });
 
   test('a reopen names the party’s suggestions in the order the live read does', async () => {
@@ -465,11 +454,10 @@ describe('the records of a takeover', () => {
     }
   });
 
-  test('a version 5 manifest whose takeovers do not read or do not fit the file is refused', async () => {
-    const { room, ana, olga } = await people();
-    await steps(room, [ana, toggle('bold')], [olga, toggle('italic')]);
-    const checkpoint = await checkpointOf(room, SOURCE, writeOrderedCheckpointVersion5);
-    const entries = unzipSync(checkpoint);
+  // The case is the room of Ana's bold and Olga's italic over it, as the last version 5 writer
+  // wrote it
+  test('a version 5 manifest whose takeovers do not read or do not fit the file is refused', () => {
+    const entries = unzipSync(versionFiveCase('italic-over-bold'));
     const manifest = JSON.parse(strFromU8(entries[MANIFEST] ?? new Uint8Array()));
     const [takeover] = manifest.takeovers;
     const cases = [
@@ -508,23 +496,6 @@ describe('the records of a takeover', () => {
       expect(() => openOrderedCheckpoint(zipSync(entries), { file: 1 })).toThrow(
         'checkpoint-manifest'
       );
-    }
-  });
-
-  test('exports write the Word file only: a version 5 checkpoint’s parts are the same but for its marks', async () => {
-    const { room, ana, olga } = await people();
-    await steps(room, [ana, toggle('bold')], [olga, toggle('italic')]);
-    const { base } = openOrderedRoomFile(SOURCE, { file: FILE });
-    const exported = unzipSync(orderedPackageBytes(room.room.document, base));
-    const checkpoint = unzipSync(await checkpointOf(room, SOURCE, writeOrderedCheckpointVersion5));
-    expect(Object.keys(checkpoint)).toEqual([...Object.keys(exported), MANIFEST]);
-
-    // The checkpoint's own attributes (`oc:label`, `oc:typer`) and their declaration taken off
-    const unmarked = (bytes: Uint8Array) =>
-      strFromU8(bytes).replace(/ (?:xmlns:)?oc(?::[a-z]+)?="[^"]*"/g, '');
-    for (const [entry, bytes] of Object.entries(exported)) {
-      const same = unmarked(checkpoint[entry] ?? new Uint8Array()) === strFromU8(bytes);
-      expect({ entry, same }).toEqual({ entry, same: true });
     }
   });
 });

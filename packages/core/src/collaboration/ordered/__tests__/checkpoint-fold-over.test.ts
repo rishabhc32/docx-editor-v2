@@ -11,7 +11,6 @@ import {
   OrderedWordFileError,
 } from '../client/open.ts';
 import { orderedCardSeen } from '../change/apply-decide.ts';
-import { writeOrderedCheckpointVersion5 } from '../compose/checkpoint.ts';
 import type { OrderedDocument } from '../model/types.ts';
 import {
   addressOf,
@@ -23,7 +22,8 @@ import {
   opens,
   partsOf,
 } from './change-apply-fixture.ts';
-import { checkFold, checkpointBytes, folded, mediaStore } from './fold-check.ts';
+import { versionFiveCase } from './checkpoint-fixture.ts';
+import { checkFold, folded, mediaStore } from './fold-check.ts';
 import { docx, p, t } from './word-fixtures.ts';
 
 type Mode = typeof EDIT | typeof DIRECT;
@@ -391,15 +391,17 @@ interface Entry {
   readonly records: readonly Record<string, unknown>[];
 }
 
+/** The version 5 case of each room whose made-over records a test forges, by the room. */
+const CASES: Readonly<Record<string, string>> = {
+  [FORMAT]: 'direct-format-over-pending-format',
+  [PARAGRAPH]: 'direct-paragraph-write-over-pending-one',
+  [PAGE]: 'direct-page-write-over-pending-one',
+  [PRESS]: 'press-on-own-new-paragraph-over-pending-record',
+};
+
 /** A room's checkpoint of version 5 with its manifest's text edited. */
-async function crafted(label: string, edit: (json: string) => string): Promise<Uint8Array> {
-  const [, body, change] = ROOMS.find(([name]) => name === label)!;
-  const { document: doc, base } = openOrderedWordFile(docx(body), { file: 1 });
-  change(doc);
-  const blobs = mediaStore(base);
-  const entries = unzipSync(
-    await checkpointBytes(doc, base, blobs, writeOrderedCheckpointVersion5)
-  );
+function crafted(label: string, edit: (json: string) => string): Uint8Array {
+  const entries = unzipSync(versionFiveCase(CASES[label]!));
   entries[MANIFEST] = strToU8(edit(strFromU8(entries[MANIFEST]!)));
   return zipSync(entries);
 }
@@ -430,9 +432,9 @@ function openReason(bytes: Uint8Array): string {
 }
 
 describe("a version 5 checkpoint's made-over records are untrusted", () => {
-  test('a checkpoint with none opens as the file holds it', async () => {
+  test('a checkpoint with none opens as the file holds it', () => {
     for (const label of [FORMAT, PARAGRAPH, PAGE]) {
-      const bytes = await crafted(label, (json) => {
+      const bytes = crafted(label, (json) => {
         const { madeOver: _none, ...rest } = JSON.parse(json) as Record<string, unknown>;
         return JSON.stringify(rest);
       });
@@ -440,9 +442,9 @@ describe("a version 5 checkpoint's made-over records are untrusted", () => {
     }
   });
 
-  test('each forged entry refuses the whole checkpoint', async () => {
+  test('each forged entry refuses the whole checkpoint', () => {
     const W = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main';
-    const forged: [string, Promise<Uint8Array>][] = [
+    const forged: [string, Uint8Array][] = [
       [
         'a label on no element',
         withMadeOver(FORMAT, (list) => list.map((e) => ({ ...e, label: 999 }))),
@@ -571,7 +573,7 @@ describe("a version 5 checkpoint's made-over records are untrusted", () => {
       ],
     ];
     for (const [name, bytes] of forged) {
-      expect({ name, reason: openReason(await bytes) }).toEqual({
+      expect({ name, reason: openReason(bytes) }).toEqual({
         name,
         reason: 'checkpoint-manifest',
       });

@@ -8,7 +8,6 @@ import { orderedCardSeen } from '../change/apply-decide.ts';
 import { applyOrderedChange } from '../change/apply.ts';
 import { orderedIdMinter } from '../change/ids.ts';
 import { openOrderedCheckpoint, openOrderedWordFile } from '../client/open.ts';
-import { writeOrderedCheckpointVersion5 } from '../compose/checkpoint.ts';
 import { orderedPackageBytes } from '../compose/package.ts';
 import type { OrderedDocument } from '../model/types.ts';
 import { takeBack, withUndoRecord } from '../model/undo-record.ts';
@@ -24,7 +23,8 @@ import {
   partsOf,
   textOf,
 } from './change-apply-fixture.ts';
-import { checkEveryCard, checkFold, checkpointBytes, folded, mediaStore } from './fold-check.ts';
+import { versionFiveCase } from './checkpoint-fixture.ts';
+import { checkEveryCard, checkFold, folded, mediaStore } from './fold-check.ts';
 import { testPerson } from './test-persons.ts';
 import { docx, p, t } from './word-fixtures.ts';
 
@@ -538,11 +538,10 @@ describe("a control's prompt shown again, decided card by card after a fold", ()
       expect(partsOf(again)[0]).toMatch(/item\.<\/w:t><\/w:r><w:commentRangeEnd /);
     });
 
-    test('of a comment the file does not hold never comes back', async () => {
-      const { document: room, base, blobs } = await typed();
-      const files = unzipSync(
-        await checkpointBytes(room, base, blobs, writeOrderedCheckpointVersion5)
-      );
+    // The case is the room `typed` makes, as the last version 5 writer wrote it
+    test('of a comment the file does not hold never comes back', () => {
+      const blobs = mediaStore(openOrderedWordFile(terms(), { file: 1 }).base);
+      const files = unzipSync(versionFiveCase('comment-end-in-a-kept-prompt'));
       const glossary = 'word/glossary/document.xml';
       files[glossary] = strToU8(
         strFromU8(files[glossary]!).replace(/(comment\w+ w:id=")\d+/g, '$1999')

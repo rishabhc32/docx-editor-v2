@@ -4,13 +4,13 @@
 // the older file is refused by the file number, as before. A plain Word file gets new ids.
 
 import { describe, expect, test } from 'bun:test';
+import { readFileSync } from 'node:fs';
 import { strFromU8, strToU8, unzipSync, zipSync } from 'fflate';
 import { orderedSeenCards } from '../change/apply-decide.ts';
 import { applyOrderedChange } from '../change/apply.ts';
 import type { OrderedChange } from '../change/types.ts';
 import { OrderedLocalRoom } from '../client/local-room.ts';
 import { openOrderedCheckpoint, openOrderedWordFile } from '../client/open.ts';
-import { writeOrderedCheckpointVersion5 } from '../compose/checkpoint.ts';
 import { orderedPackageBytes } from '../compose/package.ts';
 import { newSuggestion } from '../model/mutations.ts';
 import type { OrderedDocument } from '../model/types.ts';
@@ -84,18 +84,12 @@ describe('a suggestion id across a fold', () => {
 });
 
 describe('an id the engine mints', () => {
-  test('at the open, for a mark a version 5 manifest does not list, passes over every kept id', async () => {
-    const room = styledWithS1Accepted();
-    const blobs = mediaStore(room.base);
-    const bytes = await checkpointBytes(
-      room.document,
-      room.base,
-      blobs,
-      writeOrderedCheckpointVersion5
-    );
+  // The golden checkpoint of version 5 of the same room (`checkpoint-golden.test.ts`)
+  test('at the open, for a mark a version 5 manifest does not list, passes over every kept id', () => {
+    const golden = new URL('./fixtures/checkpoints/style-records.docx', import.meta.url);
 
     // Zed's insertion, which the room never read
-    const entries = unzipSync(bytes);
+    const entries = unzipSync(new Uint8Array(readFileSync(golden)));
     const mark = `<w:ins w:id="90" w:author="Zed" w:date="${DATE}">${t('late ')}</w:ins>`;
     const xml = strFromU8(entries['word/document.xml']!).replace(/<w:r[ >]/, (run) => mark + run);
     entries['word/document.xml'] = strToU8(xml);

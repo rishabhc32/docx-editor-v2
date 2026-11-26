@@ -13,8 +13,14 @@ const MC = 'http://schemas.openxmlformats.org/markup-compatibility/2006';
 const WPI = 'http://schemas.microsoft.com/office/word/2010/wordprocessingInk';
 const A = 'http://schemas.openxmlformats.org/drawingml/2006/main';
 
-/** An embedded workbook: a zip that nothing opens. */
-export const EMBEDDED_WORKBOOK: Uint8Array = zipSync({ 'xl/workbook.xml': strToU8('<workbook/>') });
+/**
+ * An embedded workbook: a zip that nothing opens. Its time is fixed, so its bytes and their hash
+ * are the same in each run (a version 5 case names the hash).
+ */
+export const EMBEDDED_WORKBOOK: Uint8Array = zipSync(
+  { 'xl/workbook.xml': strToU8('<workbook/>') },
+  { mtime: Date.UTC(2026, 0, 1) }
+);
 
 /** An InkML part: XML text that nothing reads. */
 export const INK: Uint8Array = strToU8(

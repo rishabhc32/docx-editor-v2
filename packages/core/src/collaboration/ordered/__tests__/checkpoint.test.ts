@@ -1,7 +1,8 @@
 // Room checkpoints (design D14): a checkpoint holds no bytes of the media the room's storage holds,
 // and names them by reference. It loads with no media bytes, and a document loaded from it
 // composes and saves as one loaded from the Word file does, byte for byte. Version 5 is the Word
-// file without its media parts and a manifest; version 6 the item list (`checkpoint-snapshot`).
+// file without its media parts and a manifest, read only (`versionFiveCase`); version 6 the item
+// list (`checkpoint-snapshot`).
 
 import { describe, expect, test } from 'bun:test';
 import { readFileSync } from 'node:fs';
@@ -14,11 +15,7 @@ import {
   OrderedWordFileError,
   type OrderedWordFile,
 } from '../client/open.ts';
-import {
-  orderedPackageMedia,
-  writeOrderedCheckpoint,
-  writeOrderedCheckpointVersion5,
-} from '../compose/checkpoint.ts';
+import { orderedPackageMedia, writeOrderedCheckpoint } from '../compose/checkpoint.ts';
 import { orderedViewParagraph } from '../compose/compose.ts';
 import {
   composeOrderedPackage,
@@ -36,7 +33,8 @@ import type { OrderedChange } from '../change/types.ts';
 import { allowWritersPolicy } from '../room/policy.ts';
 import { OrderedRoom } from '../room/room.ts';
 import { apply, at, BODY, EDIT } from './change-apply-fixture.ts';
-import { heldEntries } from './fold-check.ts';
+import { versionFiveCase } from './checkpoint-fixture.ts';
+import { folded, heldEntries } from './fold-check.ts';
 import { actor } from './room-harness.ts';
 import { EMBEDDED_SOURCE, EMBEDDED_WORKBOOK, INK } from './client/paste-embedded-harness.ts';
 import { OBJECT_SOURCE } from './client/paste-objects-harness.ts';
@@ -55,6 +53,15 @@ const ROOM_FILES: ReadonlyArray<readonly [string, () => Uint8Array]> = [
     (name) => [name, () => new Uint8Array(readFileSync(join(FIXTURES, name)))] as const
   ),
 ];
+
+/**
+ * The room files with a version 5 case: each kind of media. demo.docx's case would hold its fonts
+ * (1.2 MB), and its media are kinds the others hold.
+ */
+const VERSION_FIVE_FILES = ROOM_FILES.filter(([name]) => name !== 'demo.docx');
+
+/** The name of a room file's version 5 case. */
+const caseName = (name: string): string => name.replace(/\.docx$/, '').replaceAll(' ', '-');
 
 /** PNG bytes of `size`, different for each `seed`. */
 function pictureBytes(seed: number, size = 2048): Uint8Array {
@@ -96,23 +103,29 @@ function storeOf(media: Iterable<Uint8Array>) {
   };
 }
 
-/** A checkpoint writer. */
-type Writer = typeof writeOrderedCheckpoint;
-
-/** Each version a room opens, by its writer. */
-const VERSIONS: readonly (readonly [number, Writer])[] = [
-  [5, writeOrderedCheckpointVersion5],
-  [6, writeOrderedCheckpoint],
-];
-
 /** A document's checkpoint, written with media read from `store`. */
-function checkpointOf(
-  file: OrderedWordFile,
-  store = storeOf([]),
-  writer: Writer = writeOrderedCheckpoint
-): Promise<Uint8Array> {
-  return collected((write) => writer(file.document, file.base, { media: store.read, write }));
+function checkpointOf(file: OrderedWordFile, store = storeOf([])): Promise<Uint8Array> {
+  return collected((write) =>
+    writeOrderedCheckpoint(file.document, file.base, { media: store.read, write })
+  );
 }
+
+/** Each version a room opens. */
+const VERSIONS = [5, 6] as const;
+
+/** The version 5 case of the Word file with its own embedded workbook and ink. */
+const EMBEDDED_CASE = 'an-embedded-workbook-and-ink';
+
+/**
+ * A document's checkpoint of `version`, written with media read from `store`; of version 5, the
+ * case `name` that the last version 5 writer wrote of the same document.
+ */
+const checkpointIn = async (
+  version: (typeof VERSIONS)[number],
+  name: string,
+  file: OrderedWordFile,
+  store = storeOf([])
+): Promise<Uint8Array> => (version === 5 ? versionFiveCase(name) : checkpointOf(file, store));
 
 /** The Word file `writeOrderedPackage` writes. */
 const streamed = (file: OrderedWordFile, store: ReturnType<typeof storeOf>) =>
@@ -122,18 +135,6 @@ const ANA = { id: 'ana', name: 'Ana', org: '' };
 
 /** A listed suggestion of Ana's that the file writes no mark for. */
 const ANA_SUGGESTION = { author: 'Ana', attributes: [], person: ANA, revisions: [] };
-
-const manifestOf = (checkpoint: Uint8Array) =>
-  JSON.parse(strFromU8(unzipSync(checkpoint)[MANIFEST] ?? new Uint8Array())) as {
-    format: string;
-    version: number;
-    media: { part: string; sha256: string; contentType: string; size: number; entry: number }[];
-    suggestions: { person: unknown }[];
-    comments: unknown[];
-    takeovers: unknown[];
-    namespaces: unknown[];
-    untracked: unknown[];
-  };
 
 function expectSameBytes(actual: Uint8Array, expected: Uint8Array): void {
   expect(actual.length).toBe(expected.length);
@@ -208,21 +209,19 @@ describe('orderedPackageMedia lists the parts a checkpoint names', () => {
       '/word/media/red.png',
     ]);
 
-    for (const [, writer] of VERSIONS) {
-      const inside = Object.keys(heldEntries(await checkpointOf(file, storeOf([]), writer)));
-      for (const name of [
-        'word/media/empty.png',
-        'word/media/photo.wdp',
-        'word/fonts/font1.odttf',
-        'word/printerSettings/printerSettings1.bin',
-        'word/ink/ink1.xml',
-        'docProps/thumbnail.jpeg',
-      ]) {
-        expect(inside).toContain(name);
-      }
-
-      expect(inside).not.toContain('word/media/red.png');
+    const inside = Object.keys(heldEntries(await checkpointOf(file)));
+    for (const name of [
+      'word/media/empty.png',
+      'word/media/photo.wdp',
+      'word/fonts/font1.odttf',
+      'word/printerSettings/printerSettings1.bin',
+      'word/ink/ink1.xml',
+      'docProps/thumbnail.jpeg',
+    ]) {
+      expect(inside).toContain(name);
     }
+
+    expect(inside).not.toContain('word/media/red.png');
   });
 });
 
@@ -236,58 +235,14 @@ function withRootRelationship(bytes: Uint8Array, relationship: string): Uint8Arr
   return zipSync(entries);
 }
 
-describe('a checkpoint of version 5', () => {
-  const checkpointOf5 = (file: OrderedWordFile, store = storeOf([])) =>
-    checkpointOf(file, store, writeOrderedCheckpointVersion5);
-
-  for (const [name, source] of ROOM_FILES) {
-    test(`${name}: the Word file's parts, without the referenced ones, and a manifest`, async () => {
-      const file = openOrderedWordFile(source(), { file: 1 });
-      const word = unzipSync(orderedPackageBytes(file.document, file.base));
-      const store = storeOf([]);
-      const checkpoint = unzipSync(await checkpointOf5(file, store));
-      const manifest = manifestOf(await checkpointOf5(file));
-      const listed = orderedPackageMedia(file.base);
-      expect(store.reads).toEqual([]);
-      expect(manifest.format).toBe('docx-editor.dev/ordered-checkpoint');
-      expect(manifest.version).toBe(5);
-      expect(manifest.suggestions.filter((s) => s.person !== null)).toEqual([]);
-      const { comments, takeovers, namespaces, untracked } = manifest;
-      expect([comments, takeovers, namespaces, untracked]).toEqual([[], [], [], []]);
-      expect(manifest.media.map((media) => media.sha256).sort()).toEqual(
-        listed.map((media) => media.sha256).sort()
-      );
-
-      // Every other part as the Word file has it, in its order, the manifest last
-      const names = Object.keys(word);
-      const referenced = new Set(manifest.media.map((media) => media.part.slice(1)));
-      expect(Object.keys(checkpoint)).toEqual([
-        ...names.filter((entry) => !referenced.has(entry)),
-        MANIFEST,
-      ]);
-      for (const media of manifest.media) {
-        expect(names[media.entry]).toBe(media.part.slice(1));
-      }
-
-      for (const entry of Object.keys(checkpoint)) {
-        if (entry !== MANIFEST) {
-          expect(
-            Buffer.compare(checkpoint[entry] ?? new Uint8Array(), word[entry] ?? new Uint8Array())
-          ).toBe(0);
-        }
-      }
-    });
-  }
-});
-
-for (const [version, writer] of VERSIONS) {
+for (const version of VERSIONS) {
   describe(`a document loaded from a checkpoint of version ${version}`, () => {
-    for (const [name, source] of ROOM_FILES) {
+    for (const [name, source] of version === 5 ? VERSION_FIVE_FILES : ROOM_FILES) {
       test(`${name}: loads with no bytes, and saves as the Word file does`, async () => {
         const file = openOrderedWordFile(source(), { file: 1 });
         const store = storeOf(orderedPackageMedia(file.base).map((media) => media.bytes));
         const word = orderedPackageBytes(file.document, file.base);
-        const checkpoint = await checkpointOf(file, storeOf([]), writer);
+        const checkpoint = await checkpointIn(version, caseName(name), file);
         const fromCheckpoint = openOrderedCheckpoint(checkpoint, { file: 2 });
         const fromWord = openOrderedWordFile(word, { file: 2 });
         const fileMedia = [...fromCheckpoint.document.resources.fileMedia.values()];
@@ -304,10 +259,8 @@ for (const [version, writer] of VERSIONS) {
         expectSameBytes(await streamed(fromCheckpoint, store), expected);
         expect(store.reads).toEqual(fileMedia.map((media) => media.sha256));
 
-        // The next checkpoint: version 6 keeps the list it opened, version 5 is the Word file's
-        const again = await checkpointOf(fromCheckpoint, storeOf([]), writer);
-        const fromWordAgain = await checkpointOf(fromWord, storeOf([]), writer);
-        expectSameBytes(again, version === 5 ? fromWordAgain : checkpoint);
+        // The next close writes version 6, which opens to the same document
+        await folded(fromCheckpoint.document, fromCheckpoint.base, 3, store.blobs);
       });
     }
 
@@ -339,7 +292,7 @@ for (const [version, writer] of VERSIONS) {
         place: at(file.document, 0, 2),
         text: 'xy',
       });
-      const checkpoint = await checkpointOf(file, store, writer);
+      const checkpoint = await checkpointIn(version, 'added-pictures', file, store);
       expect(store.reads).toEqual([]);
       const held = new Set(Object.values(heldEntries(checkpoint)).map(orderedBlobHash));
       expect([...store.bytes.keys()].filter((sha256) => held.has(sha256))).toEqual([]);
@@ -356,10 +309,10 @@ for (const [version, writer] of VERSIONS) {
     });
 
     test('with no bytes, a save refuses missing-blob and a screen leaves the picture out', async () => {
-      const checkpoint = await checkpointOf(
-        openOrderedWordFile(EMBEDDED_SOURCE, { file: 1 }),
-        storeOf([]),
-        writer
+      const checkpoint = await checkpointIn(
+        version,
+        EMBEDDED_CASE,
+        openOrderedWordFile(EMBEDDED_SOURCE, { file: 1 })
       );
       const file = openOrderedCheckpoint(checkpoint, { file: 2 });
       expect(reasonOf(() => orderedPackageBytes(file.document, file.base))).toBe('missing-blob');
@@ -374,7 +327,7 @@ for (const [version, writer] of VERSIONS) {
       const file = openOrderedWordFile(docx(p(t('Alpha ') + pictureRun(5)), MATRIX_EXTRAS), {
         file: 1,
       });
-      const checkpoint = await checkpointOf(file, storeOf([]), writer);
+      const checkpoint = await checkpointIn(version, 'a-picture-alone', file);
       const { document } = openOrderedCheckpoint(checkpoint, { file: 2 });
       const room = new OrderedRoom({
         document,
@@ -413,7 +366,7 @@ for (const [version, writer] of VERSIONS) {
     async function copied(screenBytes: Uint8Array | undefined) {
       const source = docx(p(t('Alpha ') + pictureRun(5)) + p(t('Plain.')), MATRIX_EXTRAS);
       const word = openOrderedWordFile(source, { file: 1 });
-      const checkpoint = await checkpointOf(word, storeOf([]), writer);
+      const checkpoint = await checkpointIn(version, 'a-picture-and-a-line', word);
       const { document: doc, base } = openOrderedCheckpoint(checkpoint, { file: 2 });
       const screen = composeOrderedPackage(doc, base, {
         blobs: () => screenBytes,
@@ -470,14 +423,11 @@ for (const [version, writer] of VERSIONS) {
 }
 
 describe('a file of another kind is refused by name: version 5', () => {
-  const checkpoint = (writer: Writer = writeOrderedCheckpointVersion5) =>
-    checkpointOf(openOrderedWordFile(EMBEDDED_SOURCE, { file: 1 }), storeOf([]), writer);
+  const embedded = () => openOrderedWordFile(EMBEDDED_SOURCE, { file: 1 });
 
   /** The checkpoint with its manifest replaced. */
-  async function withManifest(
-    change: (manifest: Record<string, unknown>) => unknown
-  ): Promise<Uint8Array> {
-    const entries = unzipSync(await checkpoint());
+  function withManifest(change: (manifest: Record<string, unknown>) => unknown): Uint8Array {
+    const entries = unzipSync(versionFiveCase(EMBEDDED_CASE));
     const manifest = JSON.parse(strFromU8(entries[MANIFEST] ?? new Uint8Array())) as Record<
       string,
       unknown
@@ -488,18 +438,16 @@ describe('a file of another kind is refused by name: version 5', () => {
 
   const open = (bytes: Uint8Array) => () => openOrderedCheckpoint(bytes, { file: 2 });
 
-  test('a checkpoint of another format or version', async () => {
-    expect(reasonOf(open(await withManifest((m) => ({ ...m, format: 'other' }))))).toBe(
+  test('a checkpoint of another format or version', () => {
+    expect(reasonOf(open(withManifest((m) => ({ ...m, format: 'other' }))))).toBe(
       'checkpoint-format'
     );
     for (const version of [1, 2, 3, 4, 6]) {
-      expect(reasonOf(open(await withManifest((m) => ({ ...m, version }))))).toBe(
-        'checkpoint-version'
-      );
+      expect(reasonOf(open(withManifest((m) => ({ ...m, version }))))).toBe('checkpoint-version');
     }
   });
 
-  test('a manifest that does not read or does not fit the file', async () => {
+  test('a manifest that does not read or does not fit the file', () => {
     const media = (m: Record<string, unknown>) => m.media as Record<string, unknown>[];
     const cases: ((m: Record<string, unknown>) => unknown)[] = [
       () => [1, 2],
@@ -518,6 +466,7 @@ describe('a file of another kind is refused by name: version 5', () => {
       (m) => ({ ...m, suggestions: [{ ...ANA_SUGGESTION, revisions: 1 }] }),
       (m) => ({ ...m, suggestions: [{ ...ANA_SUGGESTION, revisions: [1] }] }),
       (m) => ({ ...m, suggestions: [{ ...ANA_SUGGESTION, author: 'Ben' }] }),
+      (m) => ({ ...m, suggestions: [{ ...ANA_SUGGESTION, person: { ...ANA, org: 'Acme' } }] }),
       ({ comments: _, ...m }) => m,
       (m) => ({
         ...m,
@@ -568,34 +517,33 @@ describe('a file of another kind is refused by name: version 5', () => {
       (m) => ({ ...m, later: { constructor: 1 } }),
     ];
     for (const change of cases) {
-      expect(reasonOf(open(await withManifest(change)))).toBe('checkpoint-manifest');
+      expect(reasonOf(open(withManifest(change)))).toBe('checkpoint-manifest');
     }
 
     // A namespace's person opens with no run that names it
-    const named = await withManifest((m) => ({
+    const named = withManifest((m) => ({
       ...m,
       namespaces: [{ namespace: 'ana', person: ANA }],
     }));
     expect(reasonOf(open(named))).toBe('opened');
 
-    const entries = unzipSync(await checkpoint());
+    const entries = unzipSync(versionFiveCase(EMBEDDED_CASE));
     entries[MANIFEST] = strToU8('{"format":');
     expect(reasonOf(open(zipSync(entries)))).toBe('checkpoint-manifest');
   });
 
   test('a Word file is not a checkpoint, and a checkpoint is not a Word file', async () => {
     expect(reasonOf(open(EMBEDDED_SOURCE))).toBe('not-checkpoint');
-    for (const [, writer] of VERSIONS) {
-      const bytes = await checkpoint(writer);
+    for (const version of VERSIONS) {
+      const bytes = await checkpointIn(version, EMBEDDED_CASE, embedded());
       expect(reasonOf(() => openOrderedWordFile(bytes, { file: 2 }))).toBe('checkpoint');
     }
   });
 });
 
 describe("the version 5 manifest's name in another case", () => {
-  test('opens as a checkpoint: OPC part names compare without case', async () => {
-    const word = openOrderedWordFile(EMBEDDED_SOURCE, { file: 1 });
-    const bytes = await checkpointOf(word, storeOf([]), writeOrderedCheckpointVersion5);
+  test('opens as a checkpoint: OPC part names compare without case', () => {
+    const bytes = versionFiveCase(EMBEDDED_CASE);
     const entries = unzipSync(bytes);
     entries[MANIFEST.toUpperCase()] = entries[MANIFEST]!;
     delete entries[MANIFEST];

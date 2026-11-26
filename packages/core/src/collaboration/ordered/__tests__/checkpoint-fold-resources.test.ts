@@ -1,8 +1,8 @@
 // What a change adds outside the story text, across a fold (design D14): a list level, a link's
-// address, an embedded object, a chart's part and a list's picture bullet. A checkpoint writes
-// each one as the file's, so the open gives each back to its suggestion: a decision after a fold
-// writes it or leaves it out as the room does live. The manifest is untrusted: an entry that
-// does not fit the file refuses the whole checkpoint.
+// address, an embedded object, a chart's part and a list's picture bullet. A fold keeps each one
+// with its suggestion: a decision after a fold writes it or leaves it out as the room does live.
+// A version 5 checkpoint's manifest is untrusted: an entry that does not fit the file refuses the
+// whole checkpoint.
 
 import { describe, expect, test } from 'bun:test';
 import { strFromU8, strToU8, unzipSync, zipSync } from 'fflate';
@@ -11,8 +11,7 @@ import {
   openOrderedWordFile,
   OrderedWordFileError,
 } from '../client/open.ts';
-import { writeOrderedCheckpointVersion5 } from '../compose/checkpoint.ts';
-import type { CheckpointRoom } from './checkpoint-fixture.ts';
+import { versionFiveCase, type CheckpointRoom } from './checkpoint-fixture.ts';
 import {
   CHART_ROOM,
   LINK_ROOM,
@@ -21,18 +20,15 @@ import {
   RESOURCE_ROOMS,
   resourceBlobs,
 } from './checkpoint-resources-fixture.ts';
-import { checkFold, checkpointBytes } from './fold-check.ts';
+import { checkFold } from './fold-check.ts';
 
-/** A room's checkpoint of version 5. */
-async function checkpointOf(room: CheckpointRoom): Promise<Uint8Array> {
-  const { document: doc, base } = openOrderedWordFile(room.source, { file: 1 });
-  room.edit(doc);
-  return checkpointBytes(doc, base, resourceBlobs(base), writeOrderedCheckpointVersion5);
-}
+/** A room's checkpoint of version 5, as the last version 5 writer wrote it. */
+const checkpointOf = (room: CheckpointRoom): Uint8Array =>
+  versionFiveCase(room.name.replace(/'s\b/g, 's').replaceAll(' ', '-'));
 
 /** A room's checkpoint with its manifest's text edited. */
-async function crafted(room: CheckpointRoom, edit: (json: string) => string): Promise<Uint8Array> {
-  const entries = unzipSync(await checkpointOf(room));
+function crafted(room: CheckpointRoom, edit: (json: string) => string): Uint8Array {
+  const entries = unzipSync(checkpointOf(room));
   entries['ordered-checkpoint.json'] = strToU8(
     edit(strFromU8(entries['ordered-checkpoint.json']!))
   );
@@ -43,7 +39,7 @@ async function crafted(room: CheckpointRoom, edit: (json: string) => string): Pr
 const withResources = (
   room: CheckpointRoom,
   edit: (resources: Record<string, unknown>[]) => unknown
-): Promise<Uint8Array> =>
+): Uint8Array =>
   crafted(room, (json) => {
     const manifest = JSON.parse(json) as { resources: Record<string, unknown>[] };
     return JSON.stringify({ ...manifest, resources: edit(manifest.resources) });
@@ -71,9 +67,9 @@ describe('a fold keeps what a change added outside the story text with its sugge
 
 describe("a version 5 checkpoint's resources are untrusted", () => {
   // An earlier writer listed no resources, and no list with picture bullets
-  test('a checkpoint written before the section opens them as the file holds them', async () => {
+  test('a checkpoint written before the section opens them as the file holds them', () => {
     for (const room of RESOURCE_ROOMS) {
-      const bytes = await crafted(room, (json) => {
+      const bytes = crafted(room, (json) => {
         const { resources: _none, ...rest } = JSON.parse(json) as Record<string, unknown>;
         return JSON.stringify({ ...rest, lists: [] });
       });
@@ -84,8 +80,8 @@ describe("a version 5 checkpoint's resources are untrusted", () => {
     }
   });
 
-  test('each forged entry refuses the whole checkpoint', async () => {
-    const forged: [string, Promise<Uint8Array>][] = [
+  test('each forged entry refuses the whole checkpoint', () => {
+    const forged: [string, Uint8Array][] = [
       [
         'a part the file does not hold',
         withResources(CHART_ROOM, (list) =>
@@ -128,7 +124,7 @@ describe("a version 5 checkpoint's resources are untrusted", () => {
       ],
     ];
     for (const [name, bytes] of forged) {
-      expect({ name, reason: openReason(await bytes) }).toEqual({
+      expect({ name, reason: openReason(bytes) }).toEqual({
         name,
         reason: 'checkpoint-manifest',
       });

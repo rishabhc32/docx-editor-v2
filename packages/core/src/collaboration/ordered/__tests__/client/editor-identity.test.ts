@@ -5,15 +5,12 @@
 // names the person.
 
 import { afterEach, describe, expect, test } from 'bun:test';
-import { strFromU8, unzipSync, zipSync } from 'fflate';
+import { strFromU8, unzipSync } from 'fflate';
 import { writeOoxmlPackage } from '../../../../store/package/ooxml-package.ts';
 import type { OrderedLocalRoom } from '../../client/local-room.ts';
 import { openOrderedCheckpoint, openOrderedRoomFile } from '../../client/open.ts';
 import { applyOrderedChange } from '../../change/apply.ts';
-import {
-  writeOrderedCheckpoint,
-  writeOrderedCheckpointVersion5,
-} from '../../compose/checkpoint.ts';
+import { writeOrderedCheckpoint } from '../../compose/checkpoint.ts';
 import {
   composeOrderedPackage,
   orderedPackageBytes,
@@ -113,13 +110,11 @@ const noMedia = async (sha256: string): Promise<Uint8Array> => {
 };
 
 /** The room's document as a checkpoint. */
-function checkpointOf(
-  room: OrderedLocalRoom,
-  file: number,
-  writer = writeOrderedCheckpoint
-): Promise<Uint8Array> {
+function checkpointOf(room: OrderedLocalRoom, file: number): Promise<Uint8Array> {
   const { base } = openOrderedRoomFile(SOURCE, { file });
-  return collected((write) => writer(room.room.document, base, { media: noMedia, write }));
+  return collected((write) =>
+    writeOrderedCheckpoint(room.room.document, base, { media: noMedia, write })
+  );
 }
 
 /** The entries of a zip that hold `text`. */
@@ -353,7 +348,7 @@ describe('a room knows each person by ID', () => {
 
 describe('a checkpoint keeps every person', () => {
   /** Ana, the other Ana and Ben each suggest, in a room of file 3. */
-  async function suggested(writer = writeOrderedCheckpoint) {
+  async function suggested() {
     const room = partyRoom(3);
     const ana = await party(room, ANA);
     const other = await party(room, OTHER_ANA);
@@ -366,7 +361,7 @@ describe('a checkpoint keeps every person', () => {
     surface(ben).insertPlainText(' Paid.');
     await settle();
     converged(room, ana, other, ben);
-    return { room, checkpoint: await checkpointOf(room, 3, writer) };
+    return { room, checkpoint: await checkpointOf(room, 3) };
   }
 
   const EXPECTED: [string, string | null][] = [
@@ -406,15 +401,5 @@ describe('a checkpoint keeps every person', () => {
     expect(refused(ana)).toEqual(['ordered-refused/nested']);
     expect(editorTexts(other)[1]).toBe('Reent Due in 30 days. net');
     converged(next, ana, other);
-  });
-
-  test('persons that do not fit a file of version 5 are refused by name', async () => {
-    const { checkpoint } = await suggested(writeOrderedCheckpointVersion5);
-    const entries = unzipSync(checkpoint);
-    const manifest = strFromU8(entries[MANIFEST] ?? new Uint8Array());
-    entries[MANIFEST] = new TextEncoder().encode(manifest.replace('"org":"Acme"', '"org":"Other"'));
-    expect(() => openOrderedCheckpoint(zipSync(entries), { file: 1 })).toThrow(
-      'checkpoint-manifest'
-    );
   });
 });
