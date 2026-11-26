@@ -311,8 +311,11 @@ const CASES = [
 ] as const;
 
 /** Two adjacent deletions of one author, each of one run, as one deletion's words. */
-const ADJACENT_DELETIONS =
-  /(<w:del w:author="([^"]*)"><w:r><w:delText>[^<]*)<\/w:delText><\/w:r><\/w:del><w:del w:author="\2"><w:r><w:delText>/g;
+const ADJACENT_DELETIONS = new RegExp(
+  '(<w:del w:author="([^"]*)"><w:r><w:delText>[^<]*)' +
+    '</w:delText></w:r></w:del><w:del w:author="\\2"><w:r><w:delText>',
+  'g'
+);
 
 /**
  * The control as a reader of the file sees it: its properties and content, no ids or dates, and
