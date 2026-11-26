@@ -324,6 +324,24 @@ test("a press on its author's own new paragraph, its record rejected alone", asy
   expect(strFromU8(body)).not.toContain('<w:jc ');
 });
 
+// A reject of Ana's italic takes Olive's color made over it away too, and the room draws the words
+// in one run again; a fold splits no run there, as the color splits it only while Ana's shows
+test("a direct format over another's pending format, the format rejected: one run", async () => {
+  const opened = openOrderedWordFile(docx(TEXT), { file: 1 });
+  const blobs = mediaStore(opened.base);
+  apply(opened.document, 'ana:1', format(opened.document, EDIT, 0, 5, 'i'));
+  const red = format(opened.document, DIRECT, 1, 4, 'color', { val: 'C00000' });
+  apply(opened.document, 'olive:1', red, 'Olive');
+  const once = await folded(opened.document, opened.base, 2, blobs);
+  const twice = await folded(once.document, once.base, 3, blobs);
+  const runs = [opened, once, twice].map((copy) => {
+    decideCard(copy.document, 'S:ana:1.1', 'rejected');
+    return [...(partsOf(copy.document)[0] ?? '').matchAll(/<w:r>.*?<\/w:r>/g)].map((m) => m[0]);
+  });
+  const one = ['<w:r><w:t>Cloud and serverless.</w:t></w:r>', '<w:r><w:t>After.</w:t></w:r>'];
+  expect(runs).toEqual([one, one, one]);
+});
+
 // The press is decided with Ben's new paragraph: after its accept, his indent still pending, a
 // fold keeps the press as the room holds it, and the checkpoint opens
 test("a press on its author's own new paragraph, the paragraph accepted", async () => {

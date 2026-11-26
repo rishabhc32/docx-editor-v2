@@ -14,7 +14,7 @@ import {
 } from '../../../store/store/tracked-content-control-value.ts';
 import { build, textNode } from '../../../store/store/tree-op-tracked.ts';
 import { MOVE_RANGE } from '../load/moves.ts';
-import { isSplitEdge, movedAwayBy, statusOf } from '../model/document.ts';
+import { isPending, isSplitEdge, movedAwayBy, statusOf } from '../model/document.ts';
 import { fileMark, REVISION_ROLE } from '../model/revision-ids.ts';
 import {
   isUnit,
@@ -35,7 +35,7 @@ import {
 } from '../ooxml-nodes.ts';
 import type { ComposeContext } from './context.ts';
 import { isNotesStory } from './note-references.ts';
-import { containerPropertiesAfter, drawnFormats, faceAfter } from './properties.ts';
+import { containerPropertiesAfter, drawnFormats, faceAfter, madeOverWhere } from './properties.ts';
 import { keptLinkEdges } from './kept-links.ts';
 import { hidePrompt } from './prompts.ts';
 import { withTextBoxContent } from './text-boxes.ts';
@@ -542,11 +542,14 @@ const recordKey = (record: OrderedFormatRecord): string => `${record.id}:${recor
  * format records it draws. A pending record splits the run only while it shows, and the file
  * draws that split, so it names no room run: a take-back or a reject draws the run whole again. An
  * accepted record splits it for good, as the editor keeps the runs a format split, and a fold
- * writes it into the face: it names the room run.
+ * writes it into the face: it names the room run. One made over a pending record (`over`) goes
+ * with that record's reject, so it splits the run only while that record shows, as a pending one.
  */
 function roomRunOf(ctx: ComposeContext, unit: OrderedItem): string {
   const accepted = drawnFormats(ctx, unit.fmts).filter(
-    (record) => statusOf(ctx.doc, record.suggestion) === 'accepted'
+    (record) =>
+      statusOf(ctx.doc, record.suggestion) === 'accepted' &&
+      !madeOverWhere(record, unit.fmts, (holder) => isPending(ctx.doc, holder))
   );
   return [unit.run, unit.face?.id ?? '', ...accepted.map(recordKey)].join(' ');
 }
