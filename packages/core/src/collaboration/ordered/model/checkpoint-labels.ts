@@ -176,11 +176,11 @@ function unmarked(
   }
 
   const kept = children === null ? element : withChildren(element, children);
-  const marks = element.attributes.filter(isOurs);
-  if (marks.length === 0 && !element.namespaceBindings.some(isOurs)) {
+  if (!element.attributes.some(isOurs) && !element.namespaceBindings.some(isOurs)) {
     return kept;
   }
 
+  const marks = element.attributes.filter(isOurs);
   const attributes = element.attributes.filter((attribute) => !isOurs(attribute));
   const out = {
     ...withAttributes(kept, attributes),
