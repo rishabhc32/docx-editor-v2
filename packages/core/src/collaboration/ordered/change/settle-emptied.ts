@@ -566,9 +566,9 @@ function lackedMarker(doc: OrderedDocument, item: OrderedItem): boolean {
  * The units of the prompt in a prompted control's content, loaded as a paragraph would be, with
  * the edges of the containers that hold them (a link on its words) and each control in it whole,
  * as a load marks a prompt. A record the room wrote for a suggestion's role (a prompt the glossary
- * kept with its records) is its suggestion's again. A block prompt of two or more paragraphs holds each
- * paragraph's mark but the last, marked as the prompt's as a load marks them: the control's shown
- * mark ends its last paragraph (`givePrompt`).
+ * kept with its records) is its suggestion's again. A block prompt of two or more paragraphs holds
+ * each paragraph's mark but the last, marked as the prompt's as a load marks them: the control's
+ * shown mark ends its last paragraph (`givePrompt`).
  */
 export function promptUnits(ctx: Ctx, control: OoxmlElement, open: OrderedItem): OrderedItem[] {
   const content = control.children.find(isControlContent);

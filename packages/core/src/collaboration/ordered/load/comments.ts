@@ -23,8 +23,9 @@ import { chargeItem, type LoadBudget } from './state.ts';
 
 /**
  * Record the comments of the main document's comments part in `doc.comments`, each `w:comment`
- * of the part's root by its `w:id` (the first one when the file repeats an id), with no person. Each comment's nodes count against the load's item limit. A thread
- * entry the editor ignores is ignored here.
+ * of the part's root by its `w:id` (the first one when the file repeats an id), with no person.
+ * Each comment's nodes count against the load's item limit. A thread entry the editor ignores is
+ * ignored here.
  */
 export function loadComments(
   doc: OrderedDocument,

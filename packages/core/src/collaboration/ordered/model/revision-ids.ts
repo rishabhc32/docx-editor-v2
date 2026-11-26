@@ -200,9 +200,10 @@ export function fileMark(
 
 /**
  * The suggestion a file's revision mark was read for, by its `w:id`, author and date: the mark a
- * load kept for one of the suggestion's roles; or, for a prompt's record, the one the room wrote for its suggestion's role (`revisionIdFor`). Its date
- * is the suggestion's, or the one the load read when a change gave the suggestion another.
- * Undefined for a mark no load read and the room did not write.
+ * load kept for one of the suggestion's roles; or, for a prompt's record, the one the room wrote
+ * for its suggestion's role (`revisionIdFor`). Its date is the suggestion's, or the one the load
+ * read when a change gave the suggestion another. Undefined for a mark no load read and the room
+ * did not write.
  */
 export function suggestionOfRevision(
   doc: OrderedDocument,
