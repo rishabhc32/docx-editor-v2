@@ -651,7 +651,7 @@ export function lendingsOnRemoved(ctx: ComposeContext): Map<OrderedItem, Ordered
 
 /**
  * A table's or a cell's record that holds removed cells, as compose draws it while the record
- * shows: the drawn table with only the cells the record holds, under the record, without those
+ * shows: the drawn table without the cells of later columns, under the record, without those
  * removed cells; a cell's record keeps its own children but the width. Undefined when the record
  * holds none, or `container` (the node id of the record's table or cell) is in no table this
  * drawing removed cells from. A fold writes no removed cell, so it writes the record so (a column
@@ -675,9 +675,14 @@ export function recordWithoutRemoved(
     return undefined;
   }
 
-  // Drawn as live, where no decision joins the grid
-  const others = [...cellsById(table.before).keys()].filter((id) => !holds(id));
-  const own = withoutCells(table.before, new Set(others));
+  // Drawn as live, where no decision joins the grid, without the cells of later columns: the cells
+  // the record does not hold in a row it holds. A row made after the record shows whole
+  const later = table.before.children.flatMap((row) => {
+    const cells = row.kind === 'textValue' || !isRow(row) ? [] : row.children.filter(isCell);
+    const ids = cells.map((cell) => cell.id);
+    return ids.some(holds) ? ids.filter((id) => !holds(id)) : [];
+  });
+  const own = withoutCells(table.before, new Set(later));
   if (target === 'tblGrid') {
     const shown = withChildren(
       own,

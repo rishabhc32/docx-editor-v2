@@ -395,6 +395,33 @@ describe('a column removed under a later one', () => {
     expect(widths(doc)).toEqual(['563,187,2250,3000', '563,187,2250,3000', '563,187,2250,3000']);
     await checkFold(doc, base, mediaStore(base), 'a column taken back beside a removed column');
   });
+
+  // The organiser's direct row, made after both columns, keeps a cell under the removed column,
+  // so the grid keeps that column: the cell before it spans both, live as after a fold
+  test.each(['taken back', 'rejected'])(
+    "a party's column %s, under a later column and the organiser's direct row",
+    async (how) => {
+      const { document: doc, base } = openOrderedWordFile(TABLE_FILE, { file: 1 });
+      apply(doc, 'ben:1', column(doc, 0), 'Ben');
+      apply(doc, 'ben:2', column(doc, 2), 'Ben');
+      const row = addressOf(opens(doc, 'tr')[0]!);
+      apply(doc, 'olive:1', { kind: 'insert-row', ...DIRECT, row, where: 'below' }, 'Olive');
+      if (how === 'taken back') {
+        apply(doc, 'ben:3', { kind: 'delete-column', ...EDIT, cell: cell(doc, 1) }, 'Ben');
+      } else {
+        decide(doc, 'olive:2', 'S:ben:1.1', 'rejected');
+      }
+
+      const rows = ['3000,1500,1500', '1500,1500,1500,1500', '3000,1500,1500'];
+      expect(widths(doc)).toEqual(['1500,1500,1500,1500', ...rows]);
+      const blobs = mediaStore(base);
+      const once = await folded(doc, base, 2, blobs);
+      const twice = await folded(once.document, once.base, 3, blobs);
+      const print = foldPrint(doc, base, blobs);
+      expect(foldPrint(once.document, once.base, blobs)).toEqual(print);
+      expect(foldPrint(twice.document, twice.base, blobs)).toEqual(print);
+    }
+  );
 });
 
 describe("the organiser's direct columns at a decision", () => {
