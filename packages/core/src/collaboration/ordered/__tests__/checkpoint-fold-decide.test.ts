@@ -103,6 +103,24 @@ describe('a decision after a fold, on a suggestion inside a run', () => {
     );
   });
 
+  // The run's first piece holds no format: the deletion's reject still draws the formatted words
+  // as one run, as the pieces of one room run take a record any earlier piece holds
+  test('a suggested format over part of a deletion and past it, the deletion rejected', async () => {
+    await foldOf(
+      p(run('Cloud and serverless.')),
+      (doc) => {
+        apply(doc, 'ana:1', { kind: 'delete', ...EDIT, from: at(doc, 0, 6), to: at(doc, 0, 9) });
+        const italic = {
+          from: at(doc, 0, 6),
+          to: at(doc, 0, 11),
+          properties: [{ localName: 'i' }],
+        };
+        apply(doc, 'bob:1', { kind: 'format', ...EDIT, ...italic }, 'Bob');
+      },
+      'a format over part of a deletion'
+    );
+  });
+
   // An accept keeps the split the format's records made, as the editor keeps the runs a format
   // split; a fold writes the accepted records into the face, and the pieces stay two runs
   test('a suggested format on part of a run, then on all of it, accepted', async () => {
