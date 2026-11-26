@@ -117,7 +117,7 @@ export function openOrderedCheckpoint(
   throw new OrderedWordFileError('not-checkpoint');
 }
 
-/** A room's file as a client reads it: a checkpoint when it holds the item list, else a Word file. */
+/** A room's file as a client reads it: a checkpoint by its item list, else a Word file. */
 export function openOrderedRoomFile(
   bytes: Uint8Array,
   options: OrderedWordFileOptions
