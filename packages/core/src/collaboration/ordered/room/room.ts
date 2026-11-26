@@ -6,6 +6,7 @@
 import type { ContentLockPolicy } from '../../../store/package/ooxml-edit.ts';
 import { contentLockPolicyOf } from '../../../store/store/content-lock-policy.ts';
 import {
+  mintedChange,
   ORDERED_NAMESPACE_PATTERN,
   orderedIdMinter,
   parseOrderedChangeId,
@@ -356,7 +357,7 @@ export class OrderedRoom {
   }
 
   #take(actor: OrderedActor, change: OrderedChange, at: string): Outcome {
-    const late = this.#beforeFile(change.id);
+    const late = this.#beforeFile(change);
     if (late !== null) {
       return { ok: false, refusal: late };
     }
@@ -451,15 +452,25 @@ export class OrderedRoom {
     }
   }
 
-  /** The refusal of a change made before the room's file (design D7), or null. */
-  #beforeFile(id: string): OrderedRoomRefusal | null {
-    const parsed = parseOrderedChangeId(id);
-    const saved = parsed === null ? undefined : this.#fileCounters.get(parsed.namespace);
-    if (parsed === null || saved === undefined || parsed.counter > saved) {
-      return null;
+  /**
+   * The refusal of a change made before the room's file, or of a revert of a direct edit made
+   * before it (design D7), or null. An editor that opens the file has no undo of such an edit.
+   */
+  #beforeFile(change: OrderedChange): OrderedRoomRefusal | null {
+    const reverted =
+      change.kind === 'revert'
+        ? change.suggestions.flatMap((id) => mintedChange(id, 'S') ?? [])
+        : [];
+    for (const made of [change.id, ...reverted]) {
+      const parsed = parseOrderedChangeId(made);
+      const saved = parsed === null ? undefined : this.#fileCounters.get(parsed.namespace);
+      if (parsed !== null && saved !== undefined && parsed.counter <= saved) {
+        const detail = `the room's file holds ${parsed.namespace}:${saved}`;
+        return { id: change.id, code: 'other-file', detail };
+      }
     }
 
-    return { id, code: 'other-file', detail: `the room's file holds ${parsed.namespace}:${saved}` };
+    return null;
   }
 
   #record(change: OrderedStampedChange, namespace: string): void {
@@ -493,7 +504,7 @@ export class OrderedRoom {
       throw new OrderedRoomOpenError('log-stamp', change.n, namespace);
     }
 
-    const refusal = this.#beforeFile(change.id) ?? this.#applyOne(change);
+    const refusal = this.#beforeFile(change) ?? this.#applyOne(change);
     if (refusal !== null) {
       throw new OrderedRoomOpenError(
         'log-apply',

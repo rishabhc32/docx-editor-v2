@@ -186,6 +186,32 @@ describe('a change after a close', () => {
   });
 });
 
+describe("the organiser's revert after a close", () => {
+  const direct = (doc: OrderedDocument, id: string) =>
+    ({ ...insert(doc, id, 0), mode: 'edit' }) as OrderedChange;
+  const revert = (id: string, suggestion: string) =>
+    ({ v: 1, id, kind: 'revert', suggestions: [suggestion], status: 'rejected' }) as const;
+
+  test('of a direct edit made before the file is refused by name; of a later one it applies', () => {
+    const first = roomOver(loadRoom());
+    const doc = first.document;
+    expect(first.submit(ANA, [direct(doc, 'ana-1:1')]).refused).toEqual([]);
+
+    // An editor that opens the next file has no undo of it either
+    const next = roomOver(doc);
+    const before = snapshot(doc);
+    expect(next.submit(ANA, [revert('ana-1:2', 'S:ana-1:1.1')]).refused).toEqual([
+      { id: 'ana-1:2', code: 'other-file', detail: "the room's file holds ana-1:1" },
+    ]);
+    expect(snapshot(doc)).toEqual(before);
+    expect(textOf(doc)).toContain('Late');
+
+    expect(next.submit(ANA, [direct(doc, 'ana-1:3')]).refused).toEqual([]);
+    expect(next.submit(ANA, [revert('ana-1:4', 'S:ana-1:3.1')]).refused).toEqual([]);
+    expect(textOf(doc).match(/Late/g)).toHaveLength(1);
+  });
+});
+
 describe('a page that keeps its namespace across a close', () => {
   const opened = () => openOrderedWordFile(ROOM_FILE, { file: 1 });
   const page = (doc: OrderedDocument) =>

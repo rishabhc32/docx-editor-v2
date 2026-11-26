@@ -367,7 +367,8 @@ export interface OrderedRetractChange extends OrderedChangeBase {
  * `accepted` (made again). Addresses never change, so each unit, mark and record shows exactly
  * as it did: typed text goes, deleted text and another person's struck suggestion show again,
  * Enter joins back, a join splits again, a format goes off. Only the sender's own direct
- * suggestions; never a decided one. A party never sends it.
+ * suggestions; never a decided one, nor one made before the room's file (`other-file`). A party
+ * never sends it.
  *
  * @public
  */
