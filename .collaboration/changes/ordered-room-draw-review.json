@@ -5,7 +5,6 @@
   "after": "A fold lists the lent widths with the cell's records in the order they were made. A struck note keeps only its last paragraph, as the engine keeps a story's last one. A checkpoint refuses (engine-refused) a made-over record it cannot keep; an open refuses replacedEarlier with no replaced, and reads only the records the manifest lists.",
   "reason": "Change messages, the change log and its kinds keep their meaning, and the Yjs document format and the checkpoint format (version 5) do not change. A checkpoint written before the manifest listed every taken record of a listed target no longer opens when such a record also has change-record facts. An ordered room admits only clients of its own code version, and ordered rooms are not deployed yet, so no room needs a migration.",
   "tests": [
-    "packages/core/src/collaboration/ordered/__tests__/checkpoint-made-over-refusal.test.ts",
     "packages/core/src/collaboration/ordered/__tests__/checkpoint-fold-table-records.test.ts",
     "packages/core/src/collaboration/ordered/__tests__/note-moves-fold.test.ts",
     "packages/core/src/collaboration/ordered/__tests__/checkpoint-fold-over.test.ts",
