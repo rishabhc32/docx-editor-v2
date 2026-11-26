@@ -24,6 +24,7 @@ import { createNodeIdAllocator, replaceNode } from './ooxml-edit.ts';
 import type { OoxmlPackage } from './ooxml-package.ts';
 import { MC_NAMESPACE_URI, WML_NAMESPACE_URI } from './ooxml-shared.ts';
 import type { OoxmlElement, OoxmlNamespaceBinding, OoxmlNode, OoxmlPart } from './ooxml-tree.ts';
+import { validateOoxmlPartDelta } from './ooxml-validate.ts';
 
 const VML_NAMESPACE_URI = 'urn:schemas-microsoft-com:vml';
 const WPS_NAMESPACE_URI = 'http://schemas.microsoft.com/office/word/2010/wordprocessingShape';
@@ -272,11 +273,12 @@ export function* textboxFallbackExportPackageSteps(
     const synced = runWithoutJournalCapture(() => {
       let current = part;
       for (const [stale, replacement] of pairs) {
-        const replaced = replaceNode(current, stale.id, replacement);
+        const replaced = replaceNode(current, stale.id, replacement, { deferValidation: true });
         if (!replaced.ok) return null;
         current = replaced.part;
       }
-      return current;
+      // Once, and only the copies: the rest is the part as read or as a validated edit left it
+      return validateOoxmlPartDelta(part, current).ok ? current : null;
     });
     if (!synced) continue;
     next ??= { ...pkg, parts: new Map(pkg.parts) };

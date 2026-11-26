@@ -27,7 +27,7 @@ import {
   isMcFallback,
 } from './drawing-projection-walk.ts';
 import type { OoxmlAttribute, OoxmlElement, OoxmlNode, OoxmlPart } from './ooxml-tree.ts';
-import { validateOoxmlPart } from './ooxml-validate.ts';
+import { validateOoxmlPartDelta } from './ooxml-validate.ts';
 import { createSubtreeAggregateMemo, keepsSubtreeMemo } from './subtree-memo-policy.ts';
 import { createRecentRootCache } from '../store/recent-root-cache.ts';
 
@@ -496,5 +496,6 @@ export function normalizeParagraphIdentity(part: OoxmlPart): OoxmlPart {
   // Frozen like every part the edit primitives publish — layout memos key on part identity,
   // and the freeze discipline is what makes that identity trustworthy.
   const normalized: OoxmlPart = Object.freeze({ ...part, root });
-  return validateOoxmlPart(normalized).ok ? normalized : part;
+  // The part came from the read or a validated edit, so only what the mint rebuilt needs a walk
+  return validateOoxmlPartDelta(part, normalized).ok ? normalized : part;
 }
