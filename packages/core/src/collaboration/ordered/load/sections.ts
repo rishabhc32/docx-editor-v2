@@ -2,21 +2,15 @@
 // footers outside the story text.
 
 import type { OoxmlPackage } from '../../../store/package/ooxml-package.ts';
-import type { OoxmlElement, OoxmlNode, OoxmlPart } from '../../../store/package/ooxml-tree.ts';
+import type { OoxmlElement, OoxmlPart } from '../../../store/package/ooxml-tree.ts';
 import { resolveRelationship } from '../../../store/package/relationships.ts';
 import { restoredSectionProperties } from '../../../store/store/revision-property-records.ts';
+import { sectionPropertiesOf, withOwnSection } from '../compose/sections.ts';
 import { createOrderedItem } from '../model/document.ts';
 import { REVISION_ROLE } from '../model/revision-ids.ts';
 import { implicitSectionSpace } from '../model/sections.ts';
 import type { OrderedDocument, OrderedElementRecord, OrderedItem } from '../model/types.ts';
-import {
-  attributeOf,
-  childWhere,
-  firstElement,
-  isParagraphProperties,
-  isWml,
-  withChildren,
-} from '../ooxml-nodes.ts';
+import { attributeOf, childWhere, firstElement, isWml, withChildren } from '../ooxml-nodes.ts';
 import type { LoadState } from './state.ts';
 
 const OFFICE = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships';
@@ -132,21 +126,15 @@ function splitRecord(
   };
 }
 
-/** A mark whose paragraph ends a section with a file's change record. */
-function withMarkRecord(state: LoadState, item: OrderedItem): OrderedItem {
-  const shell = item.node;
-  if (!shell || shell.kind === 'textValue') return item;
-  const pPr = childWhere(shell, isParagraphProperties);
-  const sectPr = pPr ? childWhere(pPr, (c) => isWml(c, 'sectPr')) : undefined;
-  const split = pPr && sectPr ? splitRecord(state, sectPr) : null;
-  if (!pPr || !sectPr || !split) return item;
-  const swap = (n: OoxmlNode): OoxmlNode => (n === sectPr ? split.before : n);
-  const nextPPr = withChildren(pPr, pPr.children.map(swap));
-  const node = withChildren(
-    shell,
-    shell.children.map((c) => (c === pPr ? nextPPr : c))
-  );
-  return { ...item, node, props: [...item.props, split.record] };
+/** A section holder whose section has a file's change record, with that record as a suggestion. */
+function withSectionRecord(state: LoadState, item: OrderedItem): OrderedItem {
+  const sectPr = sectionPropertiesOf(item);
+  const split = sectPr ? splitRecord(state, sectPr) : null;
+  if (!split) {
+    return item;
+  }
+
+  return { ...withOwnSection(item, split.before), props: [...item.props, split.record] };
 }
 
 /**
@@ -161,14 +149,11 @@ export function withLoadedSections(
 ): OrderedItem[] {
   let hasBodySection = false;
   const out = items.map((item) => {
-    if (item.kind === 'mark') return withMarkRecord(state, item);
-    if (item.kind !== 'zero' || item.block !== true || !item.node || !isWml(item.node, 'sectPr')) {
-      return item;
+    if (item.kind === 'zero' && item.block === true && item.node && isWml(item.node, 'sectPr')) {
+      hasBodySection = true;
     }
 
-    hasBodySection = true;
-    const split = item.node.kind === 'textValue' ? null : splitRecord(state, item.node);
-    return split ? { ...item, node: split.before, props: [...item.props, split.record] } : item;
+    return withSectionRecord(state, item);
   });
   if (!hasBodySection && part.root.localName === 'document') {
     out.push(

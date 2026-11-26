@@ -63,17 +63,15 @@ export function sectionRecordsOf(item: OrderedItem): SectionRecord[] {
 
 const newSection = (mint: () => string): OoxmlElement => build(mint(), 'generic', 'sectPr', [], []);
 
-/** The references, then the properties a record gives (a file's `w:sectPrChange` record). */
-function withRecordedElement(
-  current: OoxmlElement | null,
-  record: OrderedElementRecord,
-  mint: () => string
-) {
-  const given = (record.element?.children ?? []).filter(
+/** `section`'s references, then the properties `element` gives (a file's `w:sectPrChange`). */
+export function withRecordedElement(
+  section: OoxmlElement,
+  element: OoxmlElement | null
+): OoxmlElement {
+  const given = (element?.children ?? []).filter(
     (c) => !isReference(c) && !isWml(c, 'sectPrChange')
   );
-  const base = current ?? newSection(mint);
-  return withChildren(base, [...base.children.filter(isReference), ...given]);
+  return withChildren(section, [...section.children.filter(isReference), ...given]);
 }
 
 /** A section with its reference of one kind and variant set to `id`, or removed. */
@@ -177,7 +175,7 @@ function applyRecord(
   record: SectionRecord
 ): OoxmlElement | null {
   return record.kind === 'element'
-    ? withRecordedElement(section, record, ctx.mint)
+    ? withRecordedElement(section ?? newSection(ctx.mint), record.element)
     : applySectionOp(ctx, section, record.op);
 }
 
@@ -384,6 +382,31 @@ export function sectionPropertiesOf(item: OrderedItem): OoxmlElement | null {
   if (!node || node.kind === 'textValue') return null;
   if (item.kind === 'zero') return item.block === true ? asWml(node, 'sectPr') : null;
   return item.kind === 'mark' ? markSection(item) : null;
+}
+
+/** An item that holds a section (`sectionPropertiesOf`) with `section` as its own. */
+export function withOwnSection(item: OrderedItem, section: OoxmlElement): OrderedItem {
+  if (item.kind !== 'mark') {
+    return { ...item, node: section };
+  }
+
+  const shell = item.node;
+  if (!shell || shell.kind === 'textValue') {
+    return item;
+  }
+
+  const pPr = childWhere(shell, isParagraphProperties);
+  if (!pPr) {
+    return item;
+  }
+
+  const swap = (n: OoxmlNode): OoxmlNode => (isWml(n, 'sectPr') ? section : n);
+  const nextPPr = withChildren(pPr, pPr.children.map(swap));
+  const node = withChildren(
+    shell,
+    shell.children.map((c) => (c === pPr ? nextPPr : c))
+  );
+  return { ...item, node };
 }
 
 /**

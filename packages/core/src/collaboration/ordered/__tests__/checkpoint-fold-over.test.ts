@@ -81,6 +81,16 @@ const paragraphWrite = (
 const pageWrite = (doc: OrderedDocument, mode: Mode, page: Record<string, number | string>) =>
   ({ kind: 'section-property', ...mode, sections: [], page, pageAt: markOf(doc, 0) }) as const;
 
+/** A section that states its portrait page, a value Word's reject of its change record drops. */
+const PORTRAIT = '<w:sectPr><w:pgSz w:w="12240" w:h="15840" w:orient="portrait"/></w:sectPr>';
+
+/** Ana's A4 page and Olive's direct Letter page over it, neither naming the orientation. */
+function letterOverA4(doc: OrderedDocument): void {
+  apply(doc, 'ana:1', pageWrite(doc, EDIT, { pageWidthTwips: 11906, pageHeightTwips: 16838 }));
+  const letter = { pageWidthTwips: 12240, pageHeightTwips: 15840 };
+  apply(doc, 'olive:1', pageWrite(doc, DIRECT, letter), 'Olive');
+}
+
 /** The first container of `token`, as a table write names it. */
 const first = (doc: OrderedDocument, token: string) => [addressOf(opens(doc, token)[0]!)];
 
@@ -153,6 +163,19 @@ const ROOMS: readonly (readonly [string, string, (doc: OrderedDocument) => void,
       const margins = { marginTopTwips: 720, marginBottomTwips: 720 };
       apply(doc, 'olive:1', pageWrite(doc, DIRECT, margins), 'Olive');
     },
+    'Ana',
+  ],
+  // The section before Ana's write states its portrait page, and the writes keep it
+  [
+    "a direct page size over another's pending one, in a paragraph's portrait section",
+    p(t('Cloud and serverless.'), PORTRAIT) + p(t('After.')),
+    letterOverA4,
+    'Ana',
+  ],
+  [
+    "a direct page size over another's pending one, in a portrait body",
+    TEXT + PORTRAIT,
+    letterOverA4,
     'Ana',
   ],
   [

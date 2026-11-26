@@ -2,6 +2,7 @@
 // document (design D14).
 
 import type { OoxmlElement } from '../../../store/package/ooxml-tree.ts';
+import { sectionPropertiesOf, withOwnSection, withRecordedElement } from '../compose/sections.ts';
 import type {
   CheckpointMadeOver,
   CheckpointOverRecord,
@@ -16,7 +17,7 @@ import type {
   OrderedPropertyRecord,
   OrderedPropertyTarget,
 } from '../model/types.ts';
-import { isWml } from '../ooxml-nodes.ts';
+import { firstElement, isWml } from '../ooxml-nodes.ts';
 import { holdersOf, type Holder } from './takeovers.ts';
 
 /** A listed record with its suggestions' ids and its new order. */
@@ -54,6 +55,7 @@ export function withCheckpointMadeOver(
   }
 
   const holders = holdersOf(doc);
+  const sections: Holder[] = [];
   for (const { label, target, records } of madeOver) {
     const held = (labels.get(String(label)) ?? []).filter((e) => holders.has(e));
     const element = held[0];
@@ -67,9 +69,35 @@ export function withCheckpointMadeOver(
     ) {
       return false;
     }
+
+    if (target === 'sectPr') {
+      sections.push(...(holders.get(element) ?? []));
+    }
+  }
+
+  // After every entry: a new item takes the holder's place, and another entry may hold the same
+  // paragraph mark (its paragraph's own record)
+  for (const holder of sections) {
+    withRecordedSection(doc, holder);
   }
 
   return true;
+}
+
+/**
+ * A section holder with its own section as its file's change record states it: the section
+ * before the first pending record, which the restored records draw from, as the room's do. The
+ * load reads the record as Word's reject leaves the section, without the default values it
+ * states (a portrait page).
+ */
+function withRecordedSection(doc: OrderedDocument, { story, item, record }: Holder): void {
+  const own = sectionPropertiesOf(item);
+  if (own === null || record.kind !== 'element' || record.fileRecord === undefined) {
+    return;
+  }
+
+  const section = withRecordedElement(own, firstElement(record.fileRecord) ?? null);
+  replaceItems(doc, story, [item], [createOrderedItem(withOwnSection(item, section))]);
 }
 
 /** The listed records with their suggestions' ids, each a new order; null when one does not fit. */
