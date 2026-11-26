@@ -8,7 +8,8 @@
 //    with its Word revision ids;
 //  - after every round, when every frame has arrived: every copy equals the room, with no
 //    pending change left; decisions of random cards give one document in every order; and the
-//    saved file reopens with the same view and the same results of all decisions.
+//    saved file reopens with the same view and the same results of all decisions; and a close
+//    cleans the room (`compactOrdered`) with no change a person sees, and every copy with it.
 
 import { expect } from 'bun:test';
 import { readOoxmlPackage, type OoxmlPackage } from '../../../../store/package/ooxml-package.ts';
@@ -18,6 +19,7 @@ import {
 } from '../../../../store/package/ooxml-tree.ts';
 import { orderedCardOf } from '../../card-of.ts';
 import { applyOrderedChange } from '../../change/apply.ts';
+import { compactOrdered } from '../../change/compact.ts';
 import { orderedIdMinter } from '../../change/ids.ts';
 import { settleDecidedTables } from '../../change/settle-columns.ts';
 import { composeOrderedPart } from '../../compose/compose.ts';
@@ -32,6 +34,7 @@ import { decodeOrderedClientMessage, encodeOrderedServerMessage } from '../../pr
 import type { OrderedStampedChange } from '../../change/types.ts';
 import { OrderedRoom } from '../../room/room.ts';
 import { suggestionsOnlyPolicy } from '../../room/suggestions-only.ts';
+import { withCleanup } from '../fold-check.ts';
 import { normalizedBody, semanticBody } from '../matrix/compare.ts';
 import { seededRandom } from '../random.ts';
 import { actor } from '../room-harness.ts';
@@ -152,6 +155,30 @@ export function checkSaveAndLoad(
       ),
     });
   return limited.size;
+}
+
+/**
+ * A close's cleanup (`compactOrdered`) changes nothing a person sees: the same stories, the same
+ * cards, and the same stories after every pending suggestion is accepted, or rejected.
+ */
+function checkCleanup(doc: OrderedDocument, label: string): void {
+  const pending = [...doc.suggestions.values()].filter((s) => s.status === 'pending');
+  const seen = () => ({
+    parts: [...doc.stories.keys()].map((name) =>
+      serializeOoxmlPart(composeOrderedPart(doc, name).part)
+    ),
+    cards: orderedCards(doc).map((card) => card.suggestions.join('|')),
+    accepted: decided(
+      doc,
+      pending.map(({ id }) => [id, 'accepted'] as const)
+    ),
+    rejected: decided(
+      doc,
+      pending.map(({ id }) => [id, 'rejected'] as const)
+    ),
+  });
+  const live = seen();
+  expect({ label, cleaned: withCleanup(doc, seen) }).toEqual({ label, cleaned: live });
 }
 
 /** What a session did. */
@@ -301,6 +328,14 @@ export function runSession(
         expect(orderedCardOf(room.document, id)?.suggestions).toEqual(card.suggestions);
     checkDecisionOrders(room.document, rand, label);
     limitedTotal += checkSaveAndLoad(room.document, label);
+    checkCleanup(room.document, label);
+
+    // A close: every copy reloads the room's file, cleaned as the room is
+    for (const doc of [room.document, ...clients.map((client) => client.doc)]) {
+      compactOrdered(doc);
+    }
+
+    prints.set(room.order, printOf(room.document));
     ends.push(room.order);
   }
   const refused = { invalid: 0, local: 0, reapply: 0, room: 0 };
