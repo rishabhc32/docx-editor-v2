@@ -13,7 +13,6 @@ import { composeBlocks, isBlockToken, isLeftOut, joinsNothing, showsPastJoin } f
 import {
   ComposeContext,
   type ComposeOptions,
-  type HeldTakeovers,
   type OrderedComposeOptions,
   type OrderedRetainedPrompt,
   type OrderedViewParagraph,
@@ -27,7 +26,6 @@ import {
   viewOfParagraph,
 } from './paragraph.ts';
 import { withControlRecords, withRestoredPrompts } from './prompts.ts';
-import { withCheckpointNamespace } from '../model/checkpoint-labels.ts';
 import { isTextBoxStoryName } from '../model/text-boxes.ts';
 import { stateOf } from '../model/undo-record.ts';
 
@@ -75,10 +73,6 @@ interface StoryDrawing {
   readonly decisionEmptied: ReadonlySet<string>;
   /** Controls whose value record the words a reject took away stated. */
   readonly stale: ReadonlySet<string>;
-  /** The takeovers each change record holds, by the record's node id. */
-  readonly takeovers: ReadonlyMap<string, HeldTakeovers>;
-  /** Whether the drawing put a checkpoint's attribute on an element (a checkpoint's only). */
-  readonly marked: boolean;
 }
 
 /** A story's drawing. */
@@ -97,8 +91,6 @@ function composeStory(doc: OrderedDocument, name: string, options: ComposeOption
     composed,
     decisionEmptied: ctx.decisionEmptied,
     stale: ctx.stale,
-    takeovers: ctx.takeovers,
-    marked: ctx.markedAny,
   };
 }
 
@@ -114,27 +106,17 @@ export function composeOrderedPart(
   name: string,
   options: OrderedComposeOptions = {}
 ): { readonly part: OoxmlPart; readonly composed: OrderedComposedStory } {
-  const { part, composed } = composeStoryPart(doc, name, options);
-  return { part, composed };
+  return composeStoryPart(doc, name, options);
 }
 
-/** A story's part as {@link composeOrderedPart} composes it, and the takeovers its records hold. */
+/** A story's part as {@link composeOrderedPart} composes it, with the engine's own options. */
 export function composeStoryPart(
   doc: OrderedDocument,
   name: string,
   options: ComposeOptions = {}
-): {
-  readonly part: OoxmlPart;
-  readonly composed: OrderedComposedStory;
-  readonly takeovers: ReadonlyMap<string, HeldTakeovers>;
-} {
-  const { composed, decisionEmptied, stale, takeovers, marked } = composeStory(doc, name, options);
+): { readonly part: OoxmlPart; readonly composed: OrderedComposedStory } {
+  const { composed, decisionEmptied, stale } = composeStory(doc, name, options);
   let part = withStoryBlocks(storyNamed(doc, name).part, composed.children);
-
-  // A checkpoint's prefix bound before the edits below, which check the part
-  if (marked) {
-    part = { ...part, root: withCheckpointNamespace(part.root) };
-  }
 
   // A prompt's records show their decisions as the rest of the drawing does
   const status = (suggestion: string) => {
@@ -143,7 +125,7 @@ export function composeStoryPart(
   };
   part = withRestoredPrompts(doc, part, composed.emptied, decisionEmptied, status);
   part = withControlRecords(part, composed.reached, stale);
-  return { part, composed, takeovers };
+  return { part, composed };
 }
 
 /** What a package and a publish take of a story's compose. */
@@ -151,8 +133,6 @@ export interface OrderedStoryPart {
   readonly part: OoxmlPart;
   /** Placeholder blocks the caller writes to the glossary. */
   readonly prompts: readonly OrderedRetainedPrompt[];
-  /** The takeovers each change record holds, by the record's node id. */
-  readonly takeovers: ReadonlyMap<string, HeldTakeovers>;
 }
 
 /** A story part an open's check composed, and the next node id before and after it. */
@@ -163,7 +143,7 @@ interface CheckedStoryPart extends OrderedStoryPart {
 
 /**
  * The story parts an open's check composed, by the document's state, then by story: each is
- * given once, to the next compose of its story with no option, then dropped. The document's next
+ * given once, to the next compose of its story, then dropped. The document's next
  * write gives it a new state and drops the rest. Kept without the view, which is the large part.
  */
 const CHECKED = new WeakMap<object, Map<string, CheckedStoryPart>>();
@@ -186,9 +166,9 @@ export function composeEveryStory(doc: OrderedDocument): void {
       }
 
       const from = doc.composeIds.next;
-      const { part, composed, takeovers } = composeStoryPart(doc, name, PART_ONLY);
+      const { part, composed } = composeStoryPart(doc, name, PART_ONLY);
       const to = doc.composeIds.next;
-      checked.set(name, { part, prompts: composed.prompts, takeovers, from, to });
+      checked.set(name, { part, prompts: composed.prompts, from, to });
     }
   } finally {
     doc.composeIds.next = next;
@@ -198,33 +178,24 @@ export function composeEveryStory(doc: OrderedDocument): void {
 }
 
 /**
- * A story's part as {@link composeStoryPart} gives it, drawn without the view. With no option,
- * the part an open's check composed when the document and its next node id are as they were
- * then: the same part.
+ * A story's part as {@link composeStoryPart} gives it, drawn without the view: the part an open's
+ * check composed when the document and its next node id are as they were then, the same part.
  */
-export function storyPart(
-  doc: OrderedDocument,
-  name: string,
-  options: ComposeOptions = {}
-): OrderedStoryPart {
+export function storyPart(doc: OrderedDocument, name: string): OrderedStoryPart {
   const checked = CHECKED.get(stateOf(doc));
-  const kept = isPlain(options) ? checked?.get(name) : undefined;
+  const kept = checked?.get(name);
   if (kept !== undefined && kept.from === doc.composeIds.next) {
     checked?.delete(name);
     doc.composeIds.next = kept.to;
     return kept;
   }
 
-  const { part, composed, takeovers } = composeStoryPart(doc, name, { ...options, ...PART_ONLY });
-  return { part, prompts: composed.prompts, takeovers };
+  const { part, composed } = composeStoryPart(doc, name, PART_ONLY);
+  return { part, prompts: composed.prompts };
 }
 
 /** A drawing whose view lists no units: the caller takes only the part. */
 const PART_ONLY: ComposeOptions = { partOnly: true };
-
-/** Whether a compose takes no option: what a package and a publish draw. */
-const isPlain = (options: ComposeOptions): boolean =>
-  Object.values(options).every((value) => value === undefined);
 
 /** Shown paragraphs in a story: the tree's mark count. O(1). @public */
 export function orderedParagraphCount(doc: OrderedDocument, name: string): number {

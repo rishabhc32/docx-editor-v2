@@ -51,7 +51,6 @@ function composedBlocks(
   ctx.emptied.push(...inner.emptied);
   for (const id of inner.decisionEmptied) ctx.decisionEmptied.add(id);
   ctx.reached.push(...inner.reached);
-  ctx.markedAny ||= inner.markedAny;
   ctx.prompts.push(...inner.prompts);
   for (const [id, taken] of inner.takeovers) {
     ctx.takeovers.set(id, taken);
@@ -98,8 +97,8 @@ export function withTextBoxContent(
     const root = host ? drawn[loaded.findIndex((content) => content.id === host.root)] : undefined;
     const composed = composedBlocks(ctx, name);
 
-    // The file's form when it reads the same, but for a takeover: a checkpoint names the change
-    // record compose drew, which holds the records taken
+    // The file's form when it reads the same, but for a takeover: the change record compose drew
+    // holds the records taken
     if (!root || !composed || (!composed.takeovers && sameBlocks(root, composed.blocks))) {
       continue;
     }

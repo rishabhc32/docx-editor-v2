@@ -14,7 +14,7 @@ import {
 } from '../../../store/store/tracked-content-control-value.ts';
 import { build, textNode } from '../../../store/store/tree-op-tracked.ts';
 import { MOVE_RANGE } from '../load/moves.ts';
-import { isPending, isSplitEdge, movedAwayBy, statusOf } from '../model/document.ts';
+import { isSplitEdge, movedAwayBy, statusOf } from '../model/document.ts';
 import { fileMark, REVISION_ROLE } from '../model/revision-ids.ts';
 import {
   isUnit,
@@ -35,7 +35,7 @@ import {
 } from '../ooxml-nodes.ts';
 import type { ComposeContext } from './context.ts';
 import { isNotesStory } from './note-references.ts';
-import { containerPropertiesAfter, drawnFormats, faceAfter, madeOverWhere } from './properties.ts';
+import { containerPropertiesAfter, drawnFormats, faceAfter } from './properties.ts';
 import { keptLinkEdges } from './kept-links.ts';
 import { hidePrompt } from './prompts.ts';
 import { withTextBoxContent } from './text-boxes.ts';
@@ -58,8 +58,6 @@ interface Box {
 
 interface RunBuild {
   readonly key: string;
-  /** The room run it is drawn from (`roomRunOf`), which numbers it for a checkpoint; else empty. */
-  readonly roomRun: string;
   readonly item: OrderedItem;
   readonly content: OoxmlNode[];
   readonly deleted: boolean;
@@ -67,8 +65,6 @@ interface RunBuild {
   textShell: OoxmlElement | undefined;
   /** The text form's item is drawn in its own paragraph: the form keeps its id. */
   textHomed: boolean;
-  /** Its first unit, which names who typed every unit of the run. */
-  unit?: OrderedItem;
 }
 
 /** Whether an item is a unit: text or an atom. */
@@ -275,14 +271,13 @@ export function composeInline(ctx: ComposeContext, buffer: readonly OrderedItem[
   const flushText = (build: RunBuild): void => {
     if (!build.text) return;
     const text = textElement(ctx, build.text, build.textShell, build.deleted, build.textHomed);
-    build.content.push(ctx.ofRoomText(text, build.roomRun, build.textShell));
+    build.content.push(text);
     build.text = '';
   };
   const flush = (): void => {
     if (!current) return;
     flushText(current);
-    const run = ctx.ofRoomRun(runNode(ctx, current.item, current.content), current.roomRun);
-    place(ctx, box().children, ctx.typed(run, current.unit), current.item);
+    place(ctx, box().children, runNode(ctx, current.item, current.content), current.item);
     current = null;
   };
   for (const item of buffer) {
@@ -345,8 +340,6 @@ export function composeInline(ctx: ComposeContext, buffer: readonly OrderedItem[
       flush();
       current = {
         key,
-        // Only a checkpoint numbers the room's runs
-        roomRun: ctx.options.runs === undefined ? '' : roomRunOf(ctx, item),
         item,
         content: [],
         deleted: struckText(ctx, item),
@@ -354,10 +347,6 @@ export function composeInline(ctx: ComposeContext, buffer: readonly OrderedItem[
         textShell: undefined,
         textHomed: false,
       };
-    }
-
-    if (current.unit === undefined && isUnit(item)) {
-      current.unit = item;
     }
 
     if (item.kind === 'text') {
@@ -538,23 +527,6 @@ function textElement(
 /** A drawn format record as a run's key names it. */
 const recordKey = (record: OrderedFormatRecord): string => `${record.id}:${record.suggestion}`;
 
-/**
- * The run the room draws a unit in, by what no file holds: its `run`, its face and the accepted
- * format records it draws. A pending record splits the run only while it shows, and the file
- * draws that split, so it names no room run: a take-back or a reject draws the run whole again. An
- * accepted record splits it for good, as the editor keeps the runs a format split, and a fold
- * writes it into the face: it names the room run. One made over a pending record (`over`) goes
- * with that record's reject, so it splits the run only while that record shows, as a pending one.
- */
-function roomRunOf(ctx: ComposeContext, unit: OrderedItem): string {
-  const accepted = drawnFormats(ctx, unit.fmts).filter(
-    (record) =>
-      statusOf(ctx.doc, record.suggestion) === 'accepted' &&
-      !madeOverWhere(record, unit.fmts, (holder) => isPending(ctx.doc, holder))
-  );
-  return [unit.run, unit.face?.id ?? '', ...accepted.map(recordKey)].join(' ');
-}
-
 function runKey(ctx: ComposeContext, item: OrderedItem): string {
   const by = ctx.insertedBy(item) ?? '';
   const del = ctx.struckBy(item) ?? '';
@@ -600,11 +572,11 @@ function drawBare(ctx: ComposeContext, item: OrderedItem, into: OoxmlNode[]): vo
       else inner.push(piece.node);
     }
 
-    into.push(ctx.typed(withChildren(node, inner), item));
+    into.push(withChildren(node, inner));
     return;
   }
 
-  place(ctx, into, node.kind === 'textValue' ? node : ctx.typed(node, item), item);
+  place(ctx, into, node, item);
 }
 
 /**
@@ -632,7 +604,7 @@ function drawField(
     ride((slot) => slot === k);
     let node = piece.node;
     if (node.kind === 'run') {
-      node = ctx.typed(withId(node, ctx.runId(node.id)), item);
+      node = withId(node, ctx.runId(node.id));
     }
 
     place(ctx, into, fieldRun(ctx, item, piece, node, formatted[k] === true), item);

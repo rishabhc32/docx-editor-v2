@@ -214,7 +214,7 @@ function markProperties(
       mark.dels.some((id) => !ctx.revertedDirect(id) && ctx.rejectedOrDrawnSo(id)));
   let rPr = decided && face?.children.length === 0 ? null : face;
   if (markers.length > 0) {
-    const runProperties = face ?? ctx.drawn(build(ctx.mint(), 'runProperties', 'rPr', [], []));
+    const runProperties = face ?? build(ctx.mint(), 'runProperties', 'rPr', [], []);
     rPr = withChildren(runProperties, [...markers, ...runProperties.children]);
   }
 
@@ -224,7 +224,7 @@ function markProperties(
     return null;
   }
 
-  return base === null ? ctx.drawn(written) : written;
+  return written;
 }
 
 /**

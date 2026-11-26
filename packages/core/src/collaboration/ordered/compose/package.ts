@@ -27,7 +27,7 @@ import { withDecidedPrompts } from './prompts.ts';
 import { withUniqueIds } from './unique-ids.ts';
 import { MEDIA_PLACE, withFileMediaBytes, withFileMediaPlaces } from './file-media.ts';
 import { withoutComments } from './without-comments.ts';
-import type { ComposeOptions, HeldTakeovers, OrderedRetainedPrompt } from './context.ts';
+import type { OrderedRetainedPrompt } from './context.ts';
 import { laterRelationshipsOf } from './relationship-targets.ts';
 import {
   isAddedStory,
@@ -72,35 +72,24 @@ export function composeOrderedPackage(
   base: OoxmlPackage,
   options: OrderedResourceOptions & OrderedPackageCommentOptions = {}
 ): OoxmlPackage {
-  return composeWithMedia(doc, base, mediaBytesOf(options), options).pkg;
+  return composeWithMedia(doc, base, mediaBytesOf(options), options);
 }
 
-/** The takeovers the change records of each story part hold: by part name, then by node id. */
-export type OrderedPartTakeovers = ReadonlyMap<string, ReadonlyMap<string, HeldTakeovers>>;
-
-/** How a package is composed: its comments, and the typers and room runs a checkpoint writes. */
-type PackageComposeOptions = OrderedPackageCommentOptions & Pick<ComposeOptions, 'typers' | 'runs'>;
-
-/**
- * {@link composeOrderedPackage}, with the bytes of added media from `bytes`, and the takeovers
- * the change records of its story parts hold.
- */
+/** {@link composeOrderedPackage}, with the bytes of added media from `bytes`. */
 function composeWithMedia(
   doc: OrderedDocument,
   base: OoxmlPackage,
   bytes: OrderedMediaBytes,
-  options: PackageComposeOptions
-): { readonly pkg: OoxmlPackage; readonly takeovers: OrderedPartTakeovers } {
+  options: OrderedPackageCommentOptions
+): OoxmlPackage {
   const removesComments = options.comments === 'remove';
   let pkg = withFileMediaPlaces(base, doc);
   const prompts: OrderedRetainedPrompt[] = [];
   const added = new Map<string, OoxmlPart>();
-  const takeovers = new Map<string, ReadonlyMap<string, HeldTakeovers>>();
   for (const name of doc.stories.keys()) {
     // A text box's story is drawn into its object, in its host's part
     if (isTextBoxStoryName(name)) continue;
-    const drawn = storyPart(doc, name, { typers: options.typers, runs: options.runs });
-    takeovers.set(name, drawn.takeovers);
+    const drawn = storyPart(doc, name);
 
     // Each node id once in a part: the package writer finds nodes by id
     const part = withUniqueIds(drawn.part);
@@ -141,7 +130,7 @@ function composeWithMedia(
   }
 
   // Last, the bytes of the file's media a checkpoint names that the document still uses
-  return { pkg: withFileMediaBytes(pkg, doc, bytes), takeovers };
+  return withFileMediaBytes(pkg, doc, bytes);
 }
 
 /**
@@ -176,7 +165,6 @@ export interface OrderedPackageWriteOptions {
 interface OrderedComposedWithoutMedia {
   readonly pkg: OoxmlPackage;
   readonly media: ReadonlyMap<string, OrderedMediaReference>;
-  readonly takeovers: OrderedPartTakeovers;
 }
 
 /**
@@ -184,13 +172,13 @@ interface OrderedComposedWithoutMedia {
  * of each one when its entry is written: media a change added, and the file's media a
  * checkpoint names. The composed package never holds their bytes.
  */
-export function composedWithoutMedia(
+function composedWithoutMedia(
   doc: OrderedDocument,
   base: OoxmlPackage,
-  options: PackageComposeOptions = {}
+  options: OrderedPackageCommentOptions
 ): OrderedComposedWithoutMedia {
   const media = new Map<string, OrderedMediaReference>();
-  const { pkg, takeovers } = composeWithMedia(
+  const pkg = composeWithMedia(
     doc,
     base,
     (item) => {
@@ -199,7 +187,7 @@ export function composedWithoutMedia(
     },
     options
   );
-  return { pkg, media, takeovers };
+  return { pkg, media };
 }
 
 /**
@@ -220,59 +208,20 @@ export async function writeOrderedPackage(
   options: OrderedPackageWriteOptions & OrderedPackageCommentOptions
 ): Promise<void> {
   const { pkg, media } = composedWithoutMedia(doc, base, options);
-  await writeComposedEntries(
-    pkg,
-    async (name, data) => {
-      const held = media.get(partNameKey(name));
-      return held === undefined ? data : orderedMediaOf(held, options.media);
-    },
-    options.write
-  );
-}
-
-/** An entry's bytes as a writer writes them, or null to leave the entry out. */
-type OrderedEntryBytes = (
-  name: string,
-  data: Uint8Array,
-  entry: number
-) => Promise<Uint8Array | null>;
-
-/**
- * The entries of a composed package as a zip, handed to `write` front to back through the
- * engine's zip writer: each with the bytes `entryBytes` gives (`entry` is its place, from 0),
- * then the entry `last` gives, then the central directory. One entry at a time: an entry's
- * bytes are not kept once it is written.
- */
-export async function writeComposedEntries(
-  pkg: OoxmlPackage,
-  entryBytes: OrderedEntryBytes,
-  write: OrderedPackageWriteOptions['write'],
-  last?: () => readonly [string, Uint8Array]
-): Promise<void> {
   const zip = zipPartWriter();
-  const writePart = async (name: string, bytes: Uint8Array): Promise<void> => {
-    for (const chunk of finished(zip.part(name, bytes))) {
-      await write(chunk);
-    }
-  };
-  let entry = 0;
   for (const [name, data] of finished(ooxmlPackageEntriesSteps(pkg))) {
-    const bytes = await entryBytes(name, data, entry);
-    entry += 1;
-    if (bytes !== null) {
-      await writePart(name, bytes);
+    const held = media.get(partNameKey(name));
+    const bytes = held === undefined ? data : await orderedMediaOf(held, options.media);
+    for (const chunk of finished(zip.part(name, bytes))) {
+      await options.write(chunk);
     }
   }
 
-  if (last !== undefined) {
-    await writePart(...last());
-  }
-
-  await write(zip.end());
+  await options.write(zip.end());
 }
 
 /** The bytes of media, or `missing-blob` when `read` rejects or gives another size. */
-export async function orderedMediaOf(
+async function orderedMediaOf(
   media: OrderedMediaReference,
   read: OrderedPackageWriteOptions['media']
 ): Promise<Uint8Array> {

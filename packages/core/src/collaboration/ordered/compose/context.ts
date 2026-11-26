@@ -12,11 +12,8 @@ import {
   pendingDeleters,
   statusOf,
 } from '../model/document.ts';
-import { checkpointAttribute } from '../model/checkpoint.ts';
-import type { OrderedPerson } from '../model/person.ts';
 import { textBoxHostOf } from '../model/text-boxes.ts';
 import { revisionIdFor, revisionMarkOf } from '../model/revision-ids.ts';
-import { orderedUnitTyper } from '../model/typers.ts';
 import { withAttributes } from '../ooxml-nodes.ts';
 import type {
   OrderedAttribution,
@@ -38,22 +35,8 @@ export interface OrderedComposeOptions {
   readonly pending?: 'show' | 'reject';
 }
 
-/** How one compose draws: the public options, and what only a checkpoint's compose does. */
+/** How one compose draws: the public options, and the engine's own. */
 export interface ComposeOptions extends OrderedComposeOptions {
-  /**
-   * Set for a checkpoint: each element a unit is drawn in (its run, each run of a field, a unit
-   * not in a run) carries the namespace of the room change that typed the unit inside a pending
-   * insertion (`oc:typer`), and the person of each namespace written is kept here.
-   */
-  readonly typers?: Map<string, OrderedPerson>;
-  /**
-   * Set for a checkpoint: each run drawn from units carries the number of the run the room draws
-   * them in, and each text element the number of the room's text element (`oc:run`), kept here
-   * by what no file holds, with how many elements carry it. A pending suggestion may split a run
-   * of the room into pieces; an open joins them again. A number on one element joins nothing, and
-   * the checkpoint's label walk takes it off.
-   */
-  readonly runs?: Map<string, RoomNumber>;
   /**
    * Set for a decision's check: the story draws only the top-level blocks that hold one of these
    * items or a move, and the block after each (`compose/region.ts`).
@@ -69,12 +52,6 @@ export interface ComposeOptions extends OrderedComposeOptions {
    * paragraphs list no units, which are most of what a drawing makes.
    */
   readonly partOnly?: boolean;
-}
-
-/** The number of a room run or text element in a checkpoint's drawing, and its elements. */
-export interface RoomNumber {
-  readonly number: string;
-  uses: number;
 }
 
 /** One shown unit of a paragraph's view. @public */
@@ -153,19 +130,6 @@ export interface WrapperInfo {
   readonly outer: string;
 }
 
-/** The number of a room run or text element in a checkpoint's drawing, the first time a new one. */
-function roomNumber(runs: Map<string, RoomNumber>, key: string): string {
-  const known = runs.get(key);
-  if (known !== undefined) {
-    known.uses += 1;
-    return known.number;
-  }
-
-  const number = String(runs.size);
-  runs.set(key, { number, uses: 1 });
-  return number;
-}
-
 export class ComposeContext {
   readonly doc: OrderedDocument;
   readonly story: OrderedStory;
@@ -188,8 +152,6 @@ export class ComposeContext {
    * Controls whose value record the words a reject took away stated: words of no value clear it.
    */
   readonly stale = new Set<string>();
-  /** Whether this drawing put a checkpoint's attribute on an element: its part declares it. */
-  markedAny = false;
   /** Prompt units of controls that hold content now, and the controls those prompts held. */
   readonly hiddenPrompts = new Set<OrderedItem>();
   /** Open item spaces of the controls whose prompt is hidden. */
@@ -263,71 +225,6 @@ export class ComposeContext {
     const hostStory = host ? doc.stories.get(host.host) : undefined;
     const object = host && hostStory ? itemAt(hostStory, host.atom) : null;
     this.#objectGone = host !== null && (object === null || this.unshown(object));
-  }
-
-  /**
-   * The element units are drawn in, with the typer of `unit` on it when a checkpoint is drawn: one
-   * room change typed every unit of an item, and of a run, whose key holds the item's `run`.
-   */
-  typed(element: OoxmlElement, unit: OrderedItem | undefined): OoxmlElement {
-    const typers = this.options.typers;
-    const typer =
-      typers === undefined || unit === undefined
-        ? null
-        : orderedUnitTyper(this.doc, unit, unit.offset);
-    if (typers === undefined || typer === null) {
-      return element;
-    }
-
-    this.markedAny = true;
-    typers.set(typer.namespace, typer.person);
-    const attribute = checkpointAttribute('typer', typer.namespace);
-    return withAttributes(element, [...element.attributes, attribute]);
-  }
-
-  /** A run, numbered by the room run it is drawn from (`roomRun`) for a checkpoint. */
-  ofRoomRun(run: OoxmlElement, roomRun: string): OoxmlElement {
-    const runs = this.options.runs;
-    if (runs === undefined) {
-      return run;
-    }
-
-    this.markedAny = true;
-    const number = roomNumber(runs, roomRun);
-    return withAttributes(run, [...run.attributes, checkpointAttribute('run', number)]);
-  }
-
-  /**
-   * A text element of a run of `roomRun`, numbered for a checkpoint by the room's text element:
-   * the text form the room draws it from (`shell`). A piece a pending paragraph break moved out of
-   * its own paragraph takes the same number, so a reject draws the pieces as one element again.
-   */
-  ofRoomText(text: OoxmlNode, roomRun: string, shell: OoxmlElement | undefined): OoxmlNode {
-    const runs = this.options.runs;
-    if (runs === undefined || text.kind === 'textValue') {
-      return text;
-    }
-
-    const key = `text ${roomRun} ${shell?.id ?? ''}`;
-    const number = roomNumber(runs, key);
-    return withAttributes(text, [...text.attributes, checkpointAttribute('run', number)]);
-  }
-
-  /**
-   * Run or paragraph properties drawn only for change records, where the run or the paragraph
-   * has none, marked so when a checkpoint is drawn: an open reads them as none once a decision
-   * leaves them empty, as the room draws none then.
-   */
-  drawn(properties: OoxmlElement): OoxmlElement {
-    if (this.options.runs === undefined) {
-      return properties;
-    }
-
-    this.markedAny = true;
-    return withAttributes(properties, [
-      ...properties.attributes,
-      checkpointAttribute('drawn', '1'),
-    ]);
   }
 
   /** Whether an item shows nowhere in this drawing, by its labels and the drawing's options. */

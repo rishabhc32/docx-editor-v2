@@ -248,8 +248,8 @@ export const madeOverRejected = (
 
 /**
  * The records drawn from the first pending one, when one of them was made over a pending record
- * with no change record of its own (`over`): Word's change record does not say them, so a
- * checkpoint keeps them all.
+ * with no change record of its own (`over`): Word's change record does not say them, so the
+ * drawing keeps them all with it (`keepTakeovers`).
  */
 export const madeOverDrawn = <T extends AnyRecord>(
   drawn: readonly T[]
@@ -341,10 +341,7 @@ export function faceAfter(
 
   ctx.keepTakeovers(children, taken, madeOver);
   if (children.length === 0 && !base) return null;
-  return withChildren(
-    base ?? ctx.drawn(build(ctx.mint(), 'runProperties', 'rPr', [], [])),
-    children
-  );
+  return withChildren(base ?? build(ctx.mint(), 'runProperties', 'rPr', [], []), children);
 }
 
 /** The given element's children for a property record, the kept children `keep` selects. */

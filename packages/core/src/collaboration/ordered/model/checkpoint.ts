@@ -1,7 +1,6 @@
 // Reads the manifest of a checkpoint of version 5 (design D14), which no engine writes now.
 
 import type { OoxmlPackage } from '../../../store/package/ooxml-package.ts';
-import type { OoxmlAttribute } from '../../../store/package/ooxml-tree.ts';
 import { normalizePartName, partNameKey } from '../../../store/package/opc-names.ts';
 import { resolveContentTypeOf } from '../../../store/package/package-edit.ts';
 import { XML_HARD_MAX_BYTES } from '../../../store/package/xml-reader.ts';
@@ -56,24 +55,6 @@ const VERSION = 5;
  * a Word file too.
  */
 export const CHECKPOINT_NAMESPACE = 'https://docx-editor.dev/ordered-checkpoint';
-
-/** The prefix a checkpoint declares the namespace under, on each part root that may hold it. */
-export const CHECKPOINT_PREFIX = 'oc';
-
-/**
- * A checkpoint's attribute: a label, a typer's namespace, a room run's number, or the mark of
- * properties compose drew only for change records (`drawn`).
- */
-export const checkpointAttribute = (
-  localName: 'label' | 'typer' | 'run' | 'drawn',
-  value: string
-): OoxmlAttribute => ({
-  kind: 'genericExtension',
-  namespaceUri: CHECKPOINT_NAMESPACE,
-  localName,
-  prefix: CHECKPOINT_PREFIX,
-  value,
-});
 
 /**
  * The room facts a checkpoint's manifest keeps, which Word has no place for: each pending

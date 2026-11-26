@@ -1,32 +1,16 @@
-// The attributes only a checkpoint's parts hold (design D14): a label on each element the
-// manifest names, the typer on each typed run, the room run's number on each run drawn from
-// units, and a mark on properties drawn only for change records. The version 5 writer put them
-// on; every open takes all of them off before the load.
+// The attributes only the parts of a version 5 checkpoint hold (design D14): a label on each
+// element the manifest names, the typer on each typed run, the room run's number on each run
+// drawn from units, and a mark on properties drawn only for change records. The version 5 writer
+// put them on; every open takes all of them off before the load.
 
 import { withPart, type OoxmlPackage } from '../../../store/package/ooxml-package.ts';
-import type {
-  OoxmlElement,
-  OoxmlNamespaceBinding,
-  OoxmlNode,
-} from '../../../store/package/ooxml-tree.ts';
+import type { OoxmlElement, OoxmlNode } from '../../../store/package/ooxml-tree.ts';
 import { withAttributes, withChildren } from '../ooxml-nodes.ts';
-import { CHECKPOINT_NAMESPACE, CHECKPOINT_PREFIX } from './checkpoint.ts';
-
-/** The declaration of the namespace a checkpoint writes on each part root that holds it. */
-const BINDING: OoxmlNamespaceBinding = {
-  prefix: CHECKPOINT_PREFIX,
-  namespaceUri: CHECKPOINT_NAMESPACE,
-};
+import { CHECKPOINT_NAMESPACE } from './checkpoint.ts';
 
 /** Whether an attribute or a declaration is of a checkpoint's namespace. */
 const isOurs = (item: { readonly namespaceUri: string }): boolean =>
   item.namespaceUri === CHECKPOINT_NAMESPACE;
-
-/** A part root that declares the namespace a checkpoint writes, once. */
-export const withCheckpointNamespace = (root: OoxmlElement): OoxmlElement =>
-  root.namespaceBindings.some(isOurs)
-    ? root
-    : { ...root, namespaceBindings: [...root.namespaceBindings, BINDING] };
 
 /** What the parts of a package held of a checkpoint's attributes. */
 export interface CheckpointMarks {

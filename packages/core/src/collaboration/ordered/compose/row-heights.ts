@@ -76,15 +76,8 @@ export function withRowHeightAnchors(
       continue;
     }
 
-    // The grid record is the anchor's alone: a checkpoint marks it drawn, so an open reads none
-    const grid =
-      edits.grid &&
-      withChildren(
-        edits.grid,
-        edits.grid.children.map((child) =>
-          child.kind !== 'textValue' && isWml(child, 'tblGridChange') ? ctx.drawn(child) : child
-        )
-      );
+    // The grid record is the anchor's alone
+    const grid = edits.grid;
     current = withChildren(
       current,
       current.children.map((child) => {

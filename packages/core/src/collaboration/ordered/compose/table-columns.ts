@@ -680,8 +680,7 @@ function withCellsAccepted(
   });
   if (sites.length === 0) return marked;
 
-  // A scratch part, unchecked as compose's other engine writes: a checkpoint's drawing marks its
-  // runs with attributes the part's root does not declare yet
+  // A scratch part, unchecked as compose's other engine writes
   const scratch = withStoryBlocks(ctx.story.part, [marked]);
   const options = { siteNodeIds: sites, deferValidation: true };
   const resolved = resolveRevisions(scratch, 'accept', undefined, options);
