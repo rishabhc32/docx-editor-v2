@@ -8,6 +8,7 @@ import { applyTreeOp } from '../../../store/store/tree-op-apply.ts';
 import type { TreeDocOp } from '../../../store/store/tree-op-types.ts';
 import { composeBlocks } from '../compose/blocks.ts';
 import { withStoryBlocks } from '../compose/paragraph-ops.ts';
+import { withControlRecords } from '../compose/prompts.ts';
 import { loadBlocks } from '../load/blocks.ts';
 import { loadInEdit, newLoadBudget, newLoadState, RevisionReader } from '../load/state.ts';
 import { engineRefusal, OrderedRefusal } from '../model/refusal.ts';
@@ -28,10 +29,14 @@ export const revisionOf = (ctx: Ctx) => ({
   date: TEMPLATE_REVISION.date,
 });
 
-/** The story as the view draws it, every pending suggestion shown. */
+/**
+ * The story as the view draws it, every pending suggestion shown, and each control's value record
+ * following its text as the room shows it (`withControlRecords`).
+ */
 export function viewPart(ctx: Ctx): OoxmlPart {
   const compose = scratchCompose(ctx.doc, ctx.story, 'view');
-  return withStoryBlocks(ctx.story.part, composeBlocks(compose).children);
+  const part = withStoryBlocks(ctx.story.part, composeBlocks(compose).children);
+  return withControlRecords(part, compose.reached, compose.stale);
 }
 
 /** A node of the view by id, as an element. */

@@ -32,6 +32,8 @@
 // plain prompt kept its markers between the prompt's words when a reject showed the prompt again
 // live: the prompt goes whole inside the range, as the editor alone writes it. A date in a German
 // date picker once showed English names: it shows the names of the control's language, as Word.
+// The item an accepted pick shows, picked again, once made a card the editor alone does not make,
+// and a fold showed the stored value under it: the room's edits read the value before the accept.
 
 import { afterEach, describe, expect, test } from 'bun:test';
 import { createDocxEditor } from '../../../../editor/docx-editor.ts';
@@ -683,4 +685,69 @@ describe("a party's format over his own on a prompt, then his typing over it", (
     ];
     expect(copies.map(replaced)).toEqual([0, 0, 0, 0]);
   });
+});
+
+describe('the item an accepted pick shows, picked again', () => {
+  // Ben's pick went over words that do not read back to the stored value, so the value stayed
+  // while it was pending, and the organiser's accept read the new one from the words. The same
+  // item picked again changes nothing, as in the editor alone
+  const prompt = line(
+    `<w:showingPlcHdr/><w:dropDownList w:lastValue="30">${ITEMS}</w:dropDownList>`,
+    t('Choose an item.', FACE)
+  );
+  const listed = line(`<w:dropDownList w:lastValue="30">${ITEMS}</w:dropDownList>`, t('Net 30'));
+
+  /** Ben's pick of "Net 60", his words in it, and his pick of "Net 30" over them. */
+  const overOwnWords = (person: Person) => {
+    pick('60')(person);
+    caretAt(person, 0, 15);
+    typing('x')(person);
+    pick('30')(person);
+  };
+
+  /** Accept each of Ben's cards, as `person`. */
+  const acceptBens = (person: Person) => {
+    for (let card = bensCard(person); card; card = bensCard(person)) {
+      expect(person.editor.acceptReviewItem(card.key).ok).toBe(true);
+    }
+  };
+
+  for (const [label, file, first, again] of [
+    ["over a drop-down list's prompt beside a stored value", prompt, pick('60'), '60'],
+    ['over his own words that name no item', listed, overOwnWords, '30'],
+  ] as const) {
+    test(label, async () => {
+      const container = document.createElement('div');
+      document.body.append(container);
+      const editor = createDocxEditor({
+        container,
+        document: file,
+        author: 'Ben',
+        mode: 'suggesting',
+        modules: [reviewTestModule()],
+      });
+      const person = { name: 'alone', editor, container } as unknown as Person;
+      first(person);
+      acceptBens(person);
+      pick(again)(person);
+      surface(person).flushPendingInput();
+      const expected = { cards: pageCards(person), control: controlOf(editorXml(person)) };
+      editor.destroy();
+      container.remove();
+      expect(expected.cards).toEqual([]);
+
+      const seated = await seats(file, 1);
+      first(seated.ben);
+      await settle();
+      acceptBens(seated.olive);
+      await settle();
+      pick(again)(seated.ben);
+      await settle();
+      const reopened = await seats(await foldedBytes(seated.room.room.document, file, 1), 2);
+      expect({
+        live: { cards: roomCards(seated.room.room.document), control: roomControl(seated) },
+        folded: { cards: roomCards(reopened.room.room.document), control: roomControl(reopened) },
+      }).toEqual({ live: expected, folded: expected });
+    });
+  }
 });
