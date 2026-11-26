@@ -10,6 +10,7 @@ import { orderedPackageMedia, writeOrderedCheckpoint } from '../../compose/check
 import { orderedPackageBytes, writeOrderedPackage } from '../../compose/package.ts';
 import { orderedBlobHash } from '../../protocol/blobs.ts';
 import { docx, MATRIX_EXTRAS, p, pictureRun, RED_PNG, t } from '../word-fixtures.ts';
+import { heldEntries } from '../fold-check.ts';
 import { OBJECT_SOURCE, WORKBOOK } from './paste-objects-harness.ts';
 import {
   caretAt,
@@ -115,7 +116,7 @@ async function copyPicture(person: Person): Promise<void> {
 describe('a room whose file is a checkpoint', () => {
   test("every page reads the file's picture and shows it, from its first document on", async () => {
     const { r, olive, ben, uploads, checkpoint } = await checkpointRoom();
-    expect(Object.keys(readPackage(checkpoint).partBytes)).not.toContain(RED_PART);
+    expect(Object.keys(heldEntries(checkpoint))).not.toContain(RED_PART.slice(1));
     for (const person of [olive, ben]) {
       expect(redParts(person.handle.document)).toEqual([RED_PART]);
       expect(redParts(null, person)).toEqual([RED_PART]);

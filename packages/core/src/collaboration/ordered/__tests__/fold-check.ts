@@ -121,6 +121,12 @@ export async function checkpointBytes(
   return new Uint8Array(Buffer.concat(chunks));
 }
 
+/** The entries a checkpoint holds, with those of the Word package version 6 holds inside it. */
+export function heldEntries(checkpoint: Uint8Array): Record<string, Uint8Array> {
+  const { 'ordered/base.docx': base, ...entries } = unzipSync(checkpoint);
+  return base === undefined ? entries : { ...entries, ...unzipSync(base) };
+}
+
 /** Who made a suggestion, and when. */
 const makerKey = ({ attribution }: OrderedSuggestion): string =>
   JSON.stringify([attribution.person, attribution.author, attribution.date ?? null]);

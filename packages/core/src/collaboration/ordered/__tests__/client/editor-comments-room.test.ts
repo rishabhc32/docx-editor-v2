@@ -285,7 +285,7 @@ describe('a comment through the room', () => {
     expect(entriesWith(word, ANA.id)).toEqual([]);
 
     // The checkpoint keeps the person, under its own number and as file 1 of the next room
-    expect(entriesWith(checkpoint, ANA.id)).toEqual(['ordered-checkpoint.json']);
+    expect(entriesWith(checkpoint, ANA.id)).toEqual(['ordered/checkpoint.json']);
     const kept = [`Ana (Acme) ${ANA.id} - false Why 30?/Ask legal.`];
     expect(roomComments(openOrderedCheckpoint(checkpoint, { file: 1 }).document)).toEqual(kept);
     expect(roomComments(openOrderedCheckpoint(checkpoint, { file: 4 }).document)).toEqual(kept);

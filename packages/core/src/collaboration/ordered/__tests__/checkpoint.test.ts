@@ -36,6 +36,7 @@ import type { OrderedChange } from '../change/types.ts';
 import { allowWritersPolicy } from '../room/policy.ts';
 import { OrderedRoom } from '../room/room.ts';
 import { apply, at, BODY, EDIT } from './change-apply-fixture.ts';
+import { heldEntries } from './fold-check.ts';
 import { actor } from './room-harness.ts';
 import { EMBEDDED_SOURCE, EMBEDDED_WORKBOOK, INK } from './client/paste-embedded-harness.ts';
 import { OBJECT_SOURCE } from './client/paste-objects-harness.ts';
@@ -111,12 +112,6 @@ function checkpointOf(
   writer: Writer = writeOrderedCheckpoint
 ): Promise<Uint8Array> {
   return collected((write) => writer(file.document, file.base, { media: store.read, write }));
-}
-
-/** The entries a checkpoint holds, with those of the Word package version 6 holds inside it. */
-function heldEntries(checkpoint: Uint8Array): Record<string, Uint8Array> {
-  const { 'ordered/base.docx': base, ...entries } = unzipSync(checkpoint);
-  return base === undefined ? entries : { ...entries, ...unzipSync(base) };
 }
 
 /** The Word file `writeOrderedPackage` writes. */
