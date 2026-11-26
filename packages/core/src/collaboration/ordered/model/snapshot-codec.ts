@@ -262,6 +262,35 @@ export function map<K, V>(
   };
 }
 
+/** Entries in the order of their keys. */
+const byKey = <V>(m: Map<string, V>): Map<string, V> =>
+  new Map([...m].sort(([a], [b]) => (a < b ? -1 : 1)));
+
+/**
+ * A map whose order carries no meaning, written in the order of its keys: a key out of that
+ * order, or repeated, does not read.
+ */
+export function sortedMap<V>(
+  key: SnapshotCodec<string>,
+  value: SnapshotCodec<V>
+): SnapshotCodec<Map<string, V>> {
+  const inner = map(key, value);
+  return {
+    write: (m, w) => inner.write(byKey(m), w),
+    read: (json, path, r) => {
+      const out = inner.read(json, path, r);
+      const keys = [...out.keys()];
+      const k = keys.findIndex((name, n) => n > 0 && keys[n - 1]! > name);
+      if (k !== -1) {
+        throw new Invalid('invalid-value', at(path, k), 'not in key order');
+      }
+
+      return out;
+    },
+    diff: (a, b, path) => inner.diff(byKey(a), byKey(b), path),
+  };
+}
+
 /** A node of Word XML. */
 export const node: SnapshotCodec<OoxmlNode> = {
   write: (value, w) => w.nodes.ref(value),

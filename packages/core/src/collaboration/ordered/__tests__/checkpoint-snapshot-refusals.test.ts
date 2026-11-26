@@ -116,12 +116,50 @@ describe('a checkpoint of version 6 that is not as written', () => {
       },
       'checkpoint-manifest',
     ],
+    ...(
+      [
+        [
+          'out of namespace order',
+          [
+            ['b', 1],
+            ['a', 2],
+          ],
+        ],
+        [
+          'a repeated namespace',
+          [
+            ['a', 1],
+            ['a', 2],
+          ],
+        ],
+        ['a namespace past its pattern', [['a:b', 1]]],
+        ['a counter of 0', [['a', 0]]],
+        ['a counter past 15 digits', [['a', 10 ** 15]]],
+      ] as const
+    ).map(
+      ([name, counters]) =>
+        [
+          `last counters ${name}`,
+          (_: Json, body: Json) => ((body.document as Json).lastCounters = counters),
+          'checkpoint-manifest',
+        ] as const
+    ),
   ];
   for (const [name, change, reason, raw] of cases) {
     test(`refuses ${name}: ${reason}`, async () => {
       expect(refusal(await changed(change, raw))).toBe(reason);
     });
   }
+
+  test('keeps the last counters of each namespace, in namespace order', async () => {
+    const counters = [
+      ['a', 10 ** 15 - 1],
+      ['b', 1],
+    ];
+    const bytes = await changed((_, body) => ((body.document as Json).lastCounters = counters));
+    const { document: doc } = openOrderedCheckpoint(bytes, { file: 2 });
+    expect([...doc.lastCounters]).toEqual(counters);
+  });
 
   test('refuses a prototype key anywhere', async () => {
     const files = { ...(await FILE) };

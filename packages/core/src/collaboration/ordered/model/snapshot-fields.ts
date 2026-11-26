@@ -57,6 +57,7 @@ import {
   rebuilt,
   record,
   set,
+  sortedMap,
   stored,
   text,
   variants,
@@ -764,6 +765,9 @@ export const NAMESPACE: SnapshotCodec<string> = {
   diff: (a, b, path) => (a === b ? null : path),
 };
 
+/** A change id's counter: from 1, at most 15 digits. */
+const CHANGE_COUNTER = int(1, 10 ** 15 - 1);
+
 export const DOCUMENT: SnapshotFields<OrderedDocument> = {
   file: rebuilt("the checkpoint's `file`: the number its loaded spaces hold, kept at every save"),
   // Read first: the trees sum by the suggestions' status, and later fields name the items
@@ -793,5 +797,6 @@ export const DOCUMENT: SnapshotFields<OrderedDocument> = {
   resources: stored(after(record(RESOURCES), (read) => ({ ...read, fileMedia: new Map() }))),
   partRevisions: stored(map(id, record(PART_REVISION))),
   namespaces: stored(map(NAMESPACE, person)),
+  lastCounters: stored(sortedMap(NAMESPACE, CHANGE_COUNTER)),
   undo: rebuilt('null: no edit runs while a room saves or opens'),
 };
