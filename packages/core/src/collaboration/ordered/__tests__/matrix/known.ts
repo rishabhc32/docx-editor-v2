@@ -32,21 +32,6 @@ export interface KnownDifference {
 }
 
 const PROMPTS = ['placeholder', 'dropprompt', 'dateprompt', 'richprompt'];
-const FIELDS = [
-  'pagefield',
-  'ref',
-  'numpages',
-  'datefield',
-  'hyperfield',
-  'noteref',
-  'seq',
-  'merge',
-  'autonum',
-  'styleref',
-  'citation',
-  'formtext',
-  'formcheck',
-];
 const ONE_COLUMN = [
   'cantsplit',
   'floattable',
@@ -65,9 +50,9 @@ const inside = (containers: readonly string[], items: readonly string[]) => (kin
   containers.some((c) => items.some((i) => kind === `${i} in ${c}`));
 const all = () => true;
 
-// A group control's own content takes no edit, and a control nested in it does (Word, rows 235
-// and 243 of the sp.5 list). These are the nested kinds that are controls of their own; typing at
-// the leading edge enters the ones that take text.
+// A group control's own content takes no edit, and a control nested in it does (Word). These are
+// the nested kinds that are controls of their own; typing at the leading edge enters the ones
+// that take text.
 const NESTED_CONTROLS = ['checkbox', 'piccontrol', 'plain', 'rich', 'dropdown', 'dropprompt'];
 const TYPED_INTO = ['plain', 'rich', 'dropdown', 'dropprompt'];
 const inGroup =

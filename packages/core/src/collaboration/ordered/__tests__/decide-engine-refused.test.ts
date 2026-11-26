@@ -6,7 +6,7 @@
 // Ana's table style with a header row and her deletion of the other column: the struck cells
 // hold her style's cell records, and the engine plans no accept of her deletion and no reject of
 // Ben's column (`incomplete-group`). The room once decided both, and a fold of its file gave
-// other cell records than the live room (backlog row 103).
+// other cell records than the live room.
 //
 // A card of several suggestions is decided together, as the engine plans a batch of them: Ben's
 // paragraph record in a cell of Ana's new column joins her card, and its reject takes both.
@@ -16,7 +16,7 @@
 // the editor alone decides each, though the batch would not drop her paragraph record there.
 //
 // A format record whose runs reach into another person's suggested deletion is a card of its own,
-// and each of the two is decided alone, as Word decides them (r5-s10 of the pre-send check).
+// and each of the two is decided alone, as Word decides them (found in a large saved room).
 
 import { describe, expect, test } from 'bun:test';
 import { orderedCardSeen } from '../change/apply-decide.ts';
@@ -80,7 +80,7 @@ describe('a decision the engine plans no change for', () => {
 });
 
 describe('a card of several suggestions', () => {
-  // Seed sp5-run-1/quick-short-1 of the pre-send check (mismatch 5)
+  // Found by a random session of a room
   for (const status of ['accepted', 'rejected'] as const) {
     test(`a paragraph record in a cell of another person's new column, ${status} with it`, () => {
       const { document: doc } = openOrderedWordFile(APPLY_FILE, { file: 1 });

@@ -4,7 +4,7 @@
 // a deletion of the author's own pending words, and a decision on a revision there (Accept and
 // Reject; Accept All leaves it). The controls nested in a group stay editable. The engine once
 // let an author delete their own pending words in an inline group, and the group was gone.
-// Word evidence: desktop Word for Mac, 2026-11-26 (rows 235 of the sp.5 list).
+// Word evidence: desktop Word for Mac, 2026-11-26.
 
 import { describe, expect, test } from 'bun:test';
 import {

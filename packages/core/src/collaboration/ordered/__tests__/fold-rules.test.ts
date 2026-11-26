@@ -1,10 +1,10 @@
 // How a fold keeps each fact of the room's model (design D14). A room writes its document as a
-// checkpoint and the next opening reads it back, so each field of the model needs a rule: read
-// back from the Word file (`file`), kept in the checkpoint's manifest (`manifest`), made again
-// from other facts (`derived`), or not needed after a fold (`dropped`). A field with no honest
-// rule is `open`, with its backlog row. Each table covers every key of its type, so a new field
-// fails the type check here until it has a rule. `fold-check.ts` and the shape tests compare the
-// room live and after a fold; this file only names the rules and checks the manifest's sections.
+// checkpoint and the next opening reads it back, so each field of the model needs a rule: read back
+// from the Word file (`file`), kept in the checkpoint's manifest (`manifest`), made again from
+// other facts (`derived`), or not needed after a fold (`dropped`). Each table covers every key of
+// its type, so a new field fails the type check here until it has a rule. `fold-check.ts` and the
+// shape tests compare the room live and after a fold; this file only names the rules and checks the
+// manifest's sections.
 
 import { describe, expect, test } from 'bun:test';
 import { strFromU8, unzipSync } from 'fflate';
@@ -83,8 +83,7 @@ type FoldRule =
       readonly how: string;
     }
   | { readonly rule: 'derived'; readonly how: string }
-  | { readonly rule: 'dropped'; readonly how: string }
-  | { readonly rule: 'open'; readonly row: string; readonly how: string };
+  | { readonly rule: 'dropped'; readonly how: string };
 
 const file = (how: string): FoldRule => ({ rule: 'file', how });
 const manifest = (section: ManifestSection, field: string, how: string): FoldRule => ({

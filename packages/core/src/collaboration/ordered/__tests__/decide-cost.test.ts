@@ -2,7 +2,7 @@
 // draws only the blocks its plan reads (`compose/region.ts`). A room of 400 paragraphs with
 // tables, a move and many cards: one decision, and the decided cards report, each cost much less
 // than one compose of the whole body. A check that composed the whole part for every decision,
-// as the room once did (r5-s10 of the pre-send check: 70 ms a decision), costs more than one
+// as the room once did (70 ms a decision in a large saved room), costs more than one
 // compose and fails this. Both times are taken in the same run, so a busy machine slows both.
 // Measured: a decision about a fifth of a compose; with a whole-part check about twice one.
 
