@@ -347,6 +347,7 @@ export type {
   OrderedChangeResult,
 } from './change/read.ts';
 export { applyOrderedChange, type OrderedChangeOutcome } from './change/apply.ts';
+export { compactOrdered, type OrderedCompaction } from './change/compact.ts';
 export { orderedCardSeen, orderedDecidedCards } from './change/apply-decide.ts';
 export {
   validateOrderedBatch,
