@@ -302,7 +302,7 @@ If a later open refuses the room's file, the room does not open. You can start a
 
 An exported Word file holds names only: `writeOrderedPackage`, `orderedPackageBytes`, and `composeOrderedPackage` never write a person ID or any other room fact of a checkpoint.
 
-A checkpoint of version 5, which an earlier release wrote, still opens, and the room writes version 6 at its next close. A version 5 checkpoint marks elements with attributes of its own namespace, `https://docx-editor.dev/ordered-checkpoint`. An uploaded Word file that carries them opens as the same file without them.
+A room file of version 5 or older, which an earlier release wrote, does not open: every open throws `OrderedWordFileError` with the reason `checkpoint-version`. Start such a room again from its Word file.
 
 When the organiser's suggestion changes formatting or properties that a participant's pending suggestion changed, Word keeps one change record, under the later author. The checkpoint keeps each record that the later suggestion took over, so the earlier suggestion stays in a reopened room: when the organiser takes the later suggestion back, the earlier change shows again. To name the earlier suggestion on the later suggestion's card, call `orderedReplacedSuggestions(document, suggestion)`. It returns each suggestion whose records the given suggestion holds, with its author, person, date, `formattingKind`, and `formattingChanges`, in the terms of the review queue's items.
 
@@ -431,7 +431,7 @@ The room sends `reload` when a client must open the room again. The reason is on
 
 After a reload, `onReload` receives the reason and the participant's unsent changes. Open the room again with a new session. Show the unsent changes to the participant, because the new session does not send them for you.
 
-If a room's file is not a checkpoint of this engine's format and version, `openOrderedCheckpoint` throws `OrderedWordFileError` with the reason `not-checkpoint`, `checkpoint-format`, `checkpoint-version`, or `checkpoint-manifest`. A checkpoint whose fields do not read, or do not fit the document's rules, gives `checkpoint-manifest`. For a checkpoint of version 5, so does a manifest whose suggestions, persons, takeovers, typers, labels, or kept values do not match the file. `openOrderedWordFile` refuses a checkpoint with the reason `checkpoint`.
+If a room's file is not a checkpoint of this engine's format and version, `openOrderedCheckpoint` throws `OrderedWordFileError` with the reason `not-checkpoint`, `checkpoint-format`, `checkpoint-version`, or `checkpoint-manifest`. A checkpoint whose fields do not read, or do not fit the document's rules, gives `checkpoint-manifest`. `openOrderedWordFile` refuses a checkpoint with the reason `checkpoint`, and every open refuses a room file of version 5 or older with the reason `checkpoint-version`.
 
 ## Limits
 
