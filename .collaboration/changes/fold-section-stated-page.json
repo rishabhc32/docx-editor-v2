@@ -4,9 +4,7 @@
   "before": "A checkpoint's made-over records of a section (madeOver, sectPr) were put back on the section as the load reads its w:sectPrChange, which is Word's reject of the record and drops the default values it states. A section that stated w:orient=\"portrait\" lost it after a fold, while the room kept it.",
   "after": "The open of a checkpoint gives a section holder with made-over records the section its change record states (withRecordedElement), the section before the first pending record that the records draw from. Live, after one fold and after two, the section shows the same properties.",
   "reason": "Change messages, the change log and its kinds keep their meaning, and the Yjs document format does not change. The checkpoint format and its version do not change: only the reader of version 5 reads the change record of a made-over section as it states it. Ordered rooms are not deployed yet, so no room needs a migration.",
-  "tests": [
-    "packages/core/src/collaboration/ordered/__tests__/checkpoint-fold-over.test.ts"
-  ],
+  "tests": ["packages/core/src/collaboration/ordered/__tests__/checkpoint-fold-over.test.ts"],
   "changeset": "fold-section-stated-page",
   "migration": null
 }
