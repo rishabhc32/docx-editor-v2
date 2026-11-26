@@ -1,0 +1,15 @@
+{
+  "impact": "compatible",
+  "fields": [],
+  "before": "A checkpoint of version 6 wrote every field of each item, and each run and text element shell by value. The open composed every story to check the list and dropped the result, so a room's first document composed every story again.",
+  "after": "An item's field that holds a new item's value is left out and reads back as that value, and a base element's shell (the element with no children) is saved as its id alone. The open keeps each part its check composed until the document's next write, and the first compose of that story with no option takes it. A version 6 file of the earlier form still opens to the same document.",
+  "reason": "The open reads the same document from both forms: absent fields take the values of createOrderedItem, and a shell is the base element with no children, checked by the bounded XML reader as before. Change messages, the change log and its kinds, the checkpoint layout and the Yjs document format do not change. Migration: none; version 6 is not released, and ordered rooms are not deployed yet.",
+  "tests": [
+    "packages/core/src/collaboration/ordered/__tests__/checkpoint-snapshot.test.ts",
+    "packages/core/src/collaboration/ordered/__tests__/checkpoint-snapshot-refusals.test.ts",
+    "packages/core/src/collaboration/ordered/__tests__/checkpoint-golden.test.ts",
+    "packages/core/src/collaboration/ordered/__tests__/checkpoint-open-compose.test.ts"
+  ],
+  "changeset": "ordered-checkpoint-open-speed",
+  "migration": null
+}
