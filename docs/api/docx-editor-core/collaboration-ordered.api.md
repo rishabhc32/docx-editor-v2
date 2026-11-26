@@ -26,6 +26,9 @@ export function checkOrderedMediaPrefix(prefix: Uint8Array, media: {
 }): 'valid' | 'invalid' | 'whole';
 
 // @public
+export function compactOrdered(doc: OrderedDocument): OrderedCompaction;
+
+// @public
 export function composeOrderedPackage(doc: OrderedDocument, base: OoxmlPackage, options?: OrderedResourceOptions & OrderedPackageCommentOptions): OoxmlPackage;
 
 // @public
@@ -701,6 +704,11 @@ export interface OrderedCommentResolveChange extends OrderedChangeBase {
 
 // @public
 export type OrderedCommentThreadChange = OrderedCommentChange | OrderedCommentReplyChange | OrderedCommentResolveChange;
+
+// @public
+export interface OrderedCompaction {
+    readonly items: number;
+}
 
 // @public
 export interface OrderedComposedParagraph {
