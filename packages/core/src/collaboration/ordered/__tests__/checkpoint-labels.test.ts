@@ -1,6 +1,6 @@
-// A checkpoint names the places of its facts by label, and who typed a run on the run (design
-// D14): a later engine that reads one more element than this one, before a labelled place, reads
-// every fact at its place.
+// A checkpoint of version 5 names the places of its facts by label, and who typed a run on the run
+// (design D14): a later engine that reads one more element than this one, before a labelled place,
+// reads every fact at its place. A room's next close writes version 6, with no labels or marks.
 
 import { describe, expect, test } from 'bun:test';
 import { strFromU8, strToU8, unzipSync, zipSync } from 'fflate';
@@ -9,6 +9,7 @@ import {
   openOrderedWordFile,
   OrderedWordFileError,
 } from '../client/open.ts';
+import { writeOrderedCheckpointVersion5 } from '../compose/checkpoint.ts';
 import { orderedPackageBytes } from '../compose/package.ts';
 import { CHECKPOINT_NAMESPACE } from '../model/checkpoint.ts';
 import { isTextBoxStoryName } from '../model/text-boxes.ts';
@@ -52,12 +53,13 @@ function withAdded(bytes: Uint8Array): Uint8Array {
   );
 }
 
-/** The room of `withRoomFacts` over APPLY_FILE, its checkpoint and its storage. */
+/** The room of `withRoomFacts` over APPLY_FILE, its checkpoint of version 5 and its storage. */
 async function roomFacts() {
   const room = openOrderedWordFile(APPLY_FILE, { file: 1 });
   const blobs = mediaStore(room.base);
   const doc = withRoomFacts(room.document);
-  return { doc, base: room.base, blobs, checkpoint: await checkpointBytes(doc, room.base, blobs) };
+  const checkpoint = await checkpointBytes(doc, room.base, blobs, writeOrderedCheckpointVersion5);
+  return { doc, base: room.base, blobs, checkpoint };
 }
 
 /** Whether any part of a Word file holds the checkpoint's namespace. */
@@ -198,7 +200,8 @@ describe('a part that holds a typer', () => {
     const lastValue = (bytes: Uint8Array) =>
       /w:lastValue="([^"]*)"/.exec(strFromU8(unzipSync(bytes)['word/document.xml']!))?.[1];
     expect(lastValue(orderedPackageBytes(doc, base, { blobs }))).toBe('BeXta');
-    expect(lastValue(await checkpointBytes(doc, base, blobs))).toBe('BeXta');
+    const checkpoint = await checkpointBytes(doc, base, blobs, writeOrderedCheckpointVersion5);
+    expect(lastValue(checkpoint)).toBe('BeXta');
     await checkFold(doc, base, blobs, 'a combo box');
   });
 });
