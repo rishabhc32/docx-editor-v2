@@ -16,7 +16,7 @@ import {
 } from '../model/checkpoint.ts';
 import { withoutCheckpointMarks, type CheckpointMarks } from '../model/checkpoint-labels.ts';
 import { recordFileMedia } from '../model/file-media.ts';
-import { orderedAuthorName, type OrderedPerson } from '../model/person.ts';
+import { personsFit } from '../model/person.ts';
 import type { OrderedFileMedia } from '../model/resources.ts';
 import type { OrderedDocument } from '../model/types.ts';
 import {
@@ -249,25 +249,6 @@ function openCheckpointRead(pkg: OoxmlPackage, options: OrderedWordFileOptions):
   }
 
   return opened;
-}
-
-/** Whether every item and comment the manifest gives a person carries that person's Word name. */
-function personsFit(doc: OrderedDocument): boolean {
-  const fits = ({ author, person }: { author: string; person: OrderedPerson | null }) =>
-    person === null || author === orderedAuthorName(person);
-  for (const { attribution } of doc.suggestions.values()) {
-    if (!fits(attribution)) {
-      return false;
-    }
-  }
-
-  for (const comment of doc.comments.values()) {
-    if (!fits(comment)) {
-      return false;
-    }
-  }
-
-  return true;
 }
 
 /**
