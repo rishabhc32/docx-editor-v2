@@ -1,0 +1,18 @@
+{
+  "impact": "compatible",
+  "fields": [],
+  "before": "A room's close wrote a checkpoint of version 5: the Word file without its media parts, with labels and typer marks of the checkpoint's own namespace, and a manifest of the room facts Word has no place for. The next open loaded the Word file again, so a close gave the room's items new addresses and dropped the facts the manifest did not hold, such as taken-back records, retracted words and compose ids.",
+  "after": "A room's close writes a checkpoint of version 6: ordered/checkpoint.json holds every stored field of the room's document through one field table (the item list with its addresses, the suggestions, comments, counters, revision ids, resources, the last change counters and the side state) with a SHA-256 checksum of its body, and ordered/base.docx holds the Word package the room was first opened from, with its media by reference. The open checks every field, refuses a failure as checkpoint-manifest and a later version as checkpoint-version, and gives back the document the live room held. A session names the room's file number it opened, not the document's own number, and a room refuses a revert of a direct edit made before its file as other-file.",
+  "reason": "Change messages, the change log and its kinds, and the Yjs document format do not change: the ordered room file is not one of the Yjs version fields. Migration: start fresh rooms; a room file of version 5 still opens and writes version 6 at its next close. An engine of an earlier release refuses a file of version 6 by name (checkpoint-version), and a room admits only clients of its own code version. Ordered rooms are not deployed yet.",
+  "tests": [
+    "packages/core/src/collaboration/ordered/__tests__/checkpoint-snapshot.test.ts",
+    "packages/core/src/collaboration/ordered/__tests__/checkpoint-snapshot-refusals.test.ts",
+    "packages/core/src/collaboration/ordered/__tests__/checkpoint-golden.test.ts",
+    "packages/core/src/collaboration/ordered/__tests__/checkpoint.test.ts",
+    "packages/core/src/collaboration/ordered/__tests__/fold-rules.test.ts",
+    "packages/core/src/collaboration/ordered/__tests__/room-late-changes.test.ts",
+    "packages/core/src/collaboration/ordered/__tests__/client/editor-restart.test.ts"
+  ],
+  "changeset": "ordered-checkpoint-item-list",
+  "migration": null
+}
