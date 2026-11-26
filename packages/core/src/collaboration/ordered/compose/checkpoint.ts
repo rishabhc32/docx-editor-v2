@@ -1,13 +1,16 @@
-// Writes a room checkpoint (design D14).
+// Writes a room checkpoint (design D14): the item list as data (version 6).
 
 import type { OoxmlPackage } from '../../../store/package/ooxml-package.ts';
 import { partNameKey } from '../../../store/package/opc-names.ts';
+import { writeZip } from '../../../store/package/zip.ts';
 import { CHECKPOINT_MANIFEST, checkpointManifestBytes } from '../model/checkpoint.ts';
-import { partReferences, referencedMediaType } from '../model/file-media.ts';
+import { fileMediaAt, partReferences, referencedMediaType } from '../model/file-media.ts';
 import type { OrderedPerson } from '../model/person.ts';
 import type { OrderedFileMedia, OrderedMediaReference } from '../model/resources.ts';
+import { SNAPSHOT_BASE_ENTRY, SNAPSHOT_ENTRY, snapshotJsonBytes } from '../model/snapshot-write.ts';
 import type { OrderedDocument } from '../model/types.ts';
 import { checkpointFacts } from './checkpoint-facts.ts';
+import { withFileMediaPlaces } from './file-media.ts';
 import type { RoomNumber } from './context.ts';
 import {
   composedWithoutMedia,
@@ -46,6 +49,79 @@ export function orderedPackageMedia(pkg: OoxmlPackage): OrderedPackageMedia[] {
 }
 
 /**
+ * The whole document as a room checkpoint, handed to `options.write` front to back: one zip that
+ * holds the room's item list as data (`ordered/checkpoint.json`, every stored field of the
+ * document) and the Word package it was first opened from (`ordered/base.docx`), whose parts the
+ * list's Word XML names by node id. The base package holds no bytes of its media of a type the
+ * room stores: `checkpoint.json` names each of them by reference (part name, SHA-256, content
+ * type, size, place), and the room's storage holds the bytes, as it holds those of media a change
+ * added. So the file carries no media bytes, and `options.media` is not read. Word does not open
+ * a checkpoint; {@link openOrderedCheckpoint} does, to the same document.
+ *
+ * @throws OrderedRefusal `too-many-items` when `checkpoint.json` is past the engine's limit of
+ *   one part (64 MiB), which no open reads. The bytes written before a refusal are not a whole
+ *   file: the host keeps its last checkpoint and the room's log.
+ * @public
+ */
+export async function writeOrderedCheckpoint(
+  doc: OrderedDocument,
+  base: OoxmlPackage,
+  options: OrderedPackageWriteOptions
+): Promise<void> {
+  const { bytes, media } = await baseFileBytes(doc, base);
+  const entries = new Map([
+    [SNAPSHOT_ENTRY, snapshotJsonBytes(doc, base, media)],
+    [SNAPSHOT_BASE_ENTRY, bytes],
+  ]);
+  await options.write(writeZip(entries));
+}
+
+/**
+ * `ordered/base.docx`: the base package, each media part of a type the room stores by reference,
+ * at its place among the entries: the file's own that the package holds no bytes for (from a
+ * checkpoint), and those whose bytes it holds (from a Word file), which the host stored when it
+ * made the room.
+ */
+async function baseFileBytes(
+  doc: OrderedDocument,
+  base: OoxmlPackage
+): Promise<{ readonly bytes: Uint8Array; readonly media: readonly OrderedFileMedia[] }> {
+  const pkg = withFileMediaPlaces(base, doc);
+  const referenceOf = partReferences(pkg);
+  const media: OrderedFileMedia[] = [];
+  const chunks: Uint8Array[] = [];
+  await writeComposedEntries(
+    pkg,
+    async (name, data, entry) => {
+      const reference = fileMediaAt(doc, name) ?? referenceOf(name, data);
+      if (reference === null) {
+        return data;
+      }
+
+      const { part, contentType, sha256, size } = reference;
+      media.push({ part, contentType, sha256, size, entry });
+      return null;
+    },
+    async (chunk) => {
+      chunks.push(chunk);
+    }
+  );
+  return { bytes: concatBytes(chunks), media };
+}
+
+/** Bytes one after another. */
+function concatBytes(chunks: readonly Uint8Array[]): Uint8Array {
+  const out = new Uint8Array(chunks.reduce((n, chunk) => n + chunk.byteLength, 0));
+  let at = 0;
+  for (const chunk of chunks) {
+    out.set(chunk, at);
+    at += chunk.byteLength;
+  }
+
+  return out;
+}
+
+/**
  * The whole document as a room checkpoint, handed to `options.write` front to back: the parts
  * of the Word file that {@link writeOrderedPackage} writes for the same document (with its
  * comments: a checkpoint is the room's own file), in the same order, without the media parts
@@ -59,15 +135,15 @@ export function orderedPackageMedia(pkg: OoxmlPackage): OrderedPackageMedia[] {
  * pending insertion. The content types and the relationships stay as they are. The
  * room's storage holds the media bytes: `options.media` is read only for media a change added
  * that stays inside (an ink part), never for a picture. Word does not open a checkpoint;
- * {@link openOrderedCheckpoint} does.
+ * {@link openOrderedCheckpoint} does. Version 6 replaced it ({@link writeOrderedCheckpoint}).
  *
  * @throws OrderedRefusal as `writeOrderedPackage` does, `too-many-items` when the manifest is
  *   past the engine's limit of one part (64 MiB), which no open reads, and `engine-refused` when
  *   the manifest cannot keep a record made over a pending one. The bytes written before a
  *   refusal are not a whole file: the host keeps its last checkpoint and the room's log.
- * @public
+ * @internal Kept until every room has closed once under version 6.
  */
-export async function writeOrderedCheckpoint(
+export async function writeOrderedCheckpointVersion5(
   doc: OrderedDocument,
   base: OoxmlPackage,
   options: OrderedPackageWriteOptions

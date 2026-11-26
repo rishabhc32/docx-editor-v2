@@ -39,7 +39,7 @@ export const ORDERED_OBJECT_LIMITS = Object.freeze({
 });
 
 /** The frames a horizontal offset may be relative to (`ST_RelFromH`). */
-const FRAMES_H: readonly DrawingHorizontalReferenceFrame[] = [
+export const FRAMES_H: readonly DrawingHorizontalReferenceFrame[] = [
   'character',
   'column',
   'insideMargin',
@@ -51,7 +51,7 @@ const FRAMES_H: readonly DrawingHorizontalReferenceFrame[] = [
 ];
 
 /** The frames a vertical offset may be relative to (`ST_RelFromV`). */
-const FRAMES_V: readonly DrawingVerticalReferenceFrame[] = [
+export const FRAMES_V: readonly DrawingVerticalReferenceFrame[] = [
   'bottomMargin',
   'insideMargin',
   'line',

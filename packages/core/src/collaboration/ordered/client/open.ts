@@ -25,6 +25,7 @@ import {
   withoutCheckpointObjects,
 } from './checkpoint-resources.ts';
 import { withoutDrawnProperties } from './drawn-properties.ts';
+import { holdsSnapshot, openSnapshot } from './open-snapshot.ts';
 import {
   withCheckpointLists,
   withCheckpointStyles,
@@ -70,10 +71,10 @@ export interface OrderedWordFile {
 export class OrderedWordFileError extends Error {
   /**
    * The package reader's reason (`zip-limit`, `missing-part`, ...) or `no-main-document`. A Word
-   * file that holds a checkpoint's manifest: `checkpoint`. A checkpoint: `not-checkpoint` (it
-   * holds no manifest), `checkpoint-format` or `checkpoint-version` (the manifest names another
-   * format or version of it), or `checkpoint-manifest` (the manifest does not read, or does not
-   * fit the file).
+   * file that is a checkpoint: `checkpoint`. A checkpoint: `not-checkpoint` (it holds neither a
+   * manifest nor an item list), `checkpoint-format` or `checkpoint-version` (it names another
+   * format, or a version this reader does not read), or `checkpoint-manifest` (it does not read,
+   * or does not fit the file).
    */
   readonly reason: string;
 
@@ -101,6 +102,10 @@ export function openOrderedWordFile(
   bytes: Uint8Array,
   options: OrderedWordFileOptions
 ): OrderedWordFile {
+  if (holdsSnapshot(bytes)) {
+    throw new OrderedWordFileError('checkpoint');
+  }
+
   const pkg = readPackage(bytes, options);
   if (holdsCheckpointManifest(pkg)) {
     throw new OrderedWordFileError('checkpoint');
@@ -110,16 +115,15 @@ export function openOrderedWordFile(
 }
 
 /**
- * Open a room checkpoint (`writeOrderedCheckpoint`) as {@link openOrderedWordFile} opens the
- * Word file it stands for: the same document, under the same addresses. No media bytes are
- * read. The document's `resources.fileMedia` lists the media the checkpoint names by reference;
- * a client reads each one through its `media` reader, and `composeOrderedPackage` and
- * `writeOrderedPackage` put the bytes back in their places. Whatever the file number it opens
- * under, each pending suggestion is one suggestion again, with its person, however many Word
- * changes its marks are; each record a suggestion took from another (policy 2) is that record
- * again, with `replaced`; each record Word writes no change record for (a control's value, a
- * column's lent width) is that record again, over the properties it was made over; and
- * `orderedUnitTyper` names who typed each unit of an insertion as the room did.
+ * Open a room checkpoint (`writeOrderedCheckpoint`): the document the room saved, field by field,
+ * with its loaded addresses under file number `options.file` and every other address as saved.
+ * No media bytes are read. The document's `resources.fileMedia` lists the media the checkpoint
+ * names by reference; a client reads each one through its `media` reader, and
+ * `composeOrderedPackage` and `writeOrderedPackage` put the bytes back in their places. A
+ * checkpoint of version 5 (the Word file with the room's facts beside it) still opens: each
+ * pending suggestion is one suggestion again, with its person; each record a suggestion took from
+ * another (policy 2) is that record again; each record Word writes no change record for is that
+ * record again; and `orderedUnitTyper` names who typed each unit of an insertion as the room did.
  *
  * @throws OrderedWordFileError when the package does not read or has no main document, or when
  *   it is not a checkpoint of this engine's format and version (`not-checkpoint`,
@@ -131,6 +135,10 @@ export function openOrderedCheckpoint(
   bytes: Uint8Array,
   options: OrderedWordFileOptions
 ): OrderedWordFile {
+  if (holdsSnapshot(bytes)) {
+    return openSnapshot(bytes, options);
+  }
+
   return openCheckpointRead(readPackage(bytes, options), options);
 }
 
@@ -141,6 +149,10 @@ export function openOrderedRoomFile(
   bytes: Uint8Array,
   options: OrderedWordFileOptions
 ): OrderedWordFile {
+  if (holdsSnapshot(bytes)) {
+    return openSnapshot(bytes, options);
+  }
+
   const pkg = readPackage(bytes, options);
   return holdsCheckpointManifest(pkg)
     ? openCheckpointRead(pkg, options)

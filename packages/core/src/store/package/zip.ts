@@ -140,6 +140,28 @@ export function readZip(bytes: Uint8Array, limits: ZipLimits = DEFAULT_ZIP_LIMIT
   return { ok: true, entries };
 }
 
+/**
+ * Whether a ZIP archive holds an entry under `partName` (in any case, as OPC compares names),
+ * read from its directory: no entry is inflated. False when the archive does not read.
+ */
+export function zipHoldsEntry(bytes: Uint8Array, partName: string): boolean {
+  const key = partNameKey(partName);
+  let found = false;
+  try {
+    unzipSync(bytes, {
+      filter: (file) => {
+        const norm = normalizePartName(file.name);
+        found ||= norm.ok && partNameKey(norm.partName) === key;
+        return false;
+      },
+    });
+  } catch {
+    return false;
+  }
+
+  return found;
+}
+
 /** The modification time stamped on every entry written.
  *
  *  Without one, a writer stamps `Date.now()`, which makes the same document save to

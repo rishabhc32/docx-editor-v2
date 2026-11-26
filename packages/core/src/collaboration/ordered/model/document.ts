@@ -332,12 +332,27 @@ export function addOrderedStory(
   items: readonly OrderedItem[]
 ): OrderedStory {
   if (doc.stories.has(name)) throw new RangeError(`The story ${name} is already loaded.`);
+  return indexOrderedStory(doc, { name, part, tree: orderedStoryTree(doc, items) });
+}
+
+/** A story's tree of new items, in order, summed by `doc`. */
+export function orderedStoryTree(
+  doc: OrderedDocument,
+  items: readonly OrderedItem[]
+): SumTree<OrderedItem, OrderedItemSummary> {
   for (const item of items) if (item.leaf !== undefined) throw new OrderedRefusal('item-in-tree');
-  const tree = new SumTree<OrderedItem, OrderedItemSummary>(summaryOps(doc), items);
-  const story: OrderedStory = { name, part, tree, spaces: new Map() };
-  for (const item of items) indexItem(doc, story, item);
-  doc.stories.set(name, story);
-  return story;
+  return new SumTree<OrderedItem, OrderedItemSummary>(summaryOps(doc), items);
+}
+
+/** A story with its tree, its items indexed, put in the document. */
+export function indexOrderedStory(
+  doc: OrderedDocument,
+  story: Omit<OrderedStory, 'spaces'>
+): OrderedStory {
+  const indexed: OrderedStory = { ...story, spaces: new Map() };
+  for (const item of indexed.tree.items()) indexItem(doc, indexed, item);
+  doc.stories.set(indexed.name, indexed);
+  return indexed;
 }
 
 /** The story by name, or a refusal. */

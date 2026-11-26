@@ -334,32 +334,53 @@ function readNamespaces(value: unknown): Map<string, OrderedPerson> {
 
 /** The listed media, each checked against `base`, or null when one does not fit. */
 function mediaIn(base: OoxmlPackage, listed: readonly unknown[]): OrderedFileMedia[] | null {
+  const media: OrderedFileMedia[] = [];
+  for (const value of listed) {
+    const item = mediaItem(value);
+    if (item === null) {
+      return null;
+    }
+
+    media.push(item);
+  }
+
+  return mediaFits(base, media) ? media : null;
+}
+
+/**
+ * Whether each medium fits `base`, the package that holds them by reference: a part name of its
+ * own in normal form, of a type the room stores and the content types give it, at its own place
+ * among the entries.
+ */
+export function mediaFits(base: OoxmlPackage, media: readonly OrderedFileMedia[]): boolean {
   const taken = new Set<string>();
   for (const name of base.partBytes.keys()) {
     taken.add(partNameKey(name));
   }
 
   const entries = new Set<number>();
-  const total = base.partBytes.size + listed.length;
-  const media: OrderedFileMedia[] = [];
-  for (const value of listed) {
-    const item = mediaItem(value);
-    if (item === null || item.entry >= total || entries.has(item.entry)) {
-      return null;
+  const total = base.partBytes.size + media.length;
+  for (const item of media) {
+    const name = normalizePartName(item.part);
+    if (!name.ok || name.partName !== item.part || referencedMediaType(item.contentType) === null) {
+      return false;
+    }
+
+    if (item.entry >= total || entries.has(item.entry)) {
+      return false;
     }
 
     // Another part's name, or a type the content types do not give it
     const key = partNameKey(item.part);
     if (taken.has(key) || resolveContentTypeOf(base, item.part) !== item.contentType) {
-      return null;
+      return false;
     }
 
     taken.add(key);
     entries.add(item.entry);
-    media.push(item);
   }
 
-  return media;
+  return true;
 }
 
 /** One listed medium, or null when a field is missing or out of range. */
@@ -373,10 +394,9 @@ function mediaItem(value: unknown): OrderedFileMedia | null {
     return null;
   }
 
-  const name = normalizePartName(part);
   const type = referencedMediaType(contentType);
   const hash = attempt(() => sha256(value.sha256, 'sha256'));
-  if (!name.ok || name.partName !== part || !hash.ok || type === null) {
+  if (!hash.ok || type === null) {
     return null;
   }
 
