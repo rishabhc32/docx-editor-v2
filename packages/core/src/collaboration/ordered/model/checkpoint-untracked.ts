@@ -13,8 +13,8 @@ import {
   type Fields,
 } from '../change/read.ts';
 import { manifestList, manifestString, readNamedOnce } from './checkpoint-suggestions.ts';
-import { propertiesXml, readPropertiesXml } from './checkpoint-takeovers.ts';
-import type { OrderedPropertyRecord, OrderedPropertyTarget } from './types.ts';
+import { readPropertiesXml } from './checkpoint-takeovers.ts';
+import type { OrderedPropertyTarget } from './types.ts';
 
 /**
  * The properties a container's records with no change record give, and the container whose
@@ -29,31 +29,12 @@ export const UNTRACKED_CONTAINERS: ReadonlyMap<OrderedPropertyTarget, string> = 
 ]);
 
 /**
- * Whether Word writes two records as one change record, which a load reads as one record:
- * records of one suggestion for one properties element of a container, each with a change record
- * and neither taken from another suggestion (a take-back gives back records another took).
- */
-export function oneChangeRecord(a: OrderedPropertyRecord, b: OrderedPropertyRecord): boolean {
-  return (
-    a.kind === 'element' &&
-    b.kind === 'element' &&
-    a.target === b.target &&
-    a.suggestion === b.suggestion &&
-    UNTRACKED_CONTAINERS.has(a.target) &&
-    a.untracked !== true &&
-    b.untracked !== true &&
-    a.replaced === undefined &&
-    b.replaced === undefined
-  );
-}
-
-/**
  * A record of a container's properties as the room holds it and Word's change record does not
  * say: the children it sets (`merge`: a table op records each cell it did not change, and sets
  * nothing there), the cells the table showed when it was taken, which a decision on a column
  * reads (`holdsCell`), and the record it took.
  */
-export interface CheckpointChangeRecord {
+interface CheckpointChangeRecord {
   /** The suggestion, by its place in the manifest's list. */
   readonly suggestion: number;
   /** The suggestion the record was taken from, by its place in the manifest's list. */
@@ -106,18 +87,6 @@ export interface CheckpointUntracked {
   readonly properties?: OoxmlElement;
   /** The records, in the order they apply. */
   readonly records: readonly CheckpointUntrackedRecord[];
-}
-
-/** The untracked records as the manifest lists them: JSON leaves out a field with no value. */
-export function untrackedJson(untracked: readonly CheckpointUntracked[]): unknown[] {
-  return untracked.map(({ properties, records, ...container }) => ({
-    ...container,
-    properties: properties === undefined ? undefined : propertiesXml(properties),
-    records: records.map(({ element, ...record }) => ({
-      ...record,
-      element: element === null ? undefined : propertiesXml(element),
-    })),
-  }));
 }
 
 /**

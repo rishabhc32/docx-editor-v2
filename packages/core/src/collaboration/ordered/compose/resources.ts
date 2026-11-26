@@ -574,13 +574,6 @@ function keyedTree<T extends OoxmlNode>(node: T, id: () => string): T {
   return { ...node, id: id(), children: node.children.map((child) => keyedTree(child, id)) };
 }
 
-/** The node ids of a style resource's `w:style` and its children: `ordered-<key>-<n>`. */
-const STYLE_NODE_ID = /^ordered-(.+)-\d+$/;
-
-/** The key of the style resource compose drew a `w:style` from, if it drew it. */
-export const styleResourceKeyOf = (element: OoxmlElement): string | undefined =>
-  STYLE_NODE_ID.exec(element.id)?.[1];
-
 /** A style resource as `w:style`, built from its typed values, or a pasted style as it came. */
 function styleElement(style: OrderedStyleResource): OoxmlElement {
   let n = 0;

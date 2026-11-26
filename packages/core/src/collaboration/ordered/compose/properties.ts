@@ -214,7 +214,7 @@ function holderOf(records: readonly AnyRecord[], suggestion: string): string | u
 }
 
 /** The pending records' suggestions a record with no change record of its own was made over. */
-export const overOf = (record: AnyRecord): readonly string[] =>
+const overOf = (record: AnyRecord): readonly string[] =>
   'over' in record ? (record.over ?? []) : [];
 
 /**

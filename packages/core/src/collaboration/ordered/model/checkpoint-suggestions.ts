@@ -70,31 +70,6 @@ export function readNamedOnce<T>(
 
 const DECIDED: readonly OrderedSuggestionStatus[] = ['accepted', 'rejected'];
 
-/** The suggestions as the manifest lists them. */
-export function suggestionsJson(suggestions: readonly CheckpointSuggestion[]): unknown[] {
-  return suggestions.map(({ id, attribution, revisions, record, status, version, direct }) => ({
-    id,
-    author: attribution.author,
-    ...(attribution.date === undefined ? {} : { date: attribution.date }),
-    ...(attribution.attributes === undefined
-      ? {}
-      : {
-          attributes: attribution.attributes.map(({ namespaceUri, localName, prefix, value }) => ({
-            namespace: namespaceUri,
-            name: localName,
-            ...(prefix === undefined ? {} : { prefix }),
-            value,
-          })),
-        }),
-    ...(attribution.person === null ? {} : { person: attribution.person }),
-    revisions,
-    ...(record === undefined ? {} : { record }),
-    ...(status === undefined || status === 'pending' ? {} : { status }),
-    ...(version === undefined || version === 0 ? {} : { version }),
-    ...(direct === true ? { direct } : {}),
-  }));
-}
-
 /**
  * The listed suggestions, each checked: every value comes from storage. The id is as a decision
  * names a suggestion, each named once; the author, the date and the other attributes are as a

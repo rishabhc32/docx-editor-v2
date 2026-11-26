@@ -18,7 +18,7 @@ import {
 import { ORDERED_CHANGE_LIMITS as LIMITS } from '../change/types.ts';
 import { properties } from '../change/values.ts';
 import { manifestList, manifestString, readNamedOnce, xmlText } from './checkpoint-suggestions.ts';
-import { propertiesXml, readPropertiesXml } from './checkpoint-takeovers.ts';
+import { readPropertiesXml } from './checkpoint-takeovers.ts';
 import { readPropertyRecord, type CheckpointUntrackedRecord } from './checkpoint-untracked.ts';
 import type { OrderedSectionOp } from './sections.ts';
 import type { OrderedFormatWrite, OrderedParagraphOp, OrderedStyleWrite } from './types.ts';
@@ -51,10 +51,6 @@ const OVER_TARGETS = ['rPr', 'pPr', 'sectPr'] as const;
 
 export type CheckpointOverTarget = (typeof OVER_TARGETS)[number];
 
-/** Whether a properties element's change record may hold records made over it. */
-export const isCheckpointOverTarget = (name: string): name is CheckpointOverTarget =>
-  (OVER_TARGETS as readonly string[]).includes(name);
-
 /**
  * The records of one change record's properties when one was made over its pending records, by
  * the label on it: each record the room draws from the first pending one, in the order they
@@ -78,27 +74,6 @@ const WRITES = {
     (value: unknown, path: string) => ({ sectionOp: readSectionOp(value, path) }),
   ],
 } as const;
-
-/** The made-over records as the manifest lists them: JSON leaves out a field with no value. */
-export function madeOverJson(madeOver: readonly CheckpointMadeOver[]): unknown[] {
-  return madeOver.map(({ records, ...entry }) => ({
-    ...entry,
-    records: records.map(({ element, write, ...record }) => ({
-      ...record,
-      element: element === null ? undefined : propertiesXml(element),
-      ...(write === undefined ? {} : writeJson(write)),
-    })),
-  }));
-}
-
-/** A record's write as the manifest lists it: a section mark's properties as XML. */
-function writeJson(write: CheckpointOverWrite): CheckpointOverWrite | object {
-  if (!('sectionOp' in write) || write.sectionOp.op !== 'mark') {
-    return write;
-  }
-
-  return { sectionOp: { ...write.sectionOp, sectPr: propertiesXml(write.sectionOp.sectPr) } };
-}
 
 /**
  * The listed made-over records, each checked: every value comes from storage. Each names a

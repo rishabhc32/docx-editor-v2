@@ -1,4 +1,4 @@
-// Reads and writes a checkpoint's manifest (design D14).
+// Reads the manifest of a checkpoint of version 5 (design D14), which no engine writes now.
 
 import type { OoxmlPackage } from '../../../store/package/ooxml-package.ts';
 import type { OoxmlAttribute } from '../../../store/package/ooxml-tree.ts';
@@ -16,30 +16,27 @@ import {
   type CheckpointResource,
   type CheckpointStyle,
 } from './checkpoint-lists.ts';
-import { madeOverJson, readMadeOver, type CheckpointMadeOver } from './checkpoint-over.ts';
+import { readMadeOver, type CheckpointMadeOver } from './checkpoint-over.ts';
 import {
   readNamedOnce,
   readNamespace,
   readSuggestions,
-  suggestionsJson,
   xmlText,
   type CheckpointSuggestion,
 } from './checkpoint-suggestions.ts';
-import { readTakeovers, takeoversJson, type CheckpointTakeover } from './checkpoint-takeovers.ts';
+import { readTakeovers, type CheckpointTakeover } from './checkpoint-takeovers.ts';
 import {
   readChangeRecords,
   readUntracked,
-  untrackedJson,
   type CheckpointChangeRecords,
   type CheckpointUntracked,
 } from './checkpoint-untracked.ts';
 import { referencedMediaType } from './file-media.ts';
 import { readPerson, type OrderedPerson } from './person.ts';
-import { OrderedRefusal } from './refusal.ts';
 import type { OrderedFileMedia } from './resources.ts';
 
 /** The manifest's part name. A Word file that holds this part is not opened as one. */
-export const CHECKPOINT_MANIFEST = '/ordered-checkpoint.json';
+const CHECKPOINT_MANIFEST = '/ordered-checkpoint.json';
 
 const FORMAT = 'docx-editor.dev/ordered-checkpoint';
 
@@ -114,52 +111,6 @@ export type CheckpointRefusal =
   | 'checkpoint-format'
   | 'checkpoint-version'
   | 'checkpoint-manifest';
-
-/**
- * The manifest's bytes: one JSON part with the format, its version, each media part the
- * checkpoint holds by reference, and the room's facts.
- *
- * @throws OrderedRefusal `too-many-items` when they are past the engine's limit of one part,
- *   which a read refuses.
- */
-export function checkpointManifestBytes(
-  media: readonly OrderedFileMedia[],
-  facts: CheckpointFacts
-): Uint8Array {
-  const listed = media.map(({ part, sha256, contentType, size, entry }) => ({
-    part,
-    sha256,
-    contentType,
-    size,
-    entry,
-  }));
-  const bytes = new TextEncoder().encode(
-    JSON.stringify({
-      format: FORMAT,
-      version: VERSION,
-      media: listed,
-      suggestions: suggestionsJson(facts.suggestions),
-      comments: [...facts.commentPersons].map(([id, person]) => ({ id, person })),
-      takeovers: takeoversJson(facts.takeovers),
-      namespaces: [...facts.namespacePersons].map(([namespace, person]) => ({ namespace, person })),
-      untracked: untrackedJson(facts.untracked),
-      changeRecords: facts.changeRecords,
-      lists: facts.lists,
-      styles: facts.styles,
-      resources: facts.resources,
-      // Left out when empty: most checkpoints hold none
-      ...(facts.madeOver.length > 0 ? { madeOver: madeOverJson(facts.madeOver) } : {}),
-    })
-  );
-  if (bytes.byteLength > XML_HARD_MAX_BYTES) {
-    throw new OrderedRefusal(
-      'too-many-items',
-      `checkpoint manifest over ${XML_HARD_MAX_BYTES} bytes`
-    );
-  }
-
-  return bytes;
-}
 
 /** The part under the manifest's name, in any case as OPC compares names, and its bytes. */
 function manifestEntry(pkg: OoxmlPackage): readonly [string, Uint8Array] | undefined {

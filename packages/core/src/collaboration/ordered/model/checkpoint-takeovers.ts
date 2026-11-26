@@ -1,8 +1,6 @@
 // The takeovers a checkpoint's manifest keeps (design D5, policy 2), the elements of the file it
 // names by label, and the properties it holds as XML.
 
-import { serializeOoxmlPart } from '../../../store/package/ooxml-serialize.ts';
-import { withRequiredNamespaceBindings } from '../../../store/store/tree-op-fragment.ts';
 import {
   readOoxmlPart,
   WML_NAMESPACE_URI,
@@ -34,7 +32,7 @@ const RECORDS: ReadonlySet<string> = new Set([
 export const recordedProperties = (record: string): string => record.slice(0, -'Change'.length);
 
 /** A record a change record holds by takeover: its suggestion, and the properties it gives. */
-export interface CheckpointTaken {
+interface CheckpointTaken {
   /** The suggestion, by its place in the manifest's list. */
   readonly suggestion: number;
   /** The properties element with the record, without its own change record. */
@@ -77,15 +75,6 @@ const propertiesPart = (name: string) => ({
 });
 
 /**
- * Properties as the manifest holds them: XML text, with each prefix they use declared on them, so
- * a read gives back the prefixes of the part they came from (`w14:checkbox`, not a new one).
- */
-export const propertiesXml = (root: OoxmlElement): string => {
-  const part = { id: 'properties', ...propertiesPart(''), root };
-  return serializeOoxmlPart(withRequiredNamespaceBindings(part, [root]));
-};
-
-/**
  * Properties the manifest holds, read from their XML text; else they are not a `w:` element of
  * one of `localNames`.
  *
@@ -108,17 +97,6 @@ export function readPropertiesXml(
 
   // The part's own namespace declarations stay with it: the properties go into another part
   return { ...root, namespaceBindings: [] };
-}
-
-/** The takeovers as the manifest lists them. */
-export function takeoversJson(takeovers: readonly CheckpointTakeover[]): unknown[] {
-  return takeovers.map(({ taken, ...takeover }) => ({
-    ...takeover,
-    taken: taken.map(({ properties, ...links }) => ({
-      ...links,
-      properties: propertiesXml(properties),
-    })),
-  }));
 }
 
 /**

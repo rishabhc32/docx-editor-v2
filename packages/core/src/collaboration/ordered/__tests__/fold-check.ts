@@ -29,6 +29,7 @@ import { strFromU8, unzipSync } from 'fflate';
 import { readOoxmlPackage, type OoxmlPackage } from '../../../store/package/ooxml-package.ts';
 import { canonicalOoxmlFingerprint } from '../../../store/package/ooxml-serialize.ts';
 import { serializeOoxmlPart, type OoxmlElement } from '../../../store/package/ooxml-tree.ts';
+import { spaceReceivers } from '../../../store/store/revision-table-rebuild.ts';
 import { CardRead, isCardUnit, isOrderedItemHidden } from '../card-of.ts';
 import { applyOrderedChange } from '../change/apply.ts';
 import { orderedCardSeen } from '../change/apply-decide.ts';
@@ -42,31 +43,33 @@ import type { OrderedSeenSuggestion } from '../change/types.ts';
 import { openOrderedCheckpoint, type OrderedWordFile } from '../client/open.ts';
 import { orderedSuggestionsOfRevision } from '../client/ops/review.ts';
 import { currentFace } from '../client/properties.ts';
-import { isBlockToken } from '../compose/blocks.ts';
+import { composeBlocks, isBlockToken } from '../compose/blocks.ts';
 import { orderedPackageMedia, writeOrderedCheckpoint } from '../compose/checkpoint.ts';
-import { movedLendings } from '../compose/checkpoint-facts.ts';
 import { orderedViewParagraph } from '../compose/compose.ts';
 import { ComposeContext } from '../compose/context.ts';
 import { showsPrompt } from '../compose/paragraph.ts';
 import { orderedPackageBytes } from '../compose/package.ts';
 import { orderedReplacedSuggestions } from '../compose/replaced.ts';
 import { isSectionItem } from '../compose/sections.ts';
+import { isCell, isRow } from '../compose/table-columns.ts';
 import { orderedCards } from '../decide.ts';
 import { MOVE_RANGE } from '../load/moves.ts';
-import { oneChangeRecord } from '../model/checkpoint-untracked.ts';
-import { isHidden, movedAwayBy } from '../model/document.ts';
+import { UNTRACKED_CONTAINERS } from '../model/checkpoint-untracked.ts';
+import { isHidden, isLentWidth, itemAt, movedAwayBy, statusOf } from '../model/document.ts';
 import { setStatus } from '../model/mutations.ts';
 import { snapshotDifference } from '../model/snapshot-compare.ts';
 import { takenFrom } from '../model/takeovers.ts';
 import { OrderedRefusal } from '../model/refusal.ts';
 import { isTextBoxStoryName } from '../model/text-boxes.ts';
 import { orderedUnitTyper } from '../model/typers.ts';
-import type {
-  OrderedDocument,
-  OrderedElementRecord,
-  OrderedItem,
-  OrderedStory,
-  OrderedSuggestion,
+import {
+  tokenSpace,
+  type OrderedDocument,
+  type OrderedElementRecord,
+  type OrderedItem,
+  type OrderedPropertyRecord,
+  type OrderedStory,
+  type OrderedSuggestion,
 } from '../model/types.ts';
 import { takeBack, withUndoRecord } from '../model/undo-record.ts';
 import { attributeOf, eachElement } from '../ooxml-nodes.ts';
@@ -279,6 +282,68 @@ function keptPending(read: CardRead): OrderedSuggestion[] {
   );
 }
 
+/**
+ * Whether Word writes two records as one change record, which a load of a version 5 checkpoint
+ * reads as one record: records of one suggestion for one properties element of a container, each
+ * with a change record and neither taken from another suggestion (a take-back gives back records
+ * another took).
+ */
+const oneChangeRecord = (a: OrderedPropertyRecord, b: OrderedPropertyRecord): boolean =>
+  a.kind === 'element' &&
+  b.kind === 'element' &&
+  a.target === b.target &&
+  a.suggestion === b.suggestion &&
+  UNTRACKED_CONTAINERS.has(a.target) &&
+  a.untracked !== true &&
+  b.untracked !== true &&
+  a.replaced === undefined &&
+  b.replaced === undefined;
+
+/**
+ * The lent width records on the cells a decision or a take-back removed, by the open item of the
+ * cell that takes each one's space (the engine's `spaceReceivers`): a version 5 checkpoint wrote
+ * no removed cell, so it wrote them on that cell, and a reject of the column gave the width back
+ * to it, as live. The story is drawn only when a cell that shows nowhere holds one.
+ */
+function movedLendings(
+  doc: OrderedDocument,
+  story: OrderedStory
+): ReadonlyMap<OrderedItem, readonly OrderedElementRecord[]> {
+  const out = new Map<OrderedItem, OrderedElementRecord[]>();
+  const lending = (item: OrderedItem) =>
+    item.token === 'tc' && item.props.some(isLentWidth) && isHidden(doc, item);
+  if (!story.tree.toArray().some(lending)) {
+    return out;
+  }
+
+  const ctx = new ComposeContext(doc, story, {});
+  composeBlocks(ctx);
+  const openOf = (id: string) => itemAt(story, { space: tokenSpace(doc.file, id), offset: 0 });
+  for (const { before, cells } of ctx.removedColumns) {
+    const removed = new Set(cells.map((cell) => cell.id));
+    for (const row of before.children) {
+      if (row.kind === 'textValue' || !isRow(row)) {
+        continue;
+      }
+
+      const rowCells = row.children.flatMap((c) =>
+        c.kind !== 'textValue' && isCell(c) ? [c] : []
+      );
+      for (const [id, receiver] of spaceReceivers(rowCells, removed)) {
+        const lent = (openOf(id)?.props ?? [])
+          .filter(isLentWidth)
+          .filter((r) => statusOf(doc, r.suggestion) !== 'rejected');
+        const open = openOf(receiver);
+        if (open !== null && lent.length > 0) {
+          out.set(open, [...(out.get(open) ?? []), ...lent]);
+        }
+      }
+    }
+  }
+
+  return out;
+}
+
 /** Everything a fold must keep, as plain data with no ids or addresses. */
 export function foldPrint(doc: OrderedDocument, base: OoxmlPackage, blobs: FoldBlobs): unknown {
   const key = (id: string | null): string | null => {
@@ -304,7 +369,7 @@ export function foldPrint(doc: OrderedDocument, base: OoxmlPackage, blobs: FoldB
   };
 
   // Each unit of an item on its own: a load joins units of one face into one item. A removed
-  // cell's lent width records are on the cell that takes its space, as a fold writes them
+  // cell's lent width records are on the cell that takes its space, as version 5 wrote them
   const units = (
     story: OrderedStory,
     item: OrderedItem,
@@ -330,7 +395,7 @@ export function foldPrint(doc: OrderedDocument, base: OoxmlPackage, blobs: FoldB
       // A run holds one change record: a format names its suggestion once on a unit
       fmt: [...new Set(recorded(item.fmts))],
       // A suggestion's records of one container's properties are one change record in the file,
-      // as the checkpoint writes them (`oneChangeRecord`)
+      // as a version 5 checkpoint wrote them (`oneChangeRecord`)
       prop: recorded(
         props.filter((r, k) => !props.slice(k + 1).some((later) => oneChangeRecord(r, later)))
       ),
@@ -378,7 +443,7 @@ export function foldPrint(doc: OrderedDocument, base: OoxmlPackage, blobs: FoldB
       .flatMap(([name, story]) => {
         const hidden = drawnNowhere(doc, story);
         const shown = story.tree.toArray().filter((i) => showsOn(read, story, i) && !hidden.has(i));
-        const moved = movedLendings(doc, story, new Map());
+        const moved = movedLendings(doc, story);
         const listed = shown.flatMap((item) => units(story, item, moved));
         return listed.length === 0 ? [] : [[storyLabel(name), ...listed].join('\n')];
       })

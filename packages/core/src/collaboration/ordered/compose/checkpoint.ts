@@ -1,23 +1,13 @@
 // Writes a room checkpoint (design D14): the item list as data (version 6).
 
 import type { OoxmlPackage } from '../../../store/package/ooxml-package.ts';
-import { partNameKey } from '../../../store/package/opc-names.ts';
 import { writeZip } from '../../../store/package/zip.ts';
-import { CHECKPOINT_MANIFEST, checkpointManifestBytes } from '../model/checkpoint.ts';
-import { fileMediaAt, partReferences, referencedMediaType } from '../model/file-media.ts';
-import type { OrderedPerson } from '../model/person.ts';
+import { fileMediaAt, partReferences } from '../model/file-media.ts';
 import type { OrderedFileMedia, OrderedMediaReference } from '../model/resources.ts';
 import { SNAPSHOT_BASE_ENTRY, SNAPSHOT_ENTRY, snapshotJsonBytes } from '../model/snapshot-write.ts';
 import type { OrderedDocument } from '../model/types.ts';
-import { checkpointFacts } from './checkpoint-facts.ts';
 import { withFileMediaPlaces } from './file-media.ts';
-import type { RoomNumber } from './context.ts';
-import {
-  composedWithoutMedia,
-  orderedMediaOf,
-  writeComposedEntries,
-  type OrderedPackageWriteOptions,
-} from './package.ts';
+import type { OrderedPackageWriteOptions } from './package.ts';
 
 /** A media part of a package, as a checkpoint names it, with its bytes. @public */
 export interface OrderedPackageMedia extends OrderedMediaReference {
@@ -130,60 +120,4 @@ function baseFileBytes(
   }
 
   return { bytes: writeZip(entries), media };
-}
-
-/**
- * The whole document as a room checkpoint, handed to `options.write` front to back: the parts
- * of the Word file that {@link writeOrderedPackage} writes for the same document (with its
- * comments: a checkpoint is the room's own file), in the same order, without the media parts
- * that {@link orderedPackageMedia} lists (the file's own, and those a change added), and a
- * manifest part that names each of them by reference (part name, SHA-256, content type, size),
- * with the room facts Word has no place for: each pending suggestion whole, with its person and
- * the revision `w:id`s of its marks, the person of each room comment, the records a suggestion
- * took from another, the person of each namespace that typed units of an insertion, and the
- * records Word writes no change record for. Its parts carry what the manifest names them by: a
- * label on each element a fact names, and the typer on each run a room change typed inside a
- * pending insertion. The content types and the relationships stay as they are. The
- * room's storage holds the media bytes: `options.media` is read only for media a change added
- * that stays inside (an ink part), never for a picture. Word does not open a checkpoint;
- * {@link openOrderedCheckpoint} does. Version 6 replaced it ({@link writeOrderedCheckpoint}).
- *
- * @throws OrderedRefusal as `writeOrderedPackage` does, `too-many-items` when the manifest is
- *   past the engine's limit of one part (64 MiB), which no open reads, and `engine-refused` when
- *   the manifest cannot keep a record made over a pending one. The bytes written before a
- *   refusal are not a whole file: the host keeps its last checkpoint and the room's log.
- * @internal Kept until every room has closed once under version 6.
- */
-export async function writeOrderedCheckpointVersion5(
-  doc: OrderedDocument,
-  base: OoxmlPackage,
-  options: OrderedPackageWriteOptions
-): Promise<void> {
-  const typers = new Map<string, OrderedPerson>();
-  const runs = new Map<string, RoomNumber>();
-  const composed = composedWithoutMedia(doc, base, { typers, runs });
-  const { media } = composed;
-  const { pkg, facts } = checkpointFacts(doc, composed.pkg, composed.takeovers, typers, runs);
-  const referenceOf = partReferences(pkg);
-  const references: OrderedFileMedia[] = [];
-  await writeComposedEntries(
-    pkg,
-    async (name, data, entry) => {
-      const held = media.get(partNameKey(name));
-      const reference = held === undefined ? referenceOf(name, data) : heldReference(held);
-      if (reference !== null) {
-        references.push({ ...reference, part: name, entry });
-        return null;
-      }
-
-      return held === undefined ? data : orderedMediaOf(held, options.media);
-    },
-    options.write,
-    () => [CHECKPOINT_MANIFEST, checkpointManifestBytes(references, facts)]
-  );
-}
-
-/** Media the composed document holds by hash, or null when a checkpoint keeps it (an ink part). */
-function heldReference(media: OrderedMediaReference): OrderedMediaReference | null {
-  return referencedMediaType(media.contentType) === null ? null : media;
 }

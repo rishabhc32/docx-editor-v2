@@ -95,7 +95,7 @@ export function readStyles(value: unknown, suggestions: number): CheckpointStyle
 export type CheckpointResource = CheckpointList & CheckpointResourceKind;
 
 /** What a listed resource says past its suggestion and key, by its kind. */
-export type CheckpointResourceKind =
+type CheckpointResourceKind =
   | {
       readonly kind: 'list-level';
       readonly numId: string;
