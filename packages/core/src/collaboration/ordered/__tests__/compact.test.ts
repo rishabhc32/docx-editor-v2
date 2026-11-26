@@ -43,7 +43,7 @@ const labelledBy = (doc: OrderedDocument, id: string): OrderedItem[] => [
 const inTree = (item: OrderedItem): boolean => item.leaf !== undefined;
 
 describe('a cleanup at a close', () => {
-  test('removes a rejected insertion and an accepted deletion, with their suggestions', () => {
+  test('removes a rejected insertion and an accepted deletion, and keeps their suggestions', () => {
     const doc = load();
     apply(doc, 'ana:1', { kind: 'insert', ...EDIT, place: at(doc, 0, 4), text: 'new ' });
     apply(doc, 'ana:2', { kind: 'delete', ...EDIT, from: at(doc, 8, 0), to: at(doc, 8, 4) });
@@ -53,15 +53,15 @@ describe('a cleanup at a close', () => {
     const parts = partsOf(doc);
     const text = textOf(doc, 8);
 
-    expect(compactOrdered(doc)).toEqual({ items: went.length, suggestions: 2 });
+    expect(compactOrdered(doc)).toEqual({ items: went.length });
     expect(went.filter(inTree)).toEqual([]);
     expect([doc.suggestions.has('S:ana:1.1'), doc.suggestions.has('S:ana:2.1')]).toEqual([
-      false,
-      false,
+      true,
+      true,
     ]);
     expect(partsOf(doc)).toEqual(parts);
     expect(textOf(doc, 8)).toBe(text);
-    expect(compactOrdered(doc)).toEqual({ items: 0, suggestions: 0 });
+    expect(compactOrdered(doc)).toEqual({ items: 0 });
   });
 
   test('keeps what can show again: pending suggestions and a direct edit, which a revert undoes', () => {
@@ -75,7 +75,7 @@ describe('a cleanup at a close', () => {
     );
     const parts = partsOf(doc);
 
-    expect(compactOrdered(doc)).toEqual({ items: 0, suggestions: 0 });
+    expect(compactOrdered(doc)).toEqual({ items: 0 });
     expect(partsOf(doc)).toEqual(parts);
     apply(
       doc,
@@ -120,7 +120,7 @@ describe('a cleanup at a close', () => {
     const taken = labelledBy(doc, 'S:ana:1.1').filter((item) => item.retracted);
     const parts = partsOf(doc);
 
-    expect(compactOrdered(doc)).toEqual({ items: taken.length, suggestions: 0 });
+    expect(compactOrdered(doc)).toEqual({ items: taken.length });
     expect(doc.ownEdited.size).toBe(0);
     expect(labelledBy(doc, 'S:ana:1.1').filter((item) => item.taken)).toEqual([]);
     expect(partsOf(doc)).toEqual(parts);
@@ -133,7 +133,7 @@ describe('a cleanup at a close', () => {
     const [first] = labelledBy(doc, 'S:ana:1.1');
     const space = first?.space ?? '';
 
-    expect(compactOrdered(doc)).toEqual({ items: 0, suggestions: 0 });
+    expect(compactOrdered(doc)).toEqual({ items: 0 });
     apply(doc, 'ana:3', { kind: 'insert', ...EDIT, place: at(doc, 0, 3), text: 'p' });
     const typed = labelledBy(doc, 'S:ana:1.1').filter((item) => item.text === 'p');
     expect(typed.map((item) => item.space === space)).toEqual([false]);
