@@ -454,7 +454,7 @@ export function noteValueSigns(ctx: ComposeContext, signs: ValueSigns, item: Ord
   const struck = ctx.struckBy(item) !== null;
   const accepted = ctx.acceptedInsertion(item);
   signs.struck ||= struck;
-  signs.accepted ||= accepted;
+  signs.accepted ||= !struck && accepted;
   signs.own ||= !struck && !accepted && ctx.insertedBy(item) === null;
 }
 
@@ -471,9 +471,10 @@ export function mergeSigns(into: ValueSigns, from: ValueSigns): void {
  * Keep a control's value record in step with what it shows (`ComposeContext.reached`), as the
  * engine reads it back after a decision: a decision reached it or emptied it; it has a value
  * record that shows and no pending deletion (a record taken back, a direct edit undone, is
- * none); or words that filled it beside a record it stores were accepted
- * (`newWordsBesideRecord`). A record the words a reject took away stated is stale
- * (`ComposeContext.stale`). `control` is the control as drawn.
+ * none); or words that filled it beside a record it stores were accepted and show unstruck
+ * (`newWordsBesideRecord`): the suggestion that strikes them keeps or moves the record. A record
+ * the words a reject took away stated is stale (`ComposeContext.stale`). `control` is the control
+ * as drawn.
  */
 export function noteValueRecord(
   ctx: ComposeContext,

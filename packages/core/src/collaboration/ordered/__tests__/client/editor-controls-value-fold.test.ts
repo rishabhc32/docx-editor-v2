@@ -769,15 +769,18 @@ describe('the item an accepted pick shows, picked again', () => {
   }
 });
 
+/** A date picker that shows its date in full, as "11 July 2026". */
+const FULL_DATE = line(
+  '<w:date w:fullDate="2026-07-11T00:00:00Z"><w:dateFormat w:val="d MMMM yyyy"/>' +
+    '<w:lid w:val="en-GB"/></w:date>',
+  t('11 July 2026')
+);
+
 describe('a date picked over his own typing in his accepted date', () => {
   // Ben's date was accepted, then he typed in its words and picked another date. The pick takes
   // his typing back, so a reject gives back words that state the stored date: the date moves to
   // the picked one, as Word moves it, live, folded and in the editor alone
-  const file = line(
-    '<w:date w:fullDate="2026-07-11T00:00:00Z"><w:dateFormat w:val="d MMMM yyyy"/>' +
-      '<w:lid w:val="en-GB"/></w:date>',
-    t('11 July 2026')
-  );
+  const file = FULL_DATE;
 
   /** Ben's typing in the words of the accepted date, and his pick over them. */
   const overOwnTyping = (person: Person) => {
@@ -819,5 +822,55 @@ describe('a date picked over his own typing in his accepted date', () => {
         folded: expected.decided,
       });
     });
+  }
+});
+
+describe('a date picked over the words of an accepted date that a pending edit changed', () => {
+  // Ben's date was accepted, then a pending edit changed its words and Ben picked another date.
+  // Struck, the accepted words no longer fill the control: the pick keeps the stored date by its
+  // own rule, live, folded and in the editor alone of the room's own file, and a decision reads
+  // the date from the words, live and folded
+  const changes = [
+    [
+      "Olive's typing in them",
+      (seated: Awaited<ReturnType<typeof seats>>) => {
+        seated.olive.editor.setMode('suggesting');
+        caretAt(seated.olive, 0, 9);
+        typing('x ')(seated.olive);
+      },
+    ],
+    [
+      "Ben's own date over them",
+      (seated: Awaited<ReturnType<typeof seats>>) => pick('2026-01-14')(seated.ben),
+    ],
+  ] as const;
+  const decided = { accept: '2026-03-03', reject: '2026-02-11' } as const;
+
+  for (const [label, change] of changes) {
+    for (const decision of ['accept', 'reject'] as const) {
+      test(`${label}, ${decision}ed`, async () => {
+        const seated = await seats(FULL_DATE, 1);
+        pick('2026-02-11')(seated.ben);
+        await settle();
+        acceptBens(seated.olive);
+        await settle();
+        change(seated);
+        await settle();
+        const saved = new Uint8Array(await seated.olive.editor.save());
+        const expected = alone(saved, [6, 6], pick('2026-03-03'), decision).edited;
+        pick('2026-03-03')(seated.ben);
+        await settle();
+        const reopened = await seats(await foldedBytes(seated.room.room.document, FULL_DATE, 1), 2);
+        expect({ live: roomControl(seated), folded: roomControl(reopened) }).toEqual({
+          live: expected,
+          folded: expected,
+        });
+        await decide(seated.olive, decision);
+        await decide(reopened.olive, decision);
+        const live = roomControl(seated);
+        expect(live).toContain(`<w:date w:fullDate="${decided[decision]}T00:00:00Z">`);
+        expect(roomControl(reopened)).toBe(live);
+      });
+    }
   }
 });
