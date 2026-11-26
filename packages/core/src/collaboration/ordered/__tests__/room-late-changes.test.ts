@@ -7,16 +7,21 @@
 import { describe, expect, test } from 'bun:test';
 import { applyOrderedChange } from '../change/apply.ts';
 import type { OrderedChange, OrderedStampedChange } from '../change/types.ts';
+import { openOrderedRoomFile, openOrderedWordFile } from '../client/open.ts';
+import { OrderedReplica } from '../client/replica.ts';
 import { isHidden } from '../model/document.ts';
 import type { OrderedDocument } from '../model/types.ts';
 import { decodeOrderedClientMessage, encodeOrderedServerMessage } from '../protocol/codec.ts';
 import { allowWritersPolicy } from '../room/policy.ts';
 import { OrderedRoom, OrderedRoomOpenError } from '../room/room.ts';
+import { checkpointBytes, mediaStore } from './fold-check.ts';
 import { TestClient, type ChangeBody } from './room-client.ts';
-import { actor, BODY, loadRoom, paragraphOf, snapshot } from './room-harness.ts';
+import { actor, BODY, loadRoom, paragraphOf, ROOM_FILE, snapshot } from './room-harness.ts';
 
 const ANA = actor('Ana', 'ana-1', 'organiser');
 const BEN = actor('Ben', 'ben-1', 'organiser');
+/** A page whose host keeps one namespace across its reloads. */
+const PAGE = actor('Ana', 'ana-page', 'organiser');
 const T0 = Date.UTC(2026, 10, 26, 9, 30, 0);
 
 function roomOver(document: OrderedDocument, log?: readonly OrderedStampedChange[]): OrderedRoom {
@@ -177,5 +182,45 @@ describe('a change after a close', () => {
     // The next file holds the change, so the old log replays it never
     expect(() => roomOver(doc, log)).toThrow(OrderedRoomOpenError);
     expect(() => roomOver(doc, log)).toThrow('log-apply at 1: other-file');
+  });
+});
+
+describe('a page that keeps its namespace across a close', () => {
+  const opened = () => openOrderedWordFile(ROOM_FILE, { file: 1 });
+  const page = (doc: OrderedDocument) =>
+    new OrderedReplica({ doc, person: PAGE.person, namespace: PAGE.namespace, now: () => T0 });
+
+  /** The page types at the start of the first paragraph; returns what it sends. */
+  const typed = (replica: OrderedReplica) => {
+    replica.applyLocal({ v: 1, id: replica.nextId(), ...body(replica.doc, 0) } as OrderedChange);
+    return replica.takeUnsent();
+  };
+
+  test('its new copy counts on past the counters the file holds, and the room applies it', async () => {
+    const first = roomOver(opened().document);
+    const before = page(opened().document);
+    expect(first.submit(PAGE, typed(before)).refused).toEqual([]);
+    expect(first.submit(PAGE, typed(before)).refused).toEqual([]);
+
+    // The close: today's fold, with the counters the room held, as the saved item list holds them
+    const { base } = opened();
+    const bytes = await checkpointBytes(first.document, base, mediaStore(base));
+    const reopened = () => {
+      const { document } = openOrderedRoomFile(bytes, { file: 2 });
+      for (const [namespace, counter] of first.document.lastCounters) {
+        document.lastCounters.set(namespace, counter);
+      }
+
+      return document;
+    };
+    const next = roomOver(reopened());
+
+    // The page loads again with the same namespace, and types
+    const sent = typed(page(reopened()));
+    expect(sent.map((change) => change.id)).toEqual(['ana-page:3']);
+    const result = next.submit(PAGE, sent);
+    expect(result.refused).toEqual([]);
+    expect(result.acks).toEqual([{ id: 'ana-page:3', n: 1 }]);
+    expect(textOf(next.document).match(/Late/g)).toHaveLength(3);
   });
 });

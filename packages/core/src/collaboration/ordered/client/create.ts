@@ -73,7 +73,11 @@ export interface OrderedCollaborationOptions {
   /** The editor port's document id. Default: the room's name. */
   readonly documentId?: string;
   readonly sessionId?: string;
-  /** The namespace of this session's change ids. Default: a new one. Never reuse one. */
+  /**
+   * The namespace of this session's change ids. Default: a new one. A host may keep one for a page
+   * across its reloads: the session counts on past the counters its document holds. Never give
+   * one namespace to two sessions at once.
+   */
   readonly namespace?: string;
   /**
    * Read the room's Word file `file` from `location`, the place `welcome` names: a Word file, or

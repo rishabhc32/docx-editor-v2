@@ -78,4 +78,22 @@ describe('the counters of real sessions', () => {
     expect(counterAfter(room, org, ana)).toBeGreaterThan(direct);
     expect(room.room.document.lastCounters.get(ana.handle.session.namespace)).toBe(redone);
   });
+
+  test('a page that keeps its namespace across a reload types on past its own counters', async () => {
+    const room = localRoom();
+    const first = await join(room, 'Ana', { namespace: 'ana-page' });
+    caretAt(first, 0, 4);
+    await typeKeys(first, 'abc');
+    await settle();
+    const typed = counterAfter(room, first);
+    first.handle.destroy();
+
+    // The page joins again with the same namespace: the catch-up holds its own changes
+    const again = await join(room, 'Ana', { namespace: 'ana-page' });
+    caretAt(again, 0, 0);
+    await typeKeys(again, 'X');
+    await settle();
+    expect(counterAfter(room, again)).toBeGreaterThan(typed);
+    expect(editorTexts(again)[0]).toBe('XThe abcfee is 100 USD.');
+  });
 });
