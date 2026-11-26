@@ -4,6 +4,8 @@
 import {
   emptiedControlsOf,
   restoreEmptiedControls,
+  restoreSplitParts,
+  splitPartsOf,
   type PromptedByEdit,
   type Untracked,
 } from '../change/settle-emptied.ts';
@@ -129,6 +131,7 @@ export const SIDE: Readonly<Record<string, SnapshotSide<unknown>>> = {
     restoreEmptiedControls
   ),
   namedPrompts: side(record(NAMED_PROMPT_STATE), namedPromptStateOf, restoreNamedPromptState),
+  splitParts: side(map(item, list(record(ADDRESS))), splitPartsOf, restoreSplitParts),
 };
 
 const NAMES = new Set(Object.keys(SIDE));

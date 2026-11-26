@@ -24,7 +24,7 @@ import {
   type OrderedPropertyRecord,
   type OrderedStory,
 } from '../model/types.ts';
-import { forgetEmptiedControls } from './settle-emptied.ts';
+import { forgetEmptiedControls, splitPartsOf } from './settle-emptied.ts';
 
 /** What a cleanup removed. @public */
 export interface OrderedCompaction {
@@ -58,13 +58,14 @@ const HOLDING_TOKENS: ReadonlySet<OrderedContainerToken> = new Set([
  * their prompts (`forgetEmptiedControls`).
  *
  * It removes an item hidden for good (`hiddenForGood`) that nothing reads (`deadItems`): no
- * comment range, field slot or kept note names it, nothing it holds or its container holds stays,
- * no container that reads what it held holds it, no row keeps it as a removed cell, and it is not
- * the last item of a space that keeps one (a typed item grows into the next offsets of its space,
- * so an address is never used again). A removed address then names no item, and every reader
- * refuses it (`unknown-address`). The paragraph or block that drew a removed item is still drawn
- * from the items (`rebuilt`). It keeps every suggestion, with its version: a change record in a
- * part the list does not hold (a prompt in the glossary) names its suggestion by its `w:id`.
+ * comment range, field slot, split control's part or kept note names it, nothing it holds or its
+ * container holds stays, no container that reads what it held holds it, no row keeps it as a
+ * removed cell, and it is not the last item of a space that keeps one (a typed item grows into
+ * the next offsets of its space, so an address is never used again). A removed address then
+ * names no item, and every reader refuses it (`unknown-address`). The paragraph or block that
+ * drew a removed item is still drawn from the items (`rebuilt`). It keeps every suggestion, with
+ * its version: a change record in a part the list does not hold (a prompt in the glossary) names
+ * its suggestion by its `w:id`.
  * Like every write, it records how to take it back when an undo record is open.
  *
  * @public
@@ -283,7 +284,7 @@ function storyDeadItems(
   return all.filter((item) => dead.has(item));
 }
 
-/** The addresses a comment range or a field slot in the story names. */
+/** The addresses a comment range, a field slot or a split control's part in the story names. */
 function namedAddresses(
   doc: OrderedDocument,
   story: OrderedStory,
@@ -306,6 +307,11 @@ function namedAddresses(
     if (item.fieldSlot !== undefined) {
       named.add(item.fieldSlot.field);
     }
+  }
+
+  // A take-back of the Enter that split a control reads its part's first prompt unit
+  for (const first of splitPartsOf(doc).keys()) {
+    named.add(addressKey(first.space, first.offset));
   }
 
   return named;

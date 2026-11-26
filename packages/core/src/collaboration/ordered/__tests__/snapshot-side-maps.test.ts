@@ -3,7 +3,8 @@
 // The field table (`model/snapshot-fields.ts`) covers each field of `OrderedDocument` through
 // the type check. State a module keeps beside the document, in a map by document, has no field,
 // so the type check does not see it. This guard lists each such map with its class, and a new
-// map fails until it has one:
+// map fails until it has one. It reads each file whole, so a declaration over several lines counts,
+// and every other place that names such a map type is listed too:
 //
 //   saved:     the checkpoint saves it and gives it back (`SIDE` in `model/snapshot-side.ts`).
 //   base:      the open makes it again from the base package (`recordLoadedPackage`).
@@ -30,6 +31,7 @@ const saved = (side: string): DocumentState => ({ kind: 'saved', side });
 const DOCUMENT_STATE: Readonly<Record<string, DocumentState>> = {
   'change/settle-emptied.ts promptedByEdit': saved('emptiedControls'),
   'change/settle-named-prompts.ts states': saved('namedPrompts'),
+  'change/settle-emptied.ts splitParts': saved('splitParts'),
   'model/prompt-marks.ts droppedOf': saved('droppedMarks'),
   'model/prompt-marks.ts filledOf': saved('filledPrompts'),
   'model/prompt-marks.ts firstFillOf': saved('firstFills'),
@@ -47,11 +49,20 @@ const DOCUMENT_STATE: Readonly<Record<string, DocumentState>> = {
   'model/prompt-marks.ts changedOf': { kind: 'transient' },
 };
 
+/** Each other place that names a map or set type keyed by document, by file, and why. */
+const OTHER_USES: Readonly<Record<string, number>> = {
+  // `addFor`'s parameter: one of the index maps above
+  'model/prompt-marks.ts': 1,
+};
+
 const ORDERED = join(import.meta.dir, '..');
 
-/** A module-level map or set whose key is a document. */
+/** A map or set type whose key is a document. */
+const DOCUMENT_KEYED = /\b(?:Weak)?(?:Map|Set)<\s*OrderedDocument\b/g;
+
+/** A module-level declaration, over as many lines as it takes, whose type is such a map or set. */
 const DOCUMENT_MAP =
-  /^(?:export )?(?:const|let) (\w+)\b.*\b(?:Weak)?(?:Map|Set)<\s*OrderedDocument\b/;
+  /^(?:export )?(?:const|let) (\w+)\b[^;]*?\b(?:Weak)?(?:Map|Set)<\s*OrderedDocument\b/gm;
 
 function sourceFiles(dir: string): string[] {
   return readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
@@ -64,21 +75,32 @@ function sourceFiles(dir: string): string[] {
   });
 }
 
-function documentMaps(): string[] {
-  return sourceFiles(ORDERED).flatMap((path) => {
+/** Each map by document, and the number of other places that name such a type, by file. */
+function documentMaps(): { readonly maps: string[]; readonly others: Record<string, number> } {
+  const maps: string[] = [];
+  const others: Record<string, number> = {};
+  for (const path of sourceFiles(ORDERED)) {
     const file = relative(ORDERED, path);
-    return readFileSync(path, 'utf8')
-      .split('\n')
-      .flatMap((line) => {
-        const found = DOCUMENT_MAP.exec(line);
-        return found ? [`${file} ${found[1]}`] : [];
-      });
-  });
+    const source = readFileSync(path, 'utf8');
+    const declared = [...source.matchAll(DOCUMENT_MAP)];
+    for (const found of declared) {
+      maps.push(`${file} ${found[1]}`);
+    }
+
+    const other = [...source.matchAll(DOCUMENT_KEYED)].length - declared.length;
+    if (other !== 0) {
+      others[file] = other;
+    }
+  }
+
+  return { maps, others };
 }
 
 describe('the maps a module keeps by document', () => {
   test('each has a class: a new one says whether a checkpoint saves it', () => {
-    expect(documentMaps().sort()).toEqual(Object.keys(DOCUMENT_STATE).sort());
+    const { maps, others } = documentMaps();
+    expect(maps.sort()).toEqual(Object.keys(DOCUMENT_STATE).sort());
+    expect(others).toEqual(OTHER_USES);
   });
 
   test('each saved map is a side state of the checkpoint, and each side state is one map', () => {

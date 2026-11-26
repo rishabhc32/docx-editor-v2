@@ -655,7 +655,7 @@ function givePrompt(
   const mark = promptParagraphEnd(doc, story, emptied.mark, units);
   dropParagraphs(doc, story, emptied.dropped, true);
   if (emptied.edges.length > 0) {
-    noteSplitPart(doc, story, emptied.edges, units);
+    noteSplitPart(doc, emptied.edges, units);
   }
 
   if (emptied.decided) {
@@ -749,11 +749,23 @@ function dropParagraphs(
   }
 }
 
-/** Per document, the prompt units of each part of a split control, by its split edges. */
-const splitParts = new WeakMap<
-  OrderedDocument,
-  Map<OrderedItem, { readonly story: OrderedStory; readonly edges: readonly OrderedItemAddress[] }>
->();
+/** Per document, the split edges that end each part of a split control, by its first prompt unit. */
+const splitParts = new WeakMap<OrderedDocument, Map<OrderedItem, readonly OrderedItemAddress[]>>();
+
+/** The parts of the controls Enter split, by their first prompt unit, as a checkpoint saves them. */
+export function splitPartsOf(
+  doc: OrderedDocument
+): ReadonlyMap<OrderedItem, readonly OrderedItemAddress[]> {
+  return splitParts.get(doc) ?? new Map();
+}
+
+/** Give back the parts of the controls Enter split, as a checkpoint saved them. */
+export function restoreSplitParts(
+  doc: OrderedDocument,
+  parts: ReadonlyMap<OrderedItem, readonly OrderedItemAddress[]>
+): void {
+  splitParts.set(doc, new Map(parts));
+}
 
 /**
  * Note the units given to a part of a control Enter split. Each part is a control of its own:
@@ -762,7 +774,6 @@ const splitParts = new WeakMap<
  */
 function noteSplitPart(
   doc: OrderedDocument,
-  story: OrderedStory,
   edges: readonly OrderedItem[],
   units: readonly OrderedItem[]
 ): void {
@@ -777,8 +788,10 @@ function noteSplitPart(
     splitParts.set(doc, parts);
   }
 
-  const record = { story, edges: edges.map(({ space, offset }) => ({ space, offset })) };
-  parts.set(first, record);
+  parts.set(
+    first,
+    edges.map(({ space, offset }) => ({ space, offset }))
+  );
   recordUndo(doc, () => parts.delete(first));
 }
 
@@ -789,21 +802,28 @@ function noteSplitPart(
 function unsplit(doc: OrderedDocument): void {
   const parts = splitParts.get(doc);
   if (!parts) return;
-  for (const [first, record] of [...parts]) {
-    const { story } = record;
-    const merged = record.edges.some((address) => {
-      const edge = itemAt(story, address);
-      return edge === null || isHidden(doc, edge);
-    });
-    if (first.gone || !merged) {
-      if (first.gone) parts.delete(first);
+  for (const [first, edges] of [...parts]) {
+    if (first.gone) {
+      parts.delete(first);
+      continue;
+    }
+
+    // The part's story: the one that holds its first unit, live and after an open
+    const story = storyOfItem(doc, first);
+    const merged =
+      story !== null &&
+      edges.some((address) => {
+        const edge = itemAt(story, address);
+        return edge === null || isHidden(doc, edge);
+      });
+    if (story === null || !merged) {
       continue;
     }
 
     for (let unit: OrderedItem | null = first; unit?.prompt === true; unit = story.tree.next(unit))
       if (!unit.gone && isUnit(unit)) relabel(doc, story, unit, { gone: true });
     parts.delete(first);
-    recordUndo(doc, () => parts.set(first, record));
+    recordUndo(doc, () => parts.set(first, edges));
     const mark = shownMarkFrom(doc, story, first);
     if (mark) recordPromptMarkChange(doc, mark);
   }

@@ -18,7 +18,9 @@
     "packages/core/src/collaboration/ordered/__tests__/sessions-four.test.ts",
     "packages/core/src/collaboration/ordered/__tests__/sessions-two.test.ts",
     "packages/core/src/collaboration/ordered/__tests__/client/editor-late-counters.test.ts",
-    "packages/core/src/collaboration/ordered/__tests__/checkpoint-open-compose.test.ts"
+    "packages/core/src/collaboration/ordered/__tests__/checkpoint-open-compose.test.ts",
+    "packages/core/src/collaboration/ordered/__tests__/checkpoint-split-control.test.ts",
+    "packages/core/src/collaboration/ordered/__tests__/snapshot-side-maps.test.ts"
   ],
   "changeset": "ordered-checkpoint-item-list",
   "migration": null
