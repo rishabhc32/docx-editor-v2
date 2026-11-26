@@ -2,6 +2,7 @@
 // of the room can show again go here, with every reference to them, and the saved list does not
 // grow for the life of the room.
 
+import { isNotesStory, noteKeyOf, referenceKeyOf } from '../compose/note-references.ts';
 import {
   indexItem,
   isHidden,
@@ -11,7 +12,6 @@ import {
   statusOf,
   unindexItem,
 } from '../model/document.ts';
-import { isNotesStory, noteKeyOf, referenceKeyOf } from '../compose/note-references.ts';
 import { isDroppedMark } from '../model/prompt-marks.ts';
 import { recordUndo } from '../model/undo-record.ts';
 import {
@@ -177,7 +177,7 @@ function finalStatus(doc: OrderedDocument, id: string | null): OrderedSuggestion
  * A prompt's units and marks show again when the content over them goes, and a block control's
  * dropped paragraph comes back with the revert of the edit that emptied it.
  */
-export function hiddenForGood(doc: OrderedDocument, item: OrderedItem): boolean {
+function hiddenForGood(doc: OrderedDocument, item: OrderedItem): boolean {
   if (item.prompt === true) {
     return false;
   }
@@ -228,7 +228,7 @@ const addressKey = (space: string, offset: number): string => `${space}|${offset
  * whose every reference is hidden is left out by those references (`notesWithHiddenReferences`),
  * so a hidden reference stays while an item of its note stays.
  */
-export function deadItems(doc: OrderedDocument): Map<OrderedStory, OrderedItem[]> {
+function deadItems(doc: OrderedDocument): Map<OrderedStory, OrderedItem[]> {
   const out = new Map<OrderedStory, OrderedItem[]>();
   const stories = [...doc.stories.values()];
   const keptNotes = new Set<string>();
