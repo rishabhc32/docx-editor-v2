@@ -350,7 +350,10 @@ export function indexOrderedStory(
   story: Omit<OrderedStory, 'spaces'>
 ): OrderedStory {
   const indexed: OrderedStory = { ...story, spaces: new Map() };
-  for (const item of indexed.tree.items()) indexItem(doc, indexed, item);
+  for (const item of indexed.tree.items()) {
+    indexItem(doc, indexed, item);
+  }
+
   doc.stories.set(indexed.name, indexed);
   return indexed;
 }
