@@ -781,8 +781,12 @@ function withCellsAccepted(
     return withCellMarker(inserted, deleted, ctx.mint);
   });
   if (sites.length === 0) return marked;
+
+  // A scratch part, unchecked as compose's other engine writes: a checkpoint's drawing marks its
+  // runs with attributes the part's root does not declare yet
   const scratch = withStoryBlocks(ctx.story.part, [marked]);
-  const resolved = resolveRevisions(scratch, 'accept', undefined, { siteNodeIds: sites });
+  const options = { siteNodeIds: sites, deferValidation: true };
+  const resolved = resolveRevisions(scratch, 'accept', undefined, options);
   const found = resolved.ok && resolved.part ? findNode(resolved.part, marked.id) : null;
 
   // A table the engine cannot resolve loses the removed cells with no width given: never a

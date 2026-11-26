@@ -397,15 +397,25 @@ describe('a column removed under a later one', () => {
   });
 
   // The organiser's direct row, made after both columns, keeps a cell under the removed column,
-  // so the grid keeps that column: the cell before it spans both, live as after a fold
-  test.each(['taken back', 'rejected'])(
-    "a party's column %s, under a later column and the organiser's direct row",
-    async (how) => {
+  // so the grid keeps that column: the cell before it spans both, live as after a fold. Another
+  // party's words in the table change nothing: a fold draws their runs with its own marks
+  test.each([
+    ['taken back', 'no words'],
+    ['taken back', "another party's words"],
+    ['rejected', 'no words'],
+    ['rejected', "another party's words"],
+  ])(
+    "a party's column %s, under a later column and the organiser's direct row, %s",
+    async (how, words) => {
       const { document: doc, base } = openOrderedWordFile(TABLE_FILE, { file: 1 });
       apply(doc, 'ben:1', column(doc, 0), 'Ben');
       apply(doc, 'ben:2', column(doc, 2), 'Ben');
       const row = addressOf(opens(doc, 'tr')[0]!);
       apply(doc, 'olive:1', { kind: 'insert-row', ...DIRECT, row, where: 'below' }, 'Olive');
+      if (words !== 'no words') {
+        apply(doc, 'ana:1', { kind: 'insert', ...EDIT, place: at(doc, 0, 3), text: 's' }, 'Ana');
+      }
+
       if (how === 'taken back') {
         apply(doc, 'ben:3', { kind: 'delete-column', ...EDIT, cell: cell(doc, 1) }, 'Ben');
       } else {
