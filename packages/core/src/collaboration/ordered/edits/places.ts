@@ -170,13 +170,15 @@ function endOffsetOf(paragraph: OrderedViewParagraph, item: OrderedItem): number
 
 /**
  * Refuses a place whose address the story does not hold, by the reason it is missing: a
- * paragraph inside content kept whole as one item (a text box, a shape) is not covered.
+ * paragraph inside content kept whole as one item (a text box, a shape) is not covered, so no item
+ * of its space was ever made; a unit a cleanup removed from a space that keeps others is unknown.
  */
 function refuseMissing(doc: OrderedDocument, story: OrderedStory, place: OrderedPlace): never {
   const missing = missingAddress(doc, place);
   const loaded = loadedSpace(place.space);
   if (
     missing === 'unknown-address' &&
+    !story.spaces.has(place.space) &&
     loaded !== null &&
     (loaded.kind === 'b' || loaded.kind === 'm') &&
     findNode(story.part, loaded.node)
