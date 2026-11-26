@@ -31,6 +31,8 @@ const REFUSED: Readonly<Record<string, readonly string[]>> = {
   // The words of a control bound to custom XML, and a table of contents' generated result
   bound: ['not-covered'],
   toc: ['not-covered'],
+  // A group control's own content, which Word keeps from every edit
+  group: ['locked'],
 };
 
 /** A node's properties as a string to compare, ids aside. */
