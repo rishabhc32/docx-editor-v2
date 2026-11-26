@@ -26,6 +26,9 @@ export function checkOrderedMediaPrefix(prefix: Uint8Array, media: {
 }): 'valid' | 'invalid' | 'whole';
 
 // @public
+export function closeOrderedRoom(room: OrderedRoom, base: OoxmlPackage, options: OrderedRoomCloseOptions): Promise<OrderedRoomClose>;
+
+// @public
 export function compactOrdered(doc: OrderedDocument): OrderedCompaction;
 
 // @public
@@ -540,6 +543,11 @@ export interface OrderedChangeWatermarkSize {
     readonly heightPt: number;
     // (undocumented)
     readonly widthPt: number;
+}
+
+// @public
+export interface OrderedCheckpointWriteOptions extends OrderedPackageWriteOptions {
+    readonly order?: number;
 }
 
 // @public
@@ -2499,6 +2507,31 @@ export class OrderedRoom {
 }
 
 // @public
+export interface OrderedRoomClose {
+    readonly bytes: Uint8Array;
+    readonly compaction: OrderedCompaction;
+    readonly order: number;
+    readonly sha256: string;
+}
+
+// @public
+export type OrderedRoomCloseCode = 'unreadable' | 'different';
+
+// @public
+export class OrderedRoomCloseError extends Error {
+    constructor(code: OrderedRoomCloseCode, detail: string);
+    readonly code: OrderedRoomCloseCode;
+    readonly detail: string;
+}
+
+// @public
+export interface OrderedRoomCloseOptions {
+    readonly backup: OrderedPackageWriteOptions['write'];
+    readonly limits?: OoxmlPackageLimits;
+    readonly media: OrderedPackageWriteOptions['media'];
+}
+
+// @public
 export type OrderedRoomOpenCode = 'log-invalid' | 'log-gap' | 'log-repeated-id' | 'log-stamp' | 'log-apply';
 
 // @public
@@ -3062,6 +3095,7 @@ export interface OrderedWordFile {
     readonly base: OoxmlPackage;
     // (undocumented)
     readonly document: OrderedDocument;
+    readonly order?: number;
 }
 
 // @public
@@ -3225,7 +3259,7 @@ export function validateOrderedStampedChange(value: unknown, options?: OrderedVa
 export function withOrderedUndoRecord<T>(doc: OrderedDocument, edit: () => T): OrderedUndoRecorded<T>;
 
 // @public
-export function writeOrderedCheckpoint(doc: OrderedDocument, base: OoxmlPackage, options: OrderedPackageWriteOptions): Promise<void>;
+export function writeOrderedCheckpoint(doc: OrderedDocument, base: OoxmlPackage, options: OrderedCheckpointWriteOptions): Promise<void>;
 
 // @public
 export function writeOrderedPackage(doc: OrderedDocument, base: OoxmlPackage, options: OrderedPackageWriteOptions & OrderedPackageCommentOptions): Promise<void>;

@@ -54,7 +54,9 @@ export type OrderedRoomCloseCode = 'unreadable' | 'different';
  * @public
  */
 export class OrderedRoomCloseError extends Error {
+  /** Why the file does not stand for the room. */
   readonly code: OrderedRoomCloseCode;
+  /** The open's reason, or the path of the first field that differs. */
   readonly detail: string;
 
   constructor(code: OrderedRoomCloseCode, detail: string) {
