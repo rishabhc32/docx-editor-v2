@@ -45,9 +45,7 @@ const HOLDER_NAMESPACE = 'https://docx-editor.dev/ordered-snapshot';
  * some edits give an attribute they make (its readers treat it as `genericExtension`). An
  * attribute an edit made may have no kind (null).
  */
-const ATTRIBUTE_KINDS = ['xmlSpace', 'wmlVal', 'genericExtension', 'generic'] as const;
-
-const KINDS: readonly string[] = ATTRIBUTE_KINDS;
+const ATTRIBUTE_KINDS: readonly string[] = ['xmlSpace', 'wmlVal', 'genericExtension', 'generic'];
 
 /** The base package's nodes by number: its parts by name, each part's nodes in document order. */
 function baseNodes(base: OoxmlPackage): OoxmlNode[] {
@@ -143,7 +141,7 @@ export class SnapshotNodeWriter {
   /** Attributes as the checkpoint writes them. */
   attributes(attributes: readonly OoxmlAttribute[]): unknown[] {
     return attributes.map((a) => [
-      a.kind === undefined ? null : KINDS.indexOf(a.kind),
+      a.kind === undefined ? null : ATTRIBUTE_KINDS.indexOf(a.kind),
       this.strings.name(a.namespaceUri),
       this.strings.name(a.localName),
       a.prefix === undefined ? null : this.strings.name(a.prefix),
