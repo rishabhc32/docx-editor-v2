@@ -85,6 +85,7 @@ export function snapshotJsonBytes(
       return place;
     },
   };
+
   // In the order the reader reads them: each string and node is written at its first use
   const body = JSON.stringify({
     media: MEDIA_CODEC.write(media, w),
