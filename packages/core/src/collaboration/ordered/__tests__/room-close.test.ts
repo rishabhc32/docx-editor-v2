@@ -17,7 +17,9 @@ import {
 import * as open from '../client/open.ts';
 import * as checkpoint from '../compose/checkpoint.ts';
 import { orderedPackageBytes } from '../compose/package.ts';
+import { OrderedRefusal } from '../model/refusal.ts';
 import { snapshotDifference } from '../model/snapshot-compare.ts';
+import * as snapshotWrite from '../model/snapshot-write.ts';
 import type { OrderedDocument } from '../model/types.ts';
 import { orderedBlobHash } from '../protocol/blobs.ts';
 import { OrderedRoom } from '../room/room.ts';
@@ -159,6 +161,18 @@ describe("a room's close", () => {
     const main = unzipSync(bytes)['word/document.xml']!.byteLength;
     const list = unzipSync(close.bytes)['ordered/checkpoint.json']!.byteLength;
     expect(list).toBeLessThan(main * 1.25);
+  });
+
+  test('refuses a room whose list is past the limit of one part, and leaves the room', async () => {
+    spyOn(snapshotWrite, 'snapshotJsonBytes').mockImplementation(() => {
+      throw new OrderedRefusal('too-many-items', 'checkpoint over 67108864 bytes');
+    });
+    const { room, base } = firstRound();
+    const refusal = await closed(room, base).catch((error: unknown) => error);
+    mock.restore();
+    expect(refusal).toBeInstanceOf(OrderedRefusal);
+    expect(refusal).toMatchObject({ reason: 'too-many-items' });
+    expect(snapshotDifference(firstRound().room.document, room.document)).toBeNull();
   });
 
   /** Where a close stops, and the backup writer that stops it there, if any. */
