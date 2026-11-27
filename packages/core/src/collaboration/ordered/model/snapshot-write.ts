@@ -1,6 +1,6 @@
 // Writes a room's saved item list (checkpoint version 6, design D14): `ordered/checkpoint.json`,
 // every stored field of the document through the field table, with the Word XML its items hold
-// as references into `ordered/base.docx` or once by value.
+// as references into `ordered/base.docx` or once by value, and each string once.
 
 import type { OoxmlPackage } from '../../../store/package/ooxml-package.ts';
 import { XML_HARD_MAX_BYTES } from '../../../store/package/xml-reader.ts';
@@ -57,9 +57,9 @@ export function headerText(header: SnapshotHeader): string {
 }
 
 /**
- * `checkpoint.json` of `doc`: its stored fields, `media` (the file media of `ordered/base.docx`),
- * and the nodes and namespaces they name, with the room's last order number `order`. `base` is
- * the package `ordered/base.docx` holds.
+ * `checkpoint.json` of `doc`: `media` (the file media of `ordered/base.docx`), its stored fields
+ * and its side state, with the room's last order number `order`. `base` is the package
+ * `ordered/base.docx` holds.
  *
  * @throws OrderedRefusal `too-many-items` when it is past the engine's limit of one part (64 MiB).
  */
@@ -85,14 +85,11 @@ export function snapshotJsonBytes(
       return place;
     },
   };
-  const document = DOCUMENT_CODEC.write(doc, w);
-  const side = sideJson(doc, w);
+  // In the order the reader reads them: each string and node is written at its first use
   const body = JSON.stringify({
     media: MEDIA_CODEC.write(media, w),
-    namespaces: nodes.namespaces,
-    nodes: nodes.list,
-    document,
-    side,
+    document: DOCUMENT_CODEC.write(doc, w),
+    side: sideJson(doc, w),
   });
   const encoder = new TextEncoder();
   const bodyBytes = encoder.encode(body);

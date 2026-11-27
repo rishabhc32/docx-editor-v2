@@ -1,6 +1,8 @@
 // How a saved item list (checkpoint version 6) holds each value of the model: a codec writes a
 // value as JSON, reads it back from an untrusted file, and finds the first difference between two
 // values. The field table (`snapshot-fields.ts`) gives each field of each model type its codec.
+// The reader reads every value in the order the writer wrote it: strings and nodes are written
+// once and then named by their place (`snapshot-strings.ts`, `snapshot-nodes.ts`).
 
 import type {
   OoxmlAttribute,
@@ -9,7 +11,7 @@ import type {
   OoxmlPart,
 } from '../../../store/package/ooxml-tree.ts';
 import { isValidXmlText } from '../../../store/package/sinks.ts';
-import { at, fieldsOf, Invalid, oneOf, plainFields } from '../change/read.ts';
+import { at, Invalid } from '../change/read.ts';
 import { readPerson, type OrderedPerson } from './person.ts';
 import {
   attributesDifference,
@@ -17,9 +19,10 @@ import {
   type SnapshotNodeReader,
   type SnapshotNodeWriter,
 } from './snapshot-nodes.ts';
+import { ID_MAX } from './snapshot-strings.ts';
 import type { OrderedItem, OrderedStory, OrderedSuggestion } from './types.ts';
 
-/** What a codec writes with: the node list, and the place of each item. */
+/** What a codec writes with: the strings and nodes written so far, and the place of each item. */
 export interface SnapshotWriteContext {
   readonly nodes: SnapshotNodeWriter;
   /** An item's story and place in it. */
@@ -88,9 +91,6 @@ function plain<T>(read: (json: unknown, path: string) => T): SnapshotCodec<T> {
   };
 }
 
-/** UTF-16 units of an id or a name the model holds. */
-export const ID_MAX = 4096;
-
 /**
  * A string of `min` to `max` units that XML can hold.
  *
@@ -108,15 +108,25 @@ export function readXmlString(json: unknown, path: string, min: number, max: num
   return json;
 }
 
-/** A string of `min` to `max` units that XML can hold. */
-export const xmlString = (min: number, max: number): SnapshotCodec<string> =>
-  plain((json, path) => readXmlString(json, path, min, max));
+/** A string of `min` to `max` units that XML can hold, written once and then by its place. */
+export const xmlString = (min: number, max: number): SnapshotCodec<string> => ({
+  write: (value, w) => w.nodes.strings.string(value),
+  read: (json, path, r) => {
+    const value = r.nodes.strings.string(json, path);
+    if (value.length < min || value.length > max) {
+      throw new Invalid('invalid-text', path);
+    }
+
+    return value;
+  },
+  diff: (a, b, path) => (a === b ? null : path),
+});
 
 /** An id or a name. */
 export const id = xmlString(1, ID_MAX);
 
-/** Text of any length the file holds. */
-export const text = xmlString(0, Number.MAX_SAFE_INTEGER);
+/** Text of any length the file holds, written as it is. */
+export const text = plain((json, path) => readXmlString(json, path, 0, Number.MAX_SAFE_INTEGER));
 
 /** A safe integer from `min` to `max`. */
 export const int = (min: number, max = Number.MAX_SAFE_INTEGER): SnapshotCodec<number> =>
@@ -148,9 +158,29 @@ export const bool: SnapshotCodec<boolean> = plain((json, path) => {
   return json;
 });
 
-/** One of `values`. */
-export const choice = <T extends string>(values: readonly T[]): SnapshotCodec<T> =>
-  plain((json, path) => oneOf(json, path, values));
+/** One of `values`, by its place in them. */
+export function choice<T extends string>(values: readonly T[]): SnapshotCodec<T> {
+  return {
+    write: (value) => {
+      const place = values.indexOf(value);
+      if (place === -1) {
+        throw new RangeError(`The model holds ${value}, not one of ${values.join(', ')}.`);
+      }
+
+      return place;
+    },
+    read: (json, path) => {
+      const value =
+        typeof json === 'number' && Number.isSafeInteger(json) ? values[json] : undefined;
+      if (value === undefined) {
+        throw new Invalid('invalid-value', path, `not one of ${values.join(', ')}`);
+      }
+
+      return value;
+    },
+    diff: (a, b, path) => (a === b ? null : path),
+  };
+}
 
 /** A value or null. */
 export function nullable<T>(codec: SnapshotCodec<T>): SnapshotCodec<T | null> {
@@ -337,47 +367,84 @@ export const person: SnapshotCodec<OrderedPerson> = {
   diff: (a, b, path) => (a.id === b.id && a.name === b.name && a.org === b.org ? null : path),
 };
 
+/** The most fields a record holds: one bit each in its mask, a safe integer. */
+const RECORD_MAX_FIELDS = 53;
+
 /**
- * An object whose fields the table gives. Absent and undefined read alike. A field that holds its
- * value in `defaults` is left out, and an absent one reads as that value.
+ * An object whose fields the table gives, as `[mask, ...values]`: the values of the fields it
+ * holds, in the table's order, and the mask with one bit for each stored field (the first field
+ * is 1) set when its value follows. Absent and undefined read alike. A field that holds its value
+ * in `defaults` is left out, and an absent one reads as that value.
  */
 export function record<T>(fields: SnapshotFields<T>, defaults: Partial<T> = {}): SnapshotCodec<T> {
   const entries = Object.entries(fields as Record<string, SnapshotField<unknown>>).flatMap(
     ([key, field]) => ('stored' in field ? [[key, field] as const] : [])
   );
-  const known = new Set(entries.map(([key]) => key));
+  if (entries.length > RECORD_MAX_FIELDS) {
+    throw new RangeError(`A record holds at most ${RECORD_MAX_FIELDS} stored fields.`);
+  }
+
+  const limit = 2 ** entries.length;
   const fallback: Readonly<Record<string, unknown>> = defaults;
   return {
     write: (value, w) => {
-      const out: Record<string, unknown> = {};
+      const out: unknown[] = [0];
+      let mask = 0;
+      let bit = 1;
       for (const [key, field] of entries) {
         const v = (value as Record<string, unknown>)[key];
         if (v === undefined) {
           if (!field.optional) {
             throw new RangeError(`The model has no ${key}.`);
           }
-
-          continue;
+        } else if (
+          !Object.hasOwn(fallback, key) ||
+          field.stored.diff(v, fallback[key], key) !== null
+        ) {
+          out.push(field.stored.write(v, w));
+          mask += bit;
         }
 
-        if (!Object.hasOwn(fallback, key) || field.stored.diff(v, fallback[key], key) !== null) {
-          out[key] = field.stored.write(v, w);
-        }
+        bit *= 2;
       }
 
+      out[0] = mask;
       return out;
     },
     read: (json, path, r) => {
-      const f = fieldsOf(json, path, known);
+      const values = arrayOf(json, path);
+      const first = values[0];
+      if (
+        typeof first !== 'number' ||
+        !Number.isSafeInteger(first) ||
+        first < 0 ||
+        first >= limit
+      ) {
+        throw new Invalid('invalid-value', path, 'not a mask of its fields');
+      }
+
+      let mask = first;
       const out: Record<string, unknown> = {};
+      let next = 1;
       for (const [key, field] of entries) {
-        if (f.has(key)) {
-          out[key] = field.stored.read(f.get(key), at(path, key), r);
+        const held = mask % 2 === 1;
+        mask = Math.floor(mask / 2);
+        if (held) {
+          if (next >= values.length) {
+            throw new Invalid('missing-field', at(path, key));
+          }
+
+          out[key] = field.stored.read(values[next], at(path, key), r);
+          next += 1;
         } else if (Object.hasOwn(fallback, key)) {
           out[key] = fallback[key];
         } else if (!field.optional) {
           throw new Invalid('missing-field', at(path, key));
         }
+      }
+
+      if (next !== values.length) {
+        throw new Invalid('invalid-value', path, 'a value of no field');
       }
 
       return out as T;
@@ -413,23 +480,36 @@ export function after<T>(
   return { ...codec, read: (json, path, r) => finish(codec.read(json, path, r), r) };
 }
 
-/** One of several objects, by the value of their field `key`; each variant's own table. */
+/**
+ * One of several objects, by the value of their field `key`; each variant's own table. Written as
+ * `[place, record]`: the variant's place among the tables, and its record without `key`.
+ */
 export function variants<T extends object, K extends keyof T & string>(
   key: K,
   tables: { readonly [N in T[K] & string]: SnapshotFields<Extract<T, Record<K, N>>> }
 ): SnapshotCodec<T> {
-  const codecs = new Map<string, SnapshotCodec<T>>(
-    Object.entries(tables).map(([name, fields]) => [name, record(fields as SnapshotFields<T>)])
+  const names = Object.keys(tables);
+  const codecs = Object.entries(tables).map(([name, fields]) =>
+    record(fields as SnapshotFields<T>, { [key]: name } as Partial<T>)
   );
-  const names = [...codecs.keys()];
-  const codecOf = (value: T) => codecs.get(String(value[key]))!;
+  const placeOf = (value: T) => names.indexOf(String(value[key]));
   return {
-    write: (value, w) => codecOf(value).write(value, w),
-    read: (json, path, r) => {
-      const name = oneOf(plainFields(json, path).get(key), at(path, key), names);
-      return codecs.get(name)!.read(json, path, r);
+    write: (value, w) => {
+      const place = placeOf(value);
+      return [place, codecs[place]!.write(value, w)];
     },
-    diff: (a, b, path) => (a[key] === b[key] ? codecOf(a).diff(a, b, path) : at(path, key)),
+    read: (json, path, r) => {
+      const [place, fields, ...rest] = arrayOf(json, path);
+      const codec =
+        typeof place === 'number' && Number.isSafeInteger(place) ? codecs[place] : undefined;
+      if (codec === undefined || rest.length > 0) {
+        throw new Invalid('invalid-value', at(path, key), `not one of ${names.join(', ')}`);
+      }
+
+      return codec.read(fields, path, r);
+    },
+    diff: (a, b, path) =>
+      a[key] === b[key] ? codecs[placeOf(a)]!.diff(a, b, path) : at(path, key),
   };
 }
 

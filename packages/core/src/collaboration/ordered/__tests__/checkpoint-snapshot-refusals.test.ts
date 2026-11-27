@@ -3,19 +3,21 @@
 
 import { describe, expect, test } from 'bun:test';
 import { strFromU8, strToU8, unzipSync, zipSync } from 'fflate';
-import type { OoxmlNode } from '../../../store/package/ooxml-tree.ts';
 import {
   openOrderedCheckpoint,
   openOrderedWordFile,
   OrderedWordFileError,
 } from '../client/open.ts';
 import { createOrderedItem } from '../model/document.ts';
+import { ITEM } from '../model/snapshot-fields.ts';
+import type { OrderedDocument, OrderedItem } from '../model/types.ts';
 import { readSnapshotJson } from '../model/snapshot-read.ts';
 import { headerText, type SnapshotHeader } from '../model/snapshot-write.ts';
 import { orderedBlobHash } from '../protocol/blobs.ts';
 import { ROOM_FACTS } from './checkpoint-fixture.ts';
 import { resourceBlobs } from './checkpoint-resources-fixture.ts';
 import { checkpointBytes } from './fold-check.ts';
+import { documentView, itemJson, itemViews, type RecordView } from './snapshot-json.ts';
 
 const ENTRY = 'ordered/checkpoint.json';
 
@@ -67,32 +69,35 @@ function refusal(bytes: Uint8Array): string {
   }
 }
 
+/** The checkpoint of the room facts, written from their document changed by `change`. */
+async function written(change: (doc: OrderedDocument) => void): Promise<Uint8Array> {
+  const { document: doc, base } = openOrderedWordFile(ROOM_FACTS.source, { file: 1 });
+  ROOM_FACTS.edit(doc);
+  change(doc);
+  return checkpointBytes(doc, base, resourceBlobs(base));
+}
+
 /** The first item of the main story. */
-const firstItem = (body: Json): Json => {
-  const stories = (body.document as Json).stories as [string, Json][];
-  return (stories[0]![1].tree as Json[])[0]!;
-};
+const firstItem = (body: Json): RecordView => itemViews(body)[0]!;
 
-/** The value of a map entry of the document, by its key. */
-const entryOf = (body: Json, map: string, key: string): Json => {
-  const entries = (map.split('.').reduce((o, k) => (o as Json)[k], body.document) ?? []) as [
-    string,
-    Json,
-  ][];
-  return entries.find(([k]) => k === key)![1];
-};
+/** The first plain object inside a value of the body. */
+function firstObjectIn(value: unknown): object {
+  const found = (json: unknown): object | undefined => {
+    if (Array.isArray(json)) {
+      return json.map(found).find(Boolean);
+    }
 
-/** The first node the list holds as a base element's shell (its id alone). */
-const firstShell = (body: Json): unknown[] =>
-  (body.nodes as unknown[][]).find((entry) => entry.length === 1)!;
+    return typeof json === 'object' && json !== null ? json : undefined;
+  };
+  return found(value)!;
+}
 
-/** The id of a text node of the base's main part. */
-const BASE_TEXT_ID = (() => {
-  const { base } = openOrderedWordFile(ROOM_FACTS.source, { file: 1 });
-  const find = (node: OoxmlNode): string | null =>
-    node.kind === 'textValue' ? node.id : (node.children.map(find).find(Boolean) ?? null);
-  return find(base.parts.get('/word/document.xml')!.root)!;
-})();
+/** Two items of one space, in order, in the main story. */
+function itemsOfOneSpace(doc: OrderedDocument): readonly [OrderedItem, OrderedItem] {
+  const [story] = doc.stories.values();
+  const items = [...story!.spaces.values()].find((list) => list.length > 1)!;
+  return [items[0]!, items[1]!];
+}
 
 /** A case: its name, how it changes the file, its refusal, and whether its checksum stays. */
 type Case = readonly [string, (header: Json, body: Json) => void, string, boolean?];
@@ -123,10 +128,11 @@ describe('a checkpoint of version 6 that is not as written', () => {
     expect(refusal(await changed(() => undefined))).toBe('opens');
   });
 
+  // Each change is the first value the reader meets that is not as written
   const cases: readonly Case[] = [
     [
       'a body that does not match its checksum',
-      (_, body) => (body.namespaces = []),
+      (_, body) => documentView(body).set('counters', [0]),
       'checkpoint-manifest',
       true,
     ],
@@ -134,80 +140,51 @@ describe('a checkpoint of version 6 that is not as written', () => {
     ['a version a later reader needs', (header) => (header.reads = 7), 'checkpoint-version'],
     ['a negative order number', (header) => (header.order = -1), 'checkpoint-manifest'],
     ['an order number in parts', (header) => (header.order = 1.5), 'checkpoint-manifest'],
+    ['a missing field', (_, body) => documentView(body).delete('counters'), 'checkpoint-manifest'],
     [
-      'a missing field',
-      (_, body) => delete (body.document as Json).counters,
-      'checkpoint-manifest',
-    ],
-    ['an unknown field', (_, body) => ((body.document as Json).extra = 1), 'checkpoint-manifest'],
-    ['a wrong type', (_, body) => (firstItem(body).offset = '0'), 'checkpoint-manifest'],
-    ['a negative number', (_, body) => (firstItem(body).offset = -1), 'checkpoint-manifest'],
-    ['an unsafe number', (_, body) => (firstItem(body).length = 2 ** 60), 'checkpoint-manifest'],
-    ['an unknown kind', (_, body) => (firstItem(body).kind = 'word'), 'checkpoint-manifest'],
-    [
-      'a label of no suggestion',
-      (_, body) => (firstItem(body).by = 'S:none'),
-      'checkpoint-manifest',
-    ],
-    ['a node out of range', (_, body) => (firstItem(body).node = 99_999), 'checkpoint-manifest'],
-    [
-      'a base node it does not hold',
-      (_, body) => (firstItem(body).node = '/word/document.xml#9'),
+      'an unknown field',
+      (_, body) => {
+        const document = body.document as number[];
+        document[0] = document[0]! + 2 ** 30;
+      },
       'checkpoint-manifest',
     ],
     [
-      'a shell of no base element',
-      (_, body) => (firstShell(body)[0] = '/word/document.xml#9'),
+      'a value of no field',
+      (_, body) => (body.document as unknown[]).push(0),
+      'checkpoint-manifest',
+    ],
+    ['a wrong type', (_, body) => firstItem(body).set('offset', '0'), 'checkpoint-manifest'],
+    ['a negative number', (_, body) => firstItem(body).set('offset', -1), 'checkpoint-manifest'],
+    [
+      'an unsafe number',
+      (_, body) => firstItem(body).set('length', 2 ** 60),
+      'checkpoint-manifest',
+    ],
+    ['an unknown kind', (_, body) => firstItem(body).set('kind', 99), 'checkpoint-manifest'],
+    ['a kind by its name', (_, body) => firstItem(body).set('kind', 'text'), 'checkpoint-manifest'],
+    [
+      'a base node out of range',
+      (_, body) => firstItem(body).set('node', 99_999),
       'checkpoint-manifest',
     ],
     [
-      'a shell of a text node',
-      (_, body) => (firstShell(body)[0] = BASE_TEXT_ID),
+      'a listed node out of range',
+      (_, body) => firstItem(body).set('node', [99_999]),
       'checkpoint-manifest',
     ],
-    ['a shell by a listed node', (_, body) => (firstShell(body)[0] = 0), 'checkpoint-manifest'],
     [
       'a repeated suggestion',
       (_, body) => {
-        const suggestions = (body.document as Json).suggestions as unknown[];
+        const suggestions = documentView(body).get('suggestions') as unknown[];
         suggestions.push(suggestions[0]);
-      },
-      'checkpoint-manifest',
-    ],
-    [
-      'two items over one unit',
-      (_, body) => {
-        const stories = (body.document as Json).stories as [string, Json][];
-        const tree = stories[0]![1].tree as Json[];
-        tree.splice(1, 0, { ...tree[0]! });
-      },
-      'checkpoint-manifest',
-    ],
-    // A card never shows one name for another person
-    [
-      "a suggestion under another person's name",
-      (_, body) =>
-        ((entryOf(body, 'suggestions', 'S:quin:1.1').attribution as Json).author = 'Pia'),
-      'checkpoint-manifest',
-    ],
-    [
-      "a comment under another person's name",
-      (_, body) => (entryOf(body, 'comments', '1001645124').author = 'Quin'),
-      'checkpoint-manifest',
-    ],
-    [
-      "an attribution before a change under another person's name",
-      (_, body) => {
-        const { attribution } = entryOf(body, 'suggestions', 'S:quin:1.1');
-        const revisionIds = (body.document as Json).revisionIds as Json;
-        revisionIds.reattributed = [['S:quin:1.1', { ...(attribution as Json), author: 'Pia' }]];
       },
       'checkpoint-manifest',
     ],
     ...LAST_COUNTERS.map(
       ([name, counters]): Case => [
         `last counters ${name}`,
-        (_, body) => ((body.document as Json).lastCounters = counters),
+        (_, body) => documentView(body).set('lastCounters', counters),
         'checkpoint-manifest',
       ]
     ),
@@ -218,18 +195,67 @@ describe('a checkpoint of version 6 that is not as written', () => {
     });
   }
 
+  /** A document that breaks one of its rules: the writer writes it, the reader refuses it. */
+  const rules: readonly (readonly [string, (doc: OrderedDocument) => void])[] = [
+    [
+      'a label of no suggestion',
+      (doc) => {
+        const [story] = doc.stories.values();
+        story!.tree.toArray()[0]!.by = 'S:none';
+      },
+    ],
+    [
+      'two items over one unit',
+      (doc) => {
+        const [first, second] = itemsOfOneSpace(doc);
+        (second as { offset: number }).offset = first.offset;
+      },
+    ],
+    // A card never shows one name for another person
+    [
+      "a suggestion under another person's name",
+      (doc) => {
+        const suggestion = doc.suggestions.get('S:quin:1.1')!;
+        suggestion.attribution = { ...suggestion.attribution, author: 'Pia' };
+      },
+    ],
+    [
+      "a comment under another person's name",
+      (doc) => {
+        const comment = doc.comments.get('1001645124')!;
+        doc.comments.set('1001645124', { ...comment, author: 'Quin' });
+      },
+    ],
+    [
+      "an attribution before a change under another person's name",
+      (doc) => {
+        const { attribution } = doc.suggestions.get('S:quin:1.1')!;
+        doc.revisionIds.reattributed.set('S:quin:1.1', { ...attribution, author: 'Pia' });
+      },
+    ],
+  ];
+  for (const [name, change] of rules) {
+    test(`refuses ${name}: checkpoint-manifest`, async () => {
+      expect(refusal(await written(() => undefined))).toBe('opens');
+      expect(refusal(await written(change))).toBe('checkpoint-manifest');
+    });
+  }
+
   test("leaves out each item field that holds a new item's value, and reads it given", async () => {
     const { body } = JSON.parse(strFromU8((await FILE)[ENTRY]!)) as { body: Json };
-    const stories = (body.document as Json).stories as [string, Json][];
-    const items = stories.flatMap(([, story]) => story.tree as Json[]);
-    const fresh = createOrderedItem({ space: 'b:1:x', kind: 'text' }) as unknown as Json;
-    const given = items.flatMap((item) =>
-      Object.keys(item).filter((key) => key !== 'kind' && Bun.deepEquals(item[key], fresh[key]))
-    );
-    expect(given).toEqual([]);
-    expect(refusal(await changed((_, b) => Object.assign(firstItem(b), { dels: [] })))).toBe(
-      'opens'
-    );
+    const { document: doc } = openOrderedCheckpoint(zipSync(await FILE), { file: 2 });
+    const fresh = createOrderedItem({ space: 'b:1:x', kind: 'text' });
+    const keys = Object.entries(ITEM).flatMap(([key, field]) => ('stored' in field ? [key] : []));
+    const held = (item: OrderedItem) =>
+      keys.filter(
+        (key) =>
+          key === 'space' ||
+          key === 'kind' ||
+          !Bun.deepEquals(item[key as keyof OrderedItem], fresh[key as keyof OrderedItem])
+      ).length;
+    const items = [...doc.stories.values()].flatMap((story) => story.tree.toArray());
+    expect(itemJson(body).map((item) => item.length - 1)).toEqual(items.map(held));
+    expect(refusal(await changed((_, b) => firstItem(b).set('dels', [])))).toBe('opens');
   });
 
   test('keeps the last counters of each namespace, in namespace order', async () => {
@@ -237,17 +263,20 @@ describe('a checkpoint of version 6 that is not as written', () => {
       ['a', 10 ** 15 - 1],
       ['b', 1],
     ];
-    const bytes = await changed((_, body) => ((body.document as Json).lastCounters = counters));
+    const bytes = await changed((_, body) => documentView(body).set('lastCounters', counters));
     const { document: doc } = openOrderedCheckpoint(bytes, { file: 2 });
     expect([...doc.lastCounters]).toEqual(counters);
   });
 
   test('refuses a prototype key anywhere', async () => {
     for (const key of ['__proto__', 'constructor', 'prototype']) {
-      // A record, and a property's attributes, whose reader takes any other key
-      for (const place of ['"document":{', '"attributes":{']) {
-        const edit = (text: string) => text.replace(place, `${place}"${key}":"",`);
-        const bytes = await changed(() => undefined, false, edit);
+      // The body, and an object inside it (a property's attributes), whose reader takes any other
+      // key
+      for (const place of ['body', 'inside'] as const) {
+        const bytes = await changed((_, body) => {
+          const target = place === 'body' ? body : firstObjectIn(body.document);
+          Object.defineProperty(target, key, { value: '', enumerable: true });
+        });
         expect({ key, place, reason: refusal(bytes) }).toEqual({
           key,
           place,

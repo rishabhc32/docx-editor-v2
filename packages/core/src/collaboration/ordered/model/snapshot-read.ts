@@ -4,7 +4,7 @@
 
 import type { OoxmlPackage } from '../../../store/package/ooxml-package.ts';
 import { XML_HARD_MAX_BYTES } from '../../../store/package/xml-reader.ts';
-import { at, attempt, fieldsOf, Invalid, required } from '../change/read.ts';
+import { attempt, fieldsOf, Invalid, required } from '../change/read.ts';
 import { orderedBlobHash } from '../protocol/blobs.ts';
 import {
   createOrderedDocument,
@@ -41,7 +41,7 @@ export type SnapshotRead =
     }
   | { readonly ok: false; readonly reason: SnapshotRefusal };
 
-const BODY_FIELDS = new Set(['media', 'namespaces', 'nodes', 'document', 'side']);
+const BODY_FIELDS = new Set(['media', 'document', 'side']);
 
 /**
  * The document `checkpoint.json` holds, under the Word file number its loaded spaces hold. `base`
@@ -142,17 +142,7 @@ function documentOf(
   base: OoxmlPackage,
   file: number
 ): { readonly document: OrderedDocument; readonly media: readonly OrderedFileMedia[] } {
-  const namespaces = required(body, 'namespaces');
-  const list = required(body, 'nodes');
-  if (!Array.isArray(namespaces) || !Array.isArray(list)) {
-    throw new Invalid('invalid-type', 'body', 'not a list');
-  }
-
-  const nodes = new SnapshotNodeReader(
-    base,
-    list,
-    namespaces.map((uri, k) => readXmlString(uri, at('namespaces', k), 0, 4096))
-  );
+  const nodes = new SnapshotNodeReader(base);
   const doc = createOrderedDocument(file);
   const stories: (readonly OrderedItem[])[] = [];
   const r: SnapshotReadContext = {

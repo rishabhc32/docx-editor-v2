@@ -41,7 +41,6 @@ import {
   element,
   exactly,
   id,
-  ID_MAX,
   int,
   item,
   list,
@@ -64,6 +63,7 @@ import {
   type SnapshotCodec,
   type SnapshotFields,
 } from './snapshot-codec.ts';
+import { ID_MAX } from './snapshot-strings.ts';
 import type {
   OrderedAttribution,
   OrderedContainerToken,

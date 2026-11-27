@@ -1,9 +1,15 @@
-// The Word XML nodes of a saved item list (checkpoint version 6, design D14). A node of the base
-// package is saved as its id, which names its part and its place there. Any other node is saved
-// once, by value, in the checkpoint's node list, so two items that share one node share it again
-// after an open. A node by value keeps every field: its kind, names, authored prefix, namespace
-// declarations, attributes, children and ids. A base element's shell (the element with no
-// children, as load keeps each run and text element) is saved as its id alone.
+// The Word XML nodes of a saved item list (checkpoint version 6, design D14), in the stream of
+// `snapshot-strings.ts`. The base package's nodes have numbers: its parts by name, each part's
+// nodes in document order. Any other node is written by value at its first use, and has the next
+// number of the listed nodes, after its children; so two items that share one node share it again
+// after an open. A node is written as:
+// - `d`: the base node `d` after the last base node named;
+// - `[d]`: the listed node `d` after the last listed node named;
+// - `[k, children]`: a new node, the base element `k` (named as above) with other children;
+// - `[id, value]`: a new text node;
+// - `[id, kind, namespace, name, prefix, bindings, attributes, children]`: a new element, with
+//   every field: its kind, names, authored prefix, namespace declarations, attributes, children
+//   and id.
 
 import type { OoxmlPackage } from '../../../store/package/ooxml-package.ts';
 import { findNode } from '../../../store/package/ooxml-edit.ts';
@@ -20,68 +26,116 @@ import {
   type OoxmlPart,
 } from '../../../store/package/ooxml-tree.ts';
 import { isXmlNCName } from '../../../store/package/qname.ts';
-import { isValidXmlText } from '../../../store/package/sinks.ts';
 import { MAX_XML_DEPTH, XML_HARD_MAX_BYTES } from '../../../store/package/xml-reader.ts';
+import { isValidXmlText } from '../../../store/package/sinks.ts';
 import { at, fieldsOf, Invalid, required } from '../change/read.ts';
-import { shellOf } from '../ooxml-nodes.ts';
-
-/** A node as the checkpoint names it: a base node's id, or its place in the node list. */
-export type SnapshotNodeRef = string | number;
+import { withChildren } from '../ooxml-nodes.ts';
+import {
+  ID_MAX,
+  SnapshotChain,
+  SnapshotStringReader,
+  SnapshotStringWriter,
+} from './snapshot-strings.ts';
 
 /** The namespace of the element that holds the nodes by value while the XML reader checks them. */
 const HOLDER_NAMESPACE = 'https://docx-editor.dev/ordered-snapshot';
 
-/** UTF-16 units of a node id. */
-const ID_MAX = 4096;
+/**
+ * The attribute kinds the engine writes, by their number: the typed ones, and `generic`, which
+ * some edits give an attribute they make (its readers treat it as `genericExtension`). An
+ * attribute an edit made may have no kind (null).
+ */
+const ATTRIBUTE_KINDS = ['xmlSpace', 'wmlVal', 'genericExtension', 'generic'] as const;
 
-/** The base package's node with `id`, when `node` is that node. */
+const KINDS: readonly string[] = ATTRIBUTE_KINDS;
+
+/** The base package's nodes by number: its parts by name, each part's nodes in document order. */
+function baseNodes(base: OoxmlPackage): OoxmlNode[] {
+  const out: OoxmlNode[] = [];
+  const walk = (node: OoxmlNode) => {
+    out.push(node);
+    if (node.kind !== 'textValue') {
+      node.children.forEach(walk);
+    }
+  };
+  const parts = [...base.parts.values()].sort((a, b) => (a.name < b.name ? -1 : 1));
+  for (const part of parts) {
+    walk(part.root);
+  }
+
+  return out;
+}
+
+/** The base package's node with `id`, or null. */
 function baseNodeOf(base: OoxmlPackage, id: string): OoxmlNode | null {
   const at = id.indexOf('#');
   const part = at > 0 ? base.parts.get(id.slice(0, at)) : undefined;
   return part === undefined ? null : findNode(part, id);
 }
 
-/** Writes nodes: each base node as its id, each other node once in the node list. */
+/** Whether two elements are equal in every field but their children. */
+const sameShell = (a: OoxmlElement, b: OoxmlElement): boolean =>
+  a.id === b.id &&
+  a.kind === b.kind &&
+  a.namespaceUri === b.namespaceUri &&
+  a.localName === b.localName &&
+  a.prefix === b.prefix &&
+  a.namespaceBindings.length === b.namespaceBindings.length &&
+  a.namespaceBindings.every(
+    (x, k) =>
+      x.prefix === b.namespaceBindings[k]!.prefix &&
+      x.namespaceUri === b.namespaceBindings[k]!.namespaceUri
+  ) &&
+  attributesDifference(a.attributes, b.attributes, '') === null;
+
+/** Writes nodes: each base node by its number, each other node by value at its first use. */
 export class SnapshotNodeWriter {
+  readonly strings: SnapshotStringWriter;
   readonly #base: OoxmlPackage;
+  readonly #numbers = new Map<OoxmlNode, number>();
+  readonly #baseChain = new SnapshotChain();
   readonly #listed = new Map<OoxmlNode, number>();
-  readonly #namespaces = new Map<string, number>();
-  readonly list: unknown[] = [];
+  readonly #listChain = new SnapshotChain();
 
   constructor(base: OoxmlPackage) {
     this.#base = base;
-  }
-
-  /** The namespace URIs the listed nodes name, by their index. */
-  get namespaces(): string[] {
-    return [...this.#namespaces.keys()];
+    baseNodes(base).forEach((node, k) => {
+      if (!this.#numbers.has(node)) {
+        this.#numbers.set(node, k);
+      }
+    });
+    this.strings = new SnapshotStringWriter((id) => this.#baseNumber(id), this.#baseChain);
   }
 
   /** How the checkpoint names `node`. */
-  ref(node: OoxmlNode): SnapshotNodeRef {
-    if (baseNodeOf(this.#base, node.id) === node) {
-      return node.id;
+  ref(node: OoxmlNode): unknown {
+    const base = this.#numbers.get(node);
+    if (base !== undefined) {
+      return this.#baseChain.write(base);
     }
 
-    let index = this.#listed.get(node);
-    if (index === undefined) {
-      index = this.list.push(this.#value(node)) - 1;
-      this.#listed.set(node, index);
+    const listed = this.#listed.get(node);
+    if (listed !== undefined) {
+      return [this.#listChain.write(listed)];
     }
 
-    return index;
+    const value = this.#value(node);
+    const place = this.#listed.size;
+    this.#listed.set(node, place);
+    this.#listChain.move(place);
+    return value;
   }
 
   /** A part: the base package's by its name, any other by value. */
   part(part: OoxmlPart): unknown {
     if (this.#base.parts.get(part.name) === part) {
-      return part.name;
+      return this.strings.string(part.name);
     }
 
     return {
-      id: part.id,
-      name: part.name,
-      contentType: part.contentType,
+      id: this.strings.string(part.id),
+      name: this.strings.string(part.name),
+      contentType: this.strings.string(part.contentType),
       root: this.ref(part.root),
     };
   }
@@ -89,113 +143,82 @@ export class SnapshotNodeWriter {
   /** Attributes as the checkpoint writes them. */
   attributes(attributes: readonly OoxmlAttribute[]): unknown[] {
     return attributes.map((a) => [
-      a.kind ?? null,
-      this.#namespace(a.namespaceUri),
-      a.localName,
-      a.prefix ?? null,
-      a.value,
+      a.kind === undefined ? null : KINDS.indexOf(a.kind),
+      this.strings.name(a.namespaceUri),
+      this.strings.name(a.localName),
+      a.prefix === undefined ? null : this.strings.name(a.prefix),
+      this.strings.string(a.value),
     ]);
   }
 
-  #namespace(uri: string): number {
-    let index = this.#namespaces.get(uri);
-    if (index === undefined) {
-      index = this.#namespaces.size;
-      this.#namespaces.set(uri, index);
-    }
-
-    return index;
+  /** The number of the base node whose id is `id`. */
+  #baseNumber(id: string): number | undefined {
+    const node = baseNodeOf(this.#base, id);
+    return node?.id === id ? this.#numbers.get(node) : undefined;
   }
 
-  /** A node by value; a child that is a base node or a listed node by its reference. */
+  /** A new node by value: its fields in the order the reader reads them. */
   #value(node: OoxmlNode): unknown[] {
     if (node.kind === 'textValue') {
-      return [node.id, node.value];
+      return [this.strings.string(node.id), node.value];
     }
 
     const base = baseNodeOf(this.#base, node.id);
-    if (base !== null && base.kind !== 'textValue' && isShellOf(node, base)) {
-      return [node.id];
+    if (base !== null && base.kind !== 'textValue' && sameShell(node, base)) {
+      return [this.ref(base), node.children.map((child) => this.ref(child))];
     }
 
-    const child = (c: OoxmlNode): unknown =>
-      baseNodeOf(this.#base, c.id) === c ? c.id : (this.#listed.get(c) ?? this.#value(c));
+    const { strings } = this;
     return [
-      node.id,
-      node.kind,
-      this.#namespace(node.namespaceUri),
-      node.localName,
-      node.prefix ?? null,
-      node.namespaceBindings.map((b) => [b.prefix, this.#namespace(b.namespaceUri)]),
+      strings.string(node.id),
+      strings.name(node.kind),
+      strings.name(node.namespaceUri),
+      strings.name(node.localName),
+      node.prefix === undefined ? null : strings.name(node.prefix),
+      node.namespaceBindings.map((b) => [strings.name(b.prefix), strings.name(b.namespaceUri)]),
       this.attributes(node.attributes),
-      node.children.map(child),
+      node.children.map((child) => this.ref(child)),
     ];
   }
 }
 
 const PART_FIELDS = new Set(['id', 'name', 'contentType', 'root']);
 
-/**
- * The attribute kinds the engine writes: the typed ones, and `generic`, which some edits give an
- * attribute they make (its readers treat it as `genericExtension`).
- */
-const ATTRIBUTE_KINDS = new Set(['xmlSpace', 'wmlVal', 'genericExtension', 'generic']);
-
-/** Reads nodes against the base package, each listed node once, and checks those by value. */
+/** Reads nodes against the base package, in the writer's order, and checks those by value. */
 export class SnapshotNodeReader {
+  readonly strings: SnapshotStringReader;
   readonly #base: OoxmlPackage;
-  readonly #list: readonly unknown[];
-  readonly #namespaces: readonly string[];
-  readonly #read = new Map<number, OoxmlNode>();
-  readonly #reading = new Set<number>();
-  /** The nodes by value, in the order they were read, for the bounded reader's check. */
+  readonly #nodes: readonly OoxmlNode[];
+  readonly #baseChain = new SnapshotChain();
+  readonly #listed: OoxmlNode[] = [];
+  readonly #listChain = new SnapshotChain();
+  /** The nodes by value that no other node holds, for the bounded reader's check. */
   readonly #byValue: OoxmlNode[] = [];
 
-  constructor(base: OoxmlPackage, list: readonly unknown[], namespaces: readonly string[]) {
+  constructor(base: OoxmlPackage) {
     this.#base = base;
-    this.#list = list;
-    this.#namespaces = namespaces;
+    this.#nodes = baseNodes(base);
+    this.strings = new SnapshotStringReader(this.#nodes, this.#baseChain);
   }
 
   /**
-   * The node a reference names.
+   * The node `json` names.
    *
    * @throws Invalid when it names no node or the node does not read.
    */
-  node(value: unknown, path: string): OoxmlNode {
-    if (typeof value === 'string') {
-      const node = value.length <= ID_MAX ? baseNodeOf(this.#base, value) : null;
-      if (node === null) {
-        throw new Invalid('invalid-id', path, 'no base node');
-      }
-
-      return node;
+  node(json: unknown, path: string): OoxmlNode {
+    const count = this.#listed.length;
+    const node = this.#node(json, path, 0);
+    if (this.#listed.length > count && this.#listed.at(-1) === node) {
+      this.#byValue.push(node);
     }
 
-    if (typeof value !== 'number' || !Number.isSafeInteger(value) || value < 0) {
-      throw new Invalid('invalid-number', path);
-    }
-
-    const known = this.#read.get(value);
-    if (known !== undefined) {
-      return known;
-    }
-
-    if (value >= this.#list.length || this.#reading.has(value)) {
-      throw new Invalid('invalid-number', path, 'no listed node');
-    }
-
-    this.#reading.add(value);
-    const node = deepFreezeNode(this.#value(this.#list[value], at('nodes', value), 0));
-    this.#reading.delete(value);
-    this.#read.set(value, node);
-    this.#byValue.push(node);
     return node;
   }
 
-  /** An element a reference names. */
-  element(value: unknown, path: string): OoxmlElement {
-    const node = this.node(value, path);
+  /** An element `json` names. */
+  element(json: unknown, path: string): OoxmlElement {
+    const node = this.node(json, path);
     if (node.kind === 'textValue') {
       throw new Invalid('invalid-type', path, 'not an element');
     }
@@ -208,9 +231,9 @@ export class SnapshotNodeReader {
    *
    * @throws Invalid when it does not read.
    */
-  part(value: unknown, path: string): OoxmlPart {
-    if (typeof value === 'string') {
-      const part = this.#base.parts.get(value);
+  part(json: unknown, path: string): OoxmlPart {
+    if (typeof json !== 'object' || json === null || Array.isArray(json)) {
+      const part = this.#base.parts.get(this.strings.string(json, path));
       if (part === undefined) {
         throw new Invalid('unknown-part', path);
       }
@@ -218,11 +241,11 @@ export class SnapshotNodeReader {
       return part;
     }
 
-    const f = fieldsOf(value, path, PART_FIELDS);
+    const f = fieldsOf(json, path, PART_FIELDS);
     return {
-      id: this.#text(required(f, 'id'), at(path, 'id'), 1, ID_MAX),
-      name: this.#text(required(f, 'name'), at(path, 'name'), 1, ID_MAX),
-      contentType: this.#text(required(f, 'contentType'), at(path, 'contentType'), 1, ID_MAX),
+      id: this.#id(required(f, 'id'), at(path, 'id')),
+      name: this.#id(required(f, 'name'), at(path, 'name')),
+      contentType: this.#id(required(f, 'contentType'), at(path, 'contentType')),
       root: this.element(required(f, 'root'), at(path, 'root')),
     };
   }
@@ -232,8 +255,8 @@ export class SnapshotNodeReader {
    *
    * @throws Invalid when one does not read.
    */
-  attributes(value: unknown, path: string): OoxmlAttribute[] {
-    return this.#array(value, path).map((entry, k) => this.#attribute(entry, at(path, k)));
+  attributes(json: unknown, path: string): OoxmlAttribute[] {
+    return this.#array(json, path).map((entry, k) => this.#attribute(entry, at(path, k)));
   }
 
   /**
@@ -268,6 +291,71 @@ export class SnapshotNodeReader {
     });
   }
 
+  #node(json: unknown, path: string, depth: number): OoxmlNode {
+    if (typeof json === 'number') {
+      return this.#nodes[this.#baseChain.read(json, this.#nodes.length, path)]!;
+    }
+
+    const fields = this.#array(json, path);
+    if (fields.length === 1) {
+      return this.#listed[this.#listChain.read(fields[0], this.#listed.length, path)]!;
+    }
+
+    if (depth > MAX_XML_DEPTH) {
+      throw new Invalid('too-many', path, 'too deep');
+    }
+
+    const node = deepFreezeNode(this.#value(fields, path, depth));
+    this.#listChain.move(this.#listed.push(node) - 1);
+    return node;
+  }
+
+  /** A new node's fields, read in the writer's order. */
+  #value(fields: readonly unknown[], path: string, depth: number): OoxmlNode {
+    const children = (json: unknown, at7: string): OoxmlNode[] =>
+      this.#array(json, at7).map((entry, k) => this.#node(entry, at(at7, k), depth + 1));
+    if (fields.length === 2 && typeof fields[1] === 'string') {
+      return {
+        id: this.#id(fields[0], at(path, 0)),
+        kind: 'textValue',
+        value: this.#text(fields[1], at(path, 1)),
+      };
+    }
+
+    if (fields.length === 2) {
+      const base = typeof fields[0] === 'number' ? this.#node(fields[0], at(path, 0), depth) : null;
+      if (base === null || base.kind === 'textValue') {
+        throw new Invalid('invalid-id', at(path, 0), 'no base element');
+      }
+
+      return withChildren(base, children(fields[1], at(path, 1)));
+    }
+
+    if (fields.length !== 8) {
+      throw new Invalid('invalid-value', path, 'not a node');
+    }
+
+    const [id, kind, ns, localName, prefix, bindings, attributes, nodes] = fields;
+    const nodeId = this.#id(id, at(path, 0));
+    const kindName = this.strings.name(kind, at(path, 1));
+    if (kindName === 'textValue') {
+      throw new Invalid('invalid-value', path, 'not a node');
+    }
+
+    return {
+      id: nodeId,
+      kind: kindName,
+      namespaceUri: this.strings.name(ns, at(path, 2)),
+      localName: this.#name(localName, at(path, 3)),
+      ...(prefix === null ? {} : { prefix: this.#name(prefix, at(path, 4)) }),
+      namespaceBindings: this.#array(bindings, at(path, 5)).map((entry, k) =>
+        this.#binding(entry, at(at(path, 5), k))
+      ),
+      attributes: this.attributes(attributes, at(path, 6)),
+      children: children(nodes, at(path, 7)),
+    } as OoxmlElement;
+  }
+
   #array(value: unknown, path: string): readonly unknown[] {
     if (!Array.isArray(value)) {
       throw new Invalid('invalid-type', path, 'not a list');
@@ -276,8 +364,19 @@ export class SnapshotNodeReader {
     return value;
   }
 
-  #text(value: unknown, path: string, min: number, max: number): string {
-    if (typeof value !== 'string' || value.length < min || value.length > max) {
+  /** An id: a string of 1 to {@link ID_MAX} units. */
+  #id(json: unknown, path: string): string {
+    const value = this.strings.string(json, path);
+    if (value.length < 1 || value.length > ID_MAX) {
+      throw new Invalid('invalid-text', path);
+    }
+
+    return value;
+  }
+
+  /** A text node's value, written as it is. */
+  #text(value: unknown, path: string): string {
+    if (typeof value !== 'string' || value.length > XML_HARD_MAX_BYTES) {
       throw new Invalid('invalid-text', path);
     }
 
@@ -288,37 +387,28 @@ export class SnapshotNodeReader {
     return value;
   }
 
-  #name(value: unknown, path: string): string {
-    if (typeof value !== 'string' || !isXmlNCName(value)) {
+  #name(json: unknown, path: string): string {
+    const value = this.strings.name(json, path);
+    if (!isXmlNCName(value)) {
       throw new Invalid('invalid-value', path, 'not a name');
     }
 
     return value;
   }
 
-  #namespace(value: unknown, path: string): string {
-    const uri = typeof value === 'number' ? this.#namespaces[value] : undefined;
-    if (uri === undefined || !Number.isSafeInteger(value)) {
-      throw new Invalid('invalid-number', path, 'no namespace');
-    }
-
-    return uri;
-  }
-
-  #attribute(value: unknown, path: string): OoxmlAttribute {
-    const [kind, ns, localName, prefix, text, ...rest] = this.#array(value, path);
-    const known = typeof kind === 'string' && ATTRIBUTE_KINDS.has(kind);
-    if (rest.length > 0 || !(known || kind === null)) {
+  #attribute(json: unknown, path: string): OoxmlAttribute {
+    const [kind, ns, localName, prefix, text, ...rest] = this.#array(json, path);
+    const kindName = typeof kind === 'number' ? ATTRIBUTE_KINDS[kind] : undefined;
+    if (rest.length > 0 || !(kindName !== undefined || kind === null)) {
       throw new Invalid('invalid-value', path, 'not an attribute');
     }
 
-    // An attribute an edit made may have no kind
     const attribute = {
-      ...(kind === null ? {} : { kind }),
-      namespaceUri: this.#namespace(ns, at(path, 1)),
+      ...(kindName === undefined ? {} : { kind: kindName }),
+      namespaceUri: this.strings.name(ns, at(path, 1)),
       localName: this.#name(localName, at(path, 2)),
       ...(prefix === null ? {} : { prefix: this.#name(prefix, at(path, 3)) }),
-      value: this.#text(text, at(path, 4), 0, XML_HARD_MAX_BYTES),
+      value: this.strings.string(text, at(path, 4)),
     } as OoxmlAttribute;
     if (!attributeFits(attribute)) {
       throw new Invalid('invalid-value', path, 'not an attribute of its kind');
@@ -327,63 +417,14 @@ export class SnapshotNodeReader {
     return attribute;
   }
 
-  #value(value: unknown, path: string, depth: number): OoxmlNode {
-    if (depth > MAX_XML_DEPTH) {
-      throw new Invalid('too-many', path, 'too deep');
-    }
-
-    const fields = this.#array(value, path);
-    if (fields.length === 1) {
-      return this.#shell(fields[0], at(path, 0));
-    }
-
-    if (fields.length === 2) {
-      return {
-        id: this.#text(fields[0], at(path, 0), 1, ID_MAX),
-        kind: 'textValue',
-        value: this.#text(fields[1], at(path, 1), 0, XML_HARD_MAX_BYTES),
-      };
-    }
-
-    const [id, kind, ns, localName, prefix, bindings, attributes, children, ...rest] = fields;
-    if (rest.length > 0 || typeof kind !== 'string' || kind === 'textValue') {
-      throw new Invalid('invalid-value', path, 'not a node');
-    }
-
-    const child = (entry: unknown, k: number): OoxmlNode =>
-      typeof entry === 'string' || typeof entry === 'number'
-        ? this.node(entry, at(at(path, 7), k))
-        : this.#value(entry, at(at(path, 7), k), depth + 1);
-    return {
-      id: this.#text(id, at(path, 0), 1, ID_MAX),
-      kind,
-      namespaceUri: this.#namespace(ns, at(path, 2)),
-      localName: this.#name(localName, at(path, 3)),
-      ...(prefix === null ? {} : { prefix: this.#name(prefix, at(path, 4)) }),
-      namespaceBindings: this.#array(bindings, at(path, 5)).map((entry, k) =>
-        this.#binding(entry, at(at(path, 5), k))
-      ),
-      attributes: this.attributes(attributes, at(path, 6)),
-      children: this.#array(children, at(path, 7)).map(child),
-    } as OoxmlElement;
-  }
-
-  /** The shell of the base element `value` names. */
-  #shell(value: unknown, path: string): OoxmlElement {
-    if (typeof value !== 'string') {
-      throw new Invalid('invalid-id', path, 'no base element');
-    }
-
-    return shellOf(this.element(value, path));
-  }
-
-  #binding(value: unknown, path: string): OoxmlNamespaceBinding {
-    const [prefix, ns, ...rest] = this.#array(value, path);
-    if (rest.length > 0 || typeof prefix !== 'string' || (prefix !== '' && !isXmlNCName(prefix))) {
+  #binding(json: unknown, path: string): OoxmlNamespaceBinding {
+    const [prefix, ns, ...rest] = this.#array(json, path);
+    const prefixName = this.strings.name(prefix, at(path, 0));
+    if (rest.length > 0 || (prefixName !== '' && !isXmlNCName(prefixName))) {
       throw new Invalid('invalid-value', path, 'not a namespace binding');
     }
 
-    return { prefix, namespaceUri: this.#namespace(ns, at(path, 1)) };
+    return { prefix: prefixName, namespaceUri: this.strings.name(ns, at(path, 1)) };
   }
 }
 
@@ -468,12 +509,6 @@ function readsInContext(node: OoxmlNode): boolean {
     return shape !== undefined && sameShape(node, shape);
   });
 }
-
-/** Whether `node` is the shell of `base` in every field. */
-const isShellOf = (node: OoxmlNode, base: OoxmlElement): boolean =>
-  node.kind !== 'textValue' &&
-  node.children.length === 0 &&
-  nodeDifference(node, shellOf(base), '') === null;
 
 /** Whether an attribute's kind fits its name: `xml:space` and `w:val` are typed. */
 function attributeFits(a: OoxmlAttribute): boolean {

@@ -24,6 +24,7 @@ import { OrderedRoom } from '../room/room.ts';
 import { suggestionsOnlyPolicy } from '../room/suggestions-only.ts';
 import { mediaStore, wordMeaning } from './fold-check.ts';
 import { SESSION_FILE } from './sessions/fixture.ts';
+import { itemViews } from './snapshot-json.ts';
 import { runSession, type SessionResult } from './sessions/session.ts';
 
 /** The session's log, and where each of its rounds ends. */
@@ -81,10 +82,11 @@ function oneLetterOff(bytes: Uint8Array, rehash: boolean): Uint8Array {
   const entries = unzipSync(bytes);
   const json = strFromU8(entries['ordered/checkpoint.json']!);
   const start = json.indexOf('"body":') + '"body":'.length;
-  const body = json.slice(start, -1);
-  const items = body.indexOf('"document":');
-  const at = items + body.slice(items).search(/"text":"[A-Za-z]/) + '"text":"'.length;
-  const changed = `${body.slice(0, at)}${body[at] === 'x' ? 'y' : 'x'}${body.slice(at + 1)}`;
+  const body = JSON.parse(json.slice(start, -1)) as Record<string, unknown>;
+  const item = itemViews(body).find((view) => /^[A-Za-z]/.test(String(view.get('text'))))!;
+  const text = item.get('text') as string;
+  item.set('text', `${text[0] === 'x' ? 'y' : 'x'}${text.slice(1)}`);
+  const changed = JSON.stringify(body);
   const head = rehash
     ? json
         .slice(0, start)
