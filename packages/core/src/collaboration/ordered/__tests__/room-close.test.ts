@@ -25,6 +25,7 @@ import { suggestionsOnlyPolicy } from '../room/suggestions-only.ts';
 import { mediaStore, wordMeaning } from './fold-check.ts';
 import { SESSION_FILE } from './sessions/fixture.ts';
 import { itemViews } from './snapshot-json.ts';
+import { docx, p, t } from './word-fixtures.ts';
 import { runSession, type SessionResult } from './sessions/session.ts';
 
 /** The session's log, and where each of its rounds ends. */
@@ -140,6 +141,24 @@ describe("a room's close", () => {
     expect(wordMeaning(orderedPackageBytes(file.document, file.base, { blobs: BLOBS }))).toEqual(
       wordMeaning(orderedPackageBytes(never.document, never.base, { blobs: BLOBS }))
     );
+  });
+
+  test('closes a room of a large document, and its file opens to the same document', async () => {
+    // A contract of 1,000 clauses: a heading, and a paragraph of three runs
+    const clause = (k: number) =>
+      p(t(`${k}. Clause ${k}`, '<w:b/>'), '<w:pStyle w:val="Heading1"/>') +
+      p(t(`Clause ${k} binds `) + t('each party', '<w:i/>') + t(` for ${k} months.`));
+    const bytes = docx(Array.from({ length: 1000 }, (_, k) => clause(k + 1)).join(''));
+    const { document, base } = open.openOrderedWordFile(bytes, { file: 1 });
+    const room = roomOn(document, []);
+    const close = await closed(room, base);
+    const opened = open.openOrderedCheckpoint(close.bytes, { file: 2 });
+    expect(snapshotDifference(room.document, opened.document)).toBeNull();
+
+    // The item list is about the size of the Word XML it came from
+    const main = unzipSync(bytes)['word/document.xml']!.byteLength;
+    const list = unzipSync(close.bytes)['ordered/checkpoint.json']!.byteLength;
+    expect(list).toBeLessThan(main * 1.25);
   });
 
   /** Where a close stops, and the backup writer that stops it there, if any. */
